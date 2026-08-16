@@ -1,0 +1,696 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+<title>World Player of the Year</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; margin: 0; overscroll-behavior: none; touch-action: none; background: #05070c;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
+  #app { display: flex; flex-direction: column; height: 100dvh; width: 100vw; }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 6px; color: #fff; }
+  header h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: 0.02em; }
+  header p { margin: 2px 0 0; font-size: 12px; color: rgba(255,255,255,0.5); }
+  #muteBtn { background: rgba(255,255,255,0.1); border: none; color: rgba(255,255,255,0.8); border-radius: 999px;
+    padding: 6px 12px; font-size: 15px; cursor: pointer; }
+  #muteBtn:hover { background: rgba(255,255,255,0.2); }
+  #stats { margin: 4px 16px 8px; padding: 10px 0; display: flex; justify-content: space-evenly;
+    background: rgba(255,255,255,0.06); border-radius: 14px; }
+  .stat { display: flex; flex-direction: column; align-items: center; padding: 0 10px; }
+  .stat .value { font-size: 18px; font-weight: 700; color: #fff; }
+  .stat .value.accent { color: #4ade80; }
+  .stat .label { font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: rgba(255,255,255,0.35); margin-top: 2px; }
+  #stage { position: relative; flex: 1; min-height: 0; touch-action: none; user-select: none; }
+  #stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #hint { position: absolute; left: 0; right: 0; bottom: 14%; display: flex; justify-content: center; pointer-events: none; }
+  #hint span { background: rgba(0,0,0,0.4); color: rgba(255,255,255,0.8); padding: 6px 16px; border-radius: 999px;
+    font-size: 13px; backdrop-filter: blur(4px); animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+  #resultBanner { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; pointer-events: none; }
+  #resultBanner span { background: rgba(0,0,0,0.6); border: 2px solid #fff; border-radius: 16px; padding: 16px 32px;
+    font-size: 34px; font-weight: 800; letter-spacing: 0.05em; backdrop-filter: blur(2px);
+    animation: pop 0.35s ease-out; }
+  @keyframes pop { 0% { transform: scale(0.7); opacity: 0; } 60% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div>
+      <h1>World Player of the Year</h1>
+      <p>Swipe the ball to shoot</p>
+    </div>
+    <button id="muteBtn" aria-label="Mute">🔊</button>
+  </header>
+
+  <div id="stats">
+    <div class="stat"><span class="value accent" id="statGoals">0</span><span class="label">Goals</span></div>
+    <div class="stat"><span class="value" id="statShots">0</span><span class="label">Shots</span></div>
+    <div class="stat"><span class="value" id="statAccuracy">0%</span><span class="label">Accuracy</span></div>
+    <div class="stat"><span class="value" id="statStreak">0</span><span class="label">Streak</span></div>
+    <div class="stat"><span class="value" id="statBest">0</span><span class="label">Best</span></div>
+  </div>
+
+  <div id="stage">
+    <canvas id="canvas"></canvas>
+    <div id="hint"><span>Swipe up on the ball to shoot ⬆</span></div>
+    <div id="resultBanner"><span id="resultText"></span></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ---------------------------------------------------------------------------
+// Tunable constants (same balance as the full app)
+// ---------------------------------------------------------------------------
+const GOAL_HALF_WIDTH = 1;
+const GOAL_HEIGHT = 1;
+const WOODWORK_MARGIN = 0.045;
+
+const MIN_SWIPE_DISTANCE = 18;
+const MAX_SWIPE_DISTANCE = 260;
+const SWEET_SPOT_DISTANCE = 170;
+const REFERENCE_SWIPE_DURATION_MS = 220;
+const REFERENCE_SPEED = SWEET_SPOT_DISTANCE / REFERENCE_SWIPE_DURATION_MS;
+
+const AIM_X_OVERSHOOT = 1.15;
+const AIM_Y_OVERSHOOT = 1.15;
+
+const MIN_TRAVEL_MS = 420;
+const MAX_TRAVEL_MS = 950;
+const KEEPER_DIVE_MS_PER_UNIT = 300;
+
+const DIFFICULTY = {
+  baseNoise: 0.085,
+  powerNoisePenalty: 0.3,
+  keeperReach: 0.36,
+  keeperReactionMs: 230,
+  keeperReadChance: 0.42,
+  keeperReadBonus: 0.32,
+};
+
+const RESULT_HOLD_MS = 1500;
+
+// ---------------------------------------------------------------------------
+// Shot engine (pure logic)
+// ---------------------------------------------------------------------------
+function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+function lerp(a, b, t) { return a + (b - a) * clamp(t, 0, 1); }
+
+function gaussianRandom(mean, std) {
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  const z = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  return mean + z * std;
+}
+
+function isValidSwipe(dx, dy) {
+  return Math.hypot(dx, dy) >= MIN_SWIPE_DISTANCE;
+}
+
+function computeIntendedShot(dx, dy, durationMs) {
+  const distance = Math.hypot(dx, dy);
+  const speed = durationMs > 0 ? distance / durationMs : distance / 16;
+  const power = clamp(speed / REFERENCE_SPEED, 0.25, 1.8);
+
+  const aimX = clamp(dx / MAX_SWIPE_DISTANCE, -1, 1) * (GOAL_HALF_WIDTH * AIM_X_OVERSHOOT);
+  const upward = Math.max(0, dy);
+  const aimY = clamp(upward / MAX_SWIPE_DISTANCE, 0, 1) * (GOAL_HEIGHT * AIM_Y_OVERSHOOT);
+
+  return { aim: { x: aimX, y: aimY }, power };
+}
+
+function computeNoise(power) {
+  const overPenalty = Math.max(0, power - 1) * DIFFICULTY.powerNoisePenalty;
+  const underPenalty = Math.max(0, 0.45 - power) * DIFFICULTY.powerNoisePenalty * 0.7;
+  return DIFFICULTY.baseNoise + overPenalty + underPenalty;
+}
+
+function computeTravelTimeMs(power) {
+  return lerp(MAX_TRAVEL_MS, MIN_TRAVEL_MS, power / 1.3);
+}
+
+function isOnTarget(aim) {
+  return Math.abs(aim.x) <= GOAL_HALF_WIDTH - WOODWORK_MARGIN && aim.y >= 0 && aim.y <= GOAL_HEIGHT - WOODWORK_MARGIN;
+}
+
+function hitsWoodwork(aim) {
+  const nearPost = Math.abs(Math.abs(aim.x) - GOAL_HALF_WIDTH) < WOODWORK_MARGIN && aim.y <= GOAL_HEIGHT + WOODWORK_MARGIN;
+  const nearBar = Math.abs(aim.y - GOAL_HEIGHT) < WOODWORK_MARGIN && Math.abs(aim.x) <= GOAL_HALF_WIDTH + WOODWORK_MARGIN;
+  return nearPost || nearBar;
+}
+
+function classifyMiss(aim) {
+  if (Math.abs(aim.x) > GOAL_HALF_WIDTH) return 'wide';
+  if (aim.y > GOAL_HEIGHT) return 'over';
+  return 'wide';
+}
+
+function computeKeeperDive(actualAim, intendedAim, power) {
+  const centralBonus = (1 - clamp(Math.abs(intendedAim.x) / GOAL_HALF_WIDTH, 0, 1)) * DIFFICULTY.keeperReadBonus * 0.5;
+  const slowBonus = Math.max(0, 1 - power) * DIFFICULTY.keeperReadBonus;
+  const readChance = clamp(DIFFICULTY.keeperReadChance + centralBonus + slowBonus, 0.05, 0.97);
+  const readCorrectly = Math.random() < readChance;
+
+  let target;
+  if (readCorrectly) {
+    target = {
+      x: actualAim.x + gaussianRandom(0, 0.08),
+      y: clamp(actualAim.y + gaussianRandom(0, 0.08), 0, GOAL_HEIGHT),
+    };
+  } else {
+    const wrongSide = actualAim.x >= 0 ? -1 : 1;
+    target = {
+      x: wrongSide * (0.35 + Math.random() * 0.6),
+      y: clamp(0.15 + Math.random() * 0.6, 0, GOAL_HEIGHT),
+    };
+  }
+
+  const keeperStart = { x: 0, y: 0.28 };
+  const diveDistance = Math.hypot(target.x - keeperStart.x, target.y - keeperStart.y);
+  const reactionMs = DIFFICULTY.keeperReactionMs;
+  const diveDurationMs = reactionMs + diveDistance * KEEPER_DIVE_MS_PER_UNIT;
+
+  return { target, reactionMs, diveDurationMs, reach: DIFFICULTY.keeperReach };
+}
+
+function resolveShot(dx, dy, durationMs) {
+  const { aim: intendedAim, power } = computeIntendedShot(dx, dy, durationMs);
+  const noise = computeNoise(power);
+
+  const actualAim = {
+    x: intendedAim.x + gaussianRandom(0, noise),
+    y: Math.max(0, intendedAim.y + gaussianRandom(0, noise * 0.75)),
+  };
+
+  const travelTimeMs = computeTravelTimeMs(power);
+
+  if (hitsWoodwork(actualAim)) {
+    return { outcome: 'post', aim: actualAim, intendedAim, power, travelTimeMs, keeperDive: computeKeeperDive(actualAim, intendedAim, power) };
+  }
+  if (!isOnTarget(actualAim)) {
+    return { outcome: classifyMiss(actualAim), aim: actualAim, intendedAim, power, travelTimeMs, keeperDive: computeKeeperDive(actualAim, intendedAim, power) };
+  }
+
+  const keeperDive = computeKeeperDive(actualAim, intendedAim, power);
+  const keeperOnTime = keeperDive.diveDurationMs <= travelTimeMs;
+  const distanceToBall = Math.hypot(actualAim.x - keeperDive.target.x, actualAim.y - keeperDive.target.y);
+  const withinReach = distanceToBall <= keeperDive.reach;
+  const saved = keeperOnTime && withinReach;
+
+  return { outcome: saved ? 'saved' : 'goal', aim: actualAim, intendedAim, power, travelTimeMs, keeperDive };
+}
+
+const OUTCOME_LABEL = { goal: 'GOAL!', saved: 'SAVED', post: 'OFF THE WOODWORK', wide: 'WIDE', over: 'OVER THE BAR' };
+const OUTCOME_COLOR = { goal: '#4ade80', saved: '#f87171', post: '#fbbf24', wide: '#f87171', over: '#f87171' };
+
+// ---------------------------------------------------------------------------
+// Audio (synthesized, no external assets)
+// ---------------------------------------------------------------------------
+let audioCtx = null;
+let muted = false;
+
+function getAudioCtx() {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) return null;
+  if (!audioCtx) audioCtx = new AudioCtx();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+function tone(freq, durationSec, opts) {
+  opts = opts || {};
+  const ctx = getAudioCtx();
+  if (!ctx || muted) return;
+  const t0 = ctx.currentTime + (opts.delaySec || 0);
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = opts.type || 'sine';
+  osc.frequency.setValueAtTime(freq, t0);
+  if (opts.freqEnd !== undefined) osc.frequency.exponentialRampToValueAtTime(Math.max(1, opts.freqEnd), t0 + durationSec);
+  gain.gain.setValueAtTime(opts.startGain !== undefined ? opts.startGain : 0.28, t0);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + durationSec);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(t0);
+  osc.stop(t0 + durationSec + 0.02);
+}
+
+function noiseBurst(durationSec, opts) {
+  opts = opts || {};
+  const ctx = getAudioCtx();
+  if (!ctx || muted) return;
+  const t0 = ctx.currentTime + (opts.delaySec || 0);
+  const bufferSize = Math.floor(ctx.sampleRate * durationSec);
+  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+  const src = ctx.createBufferSource();
+  src.buffer = buffer;
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = opts.filterFreq || 1200;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(opts.startGain !== undefined ? opts.startGain : 0.25, t0);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + durationSec);
+
+  src.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  src.start(t0);
+  src.stop(t0 + durationSec + 0.02);
+}
+
+function playKick(power) {
+  noiseBurst(0.08, { startGain: 0.3 + power * 0.1, filterFreq: 2200 });
+  tone(140, 0.09, { type: 'triangle', startGain: 0.22, freqEnd: 60 });
+}
+function playPost() {
+  tone(1400, 0.35, { type: 'square', startGain: 0.22, freqEnd: 900 });
+  tone(2100, 0.25, { type: 'sine', startGain: 0.15, delaySec: 0.02 });
+}
+function playGoal() {
+  [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(f, 0.32, { type: 'triangle', startGain: 0.2, delaySec: i * 0.09 }));
+  noiseBurst(0.6, { startGain: 0.12, filterFreq: 3000, delaySec: 0.1 });
+}
+function playSave() {
+  tone(220, 0.18, { type: 'sawtooth', startGain: 0.2, freqEnd: 90 });
+  noiseBurst(0.2, { startGain: 0.18, filterFreq: 800, delaySec: 0.03 });
+}
+function playMiss() {
+  tone(180, 0.28, { type: 'sine', startGain: 0.15, freqEnd: 70 });
+}
+
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+const LAYOUT = { goalTopY: 0.15, goalBottomY: 0.36, goalHalfWidth: 0.27, ballStartY: 0.88, keeperGroundY: 0.335 };
+
+function goalToPixel(aim, w, h) {
+  const x = w / 2 + aim.x * (LAYOUT.goalHalfWidth * w);
+  const y = LAYOUT.goalBottomY * h - aim.y * ((LAYOUT.goalBottomY - LAYOUT.goalTopY) * h);
+  return { x, y };
+}
+function ballStartPixel(w, h) { return { x: w / 2, y: LAYOUT.ballStartY * h }; }
+
+function drawPitch(ctx, w, h, time) {
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, '#0f3d1f');
+  grad.addColorStop(0.4, '#155a29');
+  grad.addColorStop(1, '#1f7a37');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+
+  const stripeCount = 9;
+  const vanishY = LAYOUT.goalTopY * h - h * 0.12;
+  for (let i = 0; i < stripeCount; i++) {
+    const t0 = i / stripeCount, t1 = (i + 1) / stripeCount;
+    ctx.beginPath();
+    ctx.moveTo(lerp(0, w, t0), h);
+    ctx.lineTo(lerp(0, w, t1), h);
+    ctx.lineTo(lerp(w * 0.32, w * 0.68, t1), vanishY);
+    ctx.lineTo(lerp(w * 0.32, w * 0.68, t0), vanishY);
+    ctx.closePath();
+    ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.03)';
+    ctx.fill();
+  }
+
+  const boxTop = LAYOUT.goalBottomY * h + h * 0.02;
+  const boxHalfTop = w * 0.34, boxHalfBottom = w * 0.46;
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+  ctx.lineWidth = Math.max(2, w * 0.004);
+  ctx.beginPath();
+  ctx.moveTo(w / 2 - boxHalfTop, boxTop);
+  ctx.lineTo(w / 2 - boxHalfBottom, h * 0.995);
+  ctx.moveTo(w / 2 + boxHalfTop, boxTop);
+  ctx.lineTo(w / 2 + boxHalfBottom, h * 0.995);
+  ctx.moveTo(w / 2 - boxHalfTop, boxTop);
+  ctx.lineTo(w / 2 + boxHalfTop, boxTop);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.ellipse(w / 2, boxTop + h * 0.02, w * 0.12, h * 0.02, 0, 0, Math.PI * 2);
+  ctx.stroke();
+
+  const spot = ballStartPixel(w, h);
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.beginPath();
+  ctx.arc(spot.x, spot.y - h * 0.02, Math.max(2, w * 0.004), 0, Math.PI * 2);
+  ctx.fill();
+
+  const sweepX = ((time / 6000) % 1) * w;
+  const sweep = ctx.createRadialGradient(sweepX, h * 0.2, 0, sweepX, h * 0.2, w * 0.5);
+  sweep.addColorStop(0, 'rgba(255,255,255,0.05)');
+  sweep.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = sweep;
+  ctx.fillRect(0, 0, w, h);
+}
+
+function drawGoal(ctx, w, h) {
+  const topY = LAYOUT.goalTopY * h, botY = LAYOUT.goalBottomY * h;
+  const halfW = LAYOUT.goalHalfWidth * w;
+  const postW = Math.max(3, w * 0.009);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(w / 2 - halfW, topY, halfW * 2, botY - topY);
+  ctx.clip();
+  ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+  ctx.lineWidth = 1;
+  const netCols = 14, netRows = 8;
+  for (let i = 0; i <= netCols; i++) {
+    const x = w / 2 - halfW + (i / netCols) * halfW * 2;
+    ctx.beginPath(); ctx.moveTo(x, topY); ctx.lineTo(x, botY + (botY - topY) * 0.3); ctx.stroke();
+  }
+  for (let j = 0; j <= netRows; j++) {
+    const y = topY + (j / netRows) * (botY - topY) * 1.3;
+    ctx.beginPath(); ctx.moveTo(w / 2 - halfW, y); ctx.lineTo(w / 2 + halfW, y); ctx.stroke();
+  }
+  ctx.restore();
+
+  ctx.strokeStyle = '#f5f7fa';
+  ctx.lineWidth = postW;
+  ctx.lineCap = 'square';
+  ctx.beginPath();
+  ctx.moveTo(w / 2 - halfW, botY + postW);
+  ctx.lineTo(w / 2 - halfW, topY);
+  ctx.lineTo(w / 2 + halfW, topY);
+  ctx.lineTo(w / 2 + halfW, botY + postW);
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(w / 2 - halfW / 3, topY); ctx.lineTo(w / 2 - halfW / 3, botY);
+  ctx.moveTo(w / 2 + halfW / 3, topY); ctx.lineTo(w / 2 + halfW / 3, botY);
+  ctx.stroke();
+}
+
+function drawKeeper(ctx, w, h, pose) {
+  const { x } = goalToPixel({ x: pose.pos.x, y: 0 }, w, h);
+  const scale = w * 0.012;
+  const groundY = LAYOUT.keeperGroundY * h;
+
+  ctx.save();
+  ctx.translate(x, groundY);
+  ctx.rotate(pose.direction * pose.stretch * 0.95);
+  ctx.translate(pose.stretch * pose.direction * scale * 5, -pose.stretch * scale * 1.5);
+
+  ctx.fillStyle = pose.beaten ? '#374151' : '#facc15';
+  ctx.beginPath(); ctx.ellipse(0, -scale * 3, scale * 2.1, scale * 3.2, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#e8b48a';
+  ctx.beginPath(); ctx.arc(0, -scale * 6.1, scale * 1.5, 0, Math.PI * 2); ctx.fill();
+
+  ctx.strokeStyle = pose.beaten ? '#374151' : '#facc15';
+  ctx.lineWidth = scale * 1.1;
+  ctx.lineCap = 'round';
+  const armSpread = 2 + pose.stretch * 3.4;
+  ctx.beginPath();
+  ctx.moveTo(-scale * 0.6, -scale * 4); ctx.lineTo(-scale * armSpread, -scale * (4 - pose.stretch * 2));
+  ctx.moveTo(scale * 0.6, -scale * 4); ctx.lineTo(scale * armSpread, -scale * (4 - pose.stretch * 2));
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-scale * 0.8, -scale * 0.6); ctx.lineTo(-scale * (1.2 + pose.stretch * 1.5), scale * 0.6);
+  ctx.moveTo(scale * 0.8, -scale * 0.6); ctx.lineTo(scale * (1.2 + pose.stretch * 1.5), scale * 0.6);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawBall(ctx, x, y, radius, rotation) {
+  ctx.save();
+  ctx.translate(x, y);
+
+  ctx.beginPath();
+  ctx.ellipse(0, radius * 0.85, radius * 1.05, radius * 0.32, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.fill();
+
+  ctx.rotate(rotation);
+  const ballGrad = ctx.createRadialGradient(-radius * 0.3, -radius * 0.3, radius * 0.1, 0, 0, radius);
+  ballGrad.addColorStop(0, '#ffffff');
+  ballGrad.addColorStop(1, '#c9cdd3');
+  ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.fillStyle = ballGrad; ctx.fill();
+
+  ctx.strokeStyle = '#20232a';
+  ctx.lineWidth = Math.max(1, radius * 0.09);
+  ctx.beginPath();
+  ctx.moveTo(-radius * 0.5, -radius * 0.35);
+  ctx.lineTo(radius * 0.5, -radius * 0.35);
+  ctx.lineTo(radius * 0.62, radius * 0.25);
+  ctx.lineTo(0, radius * 0.75);
+  ctx.lineTo(-radius * 0.62, radius * 0.25);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(0, 0, radius * 0.98, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawTrail(ctx, points) {
+  if (points.length < 2) return;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function bezier(a, b, c, t) {
+  const it = 1 - t;
+  return it * it * a + 2 * it * t * b + t * t * c;
+}
+function smoothstep(t) { return t * t * (3 - 2 * t); }
+
+// ---------------------------------------------------------------------------
+// Game controller
+// ---------------------------------------------------------------------------
+const canvas = document.getElementById('canvas');
+const ctx2d = canvas.getContext('2d');
+const stage = document.getElementById('stage');
+const hintEl = document.getElementById('hint');
+const bannerEl = document.getElementById('resultBanner');
+const bannerTextEl = document.getElementById('resultText');
+const muteBtn = document.getElementById('muteBtn');
+
+const statGoals = document.getElementById('statGoals');
+const statShots = document.getElementById('statShots');
+const statAccuracy = document.getElementById('statAccuracy');
+const statStreak = document.getElementById('statStreak');
+const statBest = document.getElementById('statBest');
+
+let sizeW = 0, sizeH = 0, dpr = 1;
+
+function resizeCanvas() {
+  const rect = stage.getBoundingClientRect();
+  dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  sizeW = rect.width;
+  sizeH = rect.height;
+  canvas.width = Math.round(sizeW * dpr);
+  canvas.height = Math.round(sizeH * dpr);
+  canvas.style.width = sizeW + 'px';
+  canvas.style.height = sizeH + 'px';
+}
+new ResizeObserver(resizeCanvas).observe(stage);
+resizeCanvas();
+
+const stats = { shots: 0, goals: 0, streak: 0, bestStreak: 0 };
+function renderStats() {
+  const accuracy = stats.shots > 0 ? Math.round((stats.goals / stats.shots) * 100) : 0;
+  statGoals.textContent = stats.goals;
+  statShots.textContent = stats.shots;
+  statAccuracy.textContent = accuracy + '%';
+  statStreak.textContent = stats.streak;
+  statStreak.classList.toggle('accent', stats.streak > 0);
+  statBest.textContent = stats.bestStreak;
+}
+
+let phase = 'idle'; // idle | dragging | shooting | result
+let dragStart = null, dragPoints = [];
+let shotStartMs = 0, resultAtMs = 0;
+let result = null;
+let ballPixel = { x: 0, y: 0 }, ballRadius = 0, ballRotation = 0;
+let keeperPose = { pos: { x: 0, y: 0 }, stretch: 0, direction: 0, beaten: false };
+
+function resetForNextShot() {
+  const start = ballStartPixel(sizeW, sizeH);
+  phase = 'idle';
+  dragStart = null;
+  dragPoints = [];
+  result = null;
+  ballPixel = start;
+  ballRadius = sizeW * 0.028;
+  ballRotation = 0;
+  keeperPose = { pos: { x: 0, y: 0 }, stretch: 0, direction: 0, beaten: false };
+  hintEl.style.display = 'flex';
+  bannerEl.style.display = 'none';
+}
+
+function launchShot(dx, dy, durationMs) {
+  result = resolveShot(dx, dy, durationMs);
+  phase = 'shooting';
+  shotStartMs = performance.now();
+  ballRotation = 0;
+  hintEl.style.display = 'none';
+  bannerEl.style.display = 'none';
+  playKick(result.power);
+}
+
+function finishShot(res) {
+  stats.shots += 1;
+  if (res.outcome === 'goal') {
+    stats.goals += 1;
+    stats.streak += 1;
+    stats.bestStreak = Math.max(stats.bestStreak, stats.streak);
+  } else {
+    stats.streak = 0;
+  }
+  renderStats();
+
+  bannerTextEl.textContent = OUTCOME_LABEL[res.outcome];
+  bannerTextEl.style.color = OUTCOME_COLOR[res.outcome];
+  bannerTextEl.style.borderColor = OUTCOME_COLOR[res.outcome];
+  bannerEl.style.display = 'flex';
+
+  if (res.outcome === 'goal') playGoal();
+  else if (res.outcome === 'saved') playSave();
+  else if (res.outcome === 'post') playPost();
+  else playMiss();
+}
+
+function tick(now) {
+  if (sizeW > 0 && sizeH > 0) {
+    ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx2d.clearRect(0, 0, sizeW, sizeH);
+    drawPitch(ctx2d, sizeW, sizeH, now);
+    drawGoal(ctx2d, sizeW, sizeH);
+
+    if (phase === 'idle' || phase === 'dragging') {
+      const start = ballStartPixel(sizeW, sizeH);
+      ballPixel = start;
+      ballRadius = sizeW * 0.028;
+      drawKeeper(ctx2d, sizeW, sizeH, keeperPose);
+      if (phase === 'dragging' && dragStart) {
+        const last = dragPoints[dragPoints.length - 1] || dragStart;
+        drawTrail(ctx2d, [{ x: dragStart.x, y: dragStart.y }, { x: last.x, y: last.y }]);
+      }
+      drawBall(ctx2d, ballPixel.x, ballPixel.y, ballRadius, ballRotation);
+    } else if (phase === 'shooting' && result) {
+      const elapsed = now - shotStartMs;
+      const t = Math.min(1, elapsed / result.travelTimeMs);
+      const eased = smoothstep(t);
+
+      const start = ballStartPixel(sizeW, sizeH);
+      const endAim = result.outcome === 'saved' ? result.keeperDive.target : result.aim;
+      const end = goalToPixel(endAim, sizeW, sizeH);
+
+      const swerve = (result.aim.x - result.intendedAim.x) * sizeW * 0.18;
+      const midX = (start.x + end.x) / 2 + swerve;
+      const midY = Math.min(start.y, end.y) - sizeH * 0.05;
+
+      ballPixel = { x: bezier(start.x, midX, end.x, eased), y: bezier(start.y, midY, end.y, eased) };
+      ballRadius = lerp(sizeW * 0.028, sizeW * 0.011, eased);
+      ballRotation = eased * 18 * (result.power + 0.4);
+
+      const diveStart = result.keeperDive.reactionMs;
+      const diveElapsed = Math.max(0, elapsed - diveStart);
+      const diveTotal = Math.max(1, result.keeperDive.diveDurationMs - diveStart);
+      const diveT = Math.min(1, diveElapsed / diveTotal);
+      const diveEased = smoothstep(diveT);
+
+      keeperPose = {
+        pos: { x: result.keeperDive.target.x * diveEased, y: 0 },
+        stretch: diveEased,
+        direction: result.keeperDive.target.x >= 0 ? 1 : -1,
+        beaten: false,
+      };
+
+      drawKeeper(ctx2d, sizeW, sizeH, keeperPose);
+      drawBall(ctx2d, ballPixel.x, ballPixel.y, ballRadius, ballRotation);
+
+      if (t >= 1) {
+        phase = 'result';
+        resultAtMs = now;
+        keeperPose.beaten = result.outcome === 'goal';
+        finishShot(result);
+      }
+    } else if (phase === 'result' && result) {
+      drawKeeper(ctx2d, sizeW, sizeH, keeperPose);
+      drawBall(ctx2d, ballPixel.x, ballPixel.y, ballRadius, ballRotation);
+      if (now - resultAtMs > RESULT_HOLD_MS) resetForNextShot();
+    }
+  }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+// ---------------------------------------------------------------------------
+// Pointer (mouse + touch) swipe handling
+// ---------------------------------------------------------------------------
+function getPoint(e) {
+  const rect = canvas.getBoundingClientRect();
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top, t: performance.now() };
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (phase !== 'idle') return;
+  e.preventDefault();
+  canvas.setPointerCapture(e.pointerId);
+  const p = getPoint(e);
+  dragStart = p;
+  dragPoints = [p];
+  phase = 'dragging';
+});
+
+canvas.addEventListener('pointermove', (e) => {
+  if (phase !== 'dragging' || !dragStart) return;
+  e.preventDefault();
+  const p = getPoint(e);
+  dragPoints.push(p);
+  if (dragPoints.length > 12) dragPoints.shift();
+});
+
+function onPointerUp(e) {
+  if (phase !== 'dragging' || !dragStart) return;
+  e.preventDefault();
+  const end = getPoint(e);
+  const start = dragStart;
+
+  const dx = end.x - start.x;
+  const dy = start.y - end.y; // screen-up is positive
+  const durationMs = Math.max(16, end.t - start.t);
+
+  dragStart = null;
+  dragPoints = [];
+
+  if (isValidSwipe(dx, dy)) {
+    launchShot(dx, dy, durationMs);
+  } else {
+    phase = 'idle';
+  }
+}
+canvas.addEventListener('pointerup', onPointerUp);
+canvas.addEventListener('pointercancel', onPointerUp);
+
+muteBtn.addEventListener('click', () => {
+  muted = !muted;
+  muteBtn.textContent = muted ? '🔇' : '🔊';
+});
+
+resetForNextShot();
+renderStats();
+</script>
+</body>
+</html>
