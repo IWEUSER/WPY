@@ -77,7 +77,35 @@ function makeIdleKeeper(): KeeperPose {
   return { pos: { x: 0, y: 0 }, stretch: 0, direction: 0, beaten: false };
 }
 
-export default function ShootingGame() {
+export interface ShootingGameProps {
+  /** Header title override (defaults to the game's name). */
+  title?: string;
+  /** Header subtitle override (defaults to the swipe hint). */
+  subtitle?: string;
+  /** Small badge shown under the header, e.g. "Shot 3/10" or "Matchday 12". */
+  progressLabel?: string;
+  /** Hides the built-in shots/goals/streak stats bar (career screens track their own). */
+  hideStatsBar?: boolean;
+  /** Hides the back navigation is left to the parent; this only controls the mute button visibility. */
+  hideMuteButton?: boolean;
+  /** Limits how many shots this session allows before calling onComplete instead of resetting. */
+  maxShots?: number;
+  /** Fired the instant a shot's outcome is resolved (before the flight animation finishes). */
+  onShotResolved?: (result: ShotResult) => void;
+  /** Fired once the final shot (per maxShots) has finished its result animation. */
+  onComplete?: () => void;
+}
+
+export default function ShootingGame({
+  title,
+  subtitle,
+  progressLabel,
+  hideStatsBar = false,
+  hideMuteButton = false,
+  maxShots,
+  onShotResolved,
+  onComplete,
+}: ShootingGameProps = {}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sizeRef = useRef({ w: 0, h: 0, dpr: 1 });
@@ -86,6 +114,14 @@ export default function ShootingGame() {
   const [resultLabel, setResultLabel] = useState<{ text: string; color: string; detail: string | null } | null>(null);
   const [stats, setStats] = useState<ShotStats>({ shots: 0, goals: 0, streak: 0, bestStreak: 0 });
   const [muted, setMuted] = useState(false);
+
+  const shotsTakenRef = useRef(0);
+  const maxShotsRef = useRef(maxShots);
+  maxShotsRef.current = maxShots;
+  const onShotResolvedRef = useRef(onShotResolved);
+  onShotResolvedRef.current = onShotResolved;
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
 
   const animRef = useRef<AnimState>({
     phase: 'idle',
@@ -162,6 +198,8 @@ export default function ShootingGame() {
   }, []);
 
   const finishShot = useCallback((result: ShotResult) => {
+    shotsTakenRef.current += 1;
+    onShotResolvedRef.current?.(result);
     setStats((prev) => {
       const goals = prev.goals + (result.outcome === 'goal' ? 1 : 0);
       const streak = result.outcome === 'goal' ? prev.streak + 1 : 0;
@@ -300,7 +338,12 @@ export default function ShootingGame() {
           drawKeeper(ctx, w, h, anim.keeperPose);
           drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
           if (now - anim.resultAtMs > RESULT_HOLD_MS) {
-            resetForNextShot();
+            const limit = maxShotsRef.current;
+            if (limit !== undefined && shotsTakenRef.current >= limit) {
+              onCompleteRef.current?.();
+            } else {
+              resetForNextShot();
+            }
           }
         }
       }
@@ -386,20 +429,27 @@ export default function ShootingGame() {
     <div className="relative flex h-full w-full flex-col">
       <header className="z-10 flex items-center justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 text-white">
         <div>
-          <h1 className="text-lg font-bold tracking-wide sm:text-xl">World Player of the Year</h1>
-          <p className="text-xs text-white/50">Swipe the ball to shoot</p>
+          <h1 className="text-lg font-bold tracking-wide sm:text-xl">{title ?? 'World Player of the Year'}</h1>
+          <p className="text-xs text-white/50">{subtitle ?? 'Swipe the ball to shoot'}</p>
+          {progressLabel && (
+            <p className="mt-1 inline-block rounded-full bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-white/80">
+              {progressLabel}
+            </p>
+          )}
         </div>
-        <button
-          type="button"
-          onClick={() => setMuted((m) => !m)}
-          className="rounded-full bg-white/10 px-3 py-1.5 text-sm text-white/80 backdrop-blur transition hover:bg-white/20"
-          aria-label={muted ? 'Unmute' : 'Mute'}
-        >
-          {muted ? '🔇' : '🔊'}
-        </button>
+        {!hideMuteButton && (
+          <button
+            type="button"
+            onClick={() => setMuted((m) => !m)}
+            className="rounded-full bg-white/10 px-3 py-1.5 text-sm text-white/80 backdrop-blur transition hover:bg-white/20"
+            aria-label={muted ? 'Unmute' : 'Mute'}
+          >
+            {muted ? '🔇' : '🔊'}
+          </button>
+        )}
       </header>
 
-      <StatsBar stats={stats} />
+      {!hideStatsBar && <StatsBar stats={stats} />}
 
       <div ref={containerRef} className="relative min-h-0 flex-1 select-none touch-none">
         <canvas ref={canvasRef} className="absolute inset-0 h-full w-full touch-none" />
