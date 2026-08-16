@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">World Player of the Year</string>
+    <string name="title_activity_main">World Player of the Year</string>
+    <string name="package_name">com.wpy.game</string>
+    <string name="custom_url_scheme">com.wpy.game</string>
+</resources>
