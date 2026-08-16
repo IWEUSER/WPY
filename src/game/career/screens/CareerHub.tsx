@@ -12,6 +12,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const age = useCareerStore((s) => s.age);
   const seasonNumber = useCareerStore((s) => s.seasonNumber);
   const clubId = useCareerStore((s) => s.clubId);
+  const parentClubId = useCareerStore((s) => s.parentClubId);
   const role = useCareerStore((s) => s.role);
   const season = useCareerStore((s) => s.currentSeason);
   const availability = useCareerStore((s) => s.availability);
@@ -20,6 +21,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const advance = useCareerStore((s) => s.advance);
 
   const club = clubId ? getClub(clubId) : undefined;
+  const parentClub = role === 'loan' && parentClubId ? getClub(parentClubId) : undefined;
   if (!club || !season) return null;
 
   const played = season.gamesPlayed;
@@ -49,6 +51,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         <p className="text-xs text-white/50">
           {club.country} · {club.league}
         </p>
+        {parentClub && <p className="mt-1 text-xs text-white/40">On loan from {parentClub.name}</p>}
       </div>
 
       <div
@@ -77,6 +80,12 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
           currently {ratio.toFixed(2)}
         </p>
         <p className="mt-1 text-xs text-white/40">{matchesLeft} matches left this season</p>
+        {parentClub && (
+          <p className="mt-2 text-xs text-emerald-300/80">
+            Hit {parentClub.reserveGoalRatio.toFixed(2)} and {parentClub.name} will bring you straight back into their
+            first team.
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-3">

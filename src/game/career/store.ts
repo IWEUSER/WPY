@@ -1,10 +1,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { getClub } from './data/clubs';
 import { applyMatchResult, createAvailability, isAvailable, serveBannedGame } from './availabilityEngine';
 import { offerClubsForTrial, TRIAL_SHOTS } from './trial';
+import { resolveSeasonTransition } from './transfers';
 import type { ShotResult } from '../shooting/types';
-import type { CareerState, MatchRecord, SeasonRecord } from './types';
+import type { CareerState, MatchRecord, PlayerRole, SeasonRecord } from './types';
 
 /** Matches per season - an abstraction over real league calendars, which
  * vary from 34 to 38 games; kept uniform for now so every league/tier plays
@@ -25,12 +25,14 @@ function initialState(): CareerState {
     clubId: null,
     parentClubId: null,
     role: 'reserve',
+    seasonsAtCurrentClub: 0,
     trial: null,
     availability: createAvailability(),
     currentSeason: null,
     seasonHistory: [],
     careerGoals: 0,
     careerGames: 0,
+    pendingTransfer: null,
   };
 }
 
@@ -44,6 +46,8 @@ interface CareerActions {
   advance: () => void;
   recordMatchShot: (result: ShotResult) => void;
   continueAfterSeason: () => void;
+  /** Applies a loan/sale/transfer decision. Pass null to decline a voluntary offer. */
+  resolveTransferChoice: (clubId: string | null) => void;
   resetCareer: () => void;
   returnToMenu: () => void;
 }
@@ -81,8 +85,10 @@ export const useCareerStore = create<CareerStore>()(
           role: 'reserve',
           seasonNumber: 1,
           age: STARTING_AGE,
+          seasonsAtCurrentClub: 0,
           availability: createAvailability(),
           currentSeason: freshSeason(1, clubId, 'reserve'),
+          pendingTransfer: null,
           phase: 'hub',
         }),
 
@@ -128,23 +134,86 @@ export const useCareerStore = create<CareerStore>()(
       continueAfterSeason: () =>
         set((state) => {
           const season = state.currentSeason;
-          const club = state.clubId ? getClub(state.clubId) : undefined;
-          if (!season || !club) return state;
+          if (!season || !state.clubId || !state.parentClubId) return state;
 
-          const ratio = season.gamesPlayed > 0 ? season.goals / season.gamesPlayed : 0;
-          const threshold = season.role === 'first-team' ? club.firstTeamGoalRatio : club.reserveGoalRatio;
-          const ratioMet = ratio >= threshold;
-          const finishedSeason: SeasonRecord = { ...season, ratioMet };
+          const nextSeasonNumber = state.seasonNumber + 1;
+          const nextAge = state.age + 1;
 
-          const nextRole = season.role === 'reserve' && ratioMet ? 'first-team' : state.role;
+          const transition = resolveSeasonTransition({
+            season,
+            role: state.role,
+            clubId: state.clubId,
+            parentClubId: state.parentClubId,
+            seasonsAtCurrentClub: state.seasonsAtCurrentClub,
+            age: state.age,
+            careerGoals: state.careerGoals,
+            careerGames: state.careerGames,
+          });
+
+          const finishedSeason: SeasonRecord = { ...season, ratioMet: !transition.pendingTransfer };
+          const seasonHistory = [...state.seasonHistory, finishedSeason];
+
+          if (transition.immediate) {
+            const { clubId, parentClubId, role, seasonsAtCurrentClub } = transition.immediate;
+            return {
+              seasonHistory,
+              clubId,
+              parentClubId,
+              role,
+              seasonsAtCurrentClub,
+              seasonNumber: nextSeasonNumber,
+              age: nextAge,
+              availability: createAvailability(),
+              currentSeason: freshSeason(nextSeasonNumber, clubId, role),
+              pendingTransfer: null,
+              phase: 'hub',
+            };
+          }
 
           return {
-            seasonHistory: [...state.seasonHistory, finishedSeason],
-            role: nextRole,
-            seasonNumber: state.seasonNumber + 1,
-            age: state.age + 1,
+            seasonHistory,
+            seasonNumber: nextSeasonNumber,
+            age: nextAge,
+            pendingTransfer: transition.pendingTransfer ?? null,
+            phase: 'transfer-choice',
+          };
+        }),
+
+      resolveTransferChoice: (clubId) =>
+        set((state) => {
+          const pending = state.pendingTransfer;
+          if (!pending || !state.clubId || !state.parentClubId) return state;
+
+          if (clubId === null) {
+            // Only a voluntary promotion offer can be declined - stay put.
+            return {
+              pendingTransfer: null,
+              seasonsAtCurrentClub: state.seasonsAtCurrentClub + 1,
+              availability: createAvailability(),
+              currentSeason: freshSeason(state.seasonNumber, state.clubId, state.role),
+              phase: 'hub',
+            };
+          }
+
+          let role: PlayerRole;
+          let parentClubId: string;
+          if (pending.kind === 'loan') {
+            role = 'loan';
+            parentClubId = state.parentClubId;
+          } else {
+            // Sold outright or accepted a bigger club's offer - this is the new home club now.
+            role = 'first-team';
+            parentClubId = clubId;
+          }
+
+          return {
+            pendingTransfer: null,
+            clubId,
+            parentClubId,
+            role,
+            seasonsAtCurrentClub: 0,
             availability: createAvailability(),
-            currentSeason: freshSeason(state.seasonNumber + 1, state.clubId as string, nextRole),
+            currentSeason: freshSeason(state.seasonNumber, clubId, role),
             phase: 'hub',
           };
         }),

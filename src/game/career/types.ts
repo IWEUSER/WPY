@@ -1,4 +1,5 @@
 import type { ShotResult } from '../shooting/types';
+import type { PendingTransfer } from './transfers';
 
 export type PlayerRole = 'reserve' | 'first-team' | 'loan';
 
@@ -44,7 +45,7 @@ export interface TrialState {
   offeredClubIds: string[];
 }
 
-export type CareerPhase = 'menu' | 'trial' | 'club-offer' | 'hub' | 'match' | 'season-summary';
+export type CareerPhase = 'menu' | 'trial' | 'club-offer' | 'hub' | 'match' | 'season-summary' | 'transfer-choice';
 
 export interface CareerState {
   phase: CareerPhase;
@@ -53,10 +54,14 @@ export interface CareerState {
   clubId: string | null;
   parentClubId: string | null;
   role: PlayerRole;
+  /** Seasons spent at the current club (0 = this is the grace-period season). */
+  seasonsAtCurrentClub: number;
   trial: TrialState | null;
   availability: AvailabilityState;
   currentSeason: SeasonRecord | null;
   seasonHistory: SeasonRecord[];
   careerGoals: number;
   careerGames: number;
+  /** Set when a loan/sale/transfer decision needs the player to pick a club. */
+  pendingTransfer: PendingTransfer | null;
 }

@@ -1,40 +1,44 @@
 import { getClub } from '../data/clubs';
+import { resolveSeasonTransition } from '../transfers';
 import { useCareerStore, SEASON_LENGTH } from '../store';
 
 export default function SeasonSummaryScreen() {
   const clubId = useCareerStore((s) => s.clubId);
+  const parentClubId = useCareerStore((s) => s.parentClubId);
   const season = useCareerStore((s) => s.currentSeason);
   const role = useCareerStore((s) => s.role);
+  const seasonsAtCurrentClub = useCareerStore((s) => s.seasonsAtCurrentClub);
+  const age = useCareerStore((s) => s.age);
+  const careerGoals = useCareerStore((s) => s.careerGoals);
+  const careerGames = useCareerStore((s) => s.careerGames);
   const seasonNumber = useCareerStore((s) => s.seasonNumber);
   const continueAfterSeason = useCareerStore((s) => s.continueAfterSeason);
 
   const club = clubId ? getClub(clubId) : undefined;
-  if (!club || !season) return null;
+  if (!club || !season || !clubId || !parentClubId) return null;
 
   const ratio = season.gamesPlayed > 0 ? season.goals / season.gamesPlayed : 0;
   const threshold = role === 'first-team' ? club.firstTeamGoalRatio : club.reserveGoalRatio;
-  const ratioMet = ratio >= threshold;
   const gamesMissed = SEASON_LENGTH - season.gamesPlayed;
 
-  let headline: string;
-  let detail: string;
-  if (role === 'reserve') {
-    headline = ratioMet ? 'Promoted to the First Team!' : 'Ratio not met';
-    detail = ratioMet
-      ? `You hit ${club.reserveGoalRatio.toFixed(2)} goals/game in the reserves - the manager wants you in the first-team squad for Season ${seasonNumber + 1}.`
-      : `Season 2's loan-move logic (leaving on loan to a lower club, then a return-or-sale decision in Season 3) is the next system to build. For now you'll keep grinding it out in the reserves.`;
-  } else {
-    headline = ratioMet ? 'Place secured' : 'Under pressure';
-    detail = ratioMet
-      ? `You maintained ${club.firstTeamGoalRatio.toFixed(2)} goals/game in the first team - your place is safe going into Season ${seasonNumber + 1}.`
-      : `Your ratio slipped below ${club.firstTeamGoalRatio.toFixed(2)} goals/game. The transfer-market logic that reacts to this (moving up or down based on your ratio, with a grace period at a new club) is the next system to build.`;
-  }
+  // Preview text only - the actual transition (including any random club
+  // picks) is (re)computed for real when "Continue" is pressed.
+  const preview = resolveSeasonTransition({
+    season,
+    role,
+    clubId,
+    parentClubId,
+    seasonsAtCurrentClub,
+    age,
+    careerGoals,
+    careerGames,
+  });
 
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-6 px-6 text-center text-white">
       <div>
         <p className="text-xs uppercase tracking-wide text-white/40">Season {seasonNumber} complete</p>
-        <h1 className="mt-1 text-2xl font-extrabold">{headline}</h1>
+        <h1 className="mt-1 text-2xl font-extrabold">{preview.headline}</h1>
       </div>
 
       <div className="w-full max-w-sm rounded-2xl bg-white/5 p-5">
@@ -57,7 +61,7 @@ export default function SeasonSummaryScreen() {
         </p>
       </div>
 
-      <p className="max-w-sm text-sm text-white/60">{detail}</p>
+      <p className="max-w-sm text-sm text-white/60">{preview.detail}</p>
 
       <button
         type="button"

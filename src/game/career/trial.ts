@@ -1,4 +1,5 @@
 import { CLUBS, clubsByTier, type Club, type ClubTier } from './data/clubs';
+import { shuffle } from './util';
 
 export const TRIAL_SHOTS = 10;
 
@@ -9,15 +10,6 @@ export function tierForTrial(goals: number): ClubTier {
   if (goals >= 4) return 3; // 4-6/10
   if (goals >= 1) return 4; // 1-3/10
   return 5; // 0/10 -> the smallest club in the game
-}
-
-function shuffle<T>(items: T[]): T[] {
-  const arr = [...items];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
 }
 
 /** Picks up to `count` distinct clubs from the tier the trial performance earned. */

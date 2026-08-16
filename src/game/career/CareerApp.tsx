@@ -6,6 +6,7 @@ import ClubOfferScreen from './screens/ClubOfferScreen';
 import CareerHub from './screens/CareerHub';
 import MatchScreen from './screens/MatchScreen';
 import SeasonSummaryScreen from './screens/SeasonSummaryScreen';
+import TransferChoiceScreen from './screens/TransferChoiceScreen';
 import { useCareerStore } from './store';
 
 export default function CareerApp() {
@@ -37,6 +38,8 @@ export default function CareerApp() {
       return <MatchScreen />;
     case 'season-summary':
       return <SeasonSummaryScreen />;
+    case 'transfer-choice':
+      return <TransferChoiceScreen />;
     case 'hub':
       return <CareerHub onOpenMenu={returnToMenu} />;
     default:
