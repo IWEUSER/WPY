@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WPY &middot; Todo</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='style.css') }}"
+    />
+  </head>
+  <body>
+    <main class="app">
+      <header class="app__header">
+        <h1 class="app__title">WPY</h1>
+        <p class="app__subtitle">A tiny Flask todo app</p>
+      </header>
+
+      <form id="new-todo-form" class="composer" autocomplete="off">
+        <input
+          id="new-todo-input"
+          class="composer__input"
+          type="text"
+          name="title"
+          placeholder="What needs doing?"
+          aria-label="New todo title"
+          required
+        />
+        <button class="composer__btn" type="submit">Add</button>
+      </form>
+
+      <ul id="todo-list" class="todos" aria-live="polite"></ul>
+
+      <p id="empty-state" class="empty" hidden>
+        Nothing here yet &mdash; add your first task above.
+      </p>
+    </main>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+  </body>
+</html>
