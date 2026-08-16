@@ -27,18 +27,36 @@ export const REFERENCE_SPEED = SWEET_SPOT_DISTANCE / REFERENCE_SWIPE_DURATION_MS
 export const AIM_X_OVERSHOOT = 1.15;
 export const AIM_Y_OVERSHOOT = 1.15;
 
-/** Ball travel time bounds, in ms, fastest (max power) to slowest (min power). */
-export const MIN_TRAVEL_MS = 420;
-export const MAX_TRAVEL_MS = 950;
+/** Ball travel time bounds, in ms, fastest (max power) to slowest (min power).
+ * Widened so a full-blooded strike genuinely feels like a rocket compared to
+ * a delicate touch, rather than a subtle difference in the same tempo. */
+export const MIN_TRAVEL_MS = 260;
+export const MAX_TRAVEL_MS = 1080;
 
 /** How many ms it takes the keeper to cover one normalized unit of dive distance. */
 export const KEEPER_DIVE_MS_PER_UNIT = 300;
 
+/** Trajectory arc height (as a fraction of canvas height) at min vs max power -
+ * soft/finesse shots loop more, powerful drives fly flatter and faster. */
+export const MAX_ARC_HEIGHT_RATIO = 0.17;
+export const MIN_ARC_HEIGHT_RATIO = 0.045;
+
+/** How much a swipe's path has to bow away from a straight line (as a
+ * fraction of the swipe's own length) to register as full (+-1) curl. */
+export const CURL_BOW_SENSITIVITY = 0.12;
+
+/** How far a fully-curled shot's flight path bends sideways, as a fraction
+ * of canvas width. */
+export const MAX_BEND_RATIO = 0.24;
+
 export const DEFAULT_DIFFICULTY: ShotDifficulty = {
-  baseNoise: 0.085,
-  powerNoisePenalty: 0.3,
-  keeperReach: 0.36,
-  keeperReactionMs: 230,
-  keeperReadChance: 0.42,
-  keeperReadBonus: 0.32,
+  baseNoise: 0.075,
+  powerNoisePenalty: 0.22,
+  curlNoisePenalty: 0.05,
+  keeperReach: 0.3,
+  powerReachPenalty: 0.55,
+  keeperReactionMs: 250,
+  keeperReadChance: 0.33,
+  keeperReadBonus: 0.26,
+  curlConfusion: 0.4,
 };

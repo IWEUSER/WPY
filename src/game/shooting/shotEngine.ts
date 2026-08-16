@@ -1,6 +1,7 @@
 import {
   AIM_X_OVERSHOOT,
   AIM_Y_OVERSHOOT,
+  CURL_BOW_SENSITIVITY,
   DEFAULT_DIFFICULTY,
   GOAL_HALF_WIDTH,
   GOAL_HEIGHT,
@@ -50,13 +51,59 @@ export function isValidSwipe(gesture: SwipeGesture): boolean {
   return distance >= MIN_SWIPE_DISTANCE;
 }
 
+export interface SwipePoint {
+  x: number;
+  y: number;
+}
+
+/**
+ * Estimates how much "bend" a player put on their swipe by measuring how far
+ * the path bows away from the straight line between its start and end point,
+ * as a fraction of the swipe's own length - the same lateral motion a real
+ * strike with the inside/outside of the boot puts on a ball. The sign is
+ * relative to the swipe itself (which way it curves), not to which side of
+ * the goal it's aimed at, so the player - not a fixed bias - decides which
+ * way the shot bends.
+ *
+ * Returns a value in [-1, 1]; 0 means a straight, uncurled strike.
+ */
+export function computeSwipeCurl(points: SwipePoint[]): number {
+  if (points.length < 3) return 0;
+  const start = points[0];
+  const end = points[points.length - 1];
+  const lineX = end.x - start.x;
+  const lineY = end.y - start.y;
+  const lineLen = Math.hypot(lineX, lineY);
+  if (lineLen < 1e-3) return 0;
+
+  // Use the single largest perpendicular deviation from the straight
+  // start->end line rather than an average across all points: pointer
+  // sampling rate varies a lot (a fast real swipe or an automated drag can
+  // produce very few intermediate points), and averaging would wash out a
+  // clear bow just because it's under-sampled near the straight ends.
+  let peakOffset = 0;
+  for (const p of points) {
+    const vx = p.x - start.x;
+    const vy = p.y - start.y;
+    // Signed perpendicular distance of p from the start->end line.
+    const offset = (lineX * vy - lineY * vx) / lineLen;
+    if (Math.abs(offset) > Math.abs(peakOffset)) peakOffset = offset;
+  }
+  const bowRatio = peakOffset / lineLen;
+
+  return clamp(bowRatio / CURL_BOW_SENSITIVITY, -1, 1);
+}
+
 export interface IntendedShot {
   aim: AimPoint;
   power: number;
+  curl: number;
 }
 
-/** Maps a raw swipe into an intended (noise-free) aim point and a power scalar
- * where ~1.0 represents a well-struck "sweet spot" shot. */
+/** Maps a raw swipe into an intended (noise-free) aim point, a power scalar
+ * where ~1.0 represents a well-struck "sweet spot" shot, and the curl the
+ * player put on it. Curl is damped slightly at very high power - it's harder
+ * to finesse a shot you're absolutely leathering. */
 export function computeIntendedShot(gesture: SwipeGesture): IntendedShot {
   const distance = Math.hypot(gesture.dx, gesture.dy);
   const speed = gesture.durationMs > 0 ? distance / gesture.durationMs : distance / 16;
@@ -67,14 +114,19 @@ export function computeIntendedShot(gesture: SwipeGesture): IntendedShot {
   const upward = Math.max(0, gesture.dy);
   const aimY = clamp(upward / MAX_SWIPE_DISTANCE, 0, 1) * (GOAL_HEIGHT * AIM_Y_OVERSHOOT);
 
-  return { aim: { x: aimX, y: aimY }, power };
+  const rawCurl = clamp(gesture.curl ?? 0, -1, 1);
+  const powerDamping = 1 - clamp(power - 1, 0, 0.8) * 0.25;
+  const curl = rawCurl * powerDamping;
+
+  return { aim: { x: aimX, y: aimY }, power, curl };
 }
 
 /** Total inaccuracy (std-dev, normalized units) applied on top of the intended aim. */
-export function computeNoise(power: number, difficulty: ShotDifficulty): number {
+export function computeNoise(power: number, curl: number, difficulty: ShotDifficulty): number {
   const overPenalty = Math.max(0, power - 1) * difficulty.powerNoisePenalty;
   const underPenalty = Math.max(0, 0.45 - power) * difficulty.powerNoisePenalty * 0.7;
-  return difficulty.baseNoise + overPenalty + underPenalty;
+  const curlPenalty = Math.abs(curl) * difficulty.curlNoisePenalty;
+  return difficulty.baseNoise + overPenalty + underPenalty + curlPenalty;
 }
 
 export function computeTravelTimeMs(power: number): number {
@@ -112,17 +164,21 @@ function classifyMiss(aim: AimPoint): ShotOutcomeKind {
 }
 
 /** Decides where the keeper dives to: a correct "read" of the ball with a small
- * tracking error, or a bad guess that sends them the wrong way entirely. */
+ * tracking error, or a bad guess that sends them the wrong way entirely.
+ * Power and curl both work against the keeper: a hard, swerving shot is
+ * harder to read and, even when read correctly, harder to hold onto. */
 export function computeKeeperDive(
   actualAim: AimPoint,
   intendedAim: AimPoint,
   power: number,
+  curl: number,
   difficulty: ShotDifficulty,
   rng: RandomSource = defaultRandom,
 ): KeeperDive {
   const centralBonus = (1 - clamp(Math.abs(intendedAim.x) / GOAL_HALF_WIDTH, 0, 1)) * difficulty.keeperReadBonus * 0.5;
   const slowBonus = Math.max(0, 1 - power) * difficulty.keeperReadBonus;
-  const readChance = clamp(difficulty.keeperReadChance + centralBonus + slowBonus, 0.05, 0.97);
+  const curlPenalty = Math.abs(curl) * difficulty.curlConfusion;
+  const readChance = clamp(difficulty.keeperReadChance + centralBonus + slowBonus - curlPenalty, 0.05, 0.97);
 
   const readCorrectly = rng() < readChance;
 
@@ -145,7 +201,13 @@ export function computeKeeperDive(
   const reactionMs = difficulty.keeperReactionMs;
   const diveDurationMs = reactionMs + diveDistance * KEEPER_DIVE_MS_PER_UNIT;
 
-  return { target, reactionMs, diveDurationMs, reach: difficulty.keeperReach };
+  // A firmly struck ball is harder to cling onto even when the keeper gets a
+  // hand to it - shrink the effective reach as power climbs past the sweet
+  // spot, with a floor so it's never trivially unsaveable.
+  const powerReachFactor = 1 - clamp(power - 1, 0, 0.8) * difficulty.powerReachPenalty;
+  const effectiveReach = difficulty.keeperReach * clamp(powerReachFactor, 0.4, 1);
+
+  return { target, reactionMs, diveDurationMs, reach: effectiveReach };
 }
 
 export interface ResolveShotOptions {
@@ -157,8 +219,8 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
   const difficulty = options.difficulty ?? DEFAULT_DIFFICULTY;
   const rng = options.rng ?? defaultRandom;
 
-  const { aim: intendedAim, power } = computeIntendedShot(gesture);
-  const noise = computeNoise(power, difficulty);
+  const { aim: intendedAim, power, curl } = computeIntendedShot(gesture);
+  const noise = computeNoise(power, curl, difficulty);
 
   const actualAim: AimPoint = {
     x: intendedAim.x + gaussianRandom(0, noise, rng),
@@ -173,8 +235,9 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
       aim: actualAim,
       intendedAim,
       power,
+      curl,
       travelTimeMs,
-      keeperDive: computeKeeperDive(actualAim, intendedAim, power, difficulty, rng),
+      keeperDive: computeKeeperDive(actualAim, intendedAim, power, curl, difficulty, rng),
       saveMargin: 0,
     };
   }
@@ -185,13 +248,14 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
       aim: actualAim,
       intendedAim,
       power,
+      curl,
       travelTimeMs,
-      keeperDive: computeKeeperDive(actualAim, intendedAim, power, difficulty, rng),
+      keeperDive: computeKeeperDive(actualAim, intendedAim, power, curl, difficulty, rng),
       saveMargin: 0,
     };
   }
 
-  const keeperDive = computeKeeperDive(actualAim, intendedAim, power, difficulty, rng);
+  const keeperDive = computeKeeperDive(actualAim, intendedAim, power, curl, difficulty, rng);
   const keeperOnTime = keeperDive.diveDurationMs <= travelTimeMs;
   const distanceToBall = Math.hypot(actualAim.x - keeperDive.target.x, actualAim.y - keeperDive.target.y);
   const withinReach = distanceToBall <= keeperDive.reach;
@@ -204,6 +268,7 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
     aim: actualAim,
     intendedAim,
     power,
+    curl,
     travelTimeMs,
     keeperDive,
     saveMargin,

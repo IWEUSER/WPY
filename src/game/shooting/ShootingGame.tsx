@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as audio from './audio';
-import { isValidSwipe, resolveShot } from './shotEngine';
+import { MAX_ARC_HEIGHT_RATIO, MAX_BEND_RATIO, MIN_ARC_HEIGHT_RATIO } from './constants';
+import { computeSwipeCurl, isValidSwipe, resolveShot } from './shotEngine';
 import { ballStartPixel, drawBall, drawGoal, drawKeeper, drawPitch, drawTrail, goalToPixel, type KeeperPose } from './render';
 import type { AimPoint, ShotOutcomeKind, ShotResult, SwipeGesture } from './types';
 import StatsBar, { type ShotStats } from './StatsBar';
@@ -22,13 +23,18 @@ interface AnimState {
   ballPixel: { x: number; y: number };
   ballRadius: number;
   ballRotation: number;
+  ballTrail: { x: number; y: number }[];
   keeperPose: KeeperPose;
   resultAtMs: number;
+  shakeMagnitude: number;
+  shakeUntilMs: number;
 }
 
 const RESULT_HOLD_MS = 1500;
 const BASE_BALL_RADIUS_RATIO = 0.028;
 const FAR_BALL_RADIUS_RATIO = 0.011;
+const SHAKE_DURATION_MS = 280;
+const MAX_DRAG_POINTS = 400;
 
 const OUTCOME_LABEL: Record<ShotOutcomeKind, string> = {
   goal: 'GOAL!',
@@ -46,6 +52,27 @@ const OUTCOME_COLOR: Record<ShotOutcomeKind, string> = {
   over: '#f87171',
 };
 
+/** Describes how hard the shot was struck, for on-screen feedback. */
+function powerTierLabel(power: number): string {
+  if (power >= 1.55) return 'Thunderbolt';
+  if (power >= 1.15) return 'Firm strike';
+  if (power >= 0.75) return 'Well struck';
+  return 'Soft touch';
+}
+
+/** Describes the curl in football terms (inswinger/outswinger, which side of
+ * the boot), based on which way the shot bent relative to which side of goal
+ * it was aimed at. Returns null for a near-straight strike. */
+function curlStyleLabel(result: ShotResult): string | null {
+  if (Math.abs(result.curl) < 0.15) return null;
+  const aimSign = Math.sign(result.aim.x);
+  const curlSign = Math.sign(result.curl);
+  const bendsTowardCenter = aimSign !== 0 && curlSign !== 0 && aimSign !== curlSign;
+  const dir = curlSign > 0 ? 'right' : 'left';
+  const boot = bendsTowardCenter ? 'inswinger, inside of the boot' : 'outswinger, outside of the boot';
+  return `Curled ${dir} \u2014 ${boot}`;
+}
+
 function makeIdleKeeper(): KeeperPose {
   return { pos: { x: 0, y: 0 }, stretch: 0, direction: 0, beaten: false };
 }
@@ -56,7 +83,7 @@ export default function ShootingGame() {
   const sizeRef = useRef({ w: 0, h: 0, dpr: 1 });
 
   const [uiPhase, setUiPhase] = useState<Phase>('idle');
-  const [resultLabel, setResultLabel] = useState<{ text: string; color: string } | null>(null);
+  const [resultLabel, setResultLabel] = useState<{ text: string; color: string; detail: string | null } | null>(null);
   const [stats, setStats] = useState<ShotStats>({ shots: 0, goals: 0, streak: 0, bestStreak: 0 });
   const [muted, setMuted] = useState(false);
 
@@ -69,8 +96,11 @@ export default function ShootingGame() {
     ballPixel: { x: 0, y: 0 },
     ballRadius: 0,
     ballRotation: 0,
+    ballTrail: [],
     keeperPose: makeIdleKeeper(),
     resultAtMs: 0,
+    shakeMagnitude: 0,
+    shakeUntilMs: 0,
   });
 
   useEffect(() => {
@@ -110,7 +140,10 @@ export default function ShootingGame() {
     anim.ballPixel = start;
     anim.ballRadius = w * BASE_BALL_RADIUS_RATIO;
     anim.ballRotation = 0;
+    anim.ballTrail = [];
     anim.keeperPose = makeIdleKeeper();
+    anim.shakeMagnitude = 0;
+    anim.shakeUntilMs = 0;
     setUiPhase('idle');
     setResultLabel(null);
   }, []);
@@ -122,6 +155,7 @@ export default function ShootingGame() {
     anim.phase = 'shooting';
     anim.shotStartMs = performance.now();
     anim.ballRotation = 0;
+    anim.ballTrail = [];
     setUiPhase('shooting');
     setResultLabel(null);
     audio.playKick(result.power);
@@ -138,10 +172,21 @@ export default function ShootingGame() {
         bestStreak: Math.max(prev.bestStreak, streak),
       };
     });
-    setResultLabel({ text: OUTCOME_LABEL[result.outcome], color: OUTCOME_COLOR[result.outcome] });
+    const detailParts = [powerTierLabel(result.power), curlStyleLabel(result)].filter(Boolean) as string[];
+    setResultLabel({
+      text: OUTCOME_LABEL[result.outcome],
+      color: OUTCOME_COLOR[result.outcome],
+      detail: detailParts.length > 0 ? detailParts.join(' \u00b7 ') : null,
+    });
     setUiPhase('result');
-    if (result.outcome === 'goal') audio.playGoal();
-    else if (result.outcome === 'saved') audio.playSave();
+    if (result.outcome === 'goal') {
+      audio.playGoal();
+      if (result.power > 1.15) {
+        const anim = animRef.current;
+        anim.shakeMagnitude = Math.min(14, (result.power - 1) * 14);
+        anim.shakeUntilMs = performance.now() + SHAKE_DURATION_MS;
+      }
+    } else if (result.outcome === 'saved') audio.playSave();
     else if (result.outcome === 'post') audio.playPost();
     else audio.playMiss();
   }, []);
@@ -155,24 +200,31 @@ export default function ShootingGame() {
       const ctx = canvas?.getContext('2d');
       const { w, h, dpr } = sizeRef.current;
       if (canvas && ctx && w > 0 && h > 0) {
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.clearRect(0, 0, w, h);
+        const anim = animRef.current;
+
+        let shakeX = 0;
+        let shakeY = 0;
+        if (anim.shakeUntilMs > now) {
+          const remaining = (anim.shakeUntilMs - now) / SHAKE_DURATION_MS;
+          const mag = anim.shakeMagnitude * remaining;
+          shakeX = (Math.random() * 2 - 1) * mag;
+          shakeY = (Math.random() * 2 - 1) * mag;
+        }
+        ctx.setTransform(dpr, 0, 0, dpr, shakeX * dpr, shakeY * dpr);
+        ctx.clearRect(-shakeX - 4, -shakeY - 4, w + 8, h + 8);
         drawPitch(ctx, w, h, now);
         drawGoal(ctx, w, h);
-
-        const anim = animRef.current;
 
         if (anim.phase === 'idle' || anim.phase === 'dragging') {
           const start = ballStartPixel(w, h);
           anim.ballPixel = start;
           anim.ballRadius = w * BASE_BALL_RADIUS_RATIO;
           drawKeeper(ctx, w, h, anim.keeperPose);
-          if (anim.phase === 'dragging' && anim.dragStart) {
-            const last = anim.dragPoints[anim.dragPoints.length - 1] ?? anim.dragStart;
-            drawTrail(ctx, [
-              { x: anim.dragStart.x, y: anim.dragStart.y },
-              { x: last.x, y: last.y },
-            ]);
+          if (anim.phase === 'dragging' && anim.dragStart && anim.dragPoints.length > 1) {
+            // Show the actual curved path being swiped, not just a straight
+            // line - this is the live feedback for how much bend/curl the
+            // current swipe is imparting.
+            drawTrail(ctx, anim.dragPoints);
           }
           drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
         } else if (anim.phase === 'shooting' && anim.result) {
@@ -182,19 +234,35 @@ export default function ShootingGame() {
           const eased = t * t * (3 - 2 * t); // smoothstep
 
           const start = ballStartPixel(w, h);
-          const endAim: AimPoint = result.outcome === 'saved' ? result.keeperDive.target : result.aim;
-          const end = goalToPixel(endAim, w, h);
+          // The ball always flies to where it truly ends up - never redirect
+          // its visual path toward the keeper - so what you see is always
+          // consistent with the outcome (no more "that went in" saves).
+          const end = goalToPixel(result.aim, w, h);
 
-          const swerve = (result.aim.x - result.intendedAim.x) * w * 0.18;
-          const midX = (start.x + end.x) / 2 + swerve;
-          const midY = Math.min(start.y, end.y) - h * 0.05;
+          const powerT = clamp((result.power - 0.25) / (1.8 - 0.25), 0, 1);
+          const arcHeight = lerpNum(MAX_ARC_HEIGHT_RATIO, MIN_ARC_HEIGHT_RATIO, powerT) * h;
+          const bend = result.curl * w * MAX_BEND_RATIO;
 
-          const x = bezier(start.x, midX, end.x, eased);
-          const y = bezier(start.y, midY, end.y, eased);
+          // Cubic bezier with two control points: the shot bows out early
+          // (most of the curl) and straightens up as it nears the target,
+          // giving a real "banana" curve whose direction follows the swipe,
+          // not a fixed left/right bias.
+          const c1x = lerpNum(start.x, end.x, 0.32) + bend;
+          const c1y = lerpNum(start.y, end.y, 0.32) - arcHeight;
+          const c2x = lerpNum(start.x, end.x, 0.72) + bend * 0.3;
+          const c2y = lerpNum(start.y, end.y, 0.72) - arcHeight * 0.32;
+
+          const x = cubicBezier(start.x, c1x, c2x, end.x, eased);
+          const y = cubicBezier(start.y, c1y, c2y, end.y, eased);
 
           anim.ballPixel = { x, y };
           anim.ballRadius = lerpNum(w * BASE_BALL_RADIUS_RATIO, w * FAR_BALL_RADIUS_RATIO, eased);
-          anim.ballRotation = eased * 18 * (result.power + 0.4);
+          const spinDir = result.curl !== 0 ? Math.sign(result.curl) : 1;
+          anim.ballRotation = eased * spinDir * (10 + 14 * powerT);
+
+          anim.ballTrail.push({ x, y });
+          const trailLen = Math.round(lerpNum(5, 18, powerT));
+          while (anim.ballTrail.length > trailLen) anim.ballTrail.shift();
 
           const diveStart = result.keeperDive.reactionMs;
           const diveElapsed = Math.max(0, elapsed - diveStart);
@@ -202,13 +270,20 @@ export default function ShootingGame() {
           const diveT = Math.min(1, diveElapsed / diveTotal);
           const diveEased = diveT * diveT * (3 - 2 * diveT);
 
+          // When saved, the keeper genuinely gets to the ball - render them
+          // arriving at its true position so the dive and the "SAVED" call
+          // always agree. When beaten, they dive to wherever they actually
+          // guessed, which can be the wrong way entirely.
+          const renderTarget: AimPoint = result.outcome === 'saved' ? result.aim : result.keeperDive.target;
+
           anim.keeperPose = {
-            pos: { x: result.keeperDive.target.x * diveEased, y: 0 },
+            pos: { x: renderTarget.x * diveEased, y: 0 },
             stretch: diveEased,
-            direction: result.keeperDive.target.x >= 0 ? 1 : -1,
+            direction: renderTarget.x >= 0 ? 1 : -1,
             beaten: false,
           };
 
+          drawTrail(ctx, anim.ballTrail);
           drawKeeper(ctx, w, h, anim.keeperPose);
           drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
 
@@ -264,7 +339,10 @@ export default function ShootingGame() {
       e.preventDefault();
       const p = getPoint(e);
       anim.dragPoints.push(p);
-      if (anim.dragPoints.length > 12) anim.dragPoints.shift();
+      // Keep the whole gesture (not just the last few points) so the curl -
+      // how much the swipe bows away from a straight line - can be measured
+      // over the full swing, not just its tail end.
+      if (anim.dragPoints.length > MAX_DRAG_POINTS) anim.dragPoints.shift();
     };
 
     const onPointerUp = (e: PointerEvent) => {
@@ -277,7 +355,8 @@ export default function ShootingGame() {
       const dx = end.x - start.x;
       const dy = start.y - end.y; // screen-up is positive
       const durationMs = Math.max(16, end.t - start.t);
-      const gesture: SwipeGesture = { dx, dy, durationMs };
+      const curl = computeSwipeCurl(anim.dragPoints);
+      const gesture: SwipeGesture = { dx, dy, durationMs, curl };
 
       anim.dragStart = null;
       anim.dragPoints = [];
@@ -336,10 +415,13 @@ export default function ShootingGame() {
         {resultLabel && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <div
-              className="animate-[pop_0.35s_ease-out] rounded-2xl border-2 bg-black/60 px-8 py-4 text-3xl font-extrabold tracking-wider backdrop-blur-sm sm:text-5xl"
+              className="animate-[pop_0.35s_ease-out] flex flex-col items-center gap-1.5 rounded-2xl border-2 bg-black/60 px-8 py-4 text-3xl font-extrabold tracking-wider backdrop-blur-sm sm:text-5xl"
               style={{ color: resultLabel.color, borderColor: resultLabel.color }}
             >
               {resultLabel.text}
+              {resultLabel.detail && (
+                <span className="text-xs font-medium tracking-wide text-white/80 sm:text-sm">{resultLabel.detail}</span>
+              )}
             </div>
           </div>
         )}
@@ -360,7 +442,11 @@ function lerpNum(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
-function bezier(a: number, b: number, c: number, t: number): number {
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function cubicBezier(a: number, b: number, c: number, d: number, t: number): number {
   const it = 1 - t;
-  return it * it * a + 2 * it * t * b + t * t * c;
+  return it * it * it * a + 3 * it * it * t * b + 3 * it * t * t * c + t * t * t * d;
 }
