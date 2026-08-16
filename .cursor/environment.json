@@ -1,0 +1,17 @@
+{
+  "name": "WPY",
+  "install": "bash scripts/install.sh",
+  "terminals": [
+    {
+      "name": "web",
+      "command": "bash scripts/dev.sh",
+      "description": "WPY FastAPI dev server (uvicorn, autoreload) on http://localhost:8000"
+    }
+  ],
+  "ports": [
+    {
+      "name": "web",
+      "port": 8000
+    }
+  ]
+}

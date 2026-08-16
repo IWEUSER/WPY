@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WPY · Tasks</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="app__header">
+        <div class="brand">
+          <span class="brand__mark">W</span>
+          <div>
+            <h1 class="brand__title">WPY</h1>
+            <p class="brand__subtitle">A tiny web-python task board</p>
+          </div>
+        </div>
+        <span id="status" class="status" title="API status">connecting…</span>
+      </header>
+
+      <form id="task-form" class="composer" autocomplete="off">
+        <input
+          id="task-input"
+          class="composer__input"
+          name="title"
+          type="text"
+          placeholder="What needs doing?"
+          maxlength="200"
+          required
+        />
+        <button class="composer__button" type="submit">Add task</button>
+      </form>
+
+      <section class="board">
+        <div class="board__meta">
+          <span id="count" class="board__count">0 tasks</span>
+        </div>
+        <ul id="task-list" class="tasks"></ul>
+        <p id="empty" class="empty" hidden>No tasks yet — add your first one above.</p>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
