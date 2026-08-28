@@ -1,4 +1,5 @@
 import { getClub } from '../data/clubs';
+import { CONTINENTAL_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { resolveSeasonTransition } from '../transfers';
 import { useCareerStore, SEASON_LENGTH } from '../store';
 
@@ -12,6 +13,10 @@ export default function SeasonSummaryScreen() {
   const careerGoals = useCareerStore((s) => s.careerGoals);
   const careerGames = useCareerStore((s) => s.careerGames);
   const seasonNumber = useCareerStore((s) => s.seasonNumber);
+  const seasonCalendar = useCareerStore((s) => s.seasonCalendar);
+  const seasonSim = useCareerStore((s) => s.seasonSim);
+  const seasonStandings = useCareerStore((s) => s.seasonStandings);
+  const wpyResult = useCareerStore((s) => s.wpyResult);
   const continueAfterSeason = useCareerStore((s) => s.continueAfterSeason);
 
   const club = clubId ? getClub(clubId) : undefined;
@@ -19,10 +24,10 @@ export default function SeasonSummaryScreen() {
 
   const ratio = season.gamesPlayed > 0 ? season.goals / season.gamesPlayed : 0;
   const threshold = role === 'first-team' ? club.firstTeamGoalRatio : club.reserveGoalRatio;
-  const gamesMissed = SEASON_LENGTH - season.gamesPlayed;
+  const scheduled = seasonCalendar?.fixtures.length ?? SEASON_LENGTH;
+  const gamesMissed = Math.max(0, scheduled - season.gamesPlayed);
+  const us = seasonStandings?.league.find((r) => r.clubId === clubId);
 
-  // Preview text only - the actual transition (including any random club
-  // picks) is (re)computed for real when "Continue" is pressed.
   const preview = resolveSeasonTransition({
     season,
     role,
@@ -34,8 +39,18 @@ export default function SeasonSummaryScreen() {
     careerGames,
   });
 
+  const honours: string[] = [];
+  if (seasonSim?.honours.leagueChampion) honours.push(`Won ${club.league}`);
+  if (seasonSim?.honours.continentalChampion) {
+    honours.push(`Won the ${CONTINENTAL_CUPS[seasonSim.honours.continentalChampion].name}`);
+  }
+  if (seasonSim?.honours.superCup) honours.push('Won the Super Cup');
+  if (seasonSim?.honours.internationalChampion) {
+    honours.push(`Won the ${INTERNATIONAL_TOURNAMENTS[seasonSim.honours.internationalChampion].name}`);
+  }
+
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center gap-6 px-6 text-center text-white">
+    <div className="flex h-full w-full flex-col items-center justify-center gap-6 overflow-y-auto px-6 py-10 text-center text-white">
       <div>
         <p className="text-xs uppercase tracking-wide text-white/40">Season {seasonNumber} complete</p>
         <h1 className="mt-1 text-2xl font-extrabold">{preview.headline}</h1>
@@ -59,7 +74,33 @@ export default function SeasonSummaryScreen() {
         <p className="mt-3 text-sm font-semibold text-white/80">
           Ratio: {ratio.toFixed(2)} / {threshold.toFixed(2)} required
         </p>
+        {us && (
+          <p className="mt-2 text-xs text-white/50">
+            Finished {us.position}{ordinal(us.position)} · {us.points} pts
+            {seasonStandings?.europeanStanding
+              ? ` · ${CONTINENTAL_CUPS[seasonStandings.europeanStanding.cup].name}: ${seasonStandings.europeanStanding.stage}`
+              : ''}
+          </p>
+        )}
       </div>
+
+      {honours.length > 0 && (
+        <div className="w-full max-w-sm rounded-2xl bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+          {honours.join(' · ')}
+        </div>
+      )}
+
+      {wpyResult && (
+        <div
+          className={`w-full max-w-sm rounded-2xl px-4 py-3 text-sm ${
+            wpyResult.won ? 'bg-amber-400/15 text-amber-200' : 'bg-white/5 text-white/60'
+          }`}
+        >
+          <p className="text-xs uppercase tracking-wide text-white/40">World Player of the Year</p>
+          <p className="mt-1 font-semibold">{wpyResult.won ? 'You won it.' : 'Not this season.'}</p>
+          <p className="mt-1 text-xs">{wpyResult.reason}</p>
+        </div>
+      )}
 
       <p className="max-w-sm text-sm text-white/60">{preview.detail}</p>
 
@@ -72,4 +113,13 @@ export default function SeasonSummaryScreen() {
       </button>
     </div>
   );
+}
+
+function ordinal(n: number): string {
+  const v = n % 100;
+  if (v >= 11 && v <= 13) return 'th';
+  if (n % 10 === 1) return 'st';
+  if (n % 10 === 2) return 'nd';
+  if (n % 10 === 3) return 'rd';
+  return 'th';
 }

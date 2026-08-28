@@ -116,6 +116,10 @@ export function clubsByTier(tier: ClubTier): Club[] {
   return CLUBS.filter((c) => c.tier === tier);
 }
 
+export function clubsInLeague(league: string): Club[] {
+  return CLUBS.filter((c) => c.league === league);
+}
+
 /** Clubs strictly weaker than the given club - candidates for a loan spell. */
 export function loanCandidates(club: Club): Club[] {
   const targetTier = Math.min(5, club.tier + 1) as ClubTier;

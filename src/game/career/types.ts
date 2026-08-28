@@ -1,7 +1,10 @@
 import type { ShotResult } from '../shooting/types';
 import type { SeasonCalendar } from './calendar';
 import type { NationalTeamState } from './international';
+import type { SeasonStandings } from './matchEngine';
+import type { LiveMatch, SeasonSimState } from './seasonSim';
 import type { PendingTransfer } from './transfers';
+import type { WpyResult } from './wpy';
 
 export type PlayerRole = 'reserve' | 'first-team' | 'loan';
 
@@ -86,4 +89,12 @@ export interface CareerState {
    * by calendar.ts; consumed by the not-yet-implemented season 2-20 engine
    * (see matchEngine.ts). */
   seasonCalendar: SeasonCalendar | null;
+  /** Live league table + European stage for season 2+. Null in Season 1. */
+  seasonStandings: SeasonStandings | null;
+  seasonSim: SeasonSimState | null;
+  liveMatch: LiveMatch | null;
+  /** 1 per appearance (club or country), capped at 50, for the WPY form clause. */
+  formWindow: number[];
+  wpyResult: WpyResult | null;
+  lastMatchSummary: string | null;
 }

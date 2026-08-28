@@ -3,6 +3,8 @@ import { getClub } from '../data/clubs';
 import { CONTINENTAL_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { describeAvailability, isAvailable } from '../availabilityEngine';
 import { getNation, isSelectedForNationalTeam, selectionRatioForTier } from '../international';
+import type { SeasonStandings } from '../matchEngine';
+import { fixtureTitle } from '../seasonSim';
 import { useCareerStore, SEASON_LENGTH } from '../store';
 
 const ROLE_LABEL: Record<string, string> = {
@@ -23,6 +25,9 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const careerGoals = useCareerStore((s) => s.careerGoals);
   const careerGames = useCareerStore((s) => s.careerGames);
   const nationality = useCareerStore((s) => s.nationality);
+  const seasonStandings = useCareerStore((s) => s.seasonStandings);
+  const seasonSim = useCareerStore((s) => s.seasonSim);
+  const lastMatchSummary = useCareerStore((s) => s.lastMatchSummary);
   const advance = useCareerStore((s) => s.advance);
 
   const club = clubId ? getClub(clubId) : undefined;
@@ -36,7 +41,10 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const threshold = role === 'first-team' ? club.firstTeamGoalRatio : club.reserveGoalRatio;
   const ratioProgress = Math.min(1, threshold > 0 ? ratio / threshold : 0);
   const available = isAvailable(availability);
-  const matchesLeft = SEASON_LENGTH - season.matches.length;
+  const remainingFixtures = seasonCalendar
+    ? Math.max(0, seasonCalendar.fixtures.length - (seasonSim?.fixtureIndex ?? 0))
+    : SEASON_LENGTH - season.matches.length;
+  const nextFixture = seasonCalendar && seasonSim ? seasonCalendar.fixtures[seasonSim.fixtureIndex] : undefined;
 
   return (
     <div className="flex h-full w-full flex-col overflow-y-auto px-5 py-[max(1.25rem,env(safe-area-inset-top))] pb-10 text-white">
@@ -74,6 +82,12 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         {describeAvailability(availability)}
       </div>
 
+      {lastMatchSummary && (
+        <div className="rounded-xl bg-white/5 px-4 py-3 text-sm text-white/80">{lastMatchSummary}</div>
+      )}
+
+      {seasonStandings && <StandingsCard standings={seasonStandings} clubId={club.id} />}
+
       <div className="rounded-2xl bg-white/5 p-4">
         <div className="mb-2 flex items-baseline justify-between">
           <span className="text-xs uppercase tracking-wide text-white/40">Season ratio</span>
@@ -91,7 +105,10 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
           Need {threshold.toFixed(2)} goals/game to {role === 'first-team' ? 'keep your place' : 'earn a promotion'} ·
           currently {ratio.toFixed(2)}
         </p>
-        <p className="mt-1 text-xs text-white/40">{matchesLeft} matches left this season</p>
+        <p className="mt-1 text-xs text-white/40">
+          {remainingFixtures} match{remainingFixtures === 1 ? '' : 'es'} left this season
+          {nextFixture ? ` · next: ${fixtureTitle(nextFixture)}` : ''}
+        </p>
         {parentClub && (
           <p className="mt-2 text-xs text-emerald-300/80">
             Hit {parentClub.reserveGoalRatio.toFixed(2)} and {parentClub.name} will bring you straight back into their
@@ -130,6 +147,45 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
       >
         {available ? 'Play Next Match' : 'Continue'}
       </button>
+    </div>
+  );
+}
+
+function StandingsCard({ standings, clubId }: { standings: SeasonStandings; clubId: string }) {
+  const us = standings.league.find((r) => r.clubId === clubId);
+  const europe = standings.europeanStanding;
+  const stageLabel: Record<string, string> = {
+    group: 'Group stage',
+    'round-of-16': 'Round of 16',
+    'quarter-final': 'Quarter-final',
+    'semi-final': 'Semi-final',
+    final: 'Final',
+    eliminated: 'Eliminated',
+    champion: 'Champions',
+  };
+
+  return (
+    <div className="rounded-2xl bg-white/5 p-4">
+      <p className="text-xs uppercase tracking-wide text-white/40">Standings</p>
+      <div className="mt-2 grid grid-cols-2 gap-3">
+        <div>
+          <p className="text-2xl font-extrabold">{us ? `${us.position}` : '—'}</p>
+          <p className="text-[10px] uppercase tracking-wide text-white/40">League position</p>
+          {us && (
+            <p className="mt-1 text-xs text-white/50">
+              {us.points} pts · {us.played} played
+            </p>
+          )}
+        </div>
+        <div>
+          <p className="text-lg font-bold leading-tight">
+            {europe ? stageLabel[europe.stage] : 'No Europe'}
+          </p>
+          <p className="text-[10px] uppercase tracking-wide text-white/40">
+            {europe ? CONTINENTAL_CUPS[europe.cup].name : 'European standing'}
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

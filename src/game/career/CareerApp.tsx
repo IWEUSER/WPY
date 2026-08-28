@@ -10,6 +10,10 @@ import SeasonSummaryScreen from './screens/SeasonSummaryScreen';
 import TransferChoiceScreen from './screens/TransferChoiceScreen';
 import { useCareerStore } from './store';
 
+if (import.meta.env.DEV) {
+  (window as unknown as { __careerStore: typeof useCareerStore }).__careerStore = useCareerStore;
+}
+
 export default function CareerApp() {
   const [practicing, setPracticing] = useState(false);
   const phase = useCareerStore((s) => s.phase);

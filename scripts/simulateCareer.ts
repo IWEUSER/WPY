@@ -13,6 +13,9 @@ import {
   chancesForKnockoutTie,
   chancesForLeagueMatch,
 } from '../src/game/career/chanceEngine';
+import { getClub } from '../src/game/career/data/clubs';
+import { simulateClubMatch } from '../src/game/career/matchEngine';
+import { hydrateSeason } from '../src/game/career/seasonSim';
 import { evaluateWpy } from '../src/game/career/wpy';
 
 const N = 50000;
@@ -122,3 +125,39 @@ console.log(
     recentFormGames: 49,
   }),
 );
+
+console.log('\n--- Club match engine: better teams win more often, never always ---');
+function winRate(us: 1 | 2 | 3 | 4 | 5, them: 1 | 2 | 3 | 4 | 5, n = 8000): string {
+  let wins = 0;
+  let draws = 0;
+  for (let i = 0; i < n; i++) {
+    const r = simulateClubMatch({ clubTier: us, opponentTier: them, isHome: true });
+    if (r.outcome === 'win') wins++;
+    else if (r.outcome === 'draw') draws++;
+  }
+  return `win=${((wins / n) * 100).toFixed(1)}% draw=${((draws / n) * 100).toFixed(1)}%`;
+}
+console.log('tier 1 vs tier 5 home:', winRate(1, 5));
+console.log('tier 1 vs tier 1 home:', winRate(1, 1));
+console.log('tier 5 vs tier 1 home:', winRate(5, 1));
+
+console.log('\n--- Hydrated season 2 (elite club, strong previous ratio) ---');
+const madrid = getClub('real-madrid');
+if (madrid) {
+  const { calendar, sim } = hydrateSeason({
+    seasonNumber: 2,
+    club: madrid,
+    previousSeasonRatio: 0.8,
+    nationId: 'spain',
+  });
+  const kinds: Record<string, number> = {};
+  for (const f of calendar.fixtures) kinds[f.kind] = (kinds[f.kind] ?? 0) + 1;
+  const chanceAvg =
+    calendar.fixtures.reduce((s, f) => s + (f.playerChances ?? 0), 0) / calendar.fixtures.length;
+  console.log('fixtures', calendar.fixtures.length, kinds);
+  console.log('european stage', sim.europeanStanding);
+  console.log('international selected', sim.internationalSelected, sim.internationalStage);
+  console.log('mean pre-assigned chances', chanceAvg.toFixed(2), '(expect ~2, decisive matches pull it slightly down)');
+  const missingOpp = calendar.fixtures.filter((f) => !f.opponentLabel).length;
+  console.log('fixtures missing an opponent', missingOpp, '(expect 0)');
+}

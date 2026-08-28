@@ -31,6 +31,13 @@ export interface CalendarFixture {
   isDecisive: boolean;
   /** Leg number for two-legged continental knockout ties. */
   leg?: 1 | 2;
+  /** Pre-assigned opponent for this fixture (club id, or a nation id for
+   * international matches). */
+  opponentId?: string;
+  opponentLabel?: string;
+  /** How many scoring chances the player gets - filled in by seasonSim. */
+  playerChances?: number;
+  internationalRound?: 'group' | 'semi-final' | 'final';
 }
 
 export interface SeasonCalendar {
@@ -45,6 +52,8 @@ export interface BuildCalendarParams {
   leagueMatchWeeks: number;
   clubTier: ClubTier;
   confederation: Confederation;
+  /** When false, skip the international window (player not selected). */
+  includeInternational?: boolean;
 }
 
 const GROUP_STAGE_MATCHDAYS = 8;
@@ -61,7 +70,7 @@ const KNOCKOUT_ROUNDS_BEFORE_SEMI = 2; // e.g. round of 16, quarter-final - both
  * behind this calendar without changing its shape.
  */
 export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar {
-  const { seasonNumber, leagueMatchWeeks, clubTier, confederation } = params;
+  const { seasonNumber, leagueMatchWeeks, clubTier, confederation, includeInternational = true } = params;
   const cup = continentalCupForClub(clubTier, confederation);
   const fixtures: CalendarFixture[] = [];
 
@@ -94,8 +103,10 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
   }
 
   const internationalTournament = internationalTournamentForSeason(seasonNumber);
-  if (internationalTournament) {
-    fixtures.push({ week: ++week, kind: 'international', isDecisive: false });
+  if (includeInternational && internationalTournament) {
+    fixtures.push({ week: ++week, kind: 'international', isDecisive: false, internationalRound: 'group' });
+    fixtures.push({ week: ++week, kind: 'international', isDecisive: true, internationalRound: 'semi-final' });
+    fixtures.push({ week: ++week, kind: 'international', isDecisive: true, internationalRound: 'final' });
   }
 
   fixtures.sort((a, b) => a.week - b.week);
