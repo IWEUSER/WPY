@@ -39,7 +39,8 @@ export type ShotZoneY = 'low' | 'mid' | 'high';
 export type ShotOutcomeKind = 'goal' | 'saved' | 'post' | 'wide' | 'over';
 
 export interface KeeperDive {
-  /** Where the keeper dives to, in the same normalized space as AimPoint. */
+  /** Where the keeper's body travels to, in the same normalized space as AimPoint.
+   * Always on the correct side of the shot; |x| is capped inside the posts. */
   target: AimPoint;
   /** Reaction delay before the dive itself begins, in milliseconds. */
   reactionMs: number;
@@ -47,6 +48,10 @@ export interface KeeperDive {
   diveDurationMs: number;
   /** Effective reach radius once fully stretched, in normalized units. */
   reach: number;
+  /** -1 = left, 0 = standing (centre square), 1 = right. Always the shot's side. */
+  direction: -1 | 0 | 1;
+  /** 0 = upright, 1 = full-length dive. Driven by how wide the landing square is. */
+  stretch: number;
 }
 
 /** One cell of the 16×5 goalmouth save grid. Col 0 is the left post, row 0 is the ground. */

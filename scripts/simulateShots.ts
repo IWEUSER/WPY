@@ -3,7 +3,7 @@
  * check that outcomes are appropriately random (i.e. not ~100% or ~0% goals).
  * Run with: npm run simulate
  */
-import { REFERENCE_SPEED, SAVE_GRID_ROWS } from '../src/game/shooting/constants';
+import { DEFAULT_DIFFICULTY, KEEPER_DIVE_MAX_X, REFERENCE_SPEED, SAVE_GRID_ROWS } from '../src/game/shooting/constants';
 import {
   BALL_SCREEN_Y,
   FIFA,
@@ -15,7 +15,15 @@ import {
   randomBallStartXRatio,
   randomShotDistanceM,
 } from '../src/game/shooting/render';
-import { aimToSaveCell, computeIntendedShot, computeSwipeCurl, resolveShot, saveChanceForCell } from '../src/game/shooting/shotEngine';
+import {
+  aimToSaveCell,
+  computeIntendedShot,
+  computeKeeperDive,
+  computeSwipeCurl,
+  diveIntensityForCell,
+  resolveShot,
+  saveChanceForCell,
+} from '../src/game/shooting/shotEngine';
 import type { SwipeGesture } from '../src/game/shooting/types';
 
 const SIM_W = 390;
@@ -198,6 +206,36 @@ if (Math.abs(sixDrawn - sixToGoal) > 1e-6) {
   process.exitCode = 1;
 }
 
+const sixYardAtClose = near.screenY(FIFA.sixYardDepth) / SIM_H;
+console.log(
+  `at ${MIN_SHOT_DISTANCE_M}m: 6-yard line Y=${sixYardAtClose.toFixed(3)} ball Y=${BALL_SCREEN_Y.toFixed(3)} (must sit on the ball)`,
+);
+if (Math.abs(sixYardAtClose - BALL_SCREEN_Y) > 0.02) {
+  console.error('FAIL: on the 6-yard line the marking should sit at the ball');
+  process.exitCode = 1;
+}
+if (!(nearGoalFrac > 0.55)) {
+  console.error('FAIL: a 6-yard spawn should make the goal look close (more than half the screen wide)');
+  process.exitCode = 1;
+}
+
+const farSixY = far.screenY(FIFA.sixYardDepth) / SIM_H;
+const farGoalY = far.goal.botY / SIM_H;
+const farBallY = BALL_SCREEN_Y;
+const sixToGoalGap = Math.abs(farSixY - farGoalY);
+const sixToBallGap = Math.abs(farBallY - farSixY);
+console.log(
+  `at ${MAX_SHOT_DISTANCE_M}m: 6-yard Y=${farSixY.toFixed(3)} goal Y=${farGoalY.toFixed(3)} ball Y=${farBallY.toFixed(3)}`,
+);
+if (!(sixToBallGap > sixToGoalGap * 2)) {
+  console.error('FAIL: from 30m the 6-yard line should sit with the distant goal, not halfway to the ball');
+  process.exitCode = 1;
+}
+if (!(nearGoalFrac / farGoalFrac > 2.2)) {
+  console.error('FAIL: 6-yard vs 30m goal size ratio should be clearly larger than 2×');
+  process.exitCode = 1;
+}
+
 const keeperH = FIFA.keeperHeight / FIFA.goalHeight;
 console.log(`keeper height / goal = ${keeperH.toFixed(3)} (6'2" / 8' = 0.770)`);
 const keeperW = FIFA.keeperWidth / FIFA.goalWidth;
@@ -207,8 +245,12 @@ const distances = Array.from({ length: 80 }, () => randomShotDistanceM());
 const dMin = Math.min(...distances);
 const dMax = Math.max(...distances);
 console.log(`shot distance samples: min=${dMin.toFixed(1)}m max=${dMax.toFixed(1)}m`);
-if (dMax - dMin < 5) {
-  console.error('FAIL: shot distance is not varying');
+if (dMax - dMin < 15) {
+  console.error('FAIL: shot distance is not spanning 6-yard to 30 m');
+  process.exitCode = 1;
+}
+if (dMin < MIN_SHOT_DISTANCE_M - 0.05 || dMax > MAX_SHOT_DISTANCE_M + 0.05) {
+  console.error('FAIL: shot distance samples escaped the 5.5–30 m range');
   process.exitCode = 1;
 }
 
@@ -231,5 +273,90 @@ const maxX = Math.max(...xs);
 console.log(`ball spawn x-ratio over 200 samples: min=${minX.toFixed(3)} max=${maxX.toFixed(3)} (expect spread across ~0.08–0.92)`);
 if (maxX - minX < 0.5) {
   console.error('FAIL: ball spawn is not spreading across the screen width');
+  process.exitCode = 1;
+}
+
+console.log('\n--- Keeper dive: always the correct way, never past the post ---');
+const midIntensity = diveIntensityForCell({ col: 7, row: 2 });
+const midIntensityR = diveIntensityForCell({ col: 8, row: 2 });
+const nearMid = diveIntensityForCell({ col: 6, row: 2 });
+const outerL = diveIntensityForCell({ col: 0, row: 4 });
+const outerR = diveIntensityForCell({ col: 15, row: 4 });
+console.log(
+  `intensity: centre7=${midIntensity} centre8=${midIntensityR} col6=${nearMid.toFixed(2)} col0=${outerL} col15=${outerR}`,
+);
+if (midIntensity !== 0 || midIntensityR !== 0) {
+  console.error('FAIL: middle squares must be a standing save (no dive)');
+  process.exitCode = 1;
+}
+if (!(nearMid > 0 && nearMid < 0.35)) {
+  console.error('FAIL: a square just off centre should be a short dive');
+  process.exitCode = 1;
+}
+if (outerL !== 1 || outerR !== 1) {
+  console.error('FAIL: the two outer columns should be a full-length dive');
+  process.exitCode = 1;
+}
+
+const stand = computeKeeperDive({ x: 0.02, y: 0.5 }, { col: 8, row: 2 }, true, DEFAULT_DIFFICULTY);
+const saveLeft = computeKeeperDive({ x: -0.92, y: 0.9 }, { col: 0, row: 4 }, true, DEFAULT_DIFFICULTY);
+const missRight = computeKeeperDive({ x: 0.92, y: 0.9 }, { col: 15, row: 4 }, false, DEFAULT_DIFFICULTY);
+const nudge = computeKeeperDive({ x: -0.2, y: 0.4 }, { col: 6, row: 1 }, true, DEFAULT_DIFFICULTY);
+console.log(
+  `stand: dir=${stand.direction} x=${stand.target.x.toFixed(3)} stretch=${stand.stretch.toFixed(2)}`,
+);
+console.log(
+  `save outer-left: dir=${saveLeft.direction} x=${saveLeft.target.x.toFixed(3)} stretch=${saveLeft.stretch.toFixed(2)}`,
+);
+console.log(
+  `miss outer-right: dir=${missRight.direction} x=${missRight.target.x.toFixed(3)} stretch=${missRight.stretch.toFixed(2)}`,
+);
+console.log(
+  `nudge left: dir=${nudge.direction} x=${nudge.target.x.toFixed(3)} stretch=${nudge.stretch.toFixed(2)}`,
+);
+if (stand.direction !== 0 || Math.abs(stand.target.x) > 1e-6 || stand.stretch !== 0) {
+  console.error('FAIL: a centre-square save must be a standing keeper');
+  process.exitCode = 1;
+}
+if (saveLeft.direction !== -1 || missRight.direction !== 1) {
+  console.error('FAIL: keeper dived the wrong way');
+  process.exitCode = 1;
+}
+if (Math.abs(saveLeft.target.x) > KEEPER_DIVE_MAX_X + 1e-9 || Math.abs(missRight.target.x) > KEEPER_DIVE_MAX_X + 1e-9) {
+  console.error('FAIL: dive target is past the allowed in-post range');
+  process.exitCode = 1;
+}
+if (saveLeft.stretch < 0.95) {
+  console.error('FAIL: a saved ball in an outer square should be a full-length dive');
+  process.exitCode = 1;
+}
+if (!(missRight.stretch < saveLeft.stretch)) {
+  console.error('FAIL: a beaten outer dive should stretch less than a save');
+  process.exitCode = 1;
+}
+if (Math.abs(nudge.target.x) >= Math.abs(saveLeft.target.x) * 0.5) {
+  console.error('FAIL: a near-centre square should dive much less than an outer square');
+  process.exitCode = 1;
+}
+
+let wrongWay = 0;
+let pastPost = 0;
+const DIVE_N = 4000;
+for (let i = 0; i < DIVE_N; i++) {
+  const g = gestureFor((Math.random() * 2 - 1) * 0.95, 0.15 + Math.random() * 0.8, 0.6 + Math.random() * 0.8);
+  const result = resolveShot(g);
+  const dive = result.keeperDive;
+  if (Math.abs(dive.target.x) > KEEPER_DIVE_MAX_X + 1e-6) pastPost++;
+  if (Math.abs(result.aim.x) > 0.04 && dive.direction !== 0 && Math.sign(dive.target.x) !== Math.sign(result.aim.x)) {
+    wrongWay++;
+  }
+}
+console.log(`random on-goal dives: wrong-way=${wrongWay}/${DIVE_N} past-post=${pastPost}/${DIVE_N}`);
+if (wrongWay > 0) {
+  console.error('FAIL: keeper dived the wrong way on at least one shot');
+  process.exitCode = 1;
+}
+if (pastPost > 0) {
+  console.error('FAIL: keeper dive target went past the post');
   process.exitCode = 1;
 }

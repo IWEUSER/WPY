@@ -18,7 +18,7 @@ import {
   randomShotDistanceM,
   type KeeperPose,
 } from './render';
-import type { AimPoint, ShotOutcomeKind, ShotResult, SwipeGesture } from './types';
+import type { ShotOutcomeKind, ShotResult, SwipeGesture } from './types';
 import StatsBar, { type ShotStats } from './StatsBar';
 
 type Phase = 'idle' | 'dragging' | 'shooting' | 'result';
@@ -200,7 +200,7 @@ export default function ShootingGame({
   const resetForNextShot = useCallback(() => {
     const { w, h } = sizeRef.current;
     const xRatio = randomBallStartXRatio();
-    const distanceM = randomShotDistanceM();
+    const distanceM = readDevDistance() ?? randomShotDistanceM();
     const view = createPitchView(w, h, distanceM);
     const start = ballStartPixel(view, xRatio);
     const anim = animRef.current;
@@ -346,16 +346,13 @@ export default function ShootingGame({
           const diveT = Math.min(1, diveElapsed / diveTotal);
           const diveEased = diveT * diveT * (3 - 2 * diveT);
 
-          // When saved, the keeper genuinely gets to the ball - render them
-          // arriving at its true position so the dive and the "SAVED" call
-          // always agree. When beaten, they dive to wherever they actually
-          // guessed, which can be the wrong way entirely.
-          const renderTarget: AimPoint = result.outcome === 'saved' ? result.aim : result.keeperDive.target;
-
+          // Always the correct side, distance and stretch from the landing
+          // square — never a wrong-way guess, never past the post.
+          const dive = result.keeperDive;
           anim.keeperPose = {
-            pos: { x: renderTarget.x * diveEased, y: 0 },
-            stretch: diveEased,
-            direction: renderTarget.x >= 0 ? 1 : -1,
+            pos: { x: dive.target.x * diveEased, y: 0 },
+            stretch: dive.stretch * diveEased,
+            direction: dive.direction,
             beaten: false,
           };
 

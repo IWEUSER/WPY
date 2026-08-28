@@ -19,15 +19,20 @@ export const FIFA = {
   ballDiameter: 0.22,
 };
 
-/** Camera sits this many metres behind the ball so the ball's screen Y stays fixed. */
-export const CAM_BEHIND_M = 9;
+/** Camera sits this many metres behind the ball so the ball's screen Y stays fixed.
+ * Kept short so a 6-yard spawn is viewed from ~11 m, not ~20 m — the goal then
+ * fills most of the frame the way a real 6-yard look does. */
+export const CAM_BEHIND_M = 5.5;
 export const HORIZON_Y = 0.1;
 /** Ball is always this fraction down the canvas, so the gap from the bottom is constant. */
 export const BALL_SCREEN_Y = 0.84;
-/** Dimensionless focal length: (metres / depth) × focal = fraction of canvas width. */
-export const CAMERA_FOCAL = 1.12;
-export const MIN_SHOT_DISTANCE_M = 11;
-export const MAX_SHOT_DISTANCE_M = 20;
+/** Dimensionless focal length: (metres / depth) × focal = fraction of canvas width.
+ * Tuned so a 6-yard shot's goal is ~80% of screen width, a 30 m shot ~25%. */
+export const CAMERA_FOCAL = 1.25;
+/** Closest spawn: the 6-yard line. At this distance the 6-yard marking sits on the ball. */
+export const MIN_SHOT_DISTANCE_M = FIFA.sixYardDepth;
+/** Furthest spawn: 30 m, well outside the penalty area. */
+export const MAX_SHOT_DISTANCE_M = 30;
 
 /** Layout of the goal plane within the canvas, as fractions of width/height.
  * Static fields that do not change with camera distance. */
@@ -311,10 +316,12 @@ export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose:
 
   ctx.save();
   ctx.translate(x, groundY);
-  const tilt = pose.direction * pose.stretch * 1.05;
+  const tilt = pose.direction * pose.stretch * 0.85;
   ctx.rotate(tilt);
-  const stretchOffset = pose.stretch * pose.direction * scale * 3.2;
-  ctx.translate(stretchOffset, -pose.stretch * scale * 1.1);
+  // Modest extra slide so a full-length dive stays inside the posts — the
+  // pose.pos.x already carries how far across the goal the keeper travels.
+  const stretchOffset = pose.stretch * pose.direction * scale * 1.35;
+  ctx.translate(stretchOffset, -pose.stretch * scale * 1.05);
 
   const kitLight = pose.beaten ? '#9ca3af' : '#fde047';
   const kitDark = pose.beaten ? '#4b5563' : '#ca8a04';
@@ -327,8 +334,9 @@ export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose:
   const shoulderY = -scale * 5.5;
   const headY = -scale * 6.9;
   const legSpread = 0.9 + pose.stretch * 1.5;
-  // Resting arm span ≈ 1.4m against a 7.32m goal; dive stretches further.
-  const armReach = 2.55 + pose.stretch * 2.8;
+  // Resting arm span ≈ 1.4m against a 7.32m goal; dive stretches further,
+  // but not so far that a full-length dive puts a glove past the post.
+  const armReach = 2.45 + pose.stretch * 2.15;
 
   ctx.strokeStyle = bootColor;
   ctx.lineWidth = scale * 0.62;

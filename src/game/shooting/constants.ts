@@ -36,6 +36,10 @@ export const MAX_TRAVEL_MS = 1080;
 /** How many ms it takes the keeper to cover one normalized unit of dive distance. */
 export const KEEPER_DIVE_MS_PER_UNIT = 300;
 
+/** Max |x| the keeper's body travels, in normalized goal space (posts at ±1).
+ * Kept well inside the posts so a full-length dive never carries them beyond. */
+export const KEEPER_DIVE_MAX_X = 0.52;
+
 /**
  * On-target shots are resolved against a 16-across × 5-down grid painted on
  * the goal mouth. Each square has its own save chance: the dead-centre square

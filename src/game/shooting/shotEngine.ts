@@ -5,6 +5,7 @@ import {
   DEFAULT_DIFFICULTY,
   GOAL_HALF_WIDTH,
   GOAL_HEIGHT,
+  KEEPER_DIVE_MAX_X,
   KEEPER_DIVE_MS_PER_UNIT,
   MAX_SWIPE_DISTANCE,
   MAX_TRAVEL_MS,
@@ -188,7 +189,7 @@ export function computeNoise(power: number, curl: number, difficulty: ShotDiffic
 
 export function computeTravelTimeMs(power: number, distanceM = 16.5): number {
   const base = lerp(MAX_TRAVEL_MS, MIN_TRAVEL_MS, power / 1.3);
-  return base * clamp(distanceM / 16.5, 0.7, 1.35);
+  return base * clamp(distanceM / 16.5, 0.45, 1.55);
 }
 
 export function classifyZoneX(x: number): ShotZoneX {
@@ -258,51 +259,59 @@ export function saveChanceForAim(aim: AimPoint, power = 1, curl = 0): number {
   return clamp(base * powerFactor * curlFactor, 0.06, 0.96);
 }
 
-/** Decides where the keeper dives to: a correct "read" of the ball with a small
- * tracking error, or a bad guess that sends them the wrong way entirely.
- * Power and curl both work against the keeper: a hard, swerving shot is
- * harder to read and, even when read correctly, harder to hold onto. */
+/**
+ * How far across the goal the keeper travels for a 16-wide landing square.
+ * The two centre columns (7 and 8) are a standing save — no dive. Intensity
+ * then ramps to 1 at the posts (columns 0 and 15) for a full-length dive.
+ */
+export function diveIntensityForCell(cell: SaveCell): number {
+  if (cell.col === 7 || cell.col === 8) return 0;
+  const distFromCentre = Math.abs(cell.col + 0.5 - SAVE_GRID_COLS / 2);
+  return Math.min(1, distFromCentre / (SAVE_GRID_COLS / 2 - 0.5));
+}
+
+/**
+ * Keeper always dives the correct way. How far they go is the landing square's
+ * column — centre squares stand, near-centre a short hop, the two outer
+ * columns a full-length dive — clamped so the body never travels past the post.
+ * Whether they actually save is decided only by the 16×5 grid roll, not by
+ * whether this dive geometrically reaches the ball.
+ */
 export function computeKeeperDive(
   actualAim: AimPoint,
-  intendedAim: AimPoint,
-  power: number,
-  curl: number,
+  saveCell: SaveCell | null,
+  saved: boolean,
   difficulty: ShotDifficulty,
-  rng: RandomSource = defaultRandom,
 ): KeeperDive {
-  const centralBonus = (1 - clamp(Math.abs(intendedAim.x) / GOAL_HALF_WIDTH, 0, 1)) * difficulty.keeperReadBonus * 0.5;
-  const slowBonus = Math.max(0, 1 - power) * difficulty.keeperReadBonus;
-  const curlPenalty = Math.abs(curl) * difficulty.curlConfusion;
-  const readChance = clamp(difficulty.keeperReadChance + centralBonus + slowBonus - curlPenalty, 0.05, 0.97);
+  const intensity = saveCell
+    ? diveIntensityForCell(saveCell)
+    : Math.min(1, Math.abs(actualAim.x) / (GOAL_HALF_WIDTH + 0.05));
 
-  const readCorrectly = rng() < readChance;
+  const direction: -1 | 0 | 1 =
+    intensity === 0 ? 0 : actualAim.x < 0 ? -1 : actualAim.x > 0 ? 1 : 0;
 
-  let target: AimPoint;
-  if (readCorrectly) {
-    target = {
-      x: actualAim.x + gaussianRandom(0, 0.08, rng),
-      y: clamp(actualAim.y + gaussianRandom(0, 0.08, rng), 0, GOAL_HEIGHT),
-    };
-  } else {
-    const wrongSide = actualAim.x >= 0 ? -1 : 1;
-    target = {
-      x: wrongSide * (0.35 + rng() * 0.6),
-      y: clamp(0.15 + rng() * 0.6, 0, GOAL_HEIGHT),
-    };
-  }
+  const x = direction * intensity * KEEPER_DIVE_MAX_X;
+  const y = saveCell
+    ? (saveCell.row + 0.5) / SAVE_GRID_ROWS
+    : clamp(actualAim.y, 0, GOAL_HEIGHT);
+
+  // Full stretch only when the grid says they hold an outer square. A beaten
+  // dive still goes the right way, just not laid out at full length.
+  const stretch = intensity === 0 ? 0 : saved ? 0.4 + 0.6 * intensity : 0.18 + 0.4 * intensity;
 
   const keeperStart: AimPoint = { x: 0, y: 0.28 };
-  const diveDistance = Math.hypot(target.x - keeperStart.x, target.y - keeperStart.y);
-  const reactionMs = difficulty.keeperReactionMs;
+  const diveDistance = Math.hypot(x - keeperStart.x, y - keeperStart.y);
+  const reactionMs = difficulty.keeperReactionMs * (saved ? 0.65 : 1);
   const diveDurationMs = reactionMs + diveDistance * KEEPER_DIVE_MS_PER_UNIT;
 
-  // A firmly struck ball is harder to cling onto even when the keeper gets a
-  // hand to it - shrink the effective reach as power climbs past the sweet
-  // spot, with a floor so it's never trivially unsaveable.
-  const powerReachFactor = 1 - clamp(power - 1, 0, 0.8) * difficulty.powerReachPenalty;
-  const effectiveReach = difficulty.keeperReach * clamp(powerReachFactor, 0.4, 1);
-
-  return { target, reactionMs, diveDurationMs, reach: effectiveReach };
+  return {
+    target: { x, y },
+    reactionMs,
+    diveDurationMs,
+    reach: difficulty.keeperReach,
+    direction,
+    stretch,
+  };
 }
 
 export interface ResolveShotOptions {
@@ -332,7 +341,7 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
       power,
       curl,
       travelTimeMs,
-      keeperDive: computeKeeperDive(actualAim, intendedAim, power, curl, difficulty, rng),
+      keeperDive: computeKeeperDive(actualAim, null, false, difficulty),
       saveMargin: 0,
     };
   }
@@ -345,33 +354,15 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
       power,
       curl,
       travelTimeMs,
-      keeperDive: computeKeeperDive(actualAim, intendedAim, power, curl, difficulty, rng),
+      keeperDive: computeKeeperDive(actualAim, null, false, difficulty),
       saveMargin: 0,
     };
   }
 
   const saveCell = aimToSaveCell(actualAim);
   const saved = rng() < saveChanceForAim(actualAim, power, curl);
-
-  let keeperDive: KeeperDive;
-  if (saved) {
-    // Dive onto the ball so the animation matches a genuine save, even into
-    // a top corner — the grid, not reach geometry, decided the outcome.
-    const keeperStart: AimPoint = { x: 0, y: 0.28 };
-    const diveDistance = Math.hypot(actualAim.x - keeperStart.x, actualAim.y - keeperStart.y);
-    const reactionMs = difficulty.keeperReactionMs * 0.65;
-    keeperDive = {
-      target: { x: actualAim.x, y: actualAim.y },
-      reactionMs,
-      diveDurationMs: Math.min(reactionMs + diveDistance * KEEPER_DIVE_MS_PER_UNIT, travelTimeMs * 0.92),
-      reach: difficulty.keeperReach,
-    };
-  } else {
-    keeperDive = computeKeeperDive(actualAim, intendedAim, power, curl, difficulty, rng);
-  }
-
-  const distanceToBall = Math.hypot(actualAim.x - keeperDive.target.x, actualAim.y - keeperDive.target.y);
-  const saveMargin = saved ? clamp(1 - distanceToBall / Math.max(keeperDive.reach, 1e-3), 0, 1) : 0;
+  const keeperDive = computeKeeperDive(actualAim, saveCell, saved, difficulty);
+  const saveMargin = saved ? 1 - keeperDive.stretch * 0.25 : 0;
 
   return {
     outcome: saved ? 'saved' : 'goal',
