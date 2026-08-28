@@ -269,6 +269,15 @@ export const useCareerStore = create<CareerStore>()(
     {
       name: 'wpy-career-v1',
       version: 2,
+      migrate: (persisted) => {
+        const state = persisted as Partial<CareerState>;
+        return {
+          ...state,
+          nationality: state.nationality ?? null,
+          nationalTeam: state.nationalTeam ?? null,
+          seasonCalendar: state.seasonCalendar ?? null,
+        };
+      },
     },
   ),
 );
