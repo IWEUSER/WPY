@@ -3,6 +3,7 @@ import ShootingGame from '../shooting/ShootingGame';
 import HomeScreen from './screens/HomeScreen';
 import TrialScreen from './screens/TrialScreen';
 import ClubOfferScreen from './screens/ClubOfferScreen';
+import NationalityScreen from './screens/NationalityScreen';
 import CareerHub from './screens/CareerHub';
 import MatchScreen from './screens/MatchScreen';
 import SeasonSummaryScreen from './screens/SeasonSummaryScreen';
@@ -12,6 +13,7 @@ import { useCareerStore } from './store';
 export default function CareerApp() {
   const [practicing, setPracticing] = useState(false);
   const phase = useCareerStore((s) => s.phase);
+  const nationality = useCareerStore((s) => s.nationality);
   const returnToMenu = useCareerStore((s) => s.returnToMenu);
 
   if (practicing) {
@@ -29,11 +31,19 @@ export default function CareerApp() {
     );
   }
 
+  // Existing saves created before the nationality screen still have a club
+  // but no country - ask before they can keep playing.
+  if (!nationality && phase !== 'menu' && phase !== 'trial' && phase !== 'club-offer' && phase !== 'nationality-choice') {
+    return <NationalityScreen />;
+  }
+
   switch (phase) {
     case 'trial':
       return <TrialScreen />;
     case 'club-offer':
       return <ClubOfferScreen />;
+    case 'nationality-choice':
+      return <NationalityScreen />;
     case 'match':
       return <MatchScreen />;
     case 'season-summary':

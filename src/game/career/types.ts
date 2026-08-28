@@ -1,5 +1,6 @@
 import type { ShotResult } from '../shooting/types';
 import type { SeasonCalendar } from './calendar';
+import type { NationalTeamState } from './international';
 import type { PendingTransfer } from './transfers';
 
 export type PlayerRole = 'reserve' | 'first-team' | 'loan';
@@ -46,7 +47,15 @@ export interface TrialState {
   offeredClubIds: string[];
 }
 
-export type CareerPhase = 'menu' | 'trial' | 'club-offer' | 'hub' | 'match' | 'season-summary' | 'transfer-choice';
+export type CareerPhase =
+  | 'menu'
+  | 'trial'
+  | 'club-offer'
+  | 'nationality-choice'
+  | 'hub'
+  | 'match'
+  | 'season-summary'
+  | 'transfer-choice';
 
 export interface CareerState {
   phase: CareerPhase;
@@ -66,10 +75,12 @@ export interface CareerState {
   /** Set when a loan/sale/transfer decision needs the player to pick a club. */
   pendingTransfer: PendingTransfer | null;
   /** Chosen international nationality (independent of current club) - null
-   * until picked. Squad selection/fixtures are part of the season 2-20
-   * simulation (see international.ts); this field just remembers the
-   * choice. */
+   * until picked. The player chooses this once after signing their first
+   * club; call-ups later use goal ratio + club level (see international.ts). */
   nationality: string | null;
+  /** Caps, goals, and the same miss-streak drop rule as club football, scoped
+   * to the national team. Null until a nationality is chosen. */
+  nationalTeam: NationalTeamState | null;
   /** This season's fixture list once there are real opponents (season 2+) -
    * null in Season 1, which is reserve-team, no-opponents by design. Built
    * by calendar.ts; consumed by the not-yet-implemented season 2-20 engine

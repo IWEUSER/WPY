@@ -49,7 +49,11 @@ export function createNationalTeamState(nationId: string): NationalTeamState {
  * directly. Bigger clubs put a player in front of more selectors, so a
  * lower ratio there still gets you picked over the same ratio at a tiny
  * club. */
-const SELECTION_RATIO_BY_TIER: readonly number[] = [0, 0.3, 0.35, 0.42, 0.5, 0.6];
+export const SELECTION_RATIO_BY_TIER: readonly number[] = [0, 0.3, 0.35, 0.42, 0.5, 0.6];
+
+export function selectionRatioForTier(clubTier: ClubTier): number {
+  return SELECTION_RATIO_BY_TIER[clubTier];
+}
 
 /**
  * Whether the player earns international selection this season, based on

@@ -4,6 +4,7 @@ import { applyMatchResult, createAvailability, isAvailable, serveBannedGame } fr
 import { buildSeasonCalendar, type SeasonCalendar } from './calendar';
 import { getClub } from './data/clubs';
 import { confederationForCountry } from './data/competitions';
+import { createNationalTeamState } from './international';
 import { offerClubsForTrial, TRIAL_SHOTS } from './trial';
 import { resolveSeasonTransition } from './transfers';
 import type { ShotResult } from '../shooting/types';
@@ -58,6 +59,7 @@ function initialState(): CareerState {
     careerGames: 0,
     pendingTransfer: null,
     nationality: null,
+    nationalTeam: null,
     seasonCalendar: null,
   };
 }
@@ -67,6 +69,8 @@ interface CareerActions {
   recordTrialShot: (result: ShotResult) => void;
   finishTrial: () => void;
   chooseClub: (clubId: string) => void;
+  /** Records the player's international nationality - independent of club. */
+  chooseNationality: (nationId: string) => void;
   /** Fast-forwards through any matches the player is currently dropped for,
    * then either opens the next match or closes out the season. */
   advance: () => void;
@@ -116,6 +120,13 @@ export const useCareerStore = create<CareerStore>()(
           currentSeason: freshSeason(1, clubId, 'reserve'),
           seasonCalendar: null,
           pendingTransfer: null,
+          phase: 'nationality-choice',
+        }),
+
+      chooseNationality: (nationId) =>
+        set({
+          nationality: nationId,
+          nationalTeam: createNationalTeamState(nationId),
           phase: 'hub',
         }),
 
@@ -257,7 +268,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 1,
+      version: 2,
     },
   ),
 );

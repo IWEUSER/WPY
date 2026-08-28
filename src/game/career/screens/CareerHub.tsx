@@ -2,6 +2,7 @@ import { calendarIncludesInternational, type SeasonCalendar } from '../calendar'
 import { getClub } from '../data/clubs';
 import { CONTINENTAL_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { describeAvailability, isAvailable } from '../availabilityEngine';
+import { getNation, isSelectedForNationalTeam, selectionRatioForTier } from '../international';
 import { useCareerStore, SEASON_LENGTH } from '../store';
 
 const ROLE_LABEL: Record<string, string> = {
@@ -21,10 +22,12 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const availability = useCareerStore((s) => s.availability);
   const careerGoals = useCareerStore((s) => s.careerGoals);
   const careerGames = useCareerStore((s) => s.careerGames);
+  const nationality = useCareerStore((s) => s.nationality);
   const advance = useCareerStore((s) => s.advance);
 
   const club = clubId ? getClub(clubId) : undefined;
   const parentClub = role === 'loan' && parentClubId ? getClub(parentClubId) : undefined;
+  const nation = nationality ? getNation(nationality) : undefined;
   if (!club || !season) return null;
 
   const played = season.gamesPlayed;
@@ -54,6 +57,11 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         <p className="text-xs text-white/50">
           {club.country} · {club.league}
         </p>
+        {nation && (
+          <p className="mt-1 text-xs text-white/50">
+            International: {nation.name}
+          </p>
+        )}
         {parentClub && <p className="mt-1 text-xs text-white/40">On loan from {parentClub.name}</p>}
         <SeasonCompetitions calendar={seasonCalendar} />
       </div>
@@ -92,6 +100,15 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         )}
       </div>
 
+      {nation && (
+        <InternationalCard
+          nationName={nation.name}
+          clubTier={club.tier}
+          seasonRatio={ratio}
+          gamesPlayed={played}
+        />
+      )}
+
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-xl bg-white/5 p-3 text-center">
           <p className="text-lg font-bold">{careerGoals}</p>
@@ -113,6 +130,37 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
       >
         {available ? 'Play Next Match' : 'Continue'}
       </button>
+    </div>
+  );
+}
+
+function InternationalCard({
+  nationName,
+  clubTier,
+  seasonRatio,
+  gamesPlayed,
+}: {
+  nationName: string;
+  clubTier: 1 | 2 | 3 | 4 | 5;
+  seasonRatio: number;
+  gamesPlayed: number;
+}) {
+  const bar = selectionRatioForTier(clubTier);
+  const inForm = gamesPlayed > 0 && isSelectedForNationalTeam(clubTier, seasonRatio);
+
+  return (
+    <div className="rounded-2xl bg-white/5 p-4">
+      <p className="text-xs uppercase tracking-wide text-white/40">{nationName} call-up</p>
+      <p className={`mt-1 text-sm font-semibold ${inForm ? 'text-emerald-300' : 'text-white/80'}`}>
+        {gamesPlayed === 0
+          ? `Need ${bar.toFixed(2)} goals/game at this club level to earn a call-up.`
+          : inForm
+            ? `On current form, ${nationName} would pick you.`
+            : `Need ${bar.toFixed(2)} goals/game at this club level - currently ${seasonRatio.toFixed(2)}.`}
+      </p>
+      <p className="mt-1 text-xs text-white/40">
+        Miss a scoring streak for your country and you get dropped, same as at club level.
+      </p>
     </div>
   );
 }
