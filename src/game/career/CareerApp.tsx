@@ -15,7 +15,9 @@ if (import.meta.env.DEV) {
 }
 
 export default function CareerApp() {
-  const [practicing, setPracticing] = useState(false);
+  const [practicing, setPracticing] = useState(
+    () => import.meta.env.DEV && new URLSearchParams(window.location.search).has('practice'),
+  );
   const phase = useCareerStore((s) => s.phase);
   const nationality = useCareerStore((s) => s.nationality);
   const returnToMenu = useCareerStore((s) => s.returnToMenu);

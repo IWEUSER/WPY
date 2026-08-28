@@ -18,12 +18,14 @@ export const FIFA = {
  * The goal is smaller than the old close-up framing so more of the pitch is
  * visible; box widths/depths are derived from FIFA ratios, not fudge factors. */
 export const LAYOUT = {
-  goalHalfWidth: 0.185,
-  goalBottomY: 0.205,
-  eighteenBottomY: 0.56,
+  /** Goal half-width as a fraction of canvas width. Small enough that the
+   * 6-yard box sits clearly inside the frame with grass on both sides. */
+  goalHalfWidth: 0.145,
+  goalBottomY: 0.195,
+  eighteenBottomY: 0.58,
   ballStartY: 0.84,
   /** Near (camera-side) edge of the 18-yard box vs its far (goal-line) edge. */
-  perspectiveFlare: 1.26,
+  perspectiveFlare: 1.22,
 };
 
 /** Inset from each canvas edge so a random spawn never sits under the HUD. */
@@ -130,8 +132,8 @@ export function drawPitch(ctx: CanvasRenderingContext2D, w: number, h: number, t
     halfBottom: sixHalfBottom,
   };
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
-  ctx.lineWidth = Math.max(2, w * 0.004);
+  ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+  ctx.lineWidth = Math.max(2.5, w * 0.005);
   drawBoxOutline(ctx, w, penaltyBox);
   drawBoxOutline(ctx, w, goalBox);
 
