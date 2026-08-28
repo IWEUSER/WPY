@@ -169,7 +169,7 @@ function StandingsCard({ standings, clubId }: { standings: SeasonStandings; club
       <p className="text-xs uppercase tracking-wide text-white/40">Standings</p>
       <div className="mt-2 grid grid-cols-2 gap-3">
         <div>
-          <p className="text-2xl font-extrabold">{us ? `${us.position}` : '—'}</p>
+          <p className="text-2xl font-extrabold">{us && us.played > 0 ? `${us.position}` : '—'}</p>
           <p className="text-[10px] uppercase tracking-wide text-white/40">League position</p>
           {us && (
             <p className="mt-1 text-xs text-white/50">
