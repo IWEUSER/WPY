@@ -11,11 +11,16 @@ import {
   MIN_SWIPE_DISTANCE,
   MIN_TRAVEL_MS,
   REFERENCE_SPEED,
+  SAVE_CHANCE_CENTER,
+  SAVE_CHANCE_TOP_CORNER,
+  SAVE_GRID_COLS,
+  SAVE_GRID_ROWS,
   WOODWORK_MARGIN,
 } from './constants';
 import type {
   AimPoint,
   KeeperDive,
+  SaveCell,
   ShotDifficulty,
   ShotOutcomeKind,
   ShotResult,
@@ -163,6 +168,43 @@ function classifyMiss(aim: AimPoint): ShotOutcomeKind {
   return 'wide';
 }
 
+/** Maps an on-target aim point onto the 16×5 goalmouth grid.
+ * Col 0 is the left post, col 15 the right; row 0 is the ground, row 4 the bar. */
+export function aimToSaveCell(aim: AimPoint): SaveCell {
+  const col = clamp(Math.floor(((aim.x + GOAL_HALF_WIDTH) / (2 * GOAL_HALF_WIDTH)) * SAVE_GRID_COLS), 0, SAVE_GRID_COLS - 1);
+  const row = clamp(Math.floor((aim.y / GOAL_HEIGHT) * SAVE_GRID_ROWS), 0, SAVE_GRID_ROWS - 1);
+  return { col, row };
+}
+
+/**
+ * Keeper save probability for a given grid square. Falls off from the centre
+ * square (highest) toward the two top corners (lowest), so a shot stuffed
+ * down the middle is usually held and a top-corner strike is the keeper's
+ * worst look.
+ */
+export function saveChanceForCell(cell: SaveCell): number {
+  const cx = (SAVE_GRID_COLS - 1) / 2;
+  const cy = (SAVE_GRID_ROWS - 1) / 2;
+  const dx = (cell.col - cx) / cx;
+  const dy = (cell.row - cy) / cy;
+  // Top of the goal is harder than the ground; weight the upward axis more.
+  const upWeight = 1;
+  const downWeight = 0.55;
+  const vert = dy >= 0 ? dy * upWeight : -dy * downWeight;
+  const dist = Math.hypot(dx, vert);
+  const t = clamp(dist / Math.hypot(1, upWeight), 0, 1);
+  const eased = t * t;
+  return lerp(SAVE_CHANCE_CENTER, SAVE_CHANCE_TOP_CORNER, eased);
+}
+
+export function saveChanceForAim(aim: AimPoint, power = 1, curl = 0): number {
+  const base = saveChanceForCell(aimToSaveCell(aim));
+  const powerT = clamp((power - 0.25) / 1.55, 0, 1);
+  const powerFactor = lerp(1.06, 0.87, powerT);
+  const curlFactor = 1 - Math.abs(curl) * 0.1;
+  return clamp(base * powerFactor * curlFactor, 0.06, 0.96);
+}
+
 /** Decides where the keeper dives to: a correct "read" of the ball with a small
  * tracking error, or a bad guess that sends them the wrong way entirely.
  * Power and curl both work against the keeper: a hard, swerving shot is
@@ -255,13 +297,28 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
     };
   }
 
-  const keeperDive = computeKeeperDive(actualAim, intendedAim, power, curl, difficulty, rng);
-  const keeperOnTime = keeperDive.diveDurationMs <= travelTimeMs;
-  const distanceToBall = Math.hypot(actualAim.x - keeperDive.target.x, actualAim.y - keeperDive.target.y);
-  const withinReach = distanceToBall <= keeperDive.reach;
-  const saved = keeperOnTime && withinReach;
+  const saveCell = aimToSaveCell(actualAim);
+  const saved = rng() < saveChanceForAim(actualAim, power, curl);
 
-  const saveMargin = keeperOnTime ? clamp(1 - distanceToBall / keeperDive.reach, 0, 1) : 0;
+  let keeperDive: KeeperDive;
+  if (saved) {
+    // Dive onto the ball so the animation matches a genuine save, even into
+    // a top corner — the grid, not reach geometry, decided the outcome.
+    const keeperStart: AimPoint = { x: 0, y: 0.28 };
+    const diveDistance = Math.hypot(actualAim.x - keeperStart.x, actualAim.y - keeperStart.y);
+    const reactionMs = difficulty.keeperReactionMs * 0.65;
+    keeperDive = {
+      target: { x: actualAim.x, y: actualAim.y },
+      reactionMs,
+      diveDurationMs: Math.min(reactionMs + diveDistance * KEEPER_DIVE_MS_PER_UNIT, travelTimeMs * 0.92),
+      reach: difficulty.keeperReach,
+    };
+  } else {
+    keeperDive = computeKeeperDive(actualAim, intendedAim, power, curl, difficulty, rng);
+  }
+
+  const distanceToBall = Math.hypot(actualAim.x - keeperDive.target.x, actualAim.y - keeperDive.target.y);
+  const saveMargin = saved ? clamp(1 - distanceToBall / Math.max(keeperDive.reach, 1e-3), 0, 1) : 0;
 
   return {
     outcome: saved ? 'saved' : 'goal',
@@ -272,5 +329,6 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
     travelTimeMs,
     keeperDive,
     saveMargin,
+    saveCell,
   };
 }

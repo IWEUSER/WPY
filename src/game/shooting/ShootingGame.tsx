@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import * as audio from './audio';
 import { MAX_ARC_HEIGHT_RATIO, MAX_BEND_RATIO, MIN_ARC_HEIGHT_RATIO } from './constants';
 import { computeSwipeCurl, isValidSwipe, resolveShot } from './shotEngine';
-import { ballStartPixel, drawBall, drawGoal, drawKeeper, drawPitch, drawTrail, goalToPixel, type KeeperPose } from './render';
+import { ballStartPixel, drawBall, drawGoal, drawKeeper, drawPitch, drawTrail, goalToPixel, randomBallStartXRatio, type KeeperPose } from './render';
 import type { AimPoint, ShotOutcomeKind, ShotResult, SwipeGesture } from './types';
 import StatsBar, { type ShotStats } from './StatsBar';
 
@@ -28,6 +28,8 @@ interface AnimState {
   resultAtMs: number;
   shakeMagnitude: number;
   shakeUntilMs: number;
+  /** Horizontal spawn of the idle ball, as a fraction of canvas width. */
+  ballStartXRatio: number;
 }
 
 const RESULT_HOLD_MS = 1500;
@@ -115,6 +117,8 @@ export default function ShootingGame({
   const [stats, setStats] = useState<ShotStats>({ shots: 0, goals: 0, streak: 0, bestStreak: 0 });
   const [muted, setMuted] = useState(false);
 
+  const [ballHintX, setBallHintX] = useState(0.5);
+
   const shotsTakenRef = useRef(0);
   const maxShotsRef = useRef(maxShots);
   maxShotsRef.current = maxShots;
@@ -137,11 +141,16 @@ export default function ShootingGame({
     resultAtMs: 0,
     shakeMagnitude: 0,
     shakeUntilMs: 0,
+    ballStartXRatio: randomBallStartXRatio(),
   });
 
   useEffect(() => {
     audio.setMuted(muted);
   }, [muted]);
+
+  useEffect(() => {
+    setBallHintX(animRef.current.ballStartXRatio);
+  }, []);
 
   // Keep canvas sized to its container (handles rotation/resizing responsively).
   useEffect(() => {
@@ -167,12 +176,14 @@ export default function ShootingGame({
 
   const resetForNextShot = useCallback(() => {
     const { w, h } = sizeRef.current;
-    const start = ballStartPixel(w, h);
+    const xRatio = randomBallStartXRatio();
+    const start = ballStartPixel(w, h, xRatio);
     const anim = animRef.current;
     anim.phase = 'idle';
     anim.dragStart = null;
     anim.dragPoints = [];
     anim.result = null;
+    anim.ballStartXRatio = xRatio;
     anim.ballPixel = start;
     anim.ballRadius = w * BASE_BALL_RADIUS_RATIO;
     anim.ballRotation = 0;
@@ -180,6 +191,7 @@ export default function ShootingGame({
     anim.keeperPose = makeIdleKeeper();
     anim.shakeMagnitude = 0;
     anim.shakeUntilMs = 0;
+    setBallHintX(xRatio);
     setUiPhase('idle');
     setResultLabel(null);
   }, []);
@@ -254,7 +266,7 @@ export default function ShootingGame({
         drawGoal(ctx, w, h);
 
         if (anim.phase === 'idle' || anim.phase === 'dragging') {
-          const start = ballStartPixel(w, h);
+          const start = ballStartPixel(w, h, anim.ballStartXRatio);
           anim.ballPixel = start;
           anim.ballRadius = w * BASE_BALL_RADIUS_RATIO;
           drawKeeper(ctx, w, h, anim.keeperPose);
@@ -271,7 +283,7 @@ export default function ShootingGame({
           const t = Math.min(1, elapsed / result.travelTimeMs);
           const eased = t * t * (3 - 2 * t); // smoothstep
 
-          const start = ballStartPixel(w, h);
+          const start = ballStartPixel(w, h, anim.ballStartXRatio);
           // The ball always flies to where it truly ends up - never redirect
           // its visual path toward the keeper - so what you see is always
           // consistent with the outcome (no more "that went in" saves).
@@ -455,7 +467,13 @@ export default function ShootingGame({
         <canvas ref={canvasRef} className="absolute inset-0 h-full w-full touch-none" />
 
         {uiPhase === 'idle' && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-[14%] flex justify-center">
+          <div
+            className="pointer-events-none absolute bottom-[14%] whitespace-nowrap"
+            style={{
+              left: `${Math.min(0.82, Math.max(0.18, ballHintX)) * 100}%`,
+              transform: 'translateX(-50%)',
+            }}
+          >
             <div className="animate-pulse rounded-full bg-black/40 px-4 py-1.5 text-sm text-white/80 backdrop-blur">
               Swipe up on the ball to shoot ⬆
             </div>

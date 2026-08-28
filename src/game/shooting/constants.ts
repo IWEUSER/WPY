@@ -36,6 +36,19 @@ export const MAX_TRAVEL_MS = 1080;
 /** How many ms it takes the keeper to cover one normalized unit of dive distance. */
 export const KEEPER_DIVE_MS_PER_UNIT = 300;
 
+/**
+ * On-target shots are resolved against a 16-across × 5-down grid painted on
+ * the goal mouth. Each square has its own save chance: the dead-centre square
+ * is where the keeper is strongest, the two top-corner squares are where they
+ * are weakest.
+ */
+export const SAVE_GRID_COLS = 16;
+export const SAVE_GRID_ROWS = 5;
+/** Probability the keeper holds a shot aimed at the centre square. */
+export const SAVE_CHANCE_CENTER = 0.9;
+/** Probability the keeper holds a shot aimed at a top-corner square. */
+export const SAVE_CHANCE_TOP_CORNER = 0.16;
+
 /** Trajectory arc height (as a fraction of canvas height) at min vs max power -
  * soft/finesse shots loop more, powerful drives fly flatter and faster. */
 export const MAX_ARC_HEIGHT_RATIO = 0.17;

@@ -1,23 +1,62 @@
 import type { AimPoint } from './types';
 
-/** Layout of the goal plane within the canvas, as fractions of width/height.
- * Tuned so the goal reads as a real, wide-rectangle goal (not a tall box)
- * relative to the ball and keeper, on a portrait phone screen. */
-export const LAYOUT = {
-  goalTopY: 0.17,
-  goalBottomY: 0.3,
-  goalHalfWidth: 0.33,
-  ballStartY: 0.86,
+/** FIFA markings in metres. Boxes are drawn from these ratios to the goal
+ * (7.32 × 2.44), so the 6-yard and 18-yard areas stay in true proportion
+ * even when the pitch is scaled to show more grass. */
+export const FIFA = {
+  goalWidth: 7.32,
+  goalHeight: 2.44,
+  sixYardWidth: 18.32,
+  sixYardDepth: 5.5,
+  eighteenYardWidth: 40.32,
+  eighteenYardDepth: 16.5,
+  penaltySpot: 11,
+  penaltyArcRadius: 9.15,
 };
 
+/** Layout of the goal plane within the canvas, as fractions of width/height.
+ * The goal is smaller than the old close-up framing so more of the pitch is
+ * visible; box widths/depths are derived from FIFA ratios, not fudge factors. */
+export const LAYOUT = {
+  goalHalfWidth: 0.185,
+  goalBottomY: 0.205,
+  eighteenBottomY: 0.56,
+  ballStartY: 0.84,
+  /** Near (camera-side) edge of the 18-yard box vs its far (goal-line) edge. */
+  perspectiveFlare: 1.26,
+};
+
+/** Inset from each canvas edge so a random spawn never sits under the HUD. */
+export const BALL_SPAWN_X_MARGIN = 0.08;
+
+export function randomBallStartXRatio(rng: () => number = Math.random): number {
+  return BALL_SPAWN_X_MARGIN + rng() * (1 - 2 * BALL_SPAWN_X_MARGIN);
+}
+
+export interface GoalFrame {
+  halfW: number;
+  topY: number;
+  botY: number;
+  heightPx: number;
+}
+
+/** Pixel rect of the goal, always 7.32:2.44 regardless of canvas aspect. */
+export function goalFrame(w: number, h: number): GoalFrame {
+  const halfW = LAYOUT.goalHalfWidth * w;
+  const botY = LAYOUT.goalBottomY * h;
+  const heightPx = halfW * 2 * (FIFA.goalHeight / FIFA.goalWidth);
+  return { halfW, topY: botY - heightPx, botY, heightPx };
+}
+
 export function goalToPixel(aim: AimPoint, w: number, h: number): { x: number; y: number } {
-  const x = w / 2 + aim.x * (LAYOUT.goalHalfWidth * w);
-  const y = LAYOUT.goalBottomY * h - aim.y * ((LAYOUT.goalBottomY - LAYOUT.goalTopY) * h);
+  const { halfW, topY, botY } = goalFrame(w, h);
+  const x = w / 2 + aim.x * halfW;
+  const y = botY - aim.y * (botY - topY);
   return { x, y };
 }
 
-export function ballStartPixel(w: number, h: number): { x: number; y: number } {
-  return { x: w / 2, y: LAYOUT.ballStartY * h };
+export function ballStartPixel(w: number, h: number, xRatio = 0.5): { x: number; y: number } {
+  return { x: xRatio * w, y: LAYOUT.ballStartY * h };
 }
 
 interface BoxSpec {
@@ -44,39 +83,51 @@ export function drawPitch(ctx: CanvasRenderingContext2D, w: number, h: number, t
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, w, h);
 
+  const { halfW, topY, botY } = goalFrame(w, h);
+
   // Mowed-grass stripes converging toward the goal for a sense of perspective.
   const stripeCount = 9;
-  const vanishY = LAYOUT.goalTopY * h - h * 0.12;
+  const vanishY = topY - h * 0.12;
   for (let i = 0; i < stripeCount; i++) {
     const t0 = i / stripeCount;
     const t1 = (i + 1) / stripeCount;
     ctx.beginPath();
     ctx.moveTo(lerp(0, w, t0), h);
     ctx.lineTo(lerp(0, w, t1), h);
-    ctx.lineTo(lerp(w * 0.32, w * 0.68, t1), vanishY);
-    ctx.lineTo(lerp(w * 0.32, w * 0.68, t0), vanishY);
+    ctx.lineTo(lerp(w * 0.38, w * 0.62, t1), vanishY);
+    ctx.lineTo(lerp(w * 0.38, w * 0.62, t0), vanishY);
     ctx.closePath();
     ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.03)';
     ctx.fill();
   }
 
-  const goalLineY = LAYOUT.goalBottomY * h;
-  const halfW = LAYOUT.goalHalfWidth * w;
+  const goalLineY = botY;
+  const eighteenBottomY = LAYOUT.eighteenBottomY * h;
+  const eighteenDepth = Math.max(1, eighteenBottomY - goalLineY);
+  const sixDepth = eighteenDepth * (FIFA.sixYardDepth / FIFA.eighteenYardDepth);
+  const penaltyDepth = eighteenDepth * (FIFA.penaltySpot / FIFA.eighteenYardDepth);
+  const flare = LAYOUT.perspectiveFlare;
 
-  // 18-yard penalty box - the big trapezoid, its near (bottom) edge running
-  // wide and open past the screen edges since we're standing inside it.
+  const eighteenHalfTop = halfW * (FIFA.eighteenYardWidth / FIFA.goalWidth);
+  const eighteenHalfBottom = eighteenHalfTop * flare;
+  const sixHalfTop = halfW * (FIFA.sixYardWidth / FIFA.goalWidth);
+  const sixT = FIFA.sixYardDepth / FIFA.eighteenYardDepth;
+  const sixHalfBottom = sixHalfTop * (1 + (flare - 1) * sixT);
+
+  // 18-yard penalty box. Width is 40.32m vs the 7.32m goal, so the sides run
+  // off-screen on a portrait view — we're standing inside the box looking in.
   const penaltyBox: BoxSpec = {
-    topY: goalLineY + h * 0.006,
-    bottomY: goalLineY + h * 0.34,
-    halfTop: halfW * 1.55,
-    halfBottom: halfW * 2.05,
+    topY: goalLineY + h * 0.004,
+    bottomY: eighteenBottomY,
+    halfTop: eighteenHalfTop,
+    halfBottom: eighteenHalfBottom,
   };
-  // 6-yard box (goal area) - smaller, nested box right in front of the goal.
+  // 6-yard box (goal area): 18.32m wide, 5.5m deep — one third of the 18-yard depth.
   const goalBox: BoxSpec = {
-    topY: goalLineY + h * 0.006,
-    bottomY: goalLineY + h * 0.11,
-    halfTop: halfW * 1.14,
-    halfBottom: halfW * 1.28,
+    topY: goalLineY + h * 0.004,
+    bottomY: goalLineY + sixDepth,
+    halfTop: sixHalfTop,
+    halfBottom: sixHalfBottom,
   };
 
   ctx.strokeStyle = 'rgba(255,255,255,0.55)';
@@ -84,18 +135,20 @@ export function drawPitch(ctx: CanvasRenderingContext2D, w: number, h: number, t
   drawBoxOutline(ctx, w, penaltyBox);
   drawBoxOutline(ctx, w, goalBox);
 
-  // Penalty arc - a shallow "D" that bulges out from the edge of the 18-yard
-  // box, clipped so only the portion outside the box is visible, with the
-  // penalty spot at its centre (the true architectural point, not the
-  // stylised spot the shooter stands at further downfield).
-  const arcRadius = h * 0.09;
-  const penaltySpotY = penaltyBox.bottomY - arcRadius * 0.6;
+  // Penalty arc: 9.15m radius around the spot (11m from the goal line),
+  // clipped so only the "D" outside the 18-yard box is visible.
+  const penaltySpotY = goalLineY + penaltyDepth;
+  const pxPerMeterY = eighteenDepth / FIFA.eighteenYardDepth;
+  const halfAtPenalty = lerp(eighteenHalfTop, eighteenHalfBottom, FIFA.penaltySpot / FIFA.eighteenYardDepth);
+  const pxPerMeterX = (halfAtPenalty * 2) / FIFA.eighteenYardWidth;
+  const arcRadiusX = FIFA.penaltyArcRadius * pxPerMeterX;
+  const arcRadiusY = FIFA.penaltyArcRadius * pxPerMeterY;
   ctx.save();
   ctx.beginPath();
   ctx.rect(0, penaltyBox.bottomY, w, Math.max(0, h - penaltyBox.bottomY));
   ctx.clip();
   ctx.beginPath();
-  ctx.arc(w / 2, penaltySpotY, arcRadius, 0, Math.PI * 2);
+  ctx.ellipse(w / 2, penaltySpotY, arcRadiusX, arcRadiusY, 0, 0, Math.PI * 2);
   ctx.stroke();
   ctx.restore();
 
@@ -114,9 +167,7 @@ export function drawPitch(ctx: CanvasRenderingContext2D, w: number, h: number, t
 }
 
 export function drawGoal(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const topY = LAYOUT.goalTopY * h;
-  const botY = LAYOUT.goalBottomY * h;
-  const halfW = LAYOUT.goalHalfWidth * w;
+  const { halfW, topY, botY } = goalFrame(w, h);
   const postW = Math.max(3, w * 0.011);
 
   // Net (behind the frame).
@@ -155,14 +206,21 @@ export function drawGoal(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.lineTo(w / 2 + halfW, botY + postW);
   ctx.stroke();
 
-  // Zone guide lines (very faint, purely a visual/aiming aid).
-  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  // Faint 16×5 save-grid guides so the corners vs centre read on the goal.
+  const goalH = botY - topY;
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(w / 2 - halfW / 3, topY);
-  ctx.lineTo(w / 2 - halfW / 3, botY);
-  ctx.moveTo(w / 2 + halfW / 3, topY);
-  ctx.lineTo(w / 2 + halfW / 3, botY);
+  for (let i = 1; i < 16; i++) {
+    const x = w / 2 - halfW + (i / 16) * halfW * 2;
+    ctx.moveTo(x, topY);
+    ctx.lineTo(x, botY);
+  }
+  for (let j = 1; j < 5; j++) {
+    const y = topY + (j / 5) * goalH;
+    ctx.moveTo(w / 2 - halfW, y);
+    ctx.lineTo(w / 2 + halfW, y);
+  }
   ctx.stroke();
 }
 
@@ -180,17 +238,16 @@ export interface KeeperPose {
  * the keeper always reads as human-sized against the goal, on any screen
  * aspect ratio - rather than an independent (and easily mismatched) fraction
  * of screen width. */
-function keeperScale(h: number): number {
-  const goalHeightPx = (LAYOUT.goalBottomY - LAYOUT.goalTopY) * h;
-  return goalHeightPx * 0.12;
+function keeperScale(w: number, h: number): number {
+  return goalFrame(w, h).heightPx * 0.12;
 }
 
 export function drawKeeper(ctx: CanvasRenderingContext2D, w: number, h: number, pose: KeeperPose) {
   const { x } = goalToPixel({ x: pose.pos.x, y: 0 }, w, h);
   // The keeper's feet rest exactly on the goal line - the actual "ground" of
   // the goal mouth - so the idle stance never looks like it's floating.
-  const groundY = LAYOUT.goalBottomY * h;
-  const scale = keeperScale(h);
+  const groundY = goalFrame(w, h).botY;
+  const scale = keeperScale(w, h);
 
   // Ground contact shadow, anchored to the pitch itself (not to the diving
   // body), which keeps the keeper visually grounded even mid-dive.

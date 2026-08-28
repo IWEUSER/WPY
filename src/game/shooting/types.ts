@@ -40,6 +40,12 @@ export interface KeeperDive {
   reach: number;
 }
 
+/** One cell of the 16×5 goalmouth save grid. Col 0 is the left post, row 0 is the ground. */
+export interface SaveCell {
+  col: number;
+  row: number;
+}
+
 export interface ShotResult {
   outcome: ShotOutcomeKind;
   /** Where the ball actually ends up crossing the goal plane (pre-clamp). */
@@ -53,6 +59,8 @@ export interface ShotResult {
   keeperDive: KeeperDive;
   /** 0-1, how close the keeper's reach came to the ball; for UI/feedback. */
   saveMargin: number;
+  /** The 16×5 goalmouth cell the shot arrived in, when the shot was on target. */
+  saveCell?: SaveCell;
 }
 
 export interface ShotDifficulty {
