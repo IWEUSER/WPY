@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { applyMatchResult, createAvailability, isAvailable, serveBannedGame } from './availabilityEngine';
+import { buildSeasonCalendar, type SeasonCalendar } from './calendar';
+import { getClub } from './data/clubs';
+import { confederationForCountry } from './data/competitions';
 import { offerClubsForTrial, TRIAL_SHOTS } from './trial';
 import { resolveSeasonTransition } from './transfers';
 import type { ShotResult } from '../shooting/types';
@@ -15,6 +18,27 @@ const STARTING_AGE = 16;
 
 function freshSeason(seasonNumber: number, clubId: string, role: CareerState['role']): SeasonRecord {
   return { seasonNumber, clubId, role, matches: [], goals: 0, gamesPlayed: 0, ratioMet: null };
+}
+
+/**
+ * Starts a season's record plus (from season 2 onward) its fixture
+ * calendar. Season 1 is reserve-team/no-opponents by design, so it never
+ * gets a calendar. This is metadata only - it doesn't change how matches are
+ * currently played (still one shot per "match", via MatchScreen); it's the
+ * plug point the season 2-20 simulation will read from once it exists.
+ */
+function startSeason(seasonNumber: number, clubId: string, role: PlayerRole): { season: SeasonRecord; calendar: SeasonCalendar | null } {
+  const season = freshSeason(seasonNumber, clubId, role);
+  if (seasonNumber < 2) return { season, calendar: null };
+  const club = getClub(clubId);
+  if (!club) return { season, calendar: null };
+  const calendar = buildSeasonCalendar({
+    seasonNumber,
+    leagueMatchWeeks: SEASON_LENGTH,
+    clubTier: club.tier,
+    confederation: confederationForCountry(club.country),
+  });
+  return { season, calendar };
 }
 
 function initialState(): CareerState {
@@ -33,6 +57,8 @@ function initialState(): CareerState {
     careerGoals: 0,
     careerGames: 0,
     pendingTransfer: null,
+    nationality: null,
+    seasonCalendar: null,
   };
 }
 
@@ -88,6 +114,7 @@ export const useCareerStore = create<CareerStore>()(
           seasonsAtCurrentClub: 0,
           availability: createAvailability(),
           currentSeason: freshSeason(1, clubId, 'reserve'),
+          seasonCalendar: null,
           pendingTransfer: null,
           phase: 'hub',
         }),
@@ -155,6 +182,7 @@ export const useCareerStore = create<CareerStore>()(
 
           if (transition.immediate) {
             const { clubId, parentClubId, role, seasonsAtCurrentClub } = transition.immediate;
+            const { season: nextSeason, calendar } = startSeason(nextSeasonNumber, clubId, role);
             return {
               seasonHistory,
               clubId,
@@ -164,7 +192,8 @@ export const useCareerStore = create<CareerStore>()(
               seasonNumber: nextSeasonNumber,
               age: nextAge,
               availability: createAvailability(),
-              currentSeason: freshSeason(nextSeasonNumber, clubId, role),
+              currentSeason: nextSeason,
+              seasonCalendar: calendar,
               pendingTransfer: null,
               phase: 'hub',
             };
@@ -186,11 +215,13 @@ export const useCareerStore = create<CareerStore>()(
 
           if (clubId === null) {
             // Only a voluntary promotion offer can be declined - stay put.
+            const { season, calendar } = startSeason(state.seasonNumber, state.clubId, state.role);
             return {
               pendingTransfer: null,
               seasonsAtCurrentClub: state.seasonsAtCurrentClub + 1,
               availability: createAvailability(),
-              currentSeason: freshSeason(state.seasonNumber, state.clubId, state.role),
+              currentSeason: season,
+              seasonCalendar: calendar,
               phase: 'hub',
             };
           }
@@ -206,6 +237,7 @@ export const useCareerStore = create<CareerStore>()(
             parentClubId = clubId;
           }
 
+          const { season, calendar } = startSeason(state.seasonNumber, clubId, role);
           return {
             pendingTransfer: null,
             clubId,
@@ -213,7 +245,8 @@ export const useCareerStore = create<CareerStore>()(
             role,
             seasonsAtCurrentClub: 0,
             availability: createAvailability(),
-            currentSeason: freshSeason(state.seasonNumber, clubId, role),
+            currentSeason: season,
+            seasonCalendar: calendar,
             phase: 'hub',
           };
         }),

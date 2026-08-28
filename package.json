@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "simulate": "tsx scripts/simulateShots.ts"
+    "simulate": "tsx scripts/simulateShots.ts",
+    "simulate:career": "tsx scripts/simulateCareer.ts"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.0",

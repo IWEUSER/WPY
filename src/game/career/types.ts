@@ -1,4 +1,5 @@
 import type { ShotResult } from '../shooting/types';
+import type { SeasonCalendar } from './calendar';
 import type { PendingTransfer } from './transfers';
 
 export type PlayerRole = 'reserve' | 'first-team' | 'loan';
@@ -64,4 +65,14 @@ export interface CareerState {
   careerGames: number;
   /** Set when a loan/sale/transfer decision needs the player to pick a club. */
   pendingTransfer: PendingTransfer | null;
+  /** Chosen international nationality (independent of current club) - null
+   * until picked. Squad selection/fixtures are part of the season 2-20
+   * simulation (see international.ts); this field just remembers the
+   * choice. */
+  nationality: string | null;
+  /** This season's fixture list once there are real opponents (season 2+) -
+   * null in Season 1, which is reserve-team, no-opponents by design. Built
+   * by calendar.ts; consumed by the not-yet-implemented season 2-20 engine
+   * (see matchEngine.ts). */
+  seasonCalendar: SeasonCalendar | null;
 }

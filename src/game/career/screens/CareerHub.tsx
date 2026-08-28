@@ -1,4 +1,6 @@
+import { calendarIncludesInternational, type SeasonCalendar } from '../calendar';
 import { getClub } from '../data/clubs';
+import { CONTINENTAL_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { describeAvailability, isAvailable } from '../availabilityEngine';
 import { useCareerStore, SEASON_LENGTH } from '../store';
 
@@ -15,6 +17,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const parentClubId = useCareerStore((s) => s.parentClubId);
   const role = useCareerStore((s) => s.role);
   const season = useCareerStore((s) => s.currentSeason);
+  const seasonCalendar = useCareerStore((s) => s.seasonCalendar);
   const availability = useCareerStore((s) => s.availability);
   const careerGoals = useCareerStore((s) => s.careerGoals);
   const careerGames = useCareerStore((s) => s.careerGames);
@@ -52,6 +55,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
           {club.country} · {club.league}
         </p>
         {parentClub && <p className="mt-1 text-xs text-white/40">On loan from {parentClub.name}</p>}
+        <SeasonCompetitions calendar={seasonCalendar} />
       </div>
 
       <div
@@ -109,6 +113,35 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
       >
         {available ? 'Play Next Match' : 'Continue'}
       </button>
+    </div>
+  );
+}
+
+/**
+ * A honest, calendar-only hint at what else this season involves - the
+ * competitions the club/country qualified for, not a live table (there's no
+ * league-table/European-standing simulation yet - see matchEngine.ts). Once
+ * that exists, this is where the locked design's "league position + European
+ * standing only" summary will replace this simple badge list.
+ */
+function SeasonCompetitions({ calendar }: { calendar: SeasonCalendar | null }) {
+  if (!calendar) return null;
+  const cupIds = new Set(calendar.fixtures.map((f) => f.continentalCup).filter((id) => id !== undefined));
+  const international = calendarIncludesInternational(calendar);
+  if (cupIds.size === 0 && !international) return null;
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {[...cupIds].map((id) => (
+        <span key={id} className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/70">
+          {CONTINENTAL_CUPS[id].name}
+        </span>
+      ))}
+      {international && (
+        <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/70">
+          {INTERNATIONAL_TOURNAMENTS[international].name}
+        </span>
+      )}
     </div>
   );
 }
