@@ -3,29 +3,48 @@
  * check that outcomes are appropriately random (i.e. not ~100% or ~0% goals).
  * Run with: npm run simulate
  */
+import { REFERENCE_SPEED, SAVE_GRID_ROWS } from '../src/game/shooting/constants';
 import {
-  AIM_X_OVERSHOOT,
-  AIM_Y_OVERSHOOT,
-  GOAL_HALF_WIDTH,
-  GOAL_HEIGHT,
-  MAX_SWIPE_DISTANCE,
-  REFERENCE_SPEED,
-  SAVE_GRID_ROWS,
-} from '../src/game/shooting/constants';
-import { FIFA, LAYOUT, randomBallStartXRatio } from '../src/game/shooting/render';
-import { aimToSaveCell, computeSwipeCurl, resolveShot, saveChanceForCell } from '../src/game/shooting/shotEngine';
+  BALL_SCREEN_Y,
+  FIFA,
+  MAX_SHOT_DISTANCE_M,
+  MIN_SHOT_DISTANCE_M,
+  ballStartPixel,
+  createPitchView,
+  goalToPixel,
+  randomBallStartXRatio,
+  randomShotDistanceM,
+} from '../src/game/shooting/render';
+import { aimToSaveCell, computeIntendedShot, computeSwipeCurl, resolveShot, saveChanceForCell } from '../src/game/shooting/shotEngine';
 import type { SwipeGesture } from '../src/game/shooting/types';
 
-/** Back-solves a swipe gesture that produces a given intended aim + power
- * (and optionally curl), so test cases can be expressed in terms that matter
- * for balance instead of raw pixels. */
+const SIM_W = 390;
+const SIM_H = 844;
+const SIM_DISTANCE = 16.5;
+
+/** Builds a swipe whose screen-space end sits on the requested aim point. */
 function gestureFor(aimX: number, aimY: number, power: number, curl = 0): SwipeGesture {
-  const dx = (aimX / (GOAL_HALF_WIDTH * AIM_X_OVERSHOOT)) * MAX_SWIPE_DISTANCE;
-  const dy = (aimY / (GOAL_HEIGHT * AIM_Y_OVERSHOOT)) * MAX_SWIPE_DISTANCE;
+  const view = createPitchView(SIM_W, SIM_H, SIM_DISTANCE);
+  const ball = ballStartPixel(view, 0.5);
+  const end = goalToPixel({ x: aimX, y: aimY }, view);
+  const dx = end.x - ball.x;
+  const dy = ball.y - end.y;
   const distance = Math.hypot(dx, dy);
   const speed = power * REFERENCE_SPEED;
   const durationMs = distance / speed;
-  return { dx, dy, durationMs, curl };
+  return {
+    dx,
+    dy,
+    durationMs,
+    curl,
+    ballX: ball.x,
+    ballY: ball.y,
+    endX: end.x,
+    endY: end.y,
+    canvasW: SIM_W,
+    canvasH: SIM_H,
+    distanceM: SIM_DISTANCE,
+  };
 }
 
 function tally(label: string, gestures: SwipeGesture[]) {
@@ -153,14 +172,56 @@ if (Math.abs(depthRatio - 3) > 1e-9) {
   process.exitCode = 1;
 }
 
-const h = 844;
-const eighteenDepthPx = (LAYOUT.eighteenBottomY - LAYOUT.goalBottomY) * h;
-const sixDepthPx = eighteenDepthPx * (FIFA.sixYardDepth / FIFA.eighteenYardDepth);
+const near = createPitchView(SIM_W, SIM_H, MIN_SHOT_DISTANCE_M);
+const far = createPitchView(SIM_W, SIM_H, MAX_SHOT_DISTANCE_M);
+const nearGoalFrac = (near.goal.halfW * 2) / SIM_W;
+const farGoalFrac = (far.goal.halfW * 2) / SIM_W;
 console.log(
-  `layout: goal width=${(LAYOUT.goalHalfWidth * 2 * 100).toFixed(1)}% of canvas, 6-yard depth=${sixDepthPx.toFixed(1)}px, 18-yard depth=${eighteenDepthPx.toFixed(1)}px, ratio=${(eighteenDepthPx / sixDepthPx).toFixed(3)}`,
+  `camera: ${MIN_SHOT_DISTANCE_M}m goal=${(nearGoalFrac * 100).toFixed(1)}% of width, ${MAX_SHOT_DISTANCE_M}m goal=${(farGoalFrac * 100).toFixed(1)}%`,
 );
-if (Math.abs(eighteenDepthPx / sixDepthPx - 3) > 1e-6) {
-  console.error('FAIL: drawn box depths are not 3:1');
+if (!(nearGoalFrac > farGoalFrac * 1.15)) {
+  console.error('FAIL: closer shots should show a clearly larger goal');
+  process.exitCode = 1;
+}
+const ballNearY = ballStartPixel(near, 0.5).y / SIM_H;
+const ballFarY = ballStartPixel(far, 0.5).y / SIM_H;
+console.log(`ball screen Y at ${MIN_SHOT_DISTANCE_M}m=${ballNearY.toFixed(3)} at ${MAX_SHOT_DISTANCE_M}m=${ballFarY.toFixed(3)} (expect ${BALL_SCREEN_Y})`);
+if (Math.abs(ballNearY - BALL_SCREEN_Y) > 1e-6 || Math.abs(ballFarY - BALL_SCREEN_Y) > 1e-6) {
+  console.error('FAIL: ball screen Y must stay fixed when distance changes');
+  process.exitCode = 1;
+}
+
+const sixDrawn = (near.halfWidthPx(FIFA.sixYardWidth / 2, 0) * 2) / (near.goal.halfW * 2);
+console.log(`drawn 6-yard/goal width at goal line=${sixDrawn.toFixed(3)} (expect ${sixToGoal.toFixed(3)})`);
+if (Math.abs(sixDrawn - sixToGoal) > 1e-6) {
+  console.error('FAIL: 6-yard width is not FIFA-proportioned to the goal');
+  process.exitCode = 1;
+}
+
+const keeperH = FIFA.keeperHeight / FIFA.goalHeight;
+console.log(`keeper height / goal = ${keeperH.toFixed(3)} (6'2" / 8' = 0.770)`);
+const keeperW = FIFA.keeperWidth / FIFA.goalWidth;
+console.log(`keeper ready width / goal = ${keeperW.toFixed(3)} (1.4m / 7.32m = 0.191)`);
+
+const distances = Array.from({ length: 80 }, () => randomShotDistanceM());
+const dMin = Math.min(...distances);
+const dMax = Math.max(...distances);
+console.log(`shot distance samples: min=${dMin.toFixed(1)}m max=${dMax.toFixed(1)}m`);
+if (dMax - dMin < 5) {
+  console.error('FAIL: shot distance is not varying');
+  process.exitCode = 1;
+}
+
+const aimed = computeIntendedShot(gestureFor(-0.82, 0.85, 1.0));
+console.log(`aim recovery top-left: x=${aimed.aim.x.toFixed(3)} y=${aimed.aim.y.toFixed(3)} (expect ~-0.82, 0.85)`);
+if (Math.abs(aimed.aim.x - -0.82) > 0.08 || Math.abs(aimed.aim.y - 0.85) > 0.08) {
+  console.error('FAIL: drawing onto a corner did not aim at that corner');
+  process.exitCode = 1;
+}
+const softLow = computeIntendedShot(gestureFor(0.2, 0.12, 0.35));
+console.log(`soft low placement: y=${softLow.aim.y.toFixed(3)} (must stay under the bar)`);
+if (softLow.aim.y > 0.45) {
+  console.error('FAIL: a soft touch aimed low is still going high/over');
   process.exitCode = 1;
 }
 

@@ -49,23 +49,25 @@ export const SAVE_CHANCE_CENTER = 0.9;
 /** Probability the keeper holds a shot aimed at a top-corner square. */
 export const SAVE_CHANCE_TOP_CORNER = 0.16;
 
-/** Trajectory arc height (as a fraction of canvas height) at min vs max power -
- * soft/finesse shots loop more, powerful drives fly flatter and faster. */
-export const MAX_ARC_HEIGHT_RATIO = 0.17;
-export const MIN_ARC_HEIGHT_RATIO = 0.045;
+/** Trajectory loft as a fraction of the ball-to-goal screen distance.
+ * Kept modest so a soft placed shot doesn't balloon over the bar. */
+export const MAX_ARC_ALONG_PATH = 0.18;
+export const MIN_ARC_ALONG_PATH = 0.04;
 
 /** How much a swipe's path has to bow away from a straight line (as a
- * fraction of the swipe's own length) to register as full (+-1) curl. */
-export const CURL_BOW_SENSITIVITY = 0.12;
+ * fraction of the swipe's own length) to register as full (+-1) curl.
+ * A gentle arch while drawing toward a corner should stay a slight bend,
+ * not a full banana. */
+export const CURL_BOW_SENSITIVITY = 0.32;
 
 /** How far a fully-curled shot's flight path bends sideways, as a fraction
  * of canvas width. */
-export const MAX_BEND_RATIO = 0.24;
+export const MAX_BEND_RATIO = 0.055;
 
 export const DEFAULT_DIFFICULTY: ShotDifficulty = {
-  baseNoise: 0.075,
-  powerNoisePenalty: 0.22,
-  curlNoisePenalty: 0.05,
+  baseNoise: 0.04,
+  powerNoisePenalty: 0.16,
+  curlNoisePenalty: 0.03,
   keeperReach: 0.3,
   powerReachPenalty: 0.55,
   keeperReactionMs: 250,

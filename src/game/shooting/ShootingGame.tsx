@@ -1,8 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as audio from './audio';
-import { MAX_ARC_HEIGHT_RATIO, MAX_BEND_RATIO, MIN_ARC_HEIGHT_RATIO } from './constants';
+import { MAX_ARC_ALONG_PATH, MAX_BEND_RATIO, MIN_ARC_ALONG_PATH } from './constants';
 import { computeSwipeCurl, isValidSwipe, resolveShot } from './shotEngine';
-import { ballStartPixel, drawBall, drawGoal, drawKeeper, drawPitch, drawTrail, goalToPixel, randomBallStartXRatio, type KeeperPose } from './render';
+import {
+  BALL_SCREEN_Y,
+  ballRadiusAtGoal,
+  ballRadiusNear,
+  ballStartPixel,
+  createPitchView,
+  drawBall,
+  drawGoal,
+  drawKeeper,
+  drawPitch,
+  drawTrail,
+  goalToPixel,
+  randomBallStartXRatio,
+  randomShotDistanceM,
+  type KeeperPose,
+} from './render';
 import type { AimPoint, ShotOutcomeKind, ShotResult, SwipeGesture } from './types';
 import StatsBar, { type ShotStats } from './StatsBar';
 
@@ -30,11 +45,11 @@ interface AnimState {
   shakeUntilMs: number;
   /** Horizontal spawn of the idle ball, as a fraction of canvas width. */
   ballStartXRatio: number;
+  /** Metres from the ball to the goal line. */
+  shotDistanceM: number;
 }
 
 const RESULT_HOLD_MS = 1500;
-const BASE_BALL_RADIUS_RATIO = 0.028;
-const FAR_BALL_RADIUS_RATIO = 0.011;
 const SHAKE_DURATION_MS = 280;
 const MAX_DRAG_POINTS = 400;
 
@@ -73,6 +88,13 @@ function curlStyleLabel(result: ShotResult): string | null {
   const dir = curlSign > 0 ? 'right' : 'left';
   const boot = bendsTowardCenter ? 'inswinger, inside of the boot' : 'outswinger, outside of the boot';
   return `Curled ${dir} \u2014 ${boot}`;
+}
+
+function readDevDistance(): number | null {
+  if (!import.meta.env.DEV) return null;
+  const raw = new URLSearchParams(window.location.search).get('distance');
+  const n = raw ? Number(raw) : NaN;
+  return Number.isFinite(n) ? n : null;
 }
 
 function makeIdleKeeper(): KeeperPose {
@@ -142,6 +164,7 @@ export default function ShootingGame({
     shakeMagnitude: 0,
     shakeUntilMs: 0,
     ballStartXRatio: randomBallStartXRatio(),
+    shotDistanceM: readDevDistance() ?? randomShotDistanceM(),
   });
 
   useEffect(() => {
@@ -177,15 +200,18 @@ export default function ShootingGame({
   const resetForNextShot = useCallback(() => {
     const { w, h } = sizeRef.current;
     const xRatio = randomBallStartXRatio();
-    const start = ballStartPixel(w, h, xRatio);
+    const distanceM = randomShotDistanceM();
+    const view = createPitchView(w, h, distanceM);
+    const start = ballStartPixel(view, xRatio);
     const anim = animRef.current;
     anim.phase = 'idle';
     anim.dragStart = null;
     anim.dragPoints = [];
     anim.result = null;
     anim.ballStartXRatio = xRatio;
+    anim.shotDistanceM = distanceM;
     anim.ballPixel = start;
-    anim.ballRadius = w * BASE_BALL_RADIUS_RATIO;
+    anim.ballRadius = ballRadiusNear(view);
     anim.ballRotation = 0;
     anim.ballTrail = [];
     anim.keeperPose = makeIdleKeeper();
@@ -262,14 +288,15 @@ export default function ShootingGame({
         }
         ctx.setTransform(dpr, 0, 0, dpr, shakeX * dpr, shakeY * dpr);
         ctx.clearRect(-shakeX - 4, -shakeY - 4, w + 8, h + 8);
-        drawPitch(ctx, w, h, now);
-        drawGoal(ctx, w, h);
+        const view = createPitchView(w, h, anim.shotDistanceM);
+        drawPitch(ctx, view, now);
+        drawGoal(ctx, view);
 
         if (anim.phase === 'idle' || anim.phase === 'dragging') {
-          const start = ballStartPixel(w, h, anim.ballStartXRatio);
+          const start = ballStartPixel(view, anim.ballStartXRatio);
           anim.ballPixel = start;
-          anim.ballRadius = w * BASE_BALL_RADIUS_RATIO;
-          drawKeeper(ctx, w, h, anim.keeperPose);
+          anim.ballRadius = ballRadiusNear(view);
+          drawKeeper(ctx, view, anim.keeperPose);
           if (anim.phase === 'dragging' && anim.dragStart && anim.dragPoints.length > 1) {
             // Show the actual curved path being swiped, not just a straight
             // line - this is the live feedback for how much bend/curl the
@@ -283,30 +310,29 @@ export default function ShootingGame({
           const t = Math.min(1, elapsed / result.travelTimeMs);
           const eased = t * t * (3 - 2 * t); // smoothstep
 
-          const start = ballStartPixel(w, h, anim.ballStartXRatio);
+          const start = ballStartPixel(view, anim.ballStartXRatio);
           // The ball always flies to where it truly ends up - never redirect
           // its visual path toward the keeper - so what you see is always
           // consistent with the outcome (no more "that went in" saves).
-          const end = goalToPixel(result.aim, w, h);
+          const end = goalToPixel(result.aim, view);
 
           const powerT = clamp((result.power - 0.25) / (1.8 - 0.25), 0, 1);
-          const arcHeight = lerpNum(MAX_ARC_HEIGHT_RATIO, MIN_ARC_HEIGHT_RATIO, powerT) * h;
+          const pathLen = Math.hypot(end.x - start.x, end.y - start.y);
+          const arcHeight = lerpNum(MAX_ARC_ALONG_PATH, MIN_ARC_ALONG_PATH, powerT) * pathLen;
           const bend = result.curl * w * MAX_BEND_RATIO;
 
-          // Cubic bezier with two control points: the shot bows out early
-          // (most of the curl) and straightens up as it nears the target,
-          // giving a real "banana" curve whose direction follows the swipe,
-          // not a fixed left/right bias.
-          const c1x = lerpNum(start.x, end.x, 0.32) + bend;
-          const c1y = lerpNum(start.y, end.y, 0.32) - arcHeight;
-          const c2x = lerpNum(start.x, end.x, 0.72) + bend * 0.3;
-          const c2y = lerpNum(start.y, end.y, 0.72) - arcHeight * 0.32;
+          // Gentle banana: a little early bow, then settle into the aimed
+          // point so the shot does not whip sideways at the end.
+          const c1x = lerpNum(start.x, end.x, 0.38) + bend;
+          const c1y = lerpNum(start.y, end.y, 0.38) - arcHeight;
+          const c2x = lerpNum(start.x, end.x, 0.78) + bend * 0.2;
+          const c2y = lerpNum(start.y, end.y, 0.78) - arcHeight * 0.22;
 
           const x = cubicBezier(start.x, c1x, c2x, end.x, eased);
           const y = cubicBezier(start.y, c1y, c2y, end.y, eased);
 
           anim.ballPixel = { x, y };
-          anim.ballRadius = lerpNum(w * BASE_BALL_RADIUS_RATIO, w * FAR_BALL_RADIUS_RATIO, eased);
+          anim.ballRadius = lerpNum(ballRadiusNear(view), ballRadiusAtGoal(view), eased);
           const spinDir = result.curl !== 0 ? Math.sign(result.curl) : 1;
           anim.ballRotation = eased * spinDir * (10 + 14 * powerT);
 
@@ -334,7 +360,7 @@ export default function ShootingGame({
           };
 
           drawTrail(ctx, anim.ballTrail);
-          drawKeeper(ctx, w, h, anim.keeperPose);
+          drawKeeper(ctx, view, anim.keeperPose);
           drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
 
           if (t >= 1) {
@@ -347,7 +373,7 @@ export default function ShootingGame({
             finishShot(result);
           }
         } else if (anim.phase === 'result' && anim.result) {
-          drawKeeper(ctx, w, h, anim.keeperPose);
+          drawKeeper(ctx, view, anim.keeperPose);
           drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
           if (now - anim.resultAtMs > RESULT_HOLD_MS) {
             const limit = maxShotsRef.current;
@@ -411,7 +437,22 @@ export default function ShootingGame({
       const dy = start.y - end.y; // screen-up is positive
       const durationMs = Math.max(16, end.t - start.t);
       const curl = computeSwipeCurl(anim.dragPoints);
-      const gesture: SwipeGesture = { dx, dy, durationMs, curl };
+      const { w, h } = sizeRef.current;
+      const view = createPitchView(w, h, anim.shotDistanceM);
+      const ball = ballStartPixel(view, anim.ballStartXRatio);
+      const gesture: SwipeGesture = {
+        dx,
+        dy,
+        durationMs,
+        curl,
+        ballX: ball.x,
+        ballY: ball.y,
+        endX: end.x,
+        endY: end.y,
+        canvasW: w,
+        canvasH: h,
+        distanceM: anim.shotDistanceM,
+      };
 
       anim.dragStart = null;
       anim.dragPoints = [];
@@ -468,9 +509,10 @@ export default function ShootingGame({
 
         {uiPhase === 'idle' && (
           <div
-            className="pointer-events-none absolute bottom-[14%] whitespace-nowrap"
+            className="pointer-events-none absolute whitespace-nowrap"
             style={{
               left: `${Math.min(0.82, Math.max(0.18, ballHintX)) * 100}%`,
+              top: `${(BALL_SCREEN_Y + 0.04) * 100}%`,
               transform: 'translateX(-50%)',
             }}
           >

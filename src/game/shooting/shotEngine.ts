@@ -17,6 +17,7 @@ import {
   SAVE_GRID_ROWS,
   WOODWORK_MARGIN,
 } from './constants';
+import { createPitchView, pixelToAim } from './render';
 import type {
   AimPoint,
   KeeperDive,
@@ -107,23 +108,74 @@ export interface IntendedShot {
 
 /** Maps a raw swipe into an intended (noise-free) aim point, a power scalar
  * where ~1.0 represents a well-struck "sweet spot" shot, and the curl the
- * player put on it. Curl is damped slightly at very high power - it's harder
- * to finesse a shot you're absolutely leathering. */
+ * player put on it. When screen-space ball/end/canvas are provided, aim is
+ * the ray from the ball toward where the line is pointing on the goal —
+ * so drawing slowly onto a corner places the shot there, rather than using
+ * swipe length as elevation (which sent soft long draws over the bar). */
 export function computeIntendedShot(gesture: SwipeGesture): IntendedShot {
   const distance = Math.hypot(gesture.dx, gesture.dy);
   const speed = gesture.durationMs > 0 ? distance / gesture.durationMs : distance / 16;
 
   const power = clamp(speed / REFERENCE_SPEED, 0.25, 1.8);
 
-  const aimX = clamp(gesture.dx / MAX_SWIPE_DISTANCE, -1, 1) * (GOAL_HALF_WIDTH * AIM_X_OVERSHOOT);
-  const upward = Math.max(0, gesture.dy);
-  const aimY = clamp(upward / MAX_SWIPE_DISTANCE, 0, 1) * (GOAL_HEIGHT * AIM_Y_OVERSHOOT);
+  const aim = screenRayAim(gesture) ?? displacementAim(gesture);
 
   const rawCurl = clamp(gesture.curl ?? 0, -1, 1);
   const powerDamping = 1 - clamp(power - 1, 0, 0.8) * 0.25;
-  const curl = rawCurl * powerDamping;
+  const curl = rawCurl * powerDamping * 0.55;
 
-  return { aim: { x: aimX, y: aimY }, power, curl };
+  return { aim, power, curl };
+}
+
+function displacementAim(gesture: SwipeGesture): AimPoint {
+  const aimX = clamp(gesture.dx / MAX_SWIPE_DISTANCE, -1, 1) * (GOAL_HALF_WIDTH * AIM_X_OVERSHOOT);
+  const upward = Math.max(0, gesture.dy);
+  const aimY = clamp(upward / MAX_SWIPE_DISTANCE, 0, 1) * (GOAL_HEIGHT * AIM_Y_OVERSHOOT);
+  return { x: aimX, y: aimY };
+}
+
+function screenRayAim(gesture: SwipeGesture): AimPoint | null {
+  const { ballX, ballY, endX, endY, canvasW, canvasH, distanceM } = gesture;
+  if (
+    ballX === undefined ||
+    ballY === undefined ||
+    endX === undefined ||
+    endY === undefined ||
+    canvasW === undefined ||
+    canvasH === undefined
+  ) {
+    return null;
+  }
+
+  const view = createPitchView(canvasW, canvasH, distanceM ?? 16.5);
+  const { botY, topY } = view.goal;
+  const dirX = endX - ballX;
+  const dirY = endY - ballY;
+
+  if (dirY >= -1) {
+    // Not aiming toward the goal — treat as a ground-level poke in that direction.
+    const aim = pixelToAim(endX, botY, view);
+    return { x: aim.x, y: 0 };
+  }
+
+  if (endY <= botY) {
+    // Finger is on the goal-plane image: the line ends where the shot should go.
+    const aim = pixelToAim(endX, endY, view);
+    return { x: clamp(aim.x, -1.45, 1.45), y: clamp(aim.y, 0, 1.35) };
+  }
+
+  // Short swipe still on the pitch: extend the ray to the goal line for X,
+  // and lift Y from how steep the swipe is versus the bar.
+  const tBot = (botY - ballY) / dirY;
+  const xAtBot = ballX + tBot * dirX;
+  const aimX = pixelToAim(xAtBot, botY, view).x;
+
+  const up = -dirY / Math.hypot(dirX, dirY);
+  const toLine = (ballY - botY) / Math.hypot(xAtBot - ballX, ballY - botY);
+  const toBar = (ballY - topY) / Math.hypot(xAtBot - ballX, ballY - topY);
+  const span = Math.max(1e-4, toBar - toLine);
+  const aimY = clamp((up - toLine) / span, 0, 1.2);
+  return { x: clamp(aimX, -1.45, 1.45), y: aimY };
 }
 
 /** Total inaccuracy (std-dev, normalized units) applied on top of the intended aim. */
@@ -134,8 +186,9 @@ export function computeNoise(power: number, curl: number, difficulty: ShotDiffic
   return difficulty.baseNoise + overPenalty + underPenalty + curlPenalty;
 }
 
-export function computeTravelTimeMs(power: number): number {
-  return lerp(MAX_TRAVEL_MS, MIN_TRAVEL_MS, power / 1.3);
+export function computeTravelTimeMs(power: number, distanceM = 16.5): number {
+  const base = lerp(MAX_TRAVEL_MS, MIN_TRAVEL_MS, power / 1.3);
+  return base * clamp(distanceM / 16.5, 0.7, 1.35);
 }
 
 export function classifyZoneX(x: number): ShotZoneX {
@@ -269,7 +322,7 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
     y: Math.max(0, intendedAim.y + gaussianRandom(0, noise * 0.75, rng)),
   };
 
-  const travelTimeMs = computeTravelTimeMs(power);
+  const travelTimeMs = computeTravelTimeMs(power, gesture.distanceM ?? 16.5);
 
   if (hitsWoodwork(actualAim)) {
     return {

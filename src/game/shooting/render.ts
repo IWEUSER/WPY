@@ -2,7 +2,7 @@ import type { AimPoint } from './types';
 
 /** FIFA markings in metres. Boxes are drawn from these ratios to the goal
  * (7.32 × 2.44), so the 6-yard and 18-yard areas stay in true proportion
- * even when the pitch is scaled to show more grass. */
+ * even when the camera dollies with the ball. */
 export const FIFA = {
   goalWidth: 7.32,
   goalHeight: 2.44,
@@ -12,20 +12,27 @@ export const FIFA = {
   eighteenYardDepth: 16.5,
   penaltySpot: 11,
   penaltyArcRadius: 9.15,
+  /** Typical top-flight keeper, ~6'2". */
+  keeperHeight: 1.88,
+  /** Ready-stance width, fingertips not fully stretched. */
+  keeperWidth: 1.4,
+  ballDiameter: 0.22,
 };
 
+/** Camera sits this many metres behind the ball so the ball's screen Y stays fixed. */
+export const CAM_BEHIND_M = 9;
+export const HORIZON_Y = 0.1;
+/** Ball is always this fraction down the canvas, so the gap from the bottom is constant. */
+export const BALL_SCREEN_Y = 0.84;
+/** Dimensionless focal length: (metres / depth) × focal = fraction of canvas width. */
+export const CAMERA_FOCAL = 1.12;
+export const MIN_SHOT_DISTANCE_M = 11;
+export const MAX_SHOT_DISTANCE_M = 20;
+
 /** Layout of the goal plane within the canvas, as fractions of width/height.
- * The goal is smaller than the old close-up framing so more of the pitch is
- * visible; box widths/depths are derived from FIFA ratios, not fudge factors. */
+ * Static fields that do not change with camera distance. */
 export const LAYOUT = {
-  /** Goal half-width as a fraction of canvas width. Small enough that the
-   * 6-yard box sits clearly inside the frame with grass on both sides. */
-  goalHalfWidth: 0.145,
-  goalBottomY: 0.195,
-  eighteenBottomY: 0.58,
-  ballStartY: 0.84,
-  /** Near (camera-side) edge of the 18-yard box vs its far (goal-line) edge. */
-  perspectiveFlare: 1.22,
+  ballStartY: BALL_SCREEN_Y,
 };
 
 /** Inset from each canvas edge so a random spawn never sits under the HUD. */
@@ -35,6 +42,10 @@ export function randomBallStartXRatio(rng: () => number = Math.random): number {
   return BALL_SPAWN_X_MARGIN + rng() * (1 - 2 * BALL_SPAWN_X_MARGIN);
 }
 
+export function randomShotDistanceM(rng: () => number = Math.random): number {
+  return MIN_SHOT_DISTANCE_M + rng() * (MAX_SHOT_DISTANCE_M - MIN_SHOT_DISTANCE_M);
+}
+
 export interface GoalFrame {
   halfW: number;
   topY: number;
@@ -42,23 +53,70 @@ export interface GoalFrame {
   heightPx: number;
 }
 
-/** Pixel rect of the goal, always 7.32:2.44 regardless of canvas aspect. */
-export function goalFrame(w: number, h: number): GoalFrame {
-  const halfW = LAYOUT.goalHalfWidth * w;
-  const botY = LAYOUT.goalBottomY * h;
-  const heightPx = halfW * 2 * (FIFA.goalHeight / FIFA.goalWidth);
-  return { halfW, topY: botY - heightPx, botY, heightPx };
+export interface PitchView {
+  distanceM: number;
+  camZ: number;
+  w: number;
+  h: number;
+  goal: GoalFrame;
+  screenY(worldZ: number): number;
+  halfWidthPx(worldHalfM: number, worldZ: number): number;
 }
 
-export function goalToPixel(aim: AimPoint, w: number, h: number): { x: number; y: number } {
-  const { halfW, topY, botY } = goalFrame(w, h);
-  const x = w / 2 + aim.x * halfW;
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+/** Perspective camera looking at the goal, with the ball pinned at BALL_SCREEN_Y. */
+export function createPitchView(w: number, h: number, distanceM: number): PitchView {
+  const d = clamp(distanceM, MIN_SHOT_DISTANCE_M, MAX_SHOT_DISTANCE_M);
+  const camZ = d + CAM_BEHIND_M;
+  const lift = (BALL_SCREEN_Y - HORIZON_Y) * CAM_BEHIND_M;
+
+  function screenY(worldZ: number): number {
+    const depth = Math.max(0.4, camZ - worldZ);
+    return (HORIZON_Y + lift / depth) * h;
+  }
+
+  function halfWidthPx(worldHalfM: number, worldZ: number): number {
+    const depth = Math.max(0.4, camZ - worldZ);
+    return (worldHalfM / depth) * CAMERA_FOCAL * w;
+  }
+
+  const halfW = halfWidthPx(FIFA.goalWidth / 2, 0);
+  const botY = screenY(0);
+  const heightPx = halfW * 2 * (FIFA.goalHeight / FIFA.goalWidth);
+  const goal: GoalFrame = { halfW, topY: botY - heightPx, botY, heightPx };
+
+  return { distanceM: d, camZ, w, h, goal, screenY, halfWidthPx };
+}
+
+export function goalToPixel(aim: AimPoint, view: PitchView): { x: number; y: number } {
+  const { halfW, topY, botY } = view.goal;
+  const x = view.w / 2 + aim.x * halfW;
   const y = botY - aim.y * (botY - topY);
   return { x, y };
 }
 
-export function ballStartPixel(w: number, h: number, xRatio = 0.5): { x: number; y: number } {
-  return { x: xRatio * w, y: LAYOUT.ballStartY * h };
+export function pixelToAim(px: number, py: number, view: PitchView): AimPoint {
+  const { halfW, topY, botY } = view.goal;
+  const height = Math.max(1, botY - topY);
+  return {
+    x: (px - view.w / 2) / halfW,
+    y: (botY - py) / height,
+  };
+}
+
+export function ballStartPixel(view: PitchView, xRatio = 0.5): { x: number; y: number } {
+  return { x: xRatio * view.w, y: BALL_SCREEN_Y * view.h };
+}
+
+export function ballRadiusNear(view: PitchView): number {
+  return view.w * 0.028;
+}
+
+export function ballRadiusAtGoal(view: PitchView): number {
+  return (FIFA.ballDiameter / 2 / (FIFA.goalWidth / 2)) * view.goal.halfW;
 }
 
 interface BoxSpec {
@@ -77,7 +135,8 @@ function drawBoxOutline(ctx: CanvasRenderingContext2D, w: number, box: BoxSpec) 
   ctx.stroke();
 }
 
-export function drawPitch(ctx: CanvasRenderingContext2D, w: number, h: number, time: number) {
+export function drawPitch(ctx: CanvasRenderingContext2D, view: PitchView, time: number) {
+  const { w, h } = view;
   const grad = ctx.createLinearGradient(0, 0, 0, h);
   grad.addColorStop(0, '#0f3d1f');
   grad.addColorStop(0.4, '#155a29');
@@ -85,11 +144,10 @@ export function drawPitch(ctx: CanvasRenderingContext2D, w: number, h: number, t
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, w, h);
 
-  const { halfW, topY, botY } = goalFrame(w, h);
+  const { halfW, botY } = view.goal;
 
-  // Mowed-grass stripes converging toward the goal for a sense of perspective.
   const stripeCount = 9;
-  const vanishY = topY - h * 0.12;
+  const vanishY = HORIZON_Y * h;
   for (let i = 0; i < stripeCount; i++) {
     const t0 = i / stripeCount;
     const t1 = (i + 1) / stripeCount;
@@ -104,62 +162,51 @@ export function drawPitch(ctx: CanvasRenderingContext2D, w: number, h: number, t
   }
 
   const goalLineY = botY;
-  const eighteenBottomY = LAYOUT.eighteenBottomY * h;
-  const eighteenDepth = Math.max(1, eighteenBottomY - goalLineY);
-  const sixDepth = eighteenDepth * (FIFA.sixYardDepth / FIFA.eighteenYardDepth);
-  const penaltyDepth = eighteenDepth * (FIFA.penaltySpot / FIFA.eighteenYardDepth);
-  const flare = LAYOUT.perspectiveFlare;
+  const sixBottomY = view.screenY(FIFA.sixYardDepth);
+  const eighteenBottomY = view.screenY(FIFA.eighteenYardDepth);
 
-  const eighteenHalfTop = halfW * (FIFA.eighteenYardWidth / FIFA.goalWidth);
-  const eighteenHalfBottom = eighteenHalfTop * flare;
-  const sixHalfTop = halfW * (FIFA.sixYardWidth / FIFA.goalWidth);
-  const sixT = FIFA.sixYardDepth / FIFA.eighteenYardDepth;
-  const sixHalfBottom = sixHalfTop * (1 + (flare - 1) * sixT);
-
-  // 18-yard penalty box. Width is 40.32m vs the 7.32m goal, so the sides run
-  // off-screen on a portrait view — we're standing inside the box looking in.
   const penaltyBox: BoxSpec = {
-    topY: goalLineY + h * 0.004,
+    topY: goalLineY + 1,
     bottomY: eighteenBottomY,
-    halfTop: eighteenHalfTop,
-    halfBottom: eighteenHalfBottom,
+    halfTop: view.halfWidthPx(FIFA.eighteenYardWidth / 2, 0),
+    halfBottom: view.halfWidthPx(FIFA.eighteenYardWidth / 2, FIFA.eighteenYardDepth),
   };
-  // 6-yard box (goal area): 18.32m wide, 5.5m deep — one third of the 18-yard depth.
   const goalBox: BoxSpec = {
-    topY: goalLineY + h * 0.004,
-    bottomY: goalLineY + sixDepth,
-    halfTop: sixHalfTop,
-    halfBottom: sixHalfBottom,
+    topY: goalLineY + 1,
+    bottomY: sixBottomY,
+    halfTop: view.halfWidthPx(FIFA.sixYardWidth / 2, 0),
+    halfBottom: view.halfWidthPx(FIFA.sixYardWidth / 2, FIFA.sixYardDepth),
   };
 
   ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-  ctx.lineWidth = Math.max(2.5, w * 0.005);
+  ctx.lineWidth = Math.max(2, halfW * 0.03);
   drawBoxOutline(ctx, w, penaltyBox);
   drawBoxOutline(ctx, w, goalBox);
 
-  // Penalty arc: 9.15m radius around the spot (11m from the goal line),
-  // clipped so only the "D" outside the 18-yard box is visible.
-  const penaltySpotY = goalLineY + penaltyDepth;
-  const pxPerMeterY = eighteenDepth / FIFA.eighteenYardDepth;
-  const halfAtPenalty = lerp(eighteenHalfTop, eighteenHalfBottom, FIFA.penaltySpot / FIFA.eighteenYardDepth);
+  const penaltySpotY = view.screenY(FIFA.penaltySpot);
+  const halfAtPenalty = view.halfWidthPx(FIFA.eighteenYardWidth / 2, FIFA.penaltySpot);
   const pxPerMeterX = (halfAtPenalty * 2) / FIFA.eighteenYardWidth;
+  const pxPerMeterY = Math.abs(view.screenY(FIFA.penaltySpot + 1) - penaltySpotY);
   const arcRadiusX = FIFA.penaltyArcRadius * pxPerMeterX;
-  const arcRadiusY = FIFA.penaltyArcRadius * pxPerMeterY;
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(0, penaltyBox.bottomY, w, Math.max(0, h - penaltyBox.bottomY));
-  ctx.clip();
-  ctx.beginPath();
-  ctx.ellipse(w / 2, penaltySpotY, arcRadiusX, arcRadiusY, 0, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.restore();
+  const arcRadiusY = FIFA.penaltyArcRadius * Math.max(pxPerMeterY, pxPerMeterX * 0.35);
+  if (eighteenBottomY < h * 1.05) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, penaltyBox.bottomY, w, Math.max(0, h - penaltyBox.bottomY));
+    ctx.clip();
+    ctx.beginPath();
+    ctx.ellipse(w / 2, penaltySpotY, arcRadiusX, arcRadiusY, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
 
-  ctx.fillStyle = 'rgba(255,255,255,0.7)';
-  ctx.beginPath();
-  ctx.arc(w / 2, penaltySpotY, Math.max(2, w * 0.0045), 0, Math.PI * 2);
-  ctx.fill();
+  if (view.distanceM > FIFA.penaltySpot + 0.6 && penaltySpotY < h * 0.95) {
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.beginPath();
+    ctx.arc(w / 2, penaltySpotY, Math.max(2, w * 0.0045), 0, Math.PI * 2);
+    ctx.fill();
+  }
 
-  // Subtle vignette + a faint animated light sweep for atmosphere.
   const sweepX = ((time / 6000) % 1) * w;
   const sweep = ctx.createRadialGradient(sweepX, h * 0.2, 0, sweepX, h * 0.2, w * 0.5);
   sweep.addColorStop(0, 'rgba(255,255,255,0.05)');
@@ -168,11 +215,11 @@ export function drawPitch(ctx: CanvasRenderingContext2D, w: number, h: number, t
   ctx.fillRect(0, 0, w, h);
 }
 
-export function drawGoal(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const { halfW, topY, botY } = goalFrame(w, h);
-  const postW = Math.max(3, w * 0.011);
+export function drawGoal(ctx: CanvasRenderingContext2D, view: PitchView) {
+  const { w } = view;
+  const { halfW, topY, botY } = view.goal;
+  const postW = Math.max(2, halfW * 0.035);
 
-  // Net (behind the frame).
   ctx.save();
   ctx.beginPath();
   ctx.rect(w / 2 - halfW, topY, halfW * 2, botY - topY);
@@ -197,7 +244,6 @@ export function drawGoal(ctx: CanvasRenderingContext2D, w: number, h: number) {
   }
   ctx.restore();
 
-  // Frame.
   ctx.strokeStyle = '#f5f7fa';
   ctx.lineWidth = postW;
   ctx.lineCap = 'square';
@@ -208,7 +254,6 @@ export function drawGoal(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.lineTo(w / 2 + halfW, botY + postW);
   ctx.stroke();
 
-  // Faint 16×5 save-grid guides so the corners vs centre read on the goal.
   const goalH = botY - topY;
   ctx.strokeStyle = 'rgba(255,255,255,0.06)';
   ctx.lineWidth = 1;
@@ -236,31 +281,26 @@ export interface KeeperPose {
   beaten: boolean;
 }
 
-/** Scale factor for the keeper figure, derived from the goal's own height so
- * the keeper always reads as human-sized against the goal, on any screen
- * aspect ratio - rather than an independent (and easily mismatched) fraction
- * of screen width. */
-function keeperScale(w: number, h: number): number {
-  return goalFrame(w, h).heightPx * 0.12;
+/** Figure height is ~7.95×scale (feet at 0, top of head at 6.9+1.05). */
+const KEEPER_FIGURE_HEIGHT = 7.95;
+
+function keeperScale(view: PitchView): number {
+  return (FIFA.keeperHeight / FIFA.goalHeight) * view.goal.heightPx / KEEPER_FIGURE_HEIGHT;
 }
 
-export function drawKeeper(ctx: CanvasRenderingContext2D, w: number, h: number, pose: KeeperPose) {
-  const { x } = goalToPixel({ x: pose.pos.x, y: 0 }, w, h);
-  // The keeper's feet rest exactly on the goal line - the actual "ground" of
-  // the goal mouth - so the idle stance never looks like it's floating.
-  const groundY = goalFrame(w, h).botY;
-  const scale = keeperScale(w, h);
+export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose: KeeperPose) {
+  const { x } = goalToPixel({ x: pose.pos.x, y: 0 }, view);
+  const groundY = view.goal.botY;
+  const scale = keeperScale(view);
 
-  // Ground contact shadow, anchored to the pitch itself (not to the diving
-  // body), which keeps the keeper visually grounded even mid-dive.
   const shadowStretch = 1 + pose.stretch * 3;
   ctx.save();
   ctx.beginPath();
   ctx.ellipse(
-    x + pose.direction * pose.stretch * scale * 3.2,
+    x + pose.direction * pose.stretch * scale * 2.4,
     groundY + scale * 0.15,
-    scale * 1.5 * shadowStretch,
-    scale * 0.5,
+    scale * 1.15 * shadowStretch,
+    scale * 0.4,
     0,
     0,
     Math.PI * 2,
@@ -273,7 +313,7 @@ export function drawKeeper(ctx: CanvasRenderingContext2D, w: number, h: number, 
   ctx.translate(x, groundY);
   const tilt = pose.direction * pose.stretch * 1.05;
   ctx.rotate(tilt);
-  const stretchOffset = pose.stretch * pose.direction * scale * 4.2;
+  const stretchOffset = pose.stretch * pose.direction * scale * 3.2;
   ctx.translate(stretchOffset, -pose.stretch * scale * 1.1);
 
   const kitLight = pose.beaten ? '#9ca3af' : '#fde047';
@@ -286,22 +326,19 @@ export function drawKeeper(ctx: CanvasRenderingContext2D, w: number, h: number, 
   const hipY = -scale * 3.0;
   const shoulderY = -scale * 5.5;
   const headY = -scale * 6.9;
-  // A goalkeeper's ready stance is already wide-legged and wide-armed, well
-  // clear of the torso, so the limbs read as distinct shapes rather than
-  // merging into the body silhouette at small render sizes.
-  const legSpread = 1.5 + pose.stretch * 1.6;
-  const armReach = 3.2 + pose.stretch * 3.6;
+  const legSpread = 0.9 + pose.stretch * 1.5;
+  // Resting arm span ≈ 1.4m against a 7.32m goal; dive stretches further.
+  const armReach = 2.55 + pose.stretch * 2.8;
 
-  // Legs (hip -> knee -> boot), splaying apart as the dive stretches out.
   ctx.strokeStyle = bootColor;
-  ctx.lineWidth = scale * 0.8;
+  ctx.lineWidth = scale * 0.62;
   ctx.lineCap = 'round';
   for (const side of [-1, 1]) {
-    const kneeX = side * scale * (legSpread * 0.55 + 0.1);
+    const kneeX = side * scale * (legSpread * 0.5 + 0.08);
     const kneeY = hipY + scale * (1.5 - pose.stretch * 0.3);
     const footX = side * scale * legSpread;
     ctx.beginPath();
-    ctx.moveTo(side * scale * 0.5, hipY - scale * 0.1);
+    ctx.moveTo(side * scale * 0.35, hipY - scale * 0.1);
     ctx.lineTo(kneeX, kneeY);
     ctx.lineTo(footX, 0);
     ctx.stroke();
@@ -310,44 +347,37 @@ export function drawKeeper(ctx: CanvasRenderingContext2D, w: number, h: number, 
   for (const side of [-1, 1]) {
     const footX = side * scale * legSpread;
     ctx.beginPath();
-    ctx.ellipse(footX + side * scale * 0.15, 0, scale * 0.48, scale * 0.3, 0, 0, Math.PI * 2);
+    ctx.ellipse(footX + side * scale * 0.12, 0, scale * 0.38, scale * 0.24, 0, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // Shorts.
   ctx.fillStyle = shortsColor;
   ctx.beginPath();
-  ctx.ellipse(0, hipY + scale * 0.4, scale * 1.5, scale * 1.1, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, hipY + scale * 0.35, scale * 1.05, scale * 0.9, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Torso / jersey - a rounded, shoulders-wider-than-waist shape with a
-  // simple light-to-dark gradient for some volume.
-  const torsoGrad = ctx.createLinearGradient(-scale * 1.9, shoulderY, scale * 1.9, hipY);
+  const torsoGrad = ctx.createLinearGradient(-scale * 1.35, shoulderY, scale * 1.35, hipY);
   torsoGrad.addColorStop(0, kitLight);
   torsoGrad.addColorStop(1, kitDark);
   ctx.fillStyle = torsoGrad;
   ctx.beginPath();
-  ctx.moveTo(-scale * 1.9, shoulderY);
-  ctx.quadraticCurveTo(-scale * 2.2, (shoulderY + hipY) / 2, -scale * 1.3, hipY);
-  ctx.lineTo(scale * 1.3, hipY);
-  ctx.quadraticCurveTo(scale * 2.2, (shoulderY + hipY) / 2, scale * 1.9, shoulderY);
+  ctx.moveTo(-scale * 1.35, shoulderY);
+  ctx.quadraticCurveTo(-scale * 1.55, (shoulderY + hipY) / 2, -scale * 0.95, hipY);
+  ctx.lineTo(scale * 0.95, hipY);
+  ctx.quadraticCurveTo(scale * 1.55, (shoulderY + hipY) / 2, scale * 1.35, shoulderY);
   ctx.closePath();
   ctx.fill();
 
-  // Arms (shoulder -> elbow -> gloved hand). Even at rest the keeper holds
-  // hands up and out, ready to react - reaching further still with dive
-  // stretch - so the arms are always clearly separated from the torso, with
-  // a visible elbow bend rather than collapsing into a stub under the glove.
   ctx.strokeStyle = skinColor;
-  ctx.lineWidth = scale * 0.58;
+  ctx.lineWidth = scale * 0.48;
   ctx.lineCap = 'round';
   for (const side of [-1, 1]) {
-    const shoulderX = side * scale * 1.85;
+    const shoulderX = side * scale * 1.3;
     const shoulderPtY = shoulderY + scale * 0.05;
-    const elbowX = side * scale * (2.5 + pose.stretch * 1.3);
-    const elbowY = shoulderY + scale * (0.4 - pose.stretch * 1.5);
+    const elbowX = side * scale * (1.85 + pose.stretch * 1.1);
+    const elbowY = shoulderY + scale * (0.35 - pose.stretch * 1.4);
     const handX = side * scale * armReach;
-    const handY = shoulderY - scale * (0.35 + pose.stretch * 2.1);
+    const handY = shoulderY - scale * (0.3 + pose.stretch * 1.9);
     ctx.beginPath();
     ctx.moveTo(shoulderX, shoulderPtY);
     ctx.lineTo(elbowX, elbowY);
@@ -355,24 +385,22 @@ export function drawKeeper(ctx: CanvasRenderingContext2D, w: number, h: number, 
     ctx.stroke();
     ctx.fillStyle = gloveColor;
     ctx.beginPath();
-    ctx.arc(handX, handY, scale * 0.48, 0, Math.PI * 2);
+    ctx.arc(handX, handY, scale * 0.38, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = pose.beaten ? '#1f2937' : '#166534';
-    ctx.lineWidth = Math.max(1, scale * 0.12);
+    ctx.lineWidth = Math.max(1, scale * 0.1);
     ctx.stroke();
     ctx.strokeStyle = skinColor;
-    ctx.lineWidth = scale * 0.58;
+    ctx.lineWidth = scale * 0.48;
   }
 
-  // Neck + head.
   ctx.fillStyle = skinColor;
   ctx.beginPath();
-  ctx.arc(0, headY, scale * 1.05, 0, Math.PI * 2);
+  ctx.arc(0, headY, scale * 0.95, 0, Math.PI * 2);
   ctx.fill();
-  // A soft hair/cap shadow across the top of the head for a touch of form.
   ctx.fillStyle = 'rgba(0,0,0,0.18)';
   ctx.beginPath();
-  ctx.arc(0, headY - scale * 0.1, scale * 1.05, Math.PI * 0.95, Math.PI * 2.05);
+  ctx.arc(0, headY - scale * 0.08, scale * 0.95, Math.PI * 0.95, Math.PI * 2.05);
   ctx.fill();
 
   ctx.restore();

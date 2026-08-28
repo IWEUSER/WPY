@@ -22,6 +22,15 @@ export interface SwipeGesture {
    * strike. 0 (or omitted) means a straight, uncurled strike.
    */
   curl?: number;
+  /** Screen-space ball position; when set with endX/endY/canvas, aim is a ray toward the goal. */
+  ballX?: number;
+  ballY?: number;
+  endX?: number;
+  endY?: number;
+  canvasW?: number;
+  canvasH?: number;
+  /** World distance from the ball to the goal line, in metres. */
+  distanceM?: number;
 }
 
 export type ShotZoneX = 'far-left' | 'left' | 'center' | 'right' | 'far-right';
