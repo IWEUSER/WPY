@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { applyMatchResult, createAvailability, isAvailable, serveBannedGame } from './availabilityEngine';
-import { FORM_WINDOW_GAMES, SEASON_LENGTH, STARTING_AGE, WEEKS_PER_SEASON } from './constants';
+import { FORM_WINDOW_GAMES, SEASON_LENGTH, STARTING_AGE } from './constants';
 import { planSuperCup } from './continentalDraw';
 import { getClub, leagueMatchWeeks } from './data/clubs';
 import { playerMarketValue, weeklyWageForClub } from './playerValue';
@@ -42,6 +42,19 @@ function freshSeason(seasonNumber: number, clubId: string, role: CareerState['ro
     topGoalscorer: false,
     playerOfTheYear: false,
     wonWpy: false,
+    earnings: 0,
+  };
+}
+
+function withWeeklyPay(
+  season: SeasonRecord,
+  careerEarnings: number,
+  weeklyWage: number,
+): { season: SeasonRecord; careerEarnings: number } {
+  const pay = weeklyWage || 0;
+  return {
+    season: { ...season, earnings: (season.earnings ?? 0) + pay },
+    careerEarnings: careerEarnings + pay,
   };
 }
 
@@ -261,6 +274,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
   let availability = state.availability;
   let nationalTeam = state.nationalTeam;
   let careerGames = state.careerGames;
+  let careerEarnings = state.careerEarnings;
   let formWindow = state.formWindow;
   let lastMatchSummary = state.lastMatchSummary;
   if (!sim || !calendar || !season || !state.clubId) return {};
@@ -280,7 +294,9 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
       const resolution = resolveFixture(sim, fixture, club, 0);
       sim = { ...resolution.sim, fixtureIndex: sim.fixtureIndex + 1 };
       const record: MatchRecord = { matchNumber: season.matches.length + 1, played: false, scored: null };
-      season = { ...season, matches: [...season.matches, record] };
+      const droppedPay = withWeeklyPay(season, careerEarnings, state.weeklyWage);
+      season = { ...droppedPay.season, matches: [...droppedPay.season.matches, record] };
+      careerEarnings = droppedPay.careerEarnings;
       lastMatchSummary = `${resolution.summary} · you were dropped`;
       if (isInternational && nationalTeam) {
         nationalTeam = { ...nationalTeam, availability: serveBannedGame(nationalTeam.availability) };
@@ -295,7 +311,9 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
       const resolution = resolveFixture(sim, fixture, club, 0);
       sim = { ...resolution.sim, fixtureIndex: sim.fixtureIndex + 1 };
       const record: MatchRecord = { matchNumber: season.matches.length + 1, played: true, scored: false };
-      season = { ...season, matches: [...season.matches, record], gamesPlayed: season.gamesPlayed + 1 };
+      const noChancePay = withWeeklyPay(season, careerEarnings, state.weeklyWage);
+      season = { ...noChancePay.season, matches: [...noChancePay.season.matches, record], gamesPlayed: noChancePay.season.gamesPlayed + 1 };
+      careerEarnings = noChancePay.careerEarnings;
       if (countsTowardCareerRecord(state.seasonNumber)) {
         careerGames += 1;
         formWindow = pushForm(formWindow, 0);
@@ -319,6 +337,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
       availability,
       nationalTeam,
       careerGames,
+      careerEarnings,
       formWindow,
       lastMatchSummary,
       seasonStandings: buildSeasonStandings(sim.leagueTable, sim.europeanStanding),
@@ -334,7 +353,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
       leagueChampion: (sim.leagueTable.find((r) => r.clubId === state.clubId)?.position ?? 0) === 1,
     },
   };
-  const nextState = { ...state, seasonSim: withHonours, currentSeason: season, availability, nationalTeam, formWindow, careerGames };
+  const nextState = { ...state, seasonSim: withHonours, currentSeason: season, availability, nationalTeam, formWindow, careerGames, careerEarnings };
   const awarded = attachSeasonAwards(nextState);
   return {
     seasonSim: withHonours,
@@ -342,6 +361,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
     availability,
     nationalTeam,
     careerGames,
+    careerEarnings,
     formWindow,
     lastMatchSummary,
     liveMatch: null,
@@ -474,12 +494,13 @@ export const useCareerStore = create<CareerStore>()(
           const nextSim = { ...resolution.sim, fixtureIndex: live.fixtureIndex + 1 };
           const scored = live.goals > 0;
           const record: MatchRecord = { matchNumber: season.matches.length + 1, played: true, scored };
+          const paid = withWeeklyPay(season, state.careerEarnings, state.weeklyWage);
           const updatedSeason: SeasonRecord = {
-            ...season,
-            matches: [...season.matches, record],
-            goals: season.goals + live.goals,
-            gamesPlayed: season.gamesPlayed + 1,
-            leagueGoals: season.leagueGoals + (fixture.kind === 'league' ? live.goals : 0),
+            ...paid.season,
+            matches: [...paid.season.matches, record],
+            goals: paid.season.goals + live.goals,
+            gamesPlayed: paid.season.gamesPlayed + 1,
+            leagueGoals: paid.season.leagueGoals + (fixture.kind === 'league' ? live.goals : 0),
           };
 
           const isInternational = fixture.kind === 'international';
@@ -533,6 +554,7 @@ export const useCareerStore = create<CareerStore>()(
             formWindow: merged.formWindow,
             careerGoals: counts ? state.careerGoals + live.goals : state.careerGoals,
             careerGames: counts ? state.careerGames + 1 : state.careerGames,
+            careerEarnings: paid.careerEarnings,
             phase: lastMatchResult.isFinal ? 'match-result' : afterPhase,
             wpyResult: awarded.wpyResult,
           };
@@ -556,12 +578,13 @@ export const useCareerStore = create<CareerStore>()(
           const goals = season.goals + (scored ? 1 : 0);
           const gamesPlayed = season.gamesPlayed + 1;
           const availability = applyMatchResult(state.availability, scored);
+          const paid = withWeeklyPay(season, state.careerEarnings, state.weeklyWage);
           const updatedSeason: SeasonRecord = {
-            ...season,
+            ...paid.season,
             matches,
             goals,
             gamesPlayed,
-            leagueGoals: season.leagueGoals + (scored ? 1 : 0),
+            leagueGoals: paid.season.leagueGoals + (scored ? 1 : 0),
           };
           const counts = countsTowardCareerRecord(state.seasonNumber);
           const seasonComplete = matches.length >= reserveSeasonLength(state.clubId);
@@ -573,6 +596,7 @@ export const useCareerStore = create<CareerStore>()(
             availability,
             careerGoals: counts ? state.careerGoals + (scored ? 1 : 0) : state.careerGoals,
             careerGames: counts ? state.careerGames + 1 : state.careerGames,
+            careerEarnings: paid.careerEarnings,
             formWindow: counts ? pushForm(state.formWindow, scored ? 1 : 0) : state.formWindow,
             phase: seasonComplete ? 'season-summary' : 'hub',
             wpyResult: awarded.wpyResult,
@@ -606,11 +630,10 @@ export const useCareerStore = create<CareerStore>()(
             ? (state.role === 'first-team' ? club.firstTeamGoalRatio : club.reserveGoalRatio)
             : 0;
           const ratio = season.gamesPlayed > 0 ? season.goals / season.gamesPlayed : 0;
-          const seasonPay = (state.weeklyWage || 0) * WEEKS_PER_SEASON;
           const finishedSeason: SeasonRecord = {
             ...season,
             ratioMet: ratio >= threshold,
-            earnings: seasonPay,
+            earnings: season.earnings ?? 0,
           };
           const seasonHistory = [...state.seasonHistory, finishedSeason];
           const intlQualifying = nextQualifyingCarry(state.seasonSim);
@@ -639,7 +662,6 @@ export const useCareerStore = create<CareerStore>()(
               availability: createAvailability(),
               pendingTransfer: null,
               intlQualifying,
-              careerEarnings: state.careerEarnings + seasonPay,
               previousContinentalChampion,
               previousChampionClubId: previousContinentalChampion ? state.clubId : null,
               phase: 'hub',
@@ -664,7 +686,6 @@ export const useCareerStore = create<CareerStore>()(
             age: nextAge,
             pendingTransfer: transition.pendingTransfer ?? null,
             intlQualifying,
-            careerEarnings: state.careerEarnings + seasonPay,
             previousContinentalChampion,
             previousChampionClubId: previousContinentalChampion ? state.clubId : null,
             phase: 'transfer-choice',

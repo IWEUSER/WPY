@@ -1,4 +1,5 @@
 import { getClub } from '../data/clubs';
+import { formatEuros } from '../playerValue';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { displaySeasonLabel, displaySeasonNumber } from '../seasonDisplay';
 import { countLoanSpells, resolveSeasonTransition } from '../transfers';
@@ -95,6 +96,9 @@ export default function SeasonSummaryScreen() {
         <p className="mt-3 text-sm font-semibold text-white/80">
           Ratio: {ratio.toFixed(2)} / {threshold.toFixed(2)} required
         </p>
+        {(season.earnings ?? 0) > 0 && (
+          <p className="mt-1 text-xs text-white/50">Earned {formatEuros(season.earnings ?? 0)} this season</p>
+        )}
         {us && (
           <p className="mt-2 text-xs text-white/50">
             Finished {us.position}{ordinal(us.position)} · {us.points} pts

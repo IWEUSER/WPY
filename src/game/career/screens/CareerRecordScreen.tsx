@@ -50,19 +50,23 @@ export default function CareerRecordScreen() {
 
       {(() => {
         const club = clubId ? getClub(clubId) : undefined;
-        if (!club || careerGames === 0) return null;
-        const value = playerMarketValueFromSeasons({
-          age,
-          careerGoals,
-          careerGames,
-          seasons: [...history, ...(current ? [current] : [])],
-          fallbackClub: club,
-        });
+        const value =
+          club && careerGames > 0
+            ? playerMarketValueFromSeasons({
+                age,
+                careerGoals,
+                careerGames,
+                seasons: [...history, ...(current ? [current] : [])],
+                fallbackClub: club,
+              })
+            : null;
+        if (value == null && careerEarnings <= 0 && weeklyWage <= 0) return null;
         return (
           <p className="mt-3 text-center text-sm text-white/60">
-            Market value {formatEuros(value)}
+            {value != null ? `Market value ${formatEuros(value)}` : ''}
+            {value != null && (careerEarnings > 0 || weeklyWage > 0) ? ' · ' : ''}
             {careerEarnings > 0 || weeklyWage > 0
-              ? ` · Earnings ${formatEuros(careerEarnings)}${weeklyWage > 0 ? ` · ${formatWeeklyWage(weeklyWage)}` : ''}`
+              ? `Earnings ${formatEuros(careerEarnings)}${weeklyWage > 0 ? ` · ${formatWeeklyWage(weeklyWage)}` : ''}`
               : ''}
           </p>
         );

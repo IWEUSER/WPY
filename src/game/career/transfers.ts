@@ -1,6 +1,6 @@
 import { CLUBS, getClub, goalRatioFromStrength, loanCandidates, type Club, type ClubTier } from './data/clubs';
 import { countryForNationality, pickClubsBiasedToCountry, nearbyTierClubs, tierPool } from './clubOffers';
-import { playerMarketValueFromSeasons, weeklyWageForClub } from './playerValue';
+import { playerMarketValueFromSeasons, tierForMarketValue, weeklyWageForClub } from './playerValue';
 import type { PlayerRole, SeasonRecord } from './types';
 
 export const MAX_LOAN_SPELLS = 2;
@@ -13,6 +13,20 @@ export function tierForRatio(ratio: number): ClubTier {
   if (ratio >= goalRatioFromStrength(73)) return 3;
   if (ratio >= goalRatioFromStrength(64)) return 4;
   return 5;
+}
+
+/**
+ * Offers follow market value and career ratio, never last season alone.
+ * A collapse can drop the player one band, not to the bottom of the pyramid.
+ */
+export function offerTierFromStanding(params: {
+  careerRatio: number;
+  marketValue: number;
+  currentTier: ClubTier;
+}): ClubTier {
+  const natural = Math.min(tierForMarketValue(params.marketValue), tierForRatio(params.careerRatio)) as ClubTier;
+  const worstAllowed = Math.min(5, (params.currentTier + 1) as ClubTier) as ClubTier;
+  return Math.min(natural, worstAllowed) as ClubTier;
 }
 
 function pickClubsFromTier(
@@ -204,7 +218,12 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     }
 
     const exclude = [club.id, parentClub?.id ?? ''];
-    const saleTier = Math.max(tierForRatio(ratio), club.tier) as ClubTier;
+    const careerRatio = careerGames > 0 ? careerGoals / careerGames : ratio;
+    const saleTier = offerTierFromStanding({
+      careerRatio,
+      marketValue: value,
+      currentTier: parentClub?.tier ?? club.tier,
+    });
     const transfers = pickClubsFromTier(saleTier, 3, exclude, nationality);
     const canLoanAgain = loansUsed < MAX_LOAN_SPELLS;
     const loans = canLoanAgain
@@ -241,15 +260,37 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
   const graceActive = seasonsAtCurrentClub === 0;
 
   if (!ratioMet && !graceActive) {
-    const saleTier = Math.max(tierForRatio(ratio), club.tier) as ClubTier;
-    const offers = pickClubsFromTier(saleTier, 3, [club.id], nationality);
+    const careerRatio = careerGames > 0 ? careerGoals / careerGames : ratio;
+    const saleTier = offerTierFromStanding({
+      careerRatio,
+      marketValue: value,
+      currentTier: club.tier,
+    });
+    const transfers = pickClubsFromTier(saleTier, 3, [club.id], nationality);
+    const canLoan = loansUsed < MAX_LOAN_SPELLS;
+    const loans = canLoan
+      ? pickLoanClubs(club, nationality, 3, [club.id, ...transfers.map((c) => c.id)])
+      : [];
+    const offers = [...offerTerms(loans, 'loan', value), ...offerTerms(transfers, 'permanent', value)];
+    if (canLoan && loans.length > 0) {
+      return {
+        headline: `${club.name} have put you up for sale`,
+        detail: `Your ratio slipped to ${ratio.toFixed(2)} goals/game, below the ${threshold.toFixed(2)} they expect. A loan keeps ${club.name} as your parent club so you can win your place back.`,
+        pendingTransfer: pendingFromOffers(
+          'loan-or-transfer',
+          'Loan offers let you return next season. Permanent offers follow your market value, not just this season.',
+          offers,
+          false,
+        ),
+      };
+    }
     return {
       headline: `${club.name} have put you up for sale`,
       detail: `Your ratio slipped to ${ratio.toFixed(2)} goals/game, below the ${threshold.toFixed(2)} they expect.`,
       pendingTransfer: pendingFromOffers(
         'sold',
-        'These clubs have matched your recent form and made an offer.',
-        offerTerms(offers, 'permanent', value),
+        'These clubs have matched your market value and made an offer.',
+        offerTerms(transfers, 'permanent', value),
         false,
       ),
     };

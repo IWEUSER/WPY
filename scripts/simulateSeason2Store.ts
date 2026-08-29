@@ -167,6 +167,16 @@ const after = store.getState();
 console.log('after first S2 match:', after.lastMatchSummary);
 console.log('league pos', after.seasonStandings?.league.find((r) => r.clubId === after.clubId)?.position, 'pts', after.seasonStandings?.league.find((r) => r.clubId === after.clubId)?.points);
 console.log('phase', after.phase, 'career games', after.careerGames, '(expect 1 after first first-team match)');
+const reserveEarnings = store.getState().seasonHistory[0]?.earnings ?? 0;
+console.log('earnings after S1', reserveEarnings, 'after first S2 match', after.careerEarnings, 'wage', after.weeklyWage);
+if (reserveEarnings <= 0 || reserveEarnings !== after.weeklyWage * reserveGames) {
+  console.error('reserve-year earnings must rise by the weekly wage after every match');
+  process.exitCode = 1;
+}
+if (after.careerEarnings !== reserveEarnings + after.weeklyWage) {
+  console.error('career earnings must move by one weekly wage after each first-team match');
+  process.exitCode = 1;
+}
 if (after.careerGames !== 1) {
   console.error('Career games must start counting in season 2');
   process.exitCode = 1;

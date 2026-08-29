@@ -1,4 +1,4 @@
-import { clampStrength, getClub, type Club } from './data/clubs';
+import { clampStrength, getClub, type Club, type ClubTier } from './data/clubs';
 import { countsTowardCareerRecord } from './seasonDisplay';
 import type { SeasonRecord } from './types';
 
@@ -54,6 +54,27 @@ export function playerMarketValue(params: MarketValueParams): number {
  * Same formula, but the club/league multiplier is a goal-weighted average of
  * every first-team season so a spell at Barcelona still counts after a move.
  */
+export function lastSeasonRatio(seasons: SeasonRecord[]): number | null {
+  for (let i = seasons.length - 1; i >= 0; i--) {
+    const season = seasons[i];
+    if (!countsTowardCareerRecord(season.seasonNumber)) continue;
+    if (season.gamesPlayed <= 0) continue;
+    return season.goals / season.gamesPlayed;
+  }
+  return null;
+}
+
+/**
+ * Career ratio is the base. A collapse last season cuts the figure hard,
+ * but a 0.08 year cannot wipe a 0.80 career down to the bottom of the market.
+ */
+export function formAdjustedRatio(careerRatio: number, recentRatio: number | null): number {
+  if (recentRatio == null) return careerRatio;
+  const blended = careerRatio * 0.65 + recentRatio * 0.35;
+  const collapsed = careerRatio > 0.2 && recentRatio < careerRatio * 0.4;
+  return Math.max(0.05, blended * (collapsed ? 0.7 : 1));
+}
+
 export function playerMarketValueFromSeasons(params: {
   age: number;
   careerGoals: number;
@@ -62,7 +83,8 @@ export function playerMarketValueFromSeasons(params: {
   fallbackClub: Club;
 }): number {
   const { age, careerGoals, careerGames, seasons, fallbackClub } = params;
-  const ratio = careerGames > 0 ? careerGoals / careerGames : 0;
+  const careerRatio = careerGames > 0 ? careerGoals / careerGames : 0;
+  const ratio = formAdjustedRatio(careerRatio, lastSeasonRatio(seasons));
   let weighted = 0;
   let weight = 0;
   for (const season of seasons) {
@@ -74,6 +96,15 @@ export function playerMarketValueFromSeasons(params: {
   }
   const scale = weight > 0 ? weighted / weight : clubLeagueScale(fallbackClub);
   return valueFromScale(age, ratio, careerGoals, scale);
+}
+
+/** Which transfer band a fee belongs in. A €100m+ player is never tier 5. */
+export function tierForMarketValue(value: number): ClubTier {
+  if (value >= 70_000_000) return 1;
+  if (value >= 28_000_000) return 2;
+  if (value >= 12_000_000) return 3;
+  if (value >= 4_000_000) return 4;
+  return 5;
 }
 
 function valueFromScale(age: number, ratio: number, careerGoals: number, scale: number): number {

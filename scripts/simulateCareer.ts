@@ -15,7 +15,7 @@ import {
   meanChancesFromStrength,
 } from '../src/game/career/chanceEngine';
 import { assignClubTier, CLUBS, clubsInLeague, getClub, goalRatioFromStrength, leagueMatchWeeks, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
-import { playerMarketValue, playerMarketValueFromSeasons, weeklyWageForClub } from '../src/game/career/playerValue';
+import { formAdjustedRatio, playerMarketValue, playerMarketValueFromSeasons, weeklyWageForClub } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { internationalCampaignForSeason, internationalTournamentForSeason } from '../src/game/career/data/competitions';
 import { fifaRank } from '../src/game/career/data/fifaRankings';
@@ -656,9 +656,20 @@ const sale = resolveSeasonTransition({
 });
 const saleClubs = sale.pendingTransfer?.clubIds ?? [];
 const saleHome = saleClubs.filter((id) => getClub(id)?.country === 'Germany').length;
-console.log('sale offers', saleClubs, `home=${saleHome}`);
+const saleLoans = (sale.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan').length;
+const salePerms = (sale.pendingTransfer?.offers ?? []).filter((o) => o.move === 'permanent');
+const saleTiers = salePerms.map((o) => getClub(o.clubId)?.tier ?? 5);
+console.log('sale offers', saleClubs, `home=${saleHome}`, 'loans', saleLoans, 'tiers', saleTiers);
 if (saleHome < 1) {
   console.error('German player sale offers must include at least one German club');
+  process.exitCode = 1;
+}
+if (saleLoans !== 3 || salePerms.length !== 3) {
+  console.error('a failed first-team season must offer 3 loans and 3 transfers');
+  process.exitCode = 1;
+}
+if (saleTiers.some((tier) => tier >= 5)) {
+  console.error('sale destinations must not include the lowest clubs in the game');
   process.exitCode = 1;
 }
 
@@ -765,6 +776,65 @@ if (barca && hilal && lafc) {
   }
   if (mlsWage >= saudiWage) {
     console.error('MLS wages must sit below Saudi');
+    process.exitCode = 1;
+  }
+
+  const starSeasons = [
+    { ...dummySeason, seasonNumber: 2, clubId: 'barcelona', goals: 40, gamesPlayed: 50 },
+    { ...dummySeason, seasonNumber: 3, clubId: 'barcelona', goals: 40, gamesPlayed: 50 },
+    { ...dummySeason, seasonNumber: 4, clubId: 'barcelona', goals: 3, gamesPlayed: 38 },
+  ];
+  const starAfterCollapse = playerMarketValueFromSeasons({
+    age: 20,
+    careerGoals: 83,
+    careerGames: 138,
+    seasons: starSeasons,
+    fallbackClub: barca,
+  });
+  const starKeptForm = playerMarketValueFromSeasons({
+    age: 20,
+    careerGoals: 83,
+    careerGames: 138,
+    seasons: [
+      starSeasons[0],
+      starSeasons[1],
+      { ...dummySeason, seasonNumber: 4, clubId: 'barcelona', goals: 28, gamesPlayed: 38 },
+    ],
+    fallbackClub: barca,
+  });
+  console.log('form-adjusted', formAdjustedRatio(83 / 138, 3 / 38), 'collapse', starAfterCollapse, 'kept form', starKeptForm);
+  if (starAfterCollapse >= starKeptForm * 0.8) {
+    console.error('a 0.08 season must cut a star’s fee substantially');
+    process.exitCode = 1;
+  }
+  if (starAfterCollapse < 40_000_000) {
+    console.error('a star’s career ratio should keep them well above the bottom of the market');
+    process.exitCode = 1;
+  }
+  const starSale = resolveSeasonTransition({
+    season: starSeasons[2],
+    role: 'first-team',
+    clubId: 'barcelona',
+    parentClubId: 'barcelona',
+    seasonsAtCurrentClub: 2,
+    age: 20,
+    careerGoals: 83,
+    careerGames: 138,
+    nationality: 'spain',
+    loansUsed: 0,
+    seasonHistory: starSeasons.slice(0, 2),
+  });
+  const starPermTiers = (starSale.pendingTransfer?.offers ?? [])
+    .filter((o) => o.move === 'permanent')
+    .map((o) => getClub(o.clubId)?.tier ?? 5);
+  const starLoanCount = (starSale.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan').length;
+  console.log('star sale loans', starLoanCount, 'perm tiers', starPermTiers);
+  if (starLoanCount !== 3) {
+    console.error('a failed ratio at Barcelona must still offer loans back to the parent club');
+    process.exitCode = 1;
+  }
+  if (starPermTiers.some((tier) => tier >= 4)) {
+    console.error('a high-value player must not be offered lower-league or smallest clubs');
     process.exitCode = 1;
   }
 }

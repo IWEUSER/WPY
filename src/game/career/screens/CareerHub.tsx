@@ -5,7 +5,7 @@ import { describeAvailability, isAvailable } from '../availabilityEngine';
 import { careerRatioForSelection, clubEligibleForNationalTeam, getNation, isSelectedForNationalTeam, selectionRatioForNation } from '../international';
 import type { SeasonStandings } from '../matchEngine';
 import { displaySeasonLabel } from '../seasonDisplay';
-import { formatEuros, playerMarketValueFromSeasons } from '../playerValue';
+import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons } from '../playerValue';
 import { fixtureTitle, internationalRoundLabel, nextPlayableFixture, remainingPlayableCount, type SeasonSimState } from '../seasonSim';
 import { useCareerStore } from '../store';
 
@@ -32,6 +32,8 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const careerGames = useCareerStore((s) => s.careerGames);
   const seasonHistory = useCareerStore((s) => s.seasonHistory);
   const nationalTeam = useCareerStore((s) => s.nationalTeam);
+  const careerEarnings = useCareerStore((s) => s.careerEarnings);
+  const weeklyWage = useCareerStore((s) => s.weeklyWage);
   const advance = useCareerStore((s) => s.advance);
   const openCareerRecord = useCareerStore((s) => s.openCareerRecord);
 
@@ -84,6 +86,12 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         {parentClub && <p className="mt-1 text-xs text-white/40">On loan from {parentClub.name}</p>}
         {seasonNumber >= 2 && (
           <p className="mt-1 text-xs text-white/50">Market value {formatEuros(marketValue)}</p>
+        )}
+        {(careerEarnings > 0 || weeklyWage > 0) && (
+          <p className="mt-1 text-xs text-white/50">
+            Earnings {formatEuros(careerEarnings)}
+            {weeklyWage > 0 ? ` · ${formatWeeklyWage(weeklyWage)}` : ''}
+          </p>
         )}
         <SeasonCompetitions calendar={seasonCalendar} />
       </div>

@@ -15,8 +15,9 @@ export function pickClubsBiasedToCountry(
   extraHome: Club[] = [],
 ): Club[] {
   const homeCountry = country && CLUBS.some((c) => c.country === country) ? country : null;
+  const hintTier = preferred[0]?.tier ?? 3;
   if (!homeCountry || minFromCountry <= 0) {
-    const pool = preferred.length >= count ? preferred : [...preferred, ...CLUBS];
+    const pool = preferred.length >= count ? preferred : [...preferred, ...nearbyTierClubs(hintTier)];
     return uniqueById(shuffle(pool)).slice(0, count);
   }
 
@@ -33,7 +34,7 @@ export function pickClubsBiasedToCountry(
   awayPicks.forEach((c) => taken.add(c.id));
 
   if (homePicks.length + awayPicks.length < count) {
-    const filler = CLUBS.filter((c) => !taken.has(c.id));
+    const filler = nearbyTierClubs(hintTier, [...taken]);
     return [...homePicks, ...awayPicks, ...shuffle(filler)].slice(0, count);
   }
   return [...homePicks, ...awayPicks];

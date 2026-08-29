@@ -2,7 +2,7 @@ import { createAvailability } from './availabilityEngine';
 import { getClub } from './data/clubs';
 import { createNationalTeamState, recordInternationalAppearance } from './international';
 import { buildSeasonStandings } from './matchEngine';
-import { playerMarketValue, weeklyWageForClub } from './playerValue';
+import { playerMarketValueFromSeasons, weeklyWageForClub } from './playerValue';
 import { hydrateSeason } from './seasonSim';
 import { useCareerStore } from './store';
 import type { PendingTransfer } from './transfers';
@@ -77,25 +77,45 @@ export function applyCareerLayoutPreview(): void {
   });
 
   const preview = new URLSearchParams(window.location.search).get('preview-career');
-  const value = playerMarketValue({ age: 19, ratio: 58 / 76, careerGoals: 58, club });
+  const value = playerMarketValueFromSeasons({
+    age: 19,
+    careerGoals: 61,
+    careerGames: 114,
+    seasons: [
+      ...history,
+      season({
+        seasonNumber: 4,
+        clubId: 'real-madrid',
+        role: 'first-team',
+        matches: [],
+        goals: 3,
+        gamesPlayed: 38,
+        ratioMet: false,
+        age: 19,
+        leagueGoals: 3,
+        trophies: [],
+        topGoalscorer: false,
+        playerOfTheYear: false,
+        wonWpy: false,
+      }),
+    ],
+    fallbackClub: club,
+  });
   const pendingTransfer: PendingTransfer | null =
     preview === 'transfer'
       ? {
-          kind: 'end-of-season',
-          detail: 'These clubs have made an offer. You can stay where you are.',
-          clubIds: ['barcelona', 'bayern', 'al-hilal'],
+          kind: 'loan-or-transfer',
+          detail: 'Loan offers let you return next season. Permanent offers follow your market value, not just this season.',
+          clubIds: ['mainz', 'leicester', 'sevilla', 'barcelona', 'bayern', 'atletico-madrid'],
           offers: [
+            { clubId: 'mainz', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('mainz')!, value) },
+            { clubId: 'leicester', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('leicester')!, value) },
+            { clubId: 'sevilla', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('sevilla')!, value) },
             { clubId: 'barcelona', move: 'permanent', fee: value, weeklyWage: weeklyWageForClub(getClub('barcelona')!, value) },
             { clubId: 'bayern', move: 'permanent', fee: value, weeklyWage: weeklyWageForClub(getClub('bayern')!, value) },
-            { clubId: 'al-hilal', move: 'permanent', fee: value, weeklyWage: weeklyWageForClub(getClub('al-hilal')!, value) },
+            { clubId: 'atletico-madrid', move: 'permanent', fee: value, weeklyWage: weeklyWageForClub(getClub('atletico-madrid')!, value) },
           ],
-          allowDecline: true,
-          stay: {
-            clubId: 'real-madrid',
-            parentClubId: 'real-madrid',
-            role: 'first-team',
-            seasonsAtCurrentClub: 3,
-          },
+          allowDecline: false,
         }
       : null;
 
