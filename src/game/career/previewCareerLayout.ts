@@ -74,8 +74,7 @@ export function applyCareerLayoutPreview(): void {
   });
 
   const preview = new URLSearchParams(window.location.search).get('preview-career');
-  const madridClub = club;
-  const value = playerMarketValue({ age: 19, ratio: 58 / 76, careerGoals: 58, club: madridClub });
+  const value = playerMarketValue({ age: 19, ratio: 58 / 76, careerGoals: 58, club });
   const pendingTransfer: PendingTransfer | null =
     preview === 'transfer'
       ? {
