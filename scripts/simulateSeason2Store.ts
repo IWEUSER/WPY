@@ -171,3 +171,33 @@ if (after.careerGames !== 1) {
   console.error('Career games must start counting in season 2');
   process.exitCode = 1;
 }
+
+const finalIndex = after.seasonCalendar?.fixtures.findIndex(
+  (f) => f.kind === 'international' && f.internationalRound === 'final',
+);
+if (finalIndex == null || finalIndex < 0 || !after.seasonSim || !after.seasonCalendar) {
+  console.error('Season 2 must include a World Cup final');
+  process.exitCode = 1;
+} else {
+  store.setState({
+    seasonSim: { ...after.seasonSim, fixtureIndex: finalIndex },
+    liveMatch: { fixtureIndex: finalIndex, chancesTotal: 1, chancesTaken: 1, goals: 1 },
+  });
+  store.getState().finishLiveMatch();
+  const finalState = store.getState();
+  console.log('WC final phase', finalState.phase, finalState.lastMatchResult);
+  if (finalState.phase !== 'match-result' || !finalState.lastMatchResult?.isFinal) {
+    console.error('A World Cup final must show the result screen before season summary');
+    process.exitCode = 1;
+  }
+  if (finalState.lastMatchResult?.afterPhase !== 'season-summary') {
+    console.error('Acknowledging the last final of the year should then open season summary');
+    process.exitCode = 1;
+  }
+  store.getState().acknowledgeMatchResult();
+  if (store.getState().phase !== 'season-summary') {
+    console.error('Continue after a season-ending final must reach season summary');
+    process.exitCode = 1;
+  }
+  console.log('after acknowledge', store.getState().phase);
+}
