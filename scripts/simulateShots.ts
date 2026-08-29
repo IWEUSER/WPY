@@ -3,7 +3,7 @@
  * check that outcomes are appropriately random (i.e. not ~100% or ~0% goals).
  * Run with: npm run simulate
  */
-import { DEFAULT_DIFFICULTY, KEEPER_DIVE_MAX_X, REFERENCE_SPEED, SAVE_GRID_COLS, SAVE_GRID_ROWS } from '../src/game/shooting/constants';
+import { DEFAULT_DIFFICULTY, KEEPER_DIVE_MAX_X, PLANTED_SAVE_COL_MAX, PLANTED_SAVE_COL_MIN, REFERENCE_SPEED, SAVE_GRID_COLS, SAVE_GRID_ROWS } from '../src/game/shooting/constants';
 import {
   BALL_SCREEN_Y,
   FIFA,
@@ -26,6 +26,7 @@ import {
   computeKeeperDive,
   computeSwipeCurl,
   diveIntensityForCell,
+  isPlantedSaveCol,
   resolveShot,
   saveChanceForCell,
 } from '../src/game/shooting/shotEngine';
@@ -291,14 +292,27 @@ if (maxX - minX < 0.5) {
 console.log('\n--- Keeper dive: 160 square-specific save/miss motions ---');
 const midIntensity = diveIntensityForCell({ col: 7, row: 2 });
 const midIntensityR = diveIntensityForCell({ col: 8, row: 2 });
-const nearMid = diveIntensityForCell({ col: 6, row: 2 });
+const col6 = diveIntensityForCell({ col: 6, row: 2 });
+const col5 = diveIntensityForCell({ col: 5, row: 2 });
 const outerL = diveIntensityForCell({ col: 0, row: 4 });
 const outerR = diveIntensityForCell({ col: 15, row: 4 });
+const col13 = diveIntensityForCell({ col: 13, row: 2 });
+const col14 = diveIntensityForCell({ col: 14, row: 2 });
 console.log(
-  `intensity: centre7=${midIntensity} centre8=${midIntensityR} col6=${nearMid.toFixed(2)} col0=${outerL} col15=${outerR}`,
+  `intensity: planted6=${col6} planted7=${midIntensity} planted8=${midIntensityR} col5=${col5.toFixed(2)} col13=${col13.toFixed(2)} col14=${col14.toFixed(2)} col0=${outerL} col15=${outerR}`,
 );
-if (midIntensity !== 0 || midIntensityR !== 0) {
-  console.error('FAIL: middle squares must be a standing save (no dive)');
+for (const col of [6, 7, 8]) {
+  if (diveIntensityForCell({ col, row: 2 }) !== 0 || !isPlantedSaveCol(col)) {
+    console.error(`FAIL: column ${col} must be a standing catch (1-based square ${col + 1})`);
+    process.exitCode = 1;
+  }
+}
+if (col5 === 0 || col13 === 0 || col14 === 0) {
+  console.error('FAIL: columns 5, 13 and 14 must dive — standing is only for the three centre squares');
+  process.exitCode = 1;
+}
+if (PLANTED_SAVE_COL_MIN !== 6 || PLANTED_SAVE_COL_MAX !== 8) {
+  console.error('FAIL: planted band must be the three centre columns 6–8 (1-based 7–9)');
   process.exitCode = 1;
 }
 
@@ -337,7 +351,12 @@ const saveRight = computeKeeperDive({ x: 0.92, y: 0.9 }, { col: 15, row: 4 }, tr
 const missLeft = computeKeeperDive({ x: -0.92, y: 0.9 }, { col: 0, row: 4 }, false, DEFAULT_DIFFICULTY);
 const missRight = computeKeeperDive({ x: 0.92, y: 0.9 }, { col: 15, row: 4 }, false, DEFAULT_DIFFICULTY);
 const lowSave = computeKeeperDive({ x: -0.92, y: 0.1 }, { col: 0, row: 0 }, true, DEFAULT_DIFFICULTY);
-const nudge = computeKeeperDive({ x: -0.2, y: 0.4 }, { col: 6, row: 1 }, true, DEFAULT_DIFFICULTY);
+const nudge = computeKeeperDive({ x: -0.35, y: 0.4 }, { col: 5, row: 1 }, true, DEFAULT_DIFFICULTY);
+const save13 = computeKeeperDive({ x: 0.69, y: 0.5 }, { col: 13, row: 2 }, true, DEFAULT_DIFFICULTY, 320);
+const save14 = computeKeeperDive({ x: 0.81, y: 0.5 }, { col: 14, row: 2 }, true, DEFAULT_DIFFICULTY, 320);
+const sq13 = cellCenter({ col: 13, row: 2 });
+const sq14 = cellCenter({ col: 14, row: 2 });
+const sq0 = cellCenter({ col: 0, row: 4 });
 const leftSil = keeperSilhouetteX(poseFromDive(saveLeft));
 const rightSil = keeperSilhouetteX(poseFromDive(saveRight));
 console.log(
@@ -353,16 +372,22 @@ console.log(
   `right silhouette: glove=${rightSil.glove.toFixed(2)} hip=${rightSil.hip.toFixed(2)} foot=${rightSil.foot.toFixed(2)} (arms right, legs trail left)`,
 );
 console.log(
+  `col13 save: dir=${save13.direction} layout=${save13.layout.toFixed(2)} hand=(${save13.hand.x.toFixed(2)},${save13.hand.y.toFixed(2)}) square=(${sq13.x.toFixed(2)},${sq13.y.toFixed(2)}) duration=${save13.diveDurationMs} travel=320`,
+);
+console.log(
+  `col14 save: dir=${save14.direction} layout=${save14.layout.toFixed(2)} hand=(${save14.hand.x.toFixed(2)},${save14.hand.y.toFixed(2)}) square=(${sq14.x.toFixed(2)},${sq14.y.toFixed(2)})`,
+);
+console.log(
   `miss top-left: hand=(${missLeft.hand.x.toFixed(2)},${missLeft.hand.y.toFixed(2)}) layout=${missLeft.layout.toFixed(2)}`,
 );
 console.log(
   `low save: hips.y=${lowSave.target.y.toFixed(2)} layout=${lowSave.layout.toFixed(2)} (must sprawl on the ground)`,
 );
-if (stand.direction !== 0 || Math.abs(stand.target.x) > 0.04 || stand.layout > 0.25) {
+if (stand.direction !== 0 || stand.layout > 0.25) {
   console.error('FAIL: a centre-square save must stay planted, not dive');
   process.exitCode = 1;
 }
-if (saveLeft.direction !== -1 || missRight.direction !== 1) {
+if (saveLeft.direction !== -1 || missRight.direction !== 1 || save13.direction !== 1 || save14.direction !== 1) {
   console.error('FAIL: keeper dived the wrong way');
   process.exitCode = 1;
 }
@@ -370,8 +395,20 @@ if (Math.abs(saveLeft.target.x) > KEEPER_DIVE_MAX_X + 1e-9 || Math.abs(missRight
   console.error('FAIL: dive hips went past the allowed in-post range');
   process.exitCode = 1;
 }
-if (Math.abs(saveLeft.hand.x) > 1 + 1e-9 || saveLeft.hand.x >= saveLeft.target.x - 0.05) {
-  console.error('FAIL: a left-dive glove must stay inside the posts and on the left of the hips');
+if (Math.hypot(saveLeft.hand.x - sq0.x, saveLeft.hand.y - sq0.y) > 0.02) {
+  console.error('FAIL: a corner save must put the glove on that square');
+  process.exitCode = 1;
+}
+if (Math.hypot(save13.hand.x - sq13.x, save13.hand.y - sq13.y) > 0.02 || Math.hypot(save14.hand.x - sq14.x, save14.hand.y - sq14.y) > 0.02) {
+  console.error('FAIL: a save at square 13 or 14 must put the gloves on that square, not stand in the middle');
+  process.exitCode = 1;
+}
+if (save13.layout < 0.45 || save14.layout < 0.45) {
+  console.error('FAIL: a save at square 13 or 14 must be a dive, not an upright catch');
+  process.exitCode = 1;
+}
+if (save13.diveDurationMs > 320 + 1e-6) {
+  console.error('FAIL: a save dive must finish by the time the ball arrives');
   process.exitCode = 1;
 }
 if (Math.abs(missLeft.hand.x) >= Math.abs(saveLeft.hand.x) - 0.05) {
@@ -398,8 +435,29 @@ if (!(missRight.stretch < saveLeft.stretch)) {
   console.error('FAIL: a beaten outer dive should stretch less than a save');
   process.exitCode = 1;
 }
-if (Math.abs(nudge.target.x) >= Math.abs(saveLeft.target.x) * 0.5) {
-  console.error('FAIL: a near-centre square should dive much less than an outer square');
+if (nudge.direction === 0 || nudge.layout >= saveLeft.layout) {
+  console.error('FAIL: a near-centre square should dive, but less than an outer square');
+  process.exitCode = 1;
+}
+
+let uncoveredSave = 0;
+let standingOffCentreSave = 0;
+for (let col = 0; col < SAVE_GRID_COLS; col++) {
+  for (let row = 0; row < SAVE_GRID_ROWS; row++) {
+    const square = cellCenter({ col, row });
+    const d = computeKeeperDive(square, { col, row }, true, DEFAULT_DIFFICULTY, 400);
+    if (Math.hypot(d.hand.x - square.x, d.hand.y - square.y) > 0.02) uncoveredSave++;
+    if (!isPlantedSaveCol(col) && (d.direction === 0 || d.layout < 0.45)) standingOffCentreSave++;
+    if (d.diveDurationMs > 400 + 1e-6) uncoveredSave++;
+  }
+}
+console.log(`save coverage: uncovered=${uncoveredSave} standing-off-centre=${standingOffCentreSave} (expect 0, 0)`);
+if (uncoveredSave > 0) {
+  console.error('FAIL: a save must put the gloves on that square by the time the ball arrives');
+  process.exitCode = 1;
+}
+if (standingOffCentreSave > 0) {
+  console.error('FAIL: only the three centre columns may catch without diving');
   process.exitCode = 1;
 }
 
@@ -413,7 +471,7 @@ for (let i = 0; i < DIVE_N; i++) {
   const dive = result.keeperDive;
   if (Math.abs(dive.target.x) > KEEPER_DIVE_MAX_X + 1e-6) pastPost++;
   if (Math.abs(dive.hand.x) > 1 + 1e-6) handPastPost++;
-  if (Math.abs(result.aim.x) > 0.04 && dive.direction !== 0 && Math.sign(dive.target.x) !== Math.sign(result.aim.x)) {
+  if (Math.abs(result.aim.x) > 0.04 && dive.direction !== 0 && Math.sign(dive.direction) !== Math.sign(result.aim.x)) {
     wrongWay++;
   }
 }

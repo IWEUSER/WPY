@@ -122,6 +122,17 @@ function readDevKeeperPose(): KeeperPose | null {
   };
 }
 
+function readDevPoseCell(): { col: number; row: number } | null {
+  if (!import.meta.env.DEV) return null;
+  const raw = new URLSearchParams(window.location.search).get('pose');
+  if (!raw) return null;
+  const [c, r] = raw.split(',');
+  const col = Number(c);
+  const row = Number(r);
+  if (!Number.isInteger(col) || !Number.isInteger(row) || col < 0 || col > 15 || row < 0 || row > 4) return null;
+  return { col, row };
+}
+
 function makeIdleKeeper(): KeeperPose {
   return idleKeeperPose();
 }
@@ -321,14 +332,21 @@ export default function ShootingGame({
           const start = ballStartPixel(view, anim.ballStartXRatio);
           anim.ballPixel = start;
           anim.ballRadius = ballRadiusNear(view);
-          drawKeeper(ctx, view, readDevKeeperPose() ?? anim.keeperPose);
+          const devPose = readDevKeeperPose();
+          const devCell = readDevPoseCell();
+          drawKeeper(ctx, view, devPose ?? anim.keeperPose);
           if (anim.phase === 'dragging' && anim.dragStart && anim.dragPoints.length > 1) {
             // Show the actual curved path being swiped, not just a straight
             // line - this is the live feedback for how much bend/curl the
             // current swipe is imparting.
             drawTrail(ctx, anim.dragPoints);
           }
-          drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
+          if (devPose && devCell) {
+            const atSquare = goalToPixel(cellCenter(devCell), view);
+            drawBall(ctx, atSquare.x, atSquare.y, ballRadiusAtGoal(view), 0);
+          } else {
+            drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
+          }
         } else if (anim.phase === 'shooting' && anim.result) {
           const result = anim.result;
           const elapsed = now - anim.shotStartMs;
@@ -369,7 +387,11 @@ export default function ShootingGame({
           const diveElapsed = Math.max(0, elapsed - diveStart);
           const diveTotal = Math.max(1, result.keeperDive.diveDurationMs - diveStart);
           const diveT = Math.min(1, diveElapsed / diveTotal);
-          const diveEased = diveT * diveT * (3 - 2 * diveT);
+          // A save is timed to the ball so the keeper is on it when it arrives.
+          // A miss can still be late, which is why the shot goes in.
+          const saved = result.outcome === 'saved';
+          const poseT = saved ? t : diveT;
+          const diveEased = poseT * poseT * (3 - 2 * poseT);
 
           // Pose is the square's save or miss motion, interpolated from idle.
           const dive = result.keeperDive;
@@ -397,10 +419,20 @@ export default function ShootingGame({
           if (t >= 1) {
             anim.phase = 'result';
             anim.resultAtMs = now;
-            anim.keeperPose = {
-              ...anim.keeperPose,
-              beaten: result.outcome === 'goal',
-            };
+            anim.keeperPose = saved
+              ? {
+                  pos: dive.target,
+                  stretch: dive.stretch,
+                  direction: dive.direction,
+                  layout: dive.layout,
+                  elevation: dive.elevation,
+                  hand: dive.hand,
+                  beaten: false,
+                }
+              : {
+                  ...anim.keeperPose,
+                  beaten: result.outcome === 'goal',
+                };
             finishShot(result);
           }
         } else if (anim.phase === 'result' && anim.result) {

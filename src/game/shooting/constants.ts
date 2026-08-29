@@ -37,9 +37,14 @@ export const MAX_TRAVEL_MS = 1080;
 export const KEEPER_DIVE_MS_PER_UNIT = 300;
 
 /** Max |x| the keeper's hips travel, in normalized goal space (posts at ±1).
- * Feet trail the other way, so hips can sit closer to the ball than a standing
- * side-reach would allow without putting a boot past the post. */
-export const KEEPER_DIVE_MAX_X = 0.58;
+ * Feet trail the other way, so hips sit behind the gloves on a dive. */
+export const KEEPER_DIVE_MAX_X = 0.78;
+
+/** 0-based columns that stay on their feet and catch. On a 16-wide grid
+ * counted 1–16 from the left post, that is squares 7, 8 and 9 — the
+ * geometric centre. Every other square, including 4–6 and 13–14, is a dive. */
+export const PLANTED_SAVE_COL_MIN = 6;
+export const PLANTED_SAVE_COL_MAX = 8;
 
 /** Radians of body rotation at full layout. Positive dir (right) rotates
  * clockwise: head and both arms go right, legs trail left. */

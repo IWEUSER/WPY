@@ -41,7 +41,7 @@ export type ShotOutcomeKind = 'goal' | 'saved' | 'post' | 'wide' | 'over';
 export interface KeeperDive {
   /** Where the keeper's hips travel to. Always the correct side; |x| stays inside the posts. */
   target: AimPoint;
-  /** Glove marker on the dive side of the hips. A miss falls short of a save. */
+  /** Glove position. On a save this is the landing square so the keeper covers the ball. */
   hand: AimPoint;
   /** Reaction delay before the dive itself begins, in milliseconds. */
   reactionMs: number;

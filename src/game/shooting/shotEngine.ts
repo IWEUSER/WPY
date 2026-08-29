@@ -8,6 +8,8 @@ import {
   KEEPER_DIVE_MAX_X,
   KEEPER_DIVE_MS_PER_UNIT,
   KEEPER_STAND_Y,
+  PLANTED_SAVE_COL_MAX,
+  PLANTED_SAVE_COL_MIN,
   MAX_SWIPE_DISTANCE,
   MAX_TRAVEL_MS,
   MIN_SWIPE_DISTANCE,
@@ -19,7 +21,7 @@ import {
   SAVE_GRID_ROWS,
   WOODWORK_MARGIN,
 } from './constants';
-import { createPitchView, pixelToAim } from './render';
+import { createPitchView, hipsToPlaceGlovesAt, pixelToAim } from './render';
 import type {
   AimPoint,
   KeeperDive,
@@ -260,13 +262,18 @@ export function saveChanceForAim(aim: AimPoint, power = 1, curl = 0): number {
   return clamp(base * powerFactor * curlFactor, 0.06, 0.96);
 }
 
+/** True only for the three geometric-centre columns (1-based squares 7, 8, 9). */
+export function isPlantedSaveCol(col: number): boolean {
+  return col >= PLANTED_SAVE_COL_MIN && col <= PLANTED_SAVE_COL_MAX;
+}
+
 /**
  * How far across the goal the keeper's hips travel for a 16-wide landing square.
- * The two centre columns (7 and 8) stay planted. Intensity then ramps to 1 at
+ * Only the three centre columns stay planted. Intensity then ramps to 1 at
  * the posts (columns 0 and 15) for a full-length dive.
  */
 export function diveIntensityForCell(cell: SaveCell): number {
-  if (cell.col === 7 || cell.col === 8) return 0;
+  if (isPlantedSaveCol(cell.col)) return 0;
   const distFromCentre = Math.abs(cell.col + 0.5 - SAVE_GRID_COLS / 2);
   return Math.min(1, distFromCentre / (SAVE_GRID_COLS / 2 - 0.5));
 }
@@ -280,70 +287,59 @@ export function cellCenter(cell: SaveCell): AimPoint {
 }
 
 /**
- * One of 160 end-poses: every square has a save motion and a miss motion.
- * Hips stay inside the posts. A dive lays the body toward the ball: both
- * arms go with the head toward that post, legs trail the other way. Gloves
- * reach along that axis (a miss is a shorter reach), they are not teleported
- * onto the square. Centre squares catch without leaving their feet.
+ * One of 160 end-poses. A save puts the gloves on that square so the keeper
+ * obstructs the ball. Only the three centre columns catch on their feet;
+ * every other square is a dive toward the post, legs trailing the other way.
+ * A miss is the same motion falling short, and finishes after the ball.
  */
 export function computeKeeperDive(
   actualAim: AimPoint,
   saveCell: SaveCell | null,
   saved: boolean,
   difficulty: ShotDifficulty,
+  travelTimeMs?: number,
 ): KeeperDive {
   const cell = saveCell ?? aimToSaveCell(actualAim);
   const square = cellCenter(cell);
+  const planted = isPlantedSaveCol(cell.col);
   const lateral = diveIntensityForCell(cell);
-  const direction: -1 | 0 | 1 = lateral === 0 ? 0 : square.x < 0 ? -1 : 1;
+  const direction: -1 | 0 | 1 = planted ? 0 : square.x < 0 ? -1 : 1;
   const heightT = (cell.row + 0.5) / SAVE_GRID_ROWS;
   const lowT = 1 - heightT;
-  const isCentre = cell.col === 7 || cell.col === 8;
-  const centreBias = isCentre ? (cell.col === 7 ? -1 : 1) : 0;
 
-  const layout = isCentre
-    ? 0.04 + lowT * (saved ? 0.18 : 0.1)
-    : clamp(0.18 + lateral * 0.52 + lowT * 0.38, 0.2, 1);
+  const layout = planted
+    ? 0.02 + lowT * (saved ? 0.12 : 0.06)
+    : saved
+      ? clamp(0.48 + lateral * 0.52 + lowT * 0.18, 0.48, 1)
+      : clamp(0.28 + lateral * 0.4 + lowT * 0.15, 0.28, 0.85);
 
   const elevation = heightT;
-  const stretch = isCentre
+  const stretch = planted
     ? saved
-      ? 0.12 + heightT * 0.55
-      : 0.06 + heightT * 0.28
+      ? 0.2 + heightT * 0.55
+      : 0.08 + heightT * 0.25
     : saved
-      ? 0.38 + lateral * 0.42 + heightT * 0.2
-      : 0.22 + lateral * 0.28 + heightT * 0.12;
+      ? 0.45 + lateral * 0.4 + heightT * 0.15
+      : 0.22 + lateral * 0.28 + heightT * 0.1;
 
-  const armAim = 0.2 + stretch * 0.12;
-  const bodyMax = saved ? KEEPER_DIVE_MAX_X : KEEPER_DIVE_MAX_X * 0.7;
-  const bodyX = isCentre ? centreBias * 0.02 : direction * lateral * bodyMax;
-  const bodyY = isCentre
-    ? lerp(0.14, 0.4, heightT)
-    : lerp(0.08, 0.42, heightT);
+  const hand: AimPoint = saved
+    ? { x: square.x, y: square.y }
+    : {
+        x: clamp(square.x * 0.58, -GOAL_HALF_WIDTH, GOAL_HALF_WIDTH),
+        y: clamp(square.y * 0.52 + KEEPER_STAND_Y * 0.25, 0, GOAL_HEIGHT),
+      };
 
-  const hand: AimPoint = {
-    x: clamp(
-      isCentre ? bodyX + centreBias * 0.05 : bodyX + direction * armAim,
-      -GOAL_HALF_WIDTH,
-      GOAL_HALF_WIDTH,
-    ),
-    y: clamp(
-      isCentre
-        ? saved
-          ? 0.32 + heightT * 0.42
-          : 0.28 + heightT * 0.2
-        : saved
-          ? lerp(0.12, 0.72, heightT)
-          : lerp(0.1, 0.5, heightT),
-      0,
-      GOAL_HEIGHT,
-    ),
-  };
+  const hips = hipsToPlaceGlovesAt(hand, { direction, layout, stretch });
+  const bodyX = clamp(hips.x, -KEEPER_DIVE_MAX_X, KEEPER_DIVE_MAX_X);
+  const bodyY = clamp(hips.y, 0.06, 0.58);
 
   const keeperStart: AimPoint = { x: 0, y: KEEPER_STAND_Y };
   const diveDistance = Math.hypot(bodyX - keeperStart.x, bodyY - keeperStart.y);
-  const reactionMs = difficulty.keeperReactionMs * (saved ? 0.65 : 1);
-  const diveDurationMs = reactionMs + diveDistance * KEEPER_DIVE_MS_PER_UNIT;
+  const travel = travelTimeMs ?? 500;
+  const reactionMs = saved ? Math.min(50, travel * 0.1) : difficulty.keeperReactionMs;
+  const diveDurationMs = saved
+    ? travel
+    : Math.max(travel + 140, reactionMs + diveDistance * KEEPER_DIVE_MS_PER_UNIT);
 
   return {
     target: { x: bodyX, y: bodyY },
@@ -385,7 +381,7 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
       power,
       curl,
       travelTimeMs,
-      keeperDive: computeKeeperDive(actualAim, aimToSaveCell(actualAim), false, difficulty),
+      keeperDive: computeKeeperDive(actualAim, aimToSaveCell(actualAim), false, difficulty, travelTimeMs),
       saveMargin: 0,
     };
   }
@@ -398,14 +394,14 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
       power,
       curl,
       travelTimeMs,
-      keeperDive: computeKeeperDive(actualAim, aimToSaveCell(actualAim), false, difficulty),
+      keeperDive: computeKeeperDive(actualAim, aimToSaveCell(actualAim), false, difficulty, travelTimeMs),
       saveMargin: 0,
     };
   }
 
   const saveCell = aimToSaveCell(actualAim);
   const saved = rng() < saveChanceForAim(actualAim, power, curl);
-  const keeperDive = computeKeeperDive(actualAim, saveCell, saved, difficulty);
+  const keeperDive = computeKeeperDive(actualAim, saveCell, saved, difficulty, travelTimeMs);
   const saveMargin = saved ? 1 - keeperDive.layout * 0.2 : 0;
 
   return {

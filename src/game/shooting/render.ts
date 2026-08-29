@@ -334,7 +334,7 @@ interface KeeperLocalPt { x: number; y: number }
 /** Stick points in scale-units. Local +Y is the feet when standing; −Y is the
  * head. After `keeperDiveAngle`, a left dive has gloves left of the hips and
  * boots right of them. */
-export function keeperLocalPoints(pose: Pick<KeeperPose, 'direction' | 'stretch'>): {
+export function keeperLocalPoints(pose: Pick<KeeperPose, 'direction' | 'stretch' | 'layout'>): {
   diving: boolean;
   head: KeeperLocalPt;
   gloveL: KeeperLocalPt;
@@ -345,7 +345,7 @@ export function keeperLocalPoints(pose: Pick<KeeperPose, 'direction' | 'stretch'
   shoulderR: KeeperLocalPt;
 } {
   const stretch = clamp(pose.stretch, 0, 1);
-  const diving = pose.direction !== 0;
+  const diving = pose.direction !== 0 && clamp(pose.layout ?? 1, 0, 1) > 0.12;
   const head: KeeperLocalPt = { x: 0, y: -KEEPER_HEAD_FROM_HIP };
   const shoulderY = -KEEPER_SHOULDER_FROM_HIP;
   if (!diving) {
@@ -376,6 +376,38 @@ export function keeperLocalPoints(pose: Pick<KeeperPose, 'direction' | 'stretch'
 
 function rotateLocalX(lx: number, ly: number, ang: number): number {
   return lx * Math.cos(ang) - ly * Math.sin(ang);
+}
+
+const KEEPER_AIM_HEIGHT = FIFA.keeperHeight / FIFA.goalHeight;
+const AIM_PER_LOCAL_Y = KEEPER_AIM_HEIGHT / KEEPER_FIGURE_HEIGHT;
+const AIM_PER_LOCAL_X = AIM_PER_LOCAL_Y * (2 * FIFA.goalHeight / FIFA.goalWidth);
+
+/** Aim-space offset of a local stick point after the dive rotate. */
+export function localToAimOffset(lx: number, ly: number, ang: number): AimPoint {
+  const cos = Math.cos(ang);
+  const sin = Math.sin(ang);
+  return {
+    x: (lx * cos - ly * sin) * AIM_PER_LOCAL_X,
+    y: -(lx * sin + ly * cos) * AIM_PER_LOCAL_Y,
+  };
+}
+
+/** Midpoint of the two gloves relative to the hips, in aim space. */
+export function gloveAimOffset(pose: Pick<KeeperPose, 'direction' | 'layout' | 'stretch'>): AimPoint {
+  const ang = keeperDiveAngle(pose.direction, pose.layout);
+  const pts = keeperLocalPoints(pose);
+  const a = localToAimOffset(pts.gloveL.x, pts.gloveL.y, ang);
+  const b = localToAimOffset(pts.gloveR.x, pts.gloveR.y, ang);
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
+/** Hip position that puts the gloves on `glove` after the dive rotate. */
+export function hipsToPlaceGlovesAt(
+  glove: AimPoint,
+  pose: Pick<KeeperPose, 'direction' | 'layout' | 'stretch'>,
+): AimPoint {
+  const off = gloveAimOffset(pose);
+  return { x: glove.x - off.x, y: glove.y - off.y };
 }
 
 /** Aim-space x of hips, the furthest glove, and the furthest boot after rotate.
@@ -432,10 +464,18 @@ export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose:
   const headPx = s(pts.head.x, pts.head.y);
   const footL = s(pts.footL.x, pts.footL.y);
   const footR = s(pts.footR.x, pts.footR.y);
-  const gloveL = s(pts.gloveL.x, pts.gloveL.y);
-  const gloveR = s(pts.gloveR.x, pts.gloveR.y);
   const shoulderL = s(pts.shoulderL.x, pts.shoulderL.y);
   const shoulderR = s(pts.shoulderR.x, pts.shoulderR.y);
+  // Gloves sit on pose.hand in world space so a save actually covers the ball.
+  const handPx = goalToPixel(pose.hand, view);
+  const wx = handPx.x - hips.x;
+  const wy = handPx.y - hips.y;
+  const cosA = Math.cos(ang);
+  const sinA = Math.sin(ang);
+  const localHx = wx * cosA + wy * sinA;
+  const localHy = -wx * sinA + wy * cosA;
+  const gloveL = { x: localHx - scale * 0.38, y: localHy };
+  const gloveR = { x: localHx + scale * 0.42, y: localHy + scale * 0.22 };
 
   const drawLeg = (foot: { x: number; y: number }, hipX: number) => {
     const kneeX = hipX * 0.45 + foot.x * 0.55;
