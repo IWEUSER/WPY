@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import { applyMatchResult, createAvailability, isAvailable, serveBannedGame } from './availabilityEngine';
 import { FORM_WINDOW_GAMES, SEASON_LENGTH, STARTING_AGE } from './constants';
 import { getClub } from './data/clubs';
-import { internationalTournamentForSeason } from './data/competitions';
+import { isInternationalFinalsSeason } from './data/competitions';
 import { createNationalTeamState } from './international';
 import { buildSeasonStandings } from './matchEngine';
 import {
@@ -103,7 +103,7 @@ function evaluateSeasonWpy(state: CareerState) {
     seasonGoalRatio: ratio,
     eliteRatioBar: club.firstTeamGoalRatio,
     wonChampionsLeague: sim.honours.continentalChampion === 'ucl',
-    isInternationalTournamentYear: internationalTournamentForSeason(state.seasonNumber) !== null,
+    isInternationalTournamentYear: isInternationalFinalsSeason(state.seasonNumber),
     wonInternationalTournament: sim.honours.internationalChampion !== null,
     recentFormGoals: formGoals,
     recentFormGames: state.formWindow.length,
@@ -514,7 +514,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 4,
+      version: 5,
       migrate: (persisted) => {
         const state = persisted as Partial<CareerState>;
         const sim = state.seasonSim;
@@ -529,6 +529,12 @@ export const useCareerStore = create<CareerStore>()(
                 ...sim,
                 domesticCup: sim.domesticCup ?? null,
                 domesticCupStage: sim.domesticCupStage ?? 'not-entered',
+                internationalPhase: sim.internationalPhase ?? 'none',
+                nationId: sim.nationId ?? state.nationality ?? null,
+                qualifierPoints: sim.qualifierPoints ?? 0,
+                qualifierPlayed: sim.qualifierPlayed ?? 0,
+                qualifierTarget: sim.qualifierTarget ?? 0,
+                nationQualified: sim.nationQualified ?? false,
                 honours: {
                   leagueChampion: sim.honours?.leagueChampion ?? false,
                   continentalChampion: sim.honours?.continentalChampion ?? null,

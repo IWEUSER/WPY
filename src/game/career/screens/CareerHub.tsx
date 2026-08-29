@@ -4,7 +4,7 @@ import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../d
 import { describeAvailability, isAvailable } from '../availabilityEngine';
 import { getNation, isSelectedForNationalTeam, selectionRatioForTier } from '../international';
 import type { SeasonStandings } from '../matchEngine';
-import { fixtureTitle } from '../seasonSim';
+import { fixtureTitle, type SeasonSimState } from '../seasonSim';
 import { useCareerStore, SEASON_LENGTH } from '../store';
 
 const ROLE_LABEL: Record<string, string> = {
@@ -114,7 +114,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         </p>
         <p className="mt-1 text-xs text-white/40">
           {remainingFixtures} match{remainingFixtures === 1 ? '' : 'es'} left this season
-          {nextFixture ? ` · next: ${fixtureTitle(nextFixture)}` : ''}
+          {nextFixture ? ` · next: ${fixtureTitle(nextFixture, { playerNationName: nation?.name })}` : ''}
         </p>
         {parentClub && (
           <p className="mt-2 text-xs text-emerald-300/80">
@@ -130,6 +130,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
           clubTier={club.tier}
           seasonRatio={ratio}
           gamesPlayed={played}
+          sim={seasonSim}
         />
       )}
 
@@ -218,14 +219,34 @@ function InternationalCard({
   clubTier,
   seasonRatio,
   gamesPlayed,
+  sim,
 }: {
   nationName: string;
   clubTier: 1 | 2 | 3 | 4 | 5;
   seasonRatio: number;
   gamesPlayed: number;
+  sim: SeasonSimState | null;
 }) {
   const bar = selectionRatioForTier(clubTier);
   const inForm = gamesPlayed > 0 && isSelectedForNationalTeam(clubTier, seasonRatio);
+  const tournamentName = sim?.internationalTournament
+    ? INTERNATIONAL_TOURNAMENTS[sim.internationalTournament].name
+    : null;
+  const campaignLine = (() => {
+    if (!sim?.internationalSelected || !tournamentName) return null;
+    if (sim.internationalStage === 'qualifying') {
+      return `Qualifying for the ${tournamentName}: ${sim.qualifierPoints} pts from ${sim.qualifierPlayed}/${sim.qualifierTarget}.`;
+    }
+    if (sim.internationalStage === 'failed-qualifying') {
+      return `Did not qualify for the ${tournamentName}.`;
+    }
+    if (sim.internationalStage === 'qualified') {
+      return `Qualified for the ${tournamentName}. The finals are next cycle.`;
+    }
+    if (sim.internationalStage === 'champion') return `Won the ${tournamentName}.`;
+    if (sim.internationalStage === 'eliminated') return `Out of the ${tournamentName}.`;
+    return `Playing at the ${tournamentName}.`;
+  })();
 
   return (
     <div className="rounded-2xl bg-white/5 p-4">
@@ -237,8 +258,9 @@ function InternationalCard({
             ? `On current form, ${nationName} would pick you.`
             : `Need ${bar.toFixed(2)} goals/game at this club level - currently ${seasonRatio.toFixed(2)}.`}
       </p>
+      {campaignLine && <p className="mt-1 text-xs text-emerald-200/80">{campaignLine}</p>}
       <p className="mt-1 text-xs text-white/40">
-        Miss a scoring streak for your country and you get dropped, same as at club level.
+        When you play, you represent {nationName} — not your club.
       </p>
     </div>
   );
@@ -257,6 +279,11 @@ function SeasonCompetitions({ calendar }: { calendar: SeasonCalendar | null }) {
   const international = calendarIncludesInternational(calendar);
   const domesticCup = calendarDomesticCup(calendar);
   if (cupIds.size === 0 && !international && !domesticCup) return null;
+  const internationalLabel = international
+    ? `${INTERNATIONAL_TOURNAMENTS[international].name}${
+        calendar.internationalPhase === 'qualifiers' ? ' qualifying' : ''
+      }`
+    : null;
 
   return (
     <div className="mt-2 flex flex-wrap gap-1.5">
@@ -270,9 +297,9 @@ function SeasonCompetitions({ calendar }: { calendar: SeasonCalendar | null }) {
           {CONTINENTAL_CUPS[id].name}
         </span>
       ))}
-      {international && (
+      {internationalLabel && (
         <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/70">
-          {INTERNATIONAL_TOURNAMENTS[international].name}
+          {internationalLabel}
         </span>
       )}
     </div>

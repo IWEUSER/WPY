@@ -3,11 +3,13 @@ import ShootingGame from '../../shooting/ShootingGame';
 import type { ShotResult } from '../../shooting/types';
 import { getClub } from '../data/clubs';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
+import { getNation } from '../international';
 import { fixtureTitle } from '../seasonSim';
 import { useCareerStore, SEASON_LENGTH } from '../store';
 
 export default function MatchScreen() {
   const clubId = useCareerStore((s) => s.clubId);
+  const nationality = useCareerStore((s) => s.nationality);
   const season = useCareerStore((s) => s.currentSeason);
   const calendar = useCareerStore((s) => s.seasonCalendar);
   const liveMatch = useCareerStore((s) => s.liveMatch);
@@ -18,12 +20,15 @@ export default function MatchScreen() {
   const lastResultRef = useRef<ShotResult | null>(null);
 
   const club = clubId ? getClub(clubId) : undefined;
+  const nation = nationality ? getNation(nationality) : undefined;
   const matchNumber = (season?.matches.length ?? 0) + 1;
   const fixture = calendar && liveMatch ? calendar.fixtures[liveMatch.fixtureIndex] : undefined;
   const simulated = Boolean(calendar && liveMatch && fixture);
 
   const title = simulated && fixture
-    ? `${club?.name ?? 'Match'} — ${fixtureTitle(fixture)}`
+    ? fixture.kind === 'international'
+      ? fixtureTitle(fixture, { playerNationName: nation?.name })
+      : `${club?.name ?? 'Match'} — ${fixtureTitle(fixture)}`
     : club ? `${club.name} — Matchday ${matchNumber}` : `Matchday ${matchNumber}`;
 
   const competitionName = fixture?.continentalCup

@@ -2,12 +2,14 @@ import type { ClubTier } from './data/clubs';
 import {
   continentalCupForClub,
   domesticCupForCountry,
+  internationalCampaignForSeason,
   internationalTournamentForSeason,
   type Confederation,
   type ContinentalCupId,
   type DomesticCupId,
   type InternationalTournamentId,
 } from './data/competitions';
+import { qualifierCountFor } from './data/fifaRankings';
 
 /**
  * What kind of fixture a calendar week holds. `continental-semi-final` and
@@ -44,7 +46,7 @@ export interface CalendarFixture {
   opponentLabel?: string;
   /** How many scoring chances the player gets - filled in by seasonSim. */
   playerChances?: number;
-  internationalRound?: 'group' | 'semi-final' | 'final';
+  internationalRound?: 'qualifier' | 'group' | 'semi-final' | 'final';
 }
 
 export interface SeasonCalendar {
@@ -52,6 +54,7 @@ export interface SeasonCalendar {
   totalWeeks: number;
   fixtures: CalendarFixture[];
   internationalTournament?: InternationalTournamentId | null;
+  internationalPhase?: 'none' | 'qualifiers' | 'qualifiers-and-tournament';
   domesticCup?: DomesticCupId | null;
 }
 
@@ -81,14 +84,14 @@ const DOMESTIC_CUP_WEEKS: { week: number; stage: DomesticCupStage }[] = [
 ];
 
 const KIND_ORDER: Record<FixtureKind, number> = {
-  'domestic-cup': 0,
-  'super-cup': 1,
-  'continental-group': 2,
-  'continental-knockout': 3,
-  'continental-semi-final': 4,
-  'continental-final': 5,
-  league: 6,
-  international: 7,
+  international: 0,
+  'domestic-cup': 1,
+  'super-cup': 2,
+  'continental-group': 3,
+  'continental-knockout': 4,
+  'continental-semi-final': 5,
+  'continental-final': 6,
+  league: 7,
 };
 
 /**
@@ -155,11 +158,24 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
     fixtures.push({ week: ++week, kind: 'continental-final', continentalCup: cup, isDecisive: true });
   }
 
-  const internationalTournament = internationalTournamentForSeason(seasonNumber, nationConfederation ?? confederation);
-  if (includeInternational && internationalTournament) {
-    fixtures.push({ week: ++week, kind: 'international', isDecisive: false, internationalRound: 'group' });
-    fixtures.push({ week: ++week, kind: 'international', isDecisive: true, internationalRound: 'semi-final' });
-    fixtures.push({ week: ++week, kind: 'international', isDecisive: true, internationalRound: 'final' });
+  const campaign = internationalCampaignForSeason(seasonNumber, nationConfederation ?? confederation);
+  if (includeInternational && campaign.tournament && campaign.phase !== 'none') {
+    const qualifierCount = qualifierCountFor(campaign.tournament);
+    const interval = leagueMatchWeeks / qualifierCount;
+    for (let i = 0; i < qualifierCount; i++) {
+      const qualifierWeek = Math.max(1, Math.min(leagueMatchWeeks, Math.round((i + 0.5) * interval)));
+      fixtures.push({
+        week: qualifierWeek,
+        kind: 'international',
+        isDecisive: false,
+        internationalRound: 'qualifier',
+      });
+    }
+    if (campaign.phase === 'qualifiers-and-tournament') {
+      fixtures.push({ week: ++week, kind: 'international', isDecisive: false, internationalRound: 'group' });
+      fixtures.push({ week: ++week, kind: 'international', isDecisive: true, internationalRound: 'semi-final' });
+      fixtures.push({ week: ++week, kind: 'international', isDecisive: true, internationalRound: 'final' });
+    }
   }
 
   fixtures.sort((a, b) => a.week - b.week || KIND_ORDER[a.kind] - KIND_ORDER[b.kind]);
@@ -167,7 +183,8 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
     seasonNumber,
     totalWeeks: Math.max(leagueMatchWeeks, week),
     fixtures,
-    internationalTournament: includeInternational ? internationalTournament : null,
+    internationalTournament: includeInternational ? campaign.tournament : null,
+    internationalPhase: includeInternational ? campaign.phase : 'none',
     domesticCup,
   };
 }

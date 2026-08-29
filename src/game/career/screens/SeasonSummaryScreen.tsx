@@ -49,10 +49,18 @@ export default function SeasonSummaryScreen() {
   if (seasonSim?.honours.superCup) honours.push('Won the Super Cup');
   if (seasonSim?.honours.internationalChampion) {
     honours.push(`Won the ${INTERNATIONAL_TOURNAMENTS[seasonSim.honours.internationalChampion].name}`);
+  } else if (seasonSim?.internationalSelected && seasonSim.internationalTournament && seasonSim.internationalStage === 'qualified') {
+    honours.push(`Qualified for the ${INTERNATIONAL_TOURNAMENTS[seasonSim.internationalTournament].name}`);
   }
   if (seasonSim?.honours.domesticCup) {
     honours.push(`Won the ${DOMESTIC_CUPS[seasonSim.honours.domesticCup].name}`);
   }
+  const missedTournament =
+    seasonSim?.internationalSelected &&
+    seasonSim.internationalTournament &&
+    seasonSim.internationalStage === 'failed-qualifying'
+      ? `Did not qualify for the ${INTERNATIONAL_TOURNAMENTS[seasonSim.internationalTournament].name}`
+      : null;
 
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-6 overflow-y-auto px-6 py-10 text-center text-white">
@@ -92,6 +100,12 @@ export default function SeasonSummaryScreen() {
       {honours.length > 0 && (
         <div className="w-full max-w-sm rounded-2xl bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
           {honours.join(' · ')}
+        </div>
+      )}
+
+      {missedTournament && (
+        <div className="w-full max-w-sm rounded-2xl bg-white/5 px-4 py-3 text-sm text-white/60">
+          {missedTournament}
         </div>
       )}
 

@@ -35,8 +35,9 @@ const EXTREME_FORM_LOTTERY_CHANCE = 0.25;
  * Locked rules:
  * - Non-international years: need the elite goal ratio *and* a Champions
  *   League win. Club trophies without the ratio never win it.
- * - International years (Euros/World Cup-equivalent): winning that
- *   tournament trumps the Champions League as the trophy requirement.
+ * - International finals years (World Cup or a continental championship):
+ *   winning that tournament trumps the Champions League as the trophy
+ *   requirement. Qualifier-only seasons still use the club trophy rule.
  * - Extreme form (~1 goal/game over ~50 club+country games) buys a 1-in-4
  *   lottery shot at the award regardless of trophies.
  */

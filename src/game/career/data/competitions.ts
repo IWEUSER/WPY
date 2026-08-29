@@ -144,19 +144,50 @@ export const CONTINENTAL_TOURNAMENT_FOR_CONFEDERATION: Record<Confederation, Int
 };
 
 /**
- * The World Cup and the player's continental championship alternate on a
- * two-year cadence, starting in the player's 2nd season (the first season
- * with a real, opponent-having calendar) - seasons 2, 6, 10… are continental,
- * seasons 4, 8, 12… are the World Cup.
+ * International calendar:
+ *  - Season 1 (and 5, 9…): no international football.
+ *  - Season 2, 6, 10…: World Cup qualifiers during the club season, World Cup
+ *    at the end.
+ *  - Season 3, 7, 11…: continental qualifiers only (Euros / Copa / AFCON / …).
+ *  - Season 4, 8, 12…: more continental qualifiers, then the tournament.
+ */
+export type InternationalCampaignPhase = 'none' | 'qualifiers' | 'qualifiers-and-tournament';
+
+export interface InternationalCampaign {
+  tournament: InternationalTournamentId | null;
+  phase: InternationalCampaignPhase;
+}
+
+export function internationalCampaignForSeason(
+  seasonNumber: number,
+  confederation?: Confederation | null,
+): InternationalCampaign {
+  if (seasonNumber < 2) return { tournament: null, phase: 'none' };
+  const cycle = (seasonNumber - 2) % 4;
+  if (cycle === 3) return { tournament: null, phase: 'none' };
+  if (cycle === 0) return { tournament: 'world-cup', phase: 'qualifiers-and-tournament' };
+  const continental = confederation
+    ? CONTINENTAL_TOURNAMENT_FOR_CONFEDERATION[confederation]
+    : 'continental-championship';
+  return {
+    tournament: continental,
+    phase: cycle === 1 ? 'qualifiers' : 'qualifiers-and-tournament',
+  };
+}
+
+export function isInternationalFinalsSeason(seasonNumber: number): boolean {
+  return internationalCampaignForSeason(seasonNumber).phase === 'qualifiers-and-tournament';
+}
+
+/**
+ * Tournament the season is building towards (qualifiers or finals). Null in
+ * off-years and season 1.
  */
 export function internationalTournamentForSeason(
   seasonNumber: number,
   confederation?: Confederation | null,
 ): InternationalTournamentId | null {
-  if (seasonNumber < 2 || seasonNumber % 2 !== 0) return null;
-  if (seasonNumber % 4 === 0) return 'world-cup';
-  if (confederation) return CONTINENTAL_TOURNAMENT_FOR_CONFEDERATION[confederation];
-  return 'continental-championship';
+  return internationalCampaignForSeason(seasonNumber, confederation).tournament;
 }
 
 function slug(value: string): string {
