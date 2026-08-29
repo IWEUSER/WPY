@@ -18,11 +18,14 @@ function fakeShot(scored: boolean): ShotResult {
     travelTimeMs: 400,
     keeperDive: {
       target: { x: 0, y: 0.5 },
+      hand: { x: 0, y: 0.5 },
       reactionMs: 80,
       diveDurationMs: 300,
       reach: 0.2,
       direction: 0,
       stretch: 0,
+      layout: 0,
+      elevation: 0,
     },
     saveMargin: scored ? 1 : 0,
   };

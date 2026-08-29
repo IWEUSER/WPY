@@ -7,6 +7,7 @@ import {
   GOAL_HEIGHT,
   KEEPER_DIVE_MAX_X,
   KEEPER_DIVE_MS_PER_UNIT,
+  KEEPER_STAND_Y,
   MAX_SWIPE_DISTANCE,
   MAX_TRAVEL_MS,
   MIN_SWIPE_DISTANCE,
@@ -260,9 +261,9 @@ export function saveChanceForAim(aim: AimPoint, power = 1, curl = 0): number {
 }
 
 /**
- * How far across the goal the keeper travels for a 16-wide landing square.
- * The two centre columns (7 and 8) are a standing save — no dive. Intensity
- * then ramps to 1 at the posts (columns 0 and 15) for a full-length dive.
+ * How far across the goal the keeper's hips travel for a 16-wide landing square.
+ * The two centre columns (7 and 8) stay planted. Intensity then ramps to 1 at
+ * the posts (columns 0 and 15) for a full-length dive.
  */
 export function diveIntensityForCell(cell: SaveCell): number {
   if (cell.col === 7 || cell.col === 8) return 0;
@@ -270,12 +271,20 @@ export function diveIntensityForCell(cell: SaveCell): number {
   return Math.min(1, distFromCentre / (SAVE_GRID_COLS / 2 - 0.5));
 }
 
+/** Centre of a 16×5 goalmouth square, in normalized aim space. */
+export function cellCenter(cell: SaveCell): AimPoint {
+  return {
+    x: ((cell.col + 0.5) / SAVE_GRID_COLS) * 2 * GOAL_HALF_WIDTH - GOAL_HALF_WIDTH,
+    y: ((cell.row + 0.5) / SAVE_GRID_ROWS) * GOAL_HEIGHT,
+  };
+}
+
 /**
- * Keeper always dives the correct way. How far they go is the landing square's
- * column — centre squares stand, near-centre a short hop, the two outer
- * columns a full-length dive — clamped so the body never travels past the post.
- * Whether they actually save is decided only by the 16×5 grid roll, not by
- * whether this dive geometrically reaches the ball.
+ * One of 160 end-poses: every square has a save motion and a miss motion.
+ * The body stays inside the posts; on a save the primary glove goes to the
+ * square (including the furthest corners and the ground), on a miss it falls
+ * short of the same square so the ball can go in. Low squares sprawl; high
+ * squares leap; centre squares catch without a dive.
  */
 export function computeKeeperDive(
   actualAim: AimPoint,
@@ -283,34 +292,57 @@ export function computeKeeperDive(
   saved: boolean,
   difficulty: ShotDifficulty,
 ): KeeperDive {
-  const intensity = saveCell
-    ? diveIntensityForCell(saveCell)
-    : Math.min(1, Math.abs(actualAim.x) / (GOAL_HALF_WIDTH + 0.05));
+  const cell = saveCell ?? aimToSaveCell(actualAim);
+  const square = cellCenter(cell);
+  const lateral = diveIntensityForCell(cell);
+  const direction: -1 | 0 | 1 = lateral === 0 ? 0 : square.x < 0 ? -1 : 1;
+  const heightT = (cell.row + 0.5) / SAVE_GRID_ROWS;
+  const lowT = 1 - heightT;
+  const isCentre = cell.col === 7 || cell.col === 8;
 
-  const direction: -1 | 0 | 1 =
-    intensity === 0 ? 0 : actualAim.x < 0 ? -1 : actualAim.x > 0 ? 1 : 0;
+  const layout = isCentre
+    ? 0.04 + lowT * (saved ? 0.18 : 0.1)
+    : clamp(0.18 + lateral * 0.52 + lowT * 0.38, 0.2, 1);
 
-  const x = direction * intensity * KEEPER_DIVE_MAX_X;
-  const y = saveCell
-    ? (saveCell.row + 0.5) / SAVE_GRID_ROWS
-    : clamp(actualAim.y, 0, GOAL_HEIGHT);
+  const elevation = heightT;
+  const stretch = isCentre
+    ? saved
+      ? 0.12 + heightT * 0.55
+      : 0.06 + heightT * 0.28
+    : saved
+      ? 0.38 + lateral * 0.42 + heightT * 0.2
+      : 0.22 + lateral * 0.28 + heightT * 0.12;
 
-  // Full stretch only when the grid says they hold an outer square. A beaten
-  // dive still goes the right way, just not laid out at full length.
-  const stretch = intensity === 0 ? 0 : saved ? 0.4 + 0.6 * intensity : 0.18 + 0.4 * intensity;
+  const bodyMax = saved ? KEEPER_DIVE_MAX_X : KEEPER_DIVE_MAX_X * 0.68;
+  const bodyX = direction * lateral * bodyMax;
+  const bodyY = isCentre
+    ? lerp(0.14, 0.4, heightT)
+    : lerp(0.07, 0.46, heightT);
 
-  const keeperStart: AimPoint = { x: 0, y: 0.28 };
-  const diveDistance = Math.hypot(x - keeperStart.x, y - keeperStart.y);
+  const hand: AimPoint = saved
+    ? { x: square.x, y: square.y }
+    : {
+        x: square.x * (isCentre ? 0.2 : 0.55),
+        y: square.y * 0.62 + KEEPER_STAND_Y * 0.18,
+      };
+  hand.x = clamp(hand.x, -GOAL_HALF_WIDTH, GOAL_HALF_WIDTH);
+  hand.y = clamp(hand.y, 0, GOAL_HEIGHT);
+
+  const keeperStart: AimPoint = { x: 0, y: KEEPER_STAND_Y };
+  const diveDistance = Math.hypot(bodyX - keeperStart.x, bodyY - keeperStart.y);
   const reactionMs = difficulty.keeperReactionMs * (saved ? 0.65 : 1);
   const diveDurationMs = reactionMs + diveDistance * KEEPER_DIVE_MS_PER_UNIT;
 
   return {
-    target: { x, y },
+    target: { x: bodyX, y: bodyY },
+    hand,
     reactionMs,
     diveDurationMs,
     reach: difficulty.keeperReach,
     direction,
     stretch,
+    layout,
+    elevation,
   };
 }
 
@@ -341,7 +373,7 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
       power,
       curl,
       travelTimeMs,
-      keeperDive: computeKeeperDive(actualAim, null, false, difficulty),
+      keeperDive: computeKeeperDive(actualAim, aimToSaveCell(actualAim), false, difficulty),
       saveMargin: 0,
     };
   }
@@ -354,7 +386,7 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
       power,
       curl,
       travelTimeMs,
-      keeperDive: computeKeeperDive(actualAim, null, false, difficulty),
+      keeperDive: computeKeeperDive(actualAim, aimToSaveCell(actualAim), false, difficulty),
       saveMargin: 0,
     };
   }
@@ -362,7 +394,7 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
   const saveCell = aimToSaveCell(actualAim);
   const saved = rng() < saveChanceForAim(actualAim, power, curl);
   const keeperDive = computeKeeperDive(actualAim, saveCell, saved, difficulty);
-  const saveMargin = saved ? 1 - keeperDive.stretch * 0.25 : 0;
+  const saveMargin = saved ? 1 - keeperDive.layout * 0.2 : 0;
 
   return {
     outcome: saved ? 'saved' : 'goal',

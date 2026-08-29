@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as audio from './audio';
-import { MAX_ARC_ALONG_PATH, MAX_BEND_RATIO, MIN_ARC_ALONG_PATH } from './constants';
-import { computeSwipeCurl, isValidSwipe, resolveShot } from './shotEngine';
+import { MAX_ARC_ALONG_PATH, MAX_BEND_RATIO, MIN_ARC_ALONG_PATH, DEFAULT_DIFFICULTY } from './constants';
+import { cellCenter, computeKeeperDive, computeSwipeCurl, isValidSwipe, resolveShot } from './shotEngine';
 import {
   BALL_SCREEN_Y,
   ballRadiusAtGoal,
@@ -16,6 +16,7 @@ import {
   goalToPixel,
   randomBallStartXRatio,
   randomShotDistanceM,
+  idleKeeperPose,
   type KeeperPose,
 } from './render';
 import type { ShotOutcomeKind, ShotResult, SwipeGesture } from './types';
@@ -97,8 +98,32 @@ function readDevDistance(): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** DEV-only: ?pose=col,row,save|miss freezes the keeper in that square's motion. */
+function readDevKeeperPose(): KeeperPose | null {
+  if (!import.meta.env.DEV) return null;
+  const raw = new URLSearchParams(window.location.search).get('pose');
+  if (!raw) return null;
+  const [c, r, kind] = raw.split(',');
+  const col = Number(c);
+  const row = Number(r);
+  if (!Number.isInteger(col) || !Number.isInteger(row) || col < 0 || col > 15 || row < 0 || row > 4) return null;
+  const saved = kind !== 'miss';
+  const cell = { col, row };
+  const square = cellCenter(cell);
+  const dive = computeKeeperDive(square, cell, saved, DEFAULT_DIFFICULTY);
+  return {
+    pos: dive.target,
+    stretch: dive.stretch,
+    direction: dive.direction,
+    layout: dive.layout,
+    elevation: dive.elevation,
+    hand: dive.hand,
+    beaten: !saved,
+  };
+}
+
 function makeIdleKeeper(): KeeperPose {
-  return { pos: { x: 0, y: 0 }, stretch: 0, direction: 0, beaten: false };
+  return idleKeeperPose();
 }
 
 export interface ShootingGameProps {
@@ -296,7 +321,7 @@ export default function ShootingGame({
           const start = ballStartPixel(view, anim.ballStartXRatio);
           anim.ballPixel = start;
           anim.ballRadius = ballRadiusNear(view);
-          drawKeeper(ctx, view, anim.keeperPose);
+          drawKeeper(ctx, view, readDevKeeperPose() ?? anim.keeperPose);
           if (anim.phase === 'dragging' && anim.dragStart && anim.dragPoints.length > 1) {
             // Show the actual curved path being swiped, not just a straight
             // line - this is the live feedback for how much bend/curl the
@@ -346,13 +371,22 @@ export default function ShootingGame({
           const diveT = Math.min(1, diveElapsed / diveTotal);
           const diveEased = diveT * diveT * (3 - 2 * diveT);
 
-          // Always the correct side, distance and stretch from the landing
-          // square — never a wrong-way guess, never past the post.
+          // Pose is the square's save or miss motion, interpolated from idle.
           const dive = result.keeperDive;
+          const idleY = 0.28;
           anim.keeperPose = {
-            pos: { x: dive.target.x * diveEased, y: 0 },
+            pos: {
+              x: dive.target.x * diveEased,
+              y: idleY + (dive.target.y - idleY) * diveEased,
+            },
             stretch: dive.stretch * diveEased,
             direction: dive.direction,
+            layout: dive.layout * diveEased,
+            elevation: dive.elevation * diveEased,
+            hand: {
+              x: dive.hand.x * diveEased,
+              y: idleY + (dive.hand.y - idleY) * diveEased,
+            },
             beaten: false,
           };
 

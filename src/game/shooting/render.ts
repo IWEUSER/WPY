@@ -27,12 +27,15 @@ export const HORIZON_Y = 0.1;
 /** Ball is always this fraction down the canvas, so the gap from the bottom is constant. */
 export const BALL_SCREEN_Y = 0.84;
 /** Dimensionless focal length: (metres / depth) × focal = fraction of canvas width.
- * Tuned so a 6-yard shot's goal is ~80% of screen width, a 30 m shot ~25%. */
+ * Tuned so a 6-yard shot's goal is ~80% of screen width, a 30-yard shot ~25%. */
 export const CAMERA_FOCAL = 1.25;
 /** Closest spawn: the 6-yard line. At this distance the 6-yard marking sits on the ball. */
 export const MIN_SHOT_DISTANCE_M = FIFA.sixYardDepth;
-/** Furthest spawn: 30 m, well outside the penalty area. */
-export const MAX_SHOT_DISTANCE_M = 30;
+/** One imperial yard in metres. Spawn range is specified in football yards. */
+export const YARD_M = 0.9144;
+/** Furthest spawn: 30 yards from the goal line (12 yards outside the 18-yard box). */
+export const MAX_SHOT_DISTANCE_YARDS = 30;
+export const MAX_SHOT_DISTANCE_M = MAX_SHOT_DISTANCE_YARDS * YARD_M;
 
 /** Layout of the goal plane within the canvas, as fractions of width/height.
  * Static fields that do not change with camera distance. */
@@ -72,16 +75,15 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-/** Perspective camera looking at the goal, with the ball pinned at BALL_SCREEN_Y. */
+/** Perspective camera looking at the goal, with the ball pinned at BALL_SCREEN_Y.
+ * Pitch-marking depth is linear in world metres so an 18-yard line sits 18/30 of
+ * the way from the goal to a 30-yard ball, rather than perspective-compressing
+ * the box against the goal and stretching the grass beyond it. Goal size still
+ * comes from perspective so a 6-yard spawn fills the frame. */
 export function createPitchView(w: number, h: number, distanceM: number): PitchView {
   const d = clamp(distanceM, MIN_SHOT_DISTANCE_M, MAX_SHOT_DISTANCE_M);
   const camZ = d + CAM_BEHIND_M;
   const lift = (BALL_SCREEN_Y - HORIZON_Y) * CAM_BEHIND_M;
-
-  function screenY(worldZ: number): number {
-    const depth = Math.max(0.4, camZ - worldZ);
-    return (HORIZON_Y + lift / depth) * h;
-  }
 
   function halfWidthPx(worldHalfM: number, worldZ: number): number {
     const depth = Math.max(0.4, camZ - worldZ);
@@ -89,9 +91,14 @@ export function createPitchView(w: number, h: number, distanceM: number): PitchV
   }
 
   const halfW = halfWidthPx(FIFA.goalWidth / 2, 0);
-  const botY = screenY(0);
+  const perspectiveBotY = (HORIZON_Y + lift / Math.max(0.4, camZ)) * h;
+  const ballY = BALL_SCREEN_Y * h;
   const heightPx = halfW * 2 * (FIFA.goalHeight / FIFA.goalWidth);
-  const goal: GoalFrame = { halfW, topY: botY - heightPx, botY, heightPx };
+  const goal: GoalFrame = { halfW, topY: perspectiveBotY - heightPx, botY: perspectiveBotY, heightPx };
+
+  function screenY(worldZ: number): number {
+    return perspectiveBotY + (ballY - perspectiveBotY) * (worldZ / d);
+  }
 
   return { distanceM: d, camZ, w, h, goal, screenY, halfWidthPx };
 }
@@ -277,51 +284,69 @@ export function drawGoal(ctx: CanvasRenderingContext2D, view: PitchView) {
 }
 
 export interface KeeperPose {
-  /** Normalized aim-space position of the keeper's center. */
+  /** Normalized aim-space position of the keeper's hips. y is height (0 = ground). */
   pos: AimPoint;
-  /** 0 = standing, 1 = fully stretched/dived. */
+  /** 0 = standing, 1 = fully stretched toward the ball. */
   stretch: number;
   /** -1 = diving left, 0 = center/no dive, 1 = diving right. */
   direction: number;
   beaten: boolean;
+  /** 0 = standing, 1 = body laid out horizontal. */
+  layout: number;
+  /** 0 = on the ground, 1 = leaping toward the bar. */
+  elevation: number;
+  /** Primary glove in aim space — the square on a save, short of it on a miss. */
+  hand: AimPoint;
 }
 
 /** Figure height is ~7.95×scale (feet at 0, top of head at 6.9+1.05). */
 const KEEPER_FIGURE_HEIGHT = 7.95;
+const KEEPER_HIP_FROM_FOOT = 3.0;
+const KEEPER_SHOULDER_FROM_HIP = 2.5;
+const KEEPER_HEAD_FROM_HIP = 3.9;
 
 function keeperScale(view: PitchView): number {
   return (FIFA.keeperHeight / FIFA.goalHeight) * view.goal.heightPx / KEEPER_FIGURE_HEIGHT;
 }
 
-export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose: KeeperPose) {
-  const { x } = goalToPixel({ x: pose.pos.x, y: 0 }, view);
-  const groundY = view.goal.botY;
-  const scale = keeperScale(view);
+export function idleKeeperPose(): KeeperPose {
+  return {
+    pos: { x: 0, y: 0.28 },
+    stretch: 0,
+    direction: 0,
+    beaten: false,
+    layout: 0,
+    elevation: 0,
+    hand: { x: 0, y: 0.34 },
+  };
+}
 
-  const shadowStretch = 1 + pose.stretch * 3;
+export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose: KeeperPose) {
+  const scale = keeperScale(view);
+  const hips = goalToPixel(pose.pos, view);
+  const handPx = goalToPixel(pose.hand, view);
+  const groundY = view.goal.botY;
+  const dir = pose.direction;
+  const layout = clamp(pose.layout, 0, 1);
+  // Counter-clockwise for a screen-right dive so the head stays central
+  // and the gloves go to the ball, rather than a standing side-reach.
+  const ang = -dir * layout * 1.22;
+  const cos = Math.cos(ang);
+  const sin = Math.sin(ang);
+  const shoulderLocalY = -scale * KEEPER_SHOULDER_FROM_HIP;
+
+  const toWorld = (lx: number, ly: number) => ({
+    x: hips.x + lx * cos - ly * sin,
+    y: hips.y + lx * sin + ly * cos,
+  });
+
+  const shadowW = scale * (1.15 + layout * 2.6);
   ctx.save();
   ctx.beginPath();
-  ctx.ellipse(
-    x + pose.direction * pose.stretch * scale * 2.4,
-    groundY + scale * 0.15,
-    scale * 1.15 * shadowStretch,
-    scale * 0.4,
-    0,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(hips.x, groundY + scale * 0.12, shadowW, scale * 0.34, 0, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(0,0,0,0.32)';
   ctx.fill();
   ctx.restore();
-
-  ctx.save();
-  ctx.translate(x, groundY);
-  const tilt = pose.direction * pose.stretch * 0.85;
-  ctx.rotate(tilt);
-  // Modest extra slide so a full-length dive stays inside the posts — the
-  // pose.pos.x already carries how far across the goal the keeper travels.
-  const stretchOffset = pose.stretch * pose.direction * scale * 1.35;
-  ctx.translate(stretchOffset, -pose.stretch * scale * 1.05);
 
   const kitLight = pose.beaten ? '#9ca3af' : '#fde047';
   const kitDark = pose.beaten ? '#4b5563' : '#ca8a04';
@@ -330,38 +355,40 @@ export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose:
   const gloveColor = pose.beaten ? '#4b5563' : '#22c55e';
   const bootColor = '#181818';
 
-  const hipY = -scale * 3.0;
-  const shoulderY = -scale * 5.5;
-  const headY = -scale * 6.9;
-  const legSpread = 0.9 + pose.stretch * 1.5;
-  // Resting arm span ≈ 1.4m against a 7.32m goal; dive stretches further,
-  // but not so far that a full-length dive puts a glove past the post.
-  const armReach = 2.45 + pose.stretch * 2.15;
+  ctx.save();
+  ctx.translate(hips.x, hips.y);
+  ctx.rotate(ang);
+
+  const hipY = 0;
+  const shoulderY = shoulderLocalY;
+  const headY = -scale * KEEPER_HEAD_FROM_HIP;
+  const footY = scale * KEEPER_HIP_FROM_FOOT;
+  const diveSide = dir === 0 ? 0 : dir;
+  const kick = 0.7 + layout * 1.4 - pose.elevation * 0.25;
 
   ctx.strokeStyle = bootColor;
   ctx.lineWidth = scale * 0.62;
   ctx.lineCap = 'round';
-  for (const side of [-1, 1]) {
-    const kneeX = side * scale * (legSpread * 0.5 + 0.08);
-    const kneeY = hipY + scale * (1.5 - pose.stretch * 0.3);
-    const footX = side * scale * legSpread;
+  for (const side of [-1, 1] as const) {
+    const along = diveSide === 0 ? side * kick * 0.55 : side === diveSide ? kick : -kick * 0.35;
+    const kneeX = scale * along * 0.55;
+    const kneeY = hipY + (footY - hipY) * 0.48 + (layout > 0.4 && side === diveSide ? scale * 0.4 : 0);
+    const footX = scale * along;
+    const footDrawY = footY * (1 - layout * 0.15);
     ctx.beginPath();
-    ctx.moveTo(side * scale * 0.35, hipY - scale * 0.1);
+    ctx.moveTo(side * scale * 0.3, hipY);
     ctx.lineTo(kneeX, kneeY);
-    ctx.lineTo(footX, 0);
+    ctx.lineTo(footX, footDrawY);
     ctx.stroke();
-  }
-  ctx.fillStyle = bootColor;
-  for (const side of [-1, 1]) {
-    const footX = side * scale * legSpread;
+    ctx.fillStyle = bootColor;
     ctx.beginPath();
-    ctx.ellipse(footX + side * scale * 0.12, 0, scale * 0.38, scale * 0.24, 0, 0, Math.PI * 2);
+    ctx.ellipse(footX + side * scale * 0.1, footDrawY, scale * 0.38, scale * 0.24, 0, 0, Math.PI * 2);
     ctx.fill();
   }
 
   ctx.fillStyle = shortsColor;
   ctx.beginPath();
-  ctx.ellipse(0, hipY + scale * 0.35, scale * 1.05, scale * 0.9, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, hipY + scale * 0.25, scale * 1.05, scale * 0.85, 0, 0, Math.PI * 2);
   ctx.fill();
 
   const torsoGrad = ctx.createLinearGradient(-scale * 1.35, shoulderY, scale * 1.35, hipY);
@@ -369,38 +396,12 @@ export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose:
   torsoGrad.addColorStop(1, kitDark);
   ctx.fillStyle = torsoGrad;
   ctx.beginPath();
-  ctx.moveTo(-scale * 1.35, shoulderY);
-  ctx.quadraticCurveTo(-scale * 1.55, (shoulderY + hipY) / 2, -scale * 0.95, hipY);
-  ctx.lineTo(scale * 0.95, hipY);
-  ctx.quadraticCurveTo(scale * 1.55, (shoulderY + hipY) / 2, scale * 1.35, shoulderY);
+  ctx.moveTo(-scale * 1.3, shoulderY);
+  ctx.quadraticCurveTo(-scale * 1.5, (shoulderY + hipY) / 2, -scale * 0.9, hipY);
+  ctx.lineTo(scale * 0.9, hipY);
+  ctx.quadraticCurveTo(scale * 1.5, (shoulderY + hipY) / 2, scale * 1.3, shoulderY);
   ctx.closePath();
   ctx.fill();
-
-  ctx.strokeStyle = skinColor;
-  ctx.lineWidth = scale * 0.48;
-  ctx.lineCap = 'round';
-  for (const side of [-1, 1]) {
-    const shoulderX = side * scale * 1.3;
-    const shoulderPtY = shoulderY + scale * 0.05;
-    const elbowX = side * scale * (1.85 + pose.stretch * 1.1);
-    const elbowY = shoulderY + scale * (0.35 - pose.stretch * 1.4);
-    const handX = side * scale * armReach;
-    const handY = shoulderY - scale * (0.3 + pose.stretch * 1.9);
-    ctx.beginPath();
-    ctx.moveTo(shoulderX, shoulderPtY);
-    ctx.lineTo(elbowX, elbowY);
-    ctx.lineTo(handX, handY);
-    ctx.stroke();
-    ctx.fillStyle = gloveColor;
-    ctx.beginPath();
-    ctx.arc(handX, handY, scale * 0.38, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = pose.beaten ? '#1f2937' : '#166534';
-    ctx.lineWidth = Math.max(1, scale * 0.1);
-    ctx.stroke();
-    ctx.strokeStyle = skinColor;
-    ctx.lineWidth = scale * 0.48;
-  }
 
   ctx.fillStyle = skinColor;
   ctx.beginPath();
@@ -410,8 +411,51 @@ export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose:
   ctx.beginPath();
   ctx.arc(0, headY - scale * 0.08, scale * 0.95, Math.PI * 0.95, Math.PI * 2.05);
   ctx.fill();
-
   ctx.restore();
+
+  const leftShoulder = toWorld(-scale * 1.3, shoulderLocalY);
+  const rightShoulder = toWorld(scale * 1.3, shoulderLocalY);
+
+  const otherHand = goalToPixel(
+    {
+      x: pose.hand.x - (dir === 0 ? 0.08 : dir * 0.14),
+      y: pose.hand.y + (layout > 0.45 ? 0.1 : 0.02) * (pose.beaten ? 1 : 0.4),
+    },
+    view,
+  );
+
+  const drawArm = (shoulder: { x: number; y: number }, glove: { x: number; y: number }) => {
+    const mx = (shoulder.x + glove.x) / 2;
+    const my = (shoulder.y + glove.y) / 2;
+    const dx = glove.x - shoulder.x;
+    const dy = glove.y - shoulder.y;
+    const len = Math.max(1, Math.hypot(dx, dy));
+    const elbowX = mx + (-dy / len) * scale * 0.7;
+    const elbowY = my + (dx / len) * scale * 0.35;
+    ctx.strokeStyle = skinColor;
+    ctx.lineWidth = scale * 0.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(shoulder.x, shoulder.y);
+    ctx.lineTo(elbowX, elbowY);
+    ctx.lineTo(glove.x, glove.y);
+    ctx.stroke();
+    ctx.fillStyle = gloveColor;
+    ctx.beginPath();
+    ctx.arc(glove.x, glove.y, scale * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = pose.beaten ? '#1f2937' : '#166534';
+    ctx.lineWidth = Math.max(1, scale * 0.1);
+    ctx.stroke();
+  };
+
+  if (dir < 0) {
+    drawArm(rightShoulder, otherHand);
+    drawArm(leftShoulder, handPx);
+  } else {
+    drawArm(leftShoulder, otherHand);
+    drawArm(rightShoulder, handPx);
+  }
 }
 
 export function drawBall(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, rotation: number) {
