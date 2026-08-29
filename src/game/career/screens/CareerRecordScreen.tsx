@@ -3,6 +3,7 @@ import { INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { awardLabels, seasonClubName, seasonRatio } from '../honoursDisplay';
 import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons } from '../playerValue';
 import { countsTowardCareerRecord, displaySeasonLabel } from '../seasonDisplay';
+import { aggregateContinental, aggregateDomestic, continentalLabel } from '../seasonStats';
 import { useCareerStore } from '../store';
 import type { SeasonRecord } from '../types';
 
@@ -32,7 +33,14 @@ export default function CareerRecordScreen() {
   const wpyWins = [...history, ...(current?.wonWpy ? [current] : [])].filter(
     (s) => s.wonWpy && countsTowardCareerRecord(s.seasonNumber),
   );
-  const ratio = careerGames > 0 ? careerGoals / careerGames : 0;
+  const recordSeasons = [...history, ...(current && countsTowardCareerRecord(current.seasonNumber) ? [current] : [])];
+  const domestic = aggregateDomestic(recordSeasons.filter((s) => countsTowardCareerRecord(s.seasonNumber)));
+  const continental = aggregateContinental(recordSeasons.filter((s) => countsTowardCareerRecord(s.seasonNumber)));
+  const intlGames = nationalTeam?.caps ?? 0;
+  const intlGoals = nationalTeam?.goals ?? 0;
+  const totalGames = careerGames + intlGames;
+  const totalGoals = careerGoals + intlGoals;
+  const ratio = totalGames > 0 ? totalGoals / totalGames : 0;
 
   return (
     <div className="flex h-full w-full flex-col overflow-y-auto px-5 py-[max(1.25rem,env(safe-area-inset-top))] pb-10 text-white">
@@ -44,9 +52,26 @@ export default function CareerRecordScreen() {
       </div>
 
       <div className="grid grid-cols-3 gap-2">
-        <StatTile value={String(careerGoals)} label="Club goals" />
-        <StatTile value={String(careerGames)} label="Club games" />
-        <StatTile value={ratio.toFixed(2)} label="Club ratio" />
+        <StatTile value={String(totalGoals)} label="All goals" />
+        <StatTile value={String(totalGames)} label="All games" />
+        <StatTile value={ratio.toFixed(2)} label="All ratio" />
+      </div>
+      <p className="mt-2 text-center text-[11px] text-white/40">Club and country combined</p>
+
+      <div className="mt-3 rounded-2xl bg-white/5 p-4 text-sm">
+        <p className="text-xs uppercase tracking-wide text-white/40">Domestic</p>
+        <p className="mt-1 font-semibold">
+          {domestic.goals} goals in {domestic.games} games
+        </p>
+        {continental.length > 0 && (
+          <ul className="mt-3 space-y-1 text-xs text-white/70">
+            {continental.map((row) => (
+              <li key={row.cup}>
+                {continentalLabel(row.cup)} — {row.goals} goal{row.goals === 1 ? '' : 's'} in {row.games}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {(() => {
@@ -189,6 +214,15 @@ function SeasonCard({ season }: { season: SeasonRecord & { inProgress?: boolean 
           <dd className="text-base font-bold">{seasonRatio(season).toFixed(2)}</dd>
         </div>
       </dl>
+      <p className="mt-2 text-xs text-white/50">
+        Domestic {season.domesticGoals ?? 0} in {season.domesticGames ?? 0}
+        {(season.continentalStats ?? []).map((row) => (
+          <span key={row.cup}>
+            {' · '}
+            {continentalLabel(row.cup)} {row.goals}
+          </span>
+        ))}
+      </p>
 
       <div className="mt-3">
         <p className="text-[10px] uppercase tracking-wide text-white/40">Tournaments won</p>

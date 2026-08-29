@@ -2,6 +2,7 @@ import { getClub } from '../data/clubs';
 import { formatEuros } from '../playerValue';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { displaySeasonLabel, displaySeasonNumber } from '../seasonDisplay';
+import { lostTitleToRival } from '../seasonSim';
 import { countLoanSpells, resolveSeasonTransition } from '../transfers';
 import { leagueMatchWeeks } from '../data/clubs';
 import { useCareerStore } from '../store';
@@ -107,6 +108,11 @@ export default function SeasonSummaryScreen() {
             {seasonStandings?.europeanStanding
               ? ` · ${CONTINENTAL_CUPS[seasonStandings.europeanStanding.cup].name}: ${seasonStandings.europeanStanding.stage}`
               : ''}
+          </p>
+        )}
+        {seasonSim && lostTitleToRival(seasonSim) && (
+          <p className="mt-2 text-xs text-red-300">
+            Lost home and away to the title rival — cannot win the league.
           </p>
         )}
       </div>

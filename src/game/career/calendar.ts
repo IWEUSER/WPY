@@ -25,7 +25,8 @@ export type FixtureKind =
   | 'continental-semi-final'
   | 'continental-final'
   | 'super-cup'
-  | 'international';
+  | 'international'
+  | 'rest';
 
 export type DomesticCupStage = 'round-of-16' | 'quarter-final' | 'semi-final' | 'final';
 
@@ -46,6 +47,8 @@ export interface CalendarFixture {
   opponentLabel?: string;
   /** How many scoring chances the player gets - filled in by seasonSim. */
   playerChances?: number;
+  /** League home/away. First meeting is home, the return is away. */
+  isHome?: boolean;
   internationalRound?:
     | 'qualifier'
     | 'group'
@@ -84,12 +87,12 @@ export interface BuildCalendarParams {
 
 const GROUP_STAGE_MATCHDAYS = 8;
 const KNOCKOUT_ROUNDS_BEFORE_SEMI = 2; // round of 16 and quarter-final, both two-legged.
+const KNOCKOUT_LEGS_BEFORE_FINAL = KNOCKOUT_ROUNDS_BEFORE_SEMI * 2 + 2; // R16×2, QF×2, SF×2
 
-const DOMESTIC_CUP_FRACTIONS: { fraction: number; stage: DomesticCupStage }[] = [
+const DOMESTIC_CUP_EARLY: { fraction: number; stage: Exclude<DomesticCupStage, 'final'> }[] = [
   { fraction: 0.12, stage: 'round-of-16' },
   { fraction: 0.38, stage: 'quarter-final' },
   { fraction: 0.62, stage: 'semi-final' },
-  { fraction: 0.88, stage: 'final' },
 ];
 
 const KIND_ORDER: Record<FixtureKind, number> = {
@@ -101,15 +104,24 @@ const KIND_ORDER: Record<FixtureKind, number> = {
   'continental-semi-final': 5,
   'continental-final': 6,
   league: 7,
+  rest: 8,
 };
 
+/** Empty weeks between the last club match and the national tournament. */
+export const INTERNATIONAL_BREAK_WEEKS = 3;
+
+export function tournamentWeekCount(tournament: InternationalTournamentId | null | undefined): number {
+  if (!tournament) return 0;
+  return tournament === 'world-cup' ? 5 : 4;
+}
+
 /**
- * Builds the season's week-by-week fixture list: league weeks plus domestic
- * cup ties, and for clubs that qualify, continental group/knockout weeks and
- * an international window.
+ * Builds the season's week-by-week fixture list.
  *
- * This only lays out *what kind* of match happens each week; opponents and
- * results are filled in by seasonSim.
+ * League weeks run first. Earlier domestic-cup and continental ties share
+ * those weeks. The domestic-cup final is the week after the last league
+ * game; the continental final is the last club week. National tournaments
+ * then start three weeks later and last 4 weeks (continental) or 5 (World Cup).
  */
 export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar {
   const {
@@ -132,40 +144,61 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
   }
 
   if (domesticCup) {
-    for (const round of DOMESTIC_CUP_FRACTIONS) {
+    for (const round of DOMESTIC_CUP_EARLY) {
       const week = Math.max(1, Math.min(leagueMatchWeeks, Math.round(round.fraction * leagueMatchWeeks)));
       fixtures.push({
         week,
         kind: 'domestic-cup',
         domesticCup,
         domesticCupStage: round.stage,
-        isDecisive: round.stage === 'final',
+        isDecisive: false,
       });
     }
   }
 
-  let week = leagueMatchWeeks;
   if (cup) {
     if (includeSuperCup) {
-      fixtures.push({ week: 0, kind: 'super-cup', continentalCup: cup, isDecisive: true });
+      fixtures.push({ week: 1, kind: 'super-cup', continentalCup: cup, isDecisive: true });
     }
 
-    // Group/league-phase matchdays are interleaved evenly across the
-    // league's own run of weeks rather than tacked on afterwards.
     const groupInterval = Math.max(1, Math.floor(leagueMatchWeeks / GROUP_STAGE_MATCHDAYS));
     for (let i = 0; i < GROUP_STAGE_MATCHDAYS; i++) {
       const groupWeek = Math.min(leagueMatchWeeks, (i + 1) * groupInterval);
       fixtures.push({ week: groupWeek, kind: 'continental-group', continentalCup: cup, isDecisive: false });
     }
 
-    // Two-legged knockout through the semi-final, then a one-off final.
+    const knockoutStart = Math.max(1, leagueMatchWeeks - KNOCKOUT_LEGS_BEFORE_FINAL + 1);
+    let knockoutWeek = knockoutStart;
     for (let round = 0; round < KNOCKOUT_ROUNDS_BEFORE_SEMI; round++) {
-      fixtures.push({ week: ++week, kind: 'continental-knockout', continentalCup: cup, isDecisive: false, leg: 1 });
-      fixtures.push({ week: ++week, kind: 'continental-knockout', continentalCup: cup, isDecisive: false, leg: 2 });
+      fixtures.push({
+        week: Math.min(leagueMatchWeeks, knockoutWeek++),
+        kind: 'continental-knockout',
+        continentalCup: cup,
+        isDecisive: false,
+        leg: 1,
+      });
+      fixtures.push({
+        week: Math.min(leagueMatchWeeks, knockoutWeek++),
+        kind: 'continental-knockout',
+        continentalCup: cup,
+        isDecisive: false,
+        leg: 2,
+      });
     }
-    fixtures.push({ week: ++week, kind: 'continental-semi-final', continentalCup: cup, isDecisive: false, leg: 1 });
-    fixtures.push({ week: ++week, kind: 'continental-semi-final', continentalCup: cup, isDecisive: false, leg: 2 });
-    fixtures.push({ week: ++week, kind: 'continental-final', continentalCup: cup, isDecisive: true });
+    fixtures.push({
+      week: Math.min(leagueMatchWeeks, knockoutWeek++),
+      kind: 'continental-semi-final',
+      continentalCup: cup,
+      isDecisive: false,
+      leg: 1,
+    });
+    fixtures.push({
+      week: Math.min(leagueMatchWeeks, knockoutWeek++),
+      kind: 'continental-semi-final',
+      continentalCup: cup,
+      isDecisive: false,
+      leg: 2,
+    });
   }
 
   const campaign = internationalCampaignForSeason(seasonNumber, nationConfederation ?? confederation);
@@ -181,30 +214,85 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
         internationalRound: 'qualifier',
       });
     }
-    if (campaign.phase === 'qualifiers-and-tournament') {
-      for (let i = 0; i < 3; i++) {
-        fixtures.push({ week: ++week, kind: 'international', isDecisive: false, internationalRound: 'group' });
-      }
-      for (const round of tournamentKnockoutRounds(campaign.tournament)) {
-        fixtures.push({
-          week: ++week,
-          kind: 'international',
-          isDecisive: round === 'semi-final' || round === 'final',
-          internationalRound: round,
-        });
-      }
+  }
+
+  let week = leagueMatchWeeks;
+  if (domesticCup) {
+    fixtures.push({
+      week: ++week,
+      kind: 'domestic-cup',
+      domesticCup,
+      domesticCupStage: 'final',
+      isDecisive: true,
+    });
+  }
+  if (cup) {
+    fixtures.push({ week: ++week, kind: 'continental-final', continentalCup: cup, isDecisive: true });
+  }
+
+  if (
+    includeInternational &&
+    campaign.tournament &&
+    campaign.phase === 'qualifiers-and-tournament'
+  ) {
+    for (let i = 0; i < INTERNATIONAL_BREAK_WEEKS; i++) {
+      fixtures.push({ week: ++week, kind: 'rest', isDecisive: false });
+    }
+    const finalsWeeks = tournamentWeekCount(campaign.tournament);
+    const rounds: CalendarFixture['internationalRound'][] = [
+      'group',
+      'group',
+      'group',
+      ...tournamentKnockoutRounds(campaign.tournament),
+    ];
+    for (const packed of packIntoWeeks(rounds, finalsWeeks, week + 1)) {
+      fixtures.push({
+        week: packed.week,
+        kind: 'international',
+        isDecisive: packed.round === 'semi-final' || packed.round === 'final',
+        internationalRound: packed.round,
+      });
+      week = Math.max(week, packed.week);
     }
   }
 
   fixtures.sort((a, b) => a.week - b.week || KIND_ORDER[a.kind] - KIND_ORDER[b.kind]);
+  const totalWeeks = fixtures.reduce((max, f) => Math.max(max, f.week), leagueMatchWeeks);
   return {
     seasonNumber,
-    totalWeeks: Math.max(leagueMatchWeeks, week),
+    totalWeeks,
     fixtures,
     internationalTournament: includeInternational ? campaign.tournament : null,
     internationalPhase: includeInternational ? campaign.phase : 'none',
     domesticCup,
   };
+}
+
+function packIntoWeeks(
+  rounds: CalendarFixture['internationalRound'][],
+  weekCount: number,
+  startWeek: number,
+): { week: number; round: CalendarFixture['internationalRound'] }[] {
+  if (rounds.length === 0 || weekCount <= 0) return [];
+  const extras = Math.max(0, rounds.length - weekCount);
+  const packed: { week: number; round: CalendarFixture['internationalRound'] }[] = [];
+  let week = startWeek;
+  let i = 0;
+  for (let e = 0; e < extras && i < rounds.length; e++) {
+    packed.push({ week, round: rounds[i] });
+    i += 1;
+    if (i < rounds.length) {
+      packed.push({ week, round: rounds[i] });
+      i += 1;
+    }
+    week += 1;
+  }
+  while (i < rounds.length) {
+    packed.push({ week, round: rounds[i] });
+    i += 1;
+    week += 1;
+  }
+  return packed;
 }
 
 /** Convenience lookup for the UI: which international tournament (if any)
@@ -226,4 +314,10 @@ export function isFinalFixture(fixture: CalendarFixture): boolean {
   if (fixture.kind === 'continental-final' || fixture.kind === 'super-cup') return true;
   if (fixture.kind === 'domestic-cup' && fixture.domesticCupStage === 'final') return true;
   return fixture.kind === 'international' && fixture.internationalRound === 'final';
+}
+
+export function currentCalendarWeek(calendar: SeasonCalendar, fixtureIndex: number): number {
+  const next = calendar.fixtures[fixtureIndex];
+  if (next) return next.week;
+  return calendar.totalWeeks;
 }

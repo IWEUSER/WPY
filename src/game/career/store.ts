@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { applyMatchResult, createAvailability, isAvailable, serveBannedGame } from './availabilityEngine';
+import { rollInjuryAbsence } from './injury';
+import { recordClubAppearanceStats } from './seasonStats';
 import { FORM_WINDOW_GAMES, SEASON_LENGTH, STARTING_AGE } from './constants';
 import { planSuperCup } from './continentalDraw';
 import { getClub, leagueMatchWeeks } from './data/clubs';
@@ -23,7 +25,9 @@ import {
 import { buildSeasonStandings } from './matchEngine';
 import { isFinalFixture } from './calendar';
 import {
+  canWinLeague,
   hydrateSeason,
+  remainingPlayableCount,
   resolveFixture,
   shouldSkipFixture,
   trophyNameForFixture,
@@ -49,6 +53,9 @@ function freshSeason(seasonNumber: number, clubId: string, role: CareerState['ro
     ratioMet: null,
     age,
     leagueGoals: 0,
+    domesticGames: 0,
+    domesticGoals: 0,
+    continentalStats: [],
     trophies: [],
     topGoalscorer: false,
     playerOfTheYear: false,
@@ -119,7 +126,7 @@ function startSimulatedSeason(
   _careerGames: number,
   qualifierCarry: CareerState['intlQualifying'],
   superCup?: { include: boolean; opponentId?: string },
-): Pick<CareerState, 'currentSeason' | 'seasonCalendar' | 'seasonSim' | 'seasonStandings' | 'liveMatch' | 'wpyResult' | 'lastMatchSummary'> {
+): Pick<CareerState, 'currentSeason' | 'seasonCalendar' | 'seasonSim' | 'seasonStandings' | 'liveMatch' | 'wpyResult' | 'lastMatchSummary' | 'injuryGamesRemaining'> {
   const season = freshSeason(seasonNumber, clubId, role, age);
   if (seasonNumber < 2) {
     return {
@@ -130,6 +137,7 @@ function startSimulatedSeason(
       liveMatch: null,
       wpyResult: null,
       lastMatchSummary: null,
+      injuryGamesRemaining: 0,
     };
   }
   const club = getClub(clubId);
@@ -142,6 +150,7 @@ function startSimulatedSeason(
       liveMatch: null,
       wpyResult: null,
       lastMatchSummary: null,
+      injuryGamesRemaining: 0,
     };
   }
   const { calendar, sim } = hydrateSeason({
@@ -161,16 +170,14 @@ function startSimulatedSeason(
     liveMatch: null,
     wpyResult: null,
     lastMatchSummary: null,
+    injuryGamesRemaining: 0,
   };
 }
 
 function finalizeSimHonours(state: CareerState): CareerState['seasonSim'] {
   const sim = state.seasonSim;
   if (!sim || !state.clubId) return sim;
-  const table = sim.leagueTable;
-  const us = table.find((r) => r.clubId === state.clubId);
-  const leagueChampion = us?.position === 1;
-  return { ...sim, honours: { ...sim.honours, leagueChampion } };
+  return { ...sim, honours: { ...sim.honours, leagueChampion: canWinLeague(sim, state.clubId) } };
 }
 
 function evaluateSeasonWpy(state: CareerState) {
@@ -252,6 +259,7 @@ function initialState(): CareerState {
     careerEarnings: 0,
     contractYears: DEFAULT_CONTRACT_YEARS,
     contractYearsRemaining: DEFAULT_CONTRACT_YEARS,
+    injuryGamesRemaining: 0,
     previousContinentalChampion: null,
     previousChampionClubId: null,
     intlQualifying: null,
@@ -313,6 +321,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
   let careerEarnings = state.careerEarnings;
   let formWindow = state.formWindow;
   let lastMatchSummary = state.lastMatchSummary;
+  let injuryGamesRemaining = state.injuryGamesRemaining ?? 0;
   if (!sim || !calendar || !season || !state.clubId) return {};
   const club = getClub(state.clubId);
   if (!club) return {};
@@ -326,6 +335,17 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
 
     const isInternational = fixture.kind === 'international';
     const squad = isInternational ? nationalTeam?.availability : availability;
+    if (injuryGamesRemaining > 0) {
+      const resolution = resolveFixture(sim, fixture, club, 0);
+      sim = { ...resolution.sim, fixtureIndex: sim.fixtureIndex + 1 };
+      const record: MatchRecord = { matchNumber: season.matches.length + 1, played: false, scored: null };
+      const injuredPay = withWeeklyPay(season, careerEarnings, state.weeklyWage);
+      season = { ...injuredPay.season, matches: [...injuredPay.season.matches, record] };
+      careerEarnings = injuredPay.careerEarnings;
+      lastMatchSummary = `${resolution.summary} · you were injured`;
+      injuryGamesRemaining -= 1;
+      continue;
+    }
     if (squad && !isAvailable(squad)) {
       const resolution = resolveFixture(sim, fixture, club, 0);
       sim = { ...resolution.sim, fixtureIndex: sim.fixtureIndex + 1 };
@@ -376,6 +396,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
       careerEarnings,
       formWindow,
       lastMatchSummary,
+      injuryGamesRemaining,
       seasonStandings: buildSeasonStandings(sim.leagueTable, sim.europeanStanding),
       liveMatch,
       phase: 'match',
@@ -386,10 +407,10 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
     ...sim,
     honours: {
       ...sim.honours,
-      leagueChampion: (sim.leagueTable.find((r) => r.clubId === state.clubId)?.position ?? 0) === 1,
+      leagueChampion: canWinLeague(sim, state.clubId),
     },
   };
-  const nextState = { ...state, seasonSim: withHonours, currentSeason: season, availability, nationalTeam, formWindow, careerGames, careerEarnings };
+  const nextState = { ...state, seasonSim: withHonours, currentSeason: season, availability, nationalTeam, formWindow, careerGames, careerEarnings, injuryGamesRemaining };
   const awarded = attachSeasonAwards(nextState);
   return {
     seasonSim: withHonours,
@@ -400,6 +421,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
     careerEarnings,
     formWindow,
     lastMatchSummary,
+    injuryGamesRemaining,
     liveMatch: null,
     seasonStandings: buildSeasonStandings(withHonours.leagueTable, withHonours.europeanStanding),
     phase: 'season-summary',
@@ -533,13 +555,18 @@ export const useCareerStore = create<CareerStore>()(
           const scored = live.goals > 0;
           const record: MatchRecord = { matchNumber: season.matches.length + 1, played: true, scored };
           const paid = withWeeklyPay(season, state.careerEarnings, state.weeklyWage);
-          const updatedSeason: SeasonRecord = {
-            ...paid.season,
-            matches: [...paid.season.matches, record],
-            goals: paid.season.goals + live.goals,
-            gamesPlayed: paid.season.gamesPlayed + 1,
-            leagueGoals: paid.season.leagueGoals + (fixture.kind === 'league' ? live.goals : 0),
-          };
+          const updatedSeason: SeasonRecord = recordClubAppearanceStats(
+            {
+              ...paid.season,
+              matches: [...paid.season.matches, record],
+              goals: paid.season.goals + live.goals,
+              gamesPlayed: paid.season.gamesPlayed + 1,
+              leagueGoals: paid.season.leagueGoals + (fixture.kind === 'league' ? live.goals : 0),
+            },
+            fixture,
+            live.goals,
+            true,
+          );
 
           const isInternational = fixture.kind === 'international';
           let availability = state.availability;
@@ -561,8 +588,17 @@ export const useCareerStore = create<CareerStore>()(
           const selectedSim = withInternationalForm(nextSim, updatedSeason, state.clubId, state.nationality);
           const complete = nextSim.fixtureIndex >= calendar.fixtures.length;
           const withHonours = complete
-            ? { ...selectedSim, honours: { ...selectedSim.honours, leagueChampion: (selectedSim.leagueTable.find((r) => r.clubId === state.clubId)?.position ?? 0) === 1 } }
+            ? { ...selectedSim, honours: { ...selectedSim.honours, leagueChampion: canWinLeague(selectedSim, state.clubId) } }
             : selectedSim;
+          const remainingAfter = remainingPlayableCount(
+            { ...calendar, fixtures: calendar.fixtures },
+            withHonours,
+          );
+          const injuryGamesRemaining = complete
+            ? 0
+            : (state.injuryGamesRemaining ?? 0) > 0
+              ? state.injuryGamesRemaining
+              : rollInjuryAbsence(remainingAfter);
           const counts = countsTowardCareerRecord(state.seasonNumber);
           const merged = {
             ...state,
@@ -594,6 +630,7 @@ export const useCareerStore = create<CareerStore>()(
             careerGoals: counts ? state.careerGoals + live.goals : state.careerGoals,
             careerGames: counts ? state.careerGames + 1 : state.careerGames,
             careerEarnings: paid.careerEarnings,
+            injuryGamesRemaining,
             phase: lastMatchResult.isFinal ? 'match-result' : afterPhase,
             wpyResult: awarded.wpyResult,
           };
@@ -841,7 +878,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 10,
+      version: 11,
       migrate: (persisted) => {
         const state = persisted as Partial<CareerState>;
         const sim = state.seasonSim;
@@ -849,6 +886,9 @@ export const useCareerStore = create<CareerStore>()(
           ...season,
           age: season.age ?? (state.age ?? 16) - Math.max(0, (state.seasonHistory?.length ?? 0) - index),
           leagueGoals: season.leagueGoals ?? season.goals,
+          domesticGames: season.domesticGames ?? season.gamesPlayed,
+          domesticGoals: season.domesticGoals ?? season.leagueGoals ?? season.goals,
+          continentalStats: season.continentalStats ?? [],
           trophies: season.trophies ?? [],
           topGoalscorer: season.topGoalscorer ?? false,
           playerOfTheYear: season.playerOfTheYear ?? false,
@@ -894,6 +934,9 @@ export const useCareerStore = create<CareerStore>()(
                   internationalChampion: sim.honours?.internationalChampion ?? null,
                   domesticCup: sim.honours?.domesticCup ?? null,
                 },
+                titleRivalId: sim.titleRivalId ?? null,
+                rivalHomeOutcome: sim.rivalHomeOutcome ?? null,
+                rivalAwayOutcome: sim.rivalAwayOutcome ?? null,
               }
             : null,
           liveMatch: state.liveMatch ?? null,
@@ -905,6 +948,7 @@ export const useCareerStore = create<CareerStore>()(
           careerEarnings: state.careerEarnings ?? 0,
           contractYears: state.contractYears ?? DEFAULT_CONTRACT_YEARS,
           contractYearsRemaining: state.contractYearsRemaining ?? DEFAULT_CONTRACT_YEARS,
+          injuryGamesRemaining: state.injuryGamesRemaining ?? 0,
           previousContinentalChampion: state.previousContinentalChampion ?? null,
           previousChampionClubId: state.previousChampionClubId ?? null,
           pendingTransfer: state.pendingTransfer

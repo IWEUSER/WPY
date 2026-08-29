@@ -32,10 +32,12 @@ export function offerTierFromStanding(params: {
   currentTier: ClubTier;
   blockElite?: boolean;
 }): ClubTier {
-  const natural = Math.min(tierForMarketValue(params.marketValue), tierForRatio(params.careerRatio)) as ClubTier;
-  const worstAllowed = Math.min(5, (params.currentTier + 1) as ClubTier) as ClubTier;
-  let tier = Math.min(natural, worstAllowed) as ClubTier;
+  // Market value decides who bids. A €900k player is a smallest-club target
+  // even if last year's ratio still looks like a Strong-club number.
+  let tier = tierForMarketValue(params.marketValue);
   if (params.blockElite) tier = Math.max(tier, 2) as ClubTier;
+  void params.careerRatio;
+  void params.currentTier;
   return tier;
 }
 
@@ -340,7 +342,8 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
 
   const effectiveRatio = age < 28 ? (careerGames > 0 ? careerGoals / careerGames : 0) : ratio;
   const betterTier = tierForRatio(effectiveRatio);
-  if (betterTier < club.tier && !blockElite) {
+  const valueTier = tierForMarketValue(value);
+  if (betterTier < club.tier && !blockElite && valueTier <= betterTier) {
     const offers = pickClubsFromTier(betterTier, 3, [club.id], nationality);
     const basis = age < 28 ? 'career' : "last season's";
     return {
@@ -366,7 +369,12 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     fee,
     nationality,
     [club.id],
-    blockElite ? Math.max(2, club.tier) as ClubTier : Math.max(1, club.tier - 1) as ClubTier,
+    offerTierFromStanding({
+      careerRatio: careerGames > 0 ? careerGoals / careerGames : ratio,
+      marketValue: value,
+      currentTier: club.tier,
+      blockElite,
+    }),
     graceActive,
   );
 }

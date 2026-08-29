@@ -1,12 +1,13 @@
-import { calendarDomesticCup, calendarIncludesInternational, type SeasonCalendar } from '../calendar';
+import { calendarDomesticCup, calendarIncludesInternational, currentCalendarWeek, type SeasonCalendar } from '../calendar';
 import { getClub, leagueMatchWeeks } from '../data/clubs';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { describeAvailability, isAvailable } from '../availabilityEngine';
+import { describeInjury } from '../injury';
 import { clubEligibleForNationalTeam, getNation, isSelectedForNationalTeam, seasonRatioForSelection, selectionRatioForNation } from '../international';
 import type { SeasonStandings } from '../matchEngine';
 import { displaySeasonLabel } from '../seasonDisplay';
 import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons } from '../playerValue';
-import { fixtureTitle, internationalRoundLabel, nextPlayableFixture, remainingPlayableCount, type SeasonSimState } from '../seasonSim';
+import { fixtureTitle, internationalRoundLabel, lostTitleToRival, nextPlayableFixture, remainingPlayableCount, type SeasonSimState } from '../seasonSim';
 import { useCareerStore } from '../store';
 
 const ROLE_LABEL: Record<string, string> = {
@@ -35,6 +36,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const careerEarnings = useCareerStore((s) => s.careerEarnings);
   const weeklyWage = useCareerStore((s) => s.weeklyWage);
   const contractYearsRemaining = useCareerStore((s) => s.contractYearsRemaining);
+  const injuryGamesRemaining = useCareerStore((s) => s.injuryGamesRemaining);
   const advance = useCareerStore((s) => s.advance);
   const openCareerRecord = useCareerStore((s) => s.openCareerRecord);
 
@@ -48,10 +50,15 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const ratio = played > 0 ? goals / played : 0;
   const threshold = role === 'first-team' ? club.firstTeamGoalRatio : club.reserveGoalRatio;
   const ratioProgress = Math.min(1, threshold > 0 ? ratio / threshold : 0);
-  const available = isAvailable(availability);
+  const injured = (injuryGamesRemaining ?? 0) > 0;
+  const available = isAvailable(availability) && !injured;
   const remainingFixtures = seasonCalendar && seasonSim
     ? remainingPlayableCount(seasonCalendar, seasonSim)
     : leagueMatchWeeks(club.league) - season.matches.length;
+  const week = seasonCalendar && seasonSim
+    ? currentCalendarWeek(seasonCalendar, seasonSim.fixtureIndex)
+    : season.matches.length + 1;
+  const totalWeeks = seasonCalendar?.totalWeeks ?? leagueMatchWeeks(club.league);
   const nextFixture = seasonCalendar && seasonSim ? nextPlayableFixture(seasonCalendar, seasonSim) : undefined;
   const marketValue = playerMarketValueFromSeasons({
     age,
@@ -79,6 +86,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
       <div className="rounded-2xl bg-white/5 p-4" style={{ borderLeft: `4px solid ${club.color}` }}>
         <p className="text-xs uppercase tracking-wide text-white/40">
           {displaySeasonLabel(seasonNumber)} · {ROLE_LABEL[role]}
+          {seasonNumber >= 2 ? ` · Week ${week} of ${totalWeeks}` : ''}
         </p>
         <h1 className="text-2xl font-extrabold">{club.name}</h1>
         <p className="text-xs text-white/50">
@@ -120,8 +128,25 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
           available ? 'bg-emerald-500/15 text-emerald-300' : 'bg-red-500/15 text-red-300'
         }`}
       >
-        {describeAvailability(availability)}
+        {injured ? describeInjury(injuryGamesRemaining) : describeAvailability(availability)}
       </div>
+
+      {seasonNumber >= 2 && (
+        <div className="mt-3 rounded-xl bg-white/5 px-4 py-3">
+          <div className="flex items-baseline justify-between">
+            <span className="text-xs uppercase tracking-wide text-white/40">Season week</span>
+            <span className="text-sm font-bold">
+              {week} / {totalWeeks}
+            </span>
+          </div>
+          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+            <div
+              className="h-full rounded-full bg-emerald-400"
+              style={{ width: `${Math.min(100, (week / Math.max(1, totalWeeks)) * 100)}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {lastMatchSummary && (
         <div className="mt-3 rounded-xl bg-white/5 px-4 py-3 text-sm text-white/80">{lastMatchSummary}</div>
@@ -134,6 +159,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
             clubId={club.id}
             cupName={seasonSim?.domesticCup ? DOMESTIC_CUPS[seasonSim.domesticCup].name : null}
             cupStage={seasonSim?.domesticCupStage ?? null}
+            sim={seasonSim}
           />
         )}
 
@@ -190,14 +216,23 @@ function StandingsCard({
   clubId,
   cupName,
   cupStage,
+  sim,
 }: {
   standings: SeasonStandings;
   clubId: string;
   cupName: string | null;
   cupStage: string | null;
+  sim: SeasonSimState | null;
 }) {
   const us = standings.league.find((r) => r.clubId === clubId);
   const europe = standings.europeanStanding;
+  const rival = sim?.titleRivalId ? getClub(sim.titleRivalId) : undefined;
+  const rivalLine = (outcome: string | null | undefined) => {
+    if (!outcome) return '—';
+    if (outcome === 'win') return 'W';
+    if (outcome === 'draw') return 'D';
+    return 'L';
+  };
   const stageLabel: Record<string, string> = {
     group: 'Group stage',
     'round-of-16': 'Round of 16',
@@ -234,6 +269,16 @@ function StandingsCard({
       {cupName && cupStage && cupStage !== 'not-entered' && (
         <p className="mt-3 text-xs text-white/50">
           {cupName}: {stageLabel[cupStage] ?? cupStage}
+        </p>
+      )}
+      {rival && (
+        <p className={`mt-3 text-xs ${lostTitleToRival(sim!) ? 'text-red-300' : 'text-white/50'}`}>
+          Title rival {rival.name}
+          {' · '}
+          H {rivalLine(sim?.rivalHomeOutcome)} · A {rivalLine(sim?.rivalAwayOutcome)}
+          {lostTitleToRival(sim!)
+            ? ' — lost both, cannot win the league'
+            : ' — score in both meetings to avoid defeat'}
         </p>
       )}
     </div>

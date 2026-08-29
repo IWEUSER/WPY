@@ -106,6 +106,25 @@ if (s1record.playerOfTheYear) {
 const s2 = store.getState();
 console.log('S2 phase', s2.phase, 'season', s2.seasonNumber, 'role', s2.role);
 console.log('S2 fixtures', s2.seasonCalendar?.fixtures.length, 'standings rows', s2.seasonStandings?.league.length);
+console.log(
+  'S2 weeks',
+  s2.seasonCalendar?.totalWeeks,
+  'rival',
+  s2.seasonSim?.titleRivalId,
+  'injury',
+  s2.injuryGamesRemaining,
+);
+const s2LeagueWeeks = leagueMatchWeeks(getClub(s2.clubId ?? '')?.league ?? 'La Liga');
+const s2CupFinal = s2.seasonCalendar?.fixtures.find((f) => f.kind === 'domestic-cup' && f.domesticCupStage === 'final')?.week;
+const s2EuroFinal = s2.seasonCalendar?.fixtures.find((f) => f.kind === 'continental-final')?.week;
+if (s2CupFinal !== s2LeagueWeeks + 1 || (s2EuroFinal != null && s2EuroFinal !== s2LeagueWeeks + 2)) {
+  console.error('Season 2 week order must be league, cup final, then European final');
+  process.exitCode = 1;
+}
+if (!s2.seasonSim?.titleRivalId) {
+  console.error('Season 2 must assign a title rival');
+  process.exitCode = 1;
+}
 console.log('Europe', s2.seasonStandings?.europeanStanding, 'intl selected', s2.seasonSim?.internationalSelected);
 console.log(
   'S2 international',

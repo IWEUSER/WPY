@@ -34,6 +34,14 @@ export interface MatchRecord {
   scored: boolean | null;
 }
 
+export type ContinentalStatKey = ContinentalCupId | 'super-cup';
+
+export interface ContinentalSeasonStat {
+  cup: ContinentalStatKey;
+  games: number;
+  goals: number;
+}
+
 export interface SeasonRecord {
   seasonNumber: number;
   clubId: string;
@@ -47,6 +55,11 @@ export interface SeasonRecord {
   age: number;
   /** Goals in league (or reserve) fixtures only - used by the golden boot. */
   leagueGoals: number;
+  /** League + domestic cup appearances this season. */
+  domesticGames?: number;
+  domesticGoals?: number;
+  /** Club continental competitions this season. */
+  continentalStats?: ContinentalSeasonStat[];
   trophies: string[];
   topGoalscorer: boolean;
   playerOfTheYear: boolean;
@@ -117,6 +130,8 @@ export interface CareerState {
   careerEarnings: number;
   contractYears: number;
   contractYearsRemaining: number;
+  /** Upcoming club/country fixtures the player will sit out through injury. */
+  injuryGamesRemaining: number;
   previousContinentalChampion: ContinentalCupId | null;
   previousChampionClubId: string | null;
   /**

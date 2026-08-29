@@ -91,6 +91,10 @@ export interface SeasonSimState {
   domesticCup: DomesticCupId | null;
   domesticCupStage: DomesticCupProgress;
   honours: SeasonHonours;
+  /** Strongest other club in the league — lose home and away and the title is gone. */
+  titleRivalId: string | null;
+  rivalHomeOutcome: ClubMatchResult['outcome'] | null;
+  rivalAwayOutcome: ClubMatchResult['outcome'] | null;
 }
 
 export interface LiveMatch {
@@ -173,6 +177,7 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
   const leagueTable = leagueClubs.map((c) => emptyStanding(c.id));
   const europeanStanding: EuropeanStanding | null = cup ? { cup, stage: 'group' } : null;
   const domesticCup = calendar.domesticCup ?? null;
+  const titleRival = pickTitleRival(club);
 
   return {
     calendar,
@@ -200,8 +205,27 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
       domesticCup,
       domesticCupStage: domesticCup ? 'round-of-16' : 'not-entered',
       honours: emptyHonours(),
+      titleRivalId: titleRival?.id ?? null,
+      rivalHomeOutcome: null,
+      rivalAwayOutcome: null,
     },
   };
+}
+
+/** The club the player must beat (or at least not lose to twice) to stay in the title race. */
+export function pickTitleRival(club: Club): Club | undefined {
+  const others = clubsInLeague(club.league).filter((c) => c.id !== club.id);
+  others.sort((a, b) => b.strength - a.strength || a.id.localeCompare(b.id));
+  return others[0];
+}
+
+export function lostTitleToRival(sim: SeasonSimState): boolean {
+  return sim.rivalHomeOutcome === 'loss' && sim.rivalAwayOutcome === 'loss';
+}
+
+export function canWinLeague(sim: SeasonSimState, clubId: string): boolean {
+  if (lostTitleToRival(sim)) return false;
+  return (sim.leagueTable.find((r) => r.clubId === clubId)?.position ?? 0) === 1;
 }
 
 function assignOpponentsAndChances(
@@ -235,6 +259,8 @@ function assignOpponentsAndChances(
     const f = fixtures[i];
     if (f.kind === 'league') {
       const opp = leagueRivals[leagueI];
+      const uniqueRivals = Math.max(1, clubsInLeague(club.league).length - 1);
+      f.isHome = leagueI < uniqueRivals;
       leagueI += 1;
       if (opp) {
         f.opponentId = opp.id;
@@ -368,6 +394,7 @@ export function remainingPlayableCount(calendar: SeasonCalendar, sim: SeasonSimS
 }
 
 export function shouldSkipFixture(fixture: CalendarFixture, sim: SeasonSimState): boolean {
+  if (fixture.kind === 'rest') return true;
   if (fixture.kind === 'super-cup') return false;
 
   if (fixture.kind === 'domestic-cup') {
@@ -621,6 +648,7 @@ export function fixtureTitle(
   opts?: { playerNationName?: string },
 ): string {
   const vs = fixture.opponentLabel ? ` vs ${fixture.opponentLabel}` : '';
+  if (fixture.kind === 'rest') return 'International break';
   if (fixture.kind === 'league') return `League${vs}`;
   if (fixture.kind === 'domestic-cup') {
     const cupName = fixture.domesticCup ? DOMESTIC_CUPS[fixture.domesticCup].name : 'Cup';
@@ -703,7 +731,7 @@ export function resolveFixture(
   playerGoals: number,
   rng: () => number = Math.random,
 ): { sim: SeasonSimState; result: ClubMatchResult; summary: string } {
-  const isHome = fixture.week % 2 === 1;
+  const isHome = fixture.isHome ?? fixture.week % 2 === 1;
   const scored = playerGoals > 0;
   const isInternational = fixture.kind === 'international';
   const clubOpp = !isInternational && fixture.opponentId ? getClub(fixture.opponentId) : undefined;
@@ -731,6 +759,11 @@ export function resolveFixture(
     );
   }
 
+  const isTitleRival = fixture.kind === 'league' && fixture.opponentId === sim.titleRivalId;
+  if (isTitleRival && playerGoals > 0 && result.outcome === 'loss') {
+    result = { scoreFor: result.scoreAgainst, scoreAgainst: result.scoreAgainst, outcome: 'draw' };
+  }
+
   if (fixture.kind === 'domestic-cup') {
     result = settleCupIfDrawn(result, playerClub, clubOpp, rng);
   }
@@ -751,6 +784,10 @@ export function resolveFixture(
     let table = applyMatchToTable(next.leagueTable, playerClub.id, fixture.opponentId, result);
     table = simulateRestOfLeagueRound(table, playerClub.id, fixture.opponentId, rng);
     next.leagueTable = table;
+    if (isTitleRival) {
+      if (isHome) next.rivalHomeOutcome = result.outcome;
+      else next.rivalAwayOutcome = result.outcome;
+    }
   } else if (fixture.kind === 'domestic-cup') {
     next = applyDomesticCupResult(next, fixture, result);
   } else if (fixture.kind.startsWith('continental') || fixture.kind === 'super-cup') {

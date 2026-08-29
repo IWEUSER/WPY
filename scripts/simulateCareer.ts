@@ -7,7 +7,8 @@
  *
  * Run with: npm run simulate:career
  */
-import { buildSeasonCalendar } from '../src/game/career/calendar';
+import { buildSeasonCalendar, INTERNATIONAL_BREAK_WEEKS, isFinalFixture, tournamentWeekCount } from '../src/game/career/calendar';
+import { INJURY_CHANCE_PER_MATCH, injuryDuration } from '../src/game/career/injury';
 import {
   chancesForDecisiveMatch,
   chancesForKnockoutTie,
@@ -15,18 +16,17 @@ import {
   meanChancesFromStrength,
 } from '../src/game/career/chanceEngine';
 import { assignClubTier, CLUBS, clubsInLeague, getClub, goalRatioFromStrength, leagueMatchWeeks, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
-import { consecutivePoorFactor, contractValueFactor, formAdjustedRatio, playerMarketValue, playerMarketValueFromSeasons, weeklyWageForClub } from '../src/game/career/playerValue';
+import { consecutivePoorFactor, contractValueFactor, formAdjustedRatio, playerMarketValue, playerMarketValueFromSeasons, tierForMarketValue, weeklyWageForClub } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { internationalCampaignForSeason, internationalTournamentForSeason } from '../src/game/career/data/competitions';
 import { fifaRank } from '../src/game/career/data/fifaRankings';
 import { displaySeasonLabel, displaySeasonNumber } from '../src/game/career/seasonDisplay';
 import { isSelectedForNationalTeam, selectionRatioForNation } from '../src/game/career/international';
 import { simulateClubMatch, simulateLeagueSeason } from '../src/game/career/matchEngine';
-import { isFinalFixture } from '../src/game/career/calendar';
 import { leaguePhaseOpponents } from '../src/game/career/continentalDraw';
-import { hydrateSeason, nextPlayableFixture, resolveFixture, shouldSkipFixture } from '../src/game/career/seasonSim';
+import { canWinLeague, hydrateSeason, nextPlayableFixture, pickTitleRival, resolveFixture, shouldSkipFixture } from '../src/game/career/seasonSim';
 import { offerClubsForTrial } from '../src/game/career/trial';
-import { resolveSeasonTransition } from '../src/game/career/transfers';
+import { offerTierFromStanding, resolveSeasonTransition } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
 import {
   evaluatePlayerOfTheYear,
@@ -127,6 +127,46 @@ if (s2Rounds.join() !== expectedWc.join()) {
 }
 if (calendar.internationalTournament !== 'world-cup' || calendar.internationalPhase !== 'qualifiers-and-tournament') {
   console.error('season 2 is a World Cup finals year');
+  process.exitCode = 1;
+}
+
+const leagueWeeks = leagueMatchWeeks('La Liga');
+const lastLeague = Math.max(...calendar.fixtures.filter((f) => f.kind === 'league').map((f) => f.week));
+const cupFinalWeek = calendar.fixtures.find((f) => f.kind === 'domestic-cup' && f.domesticCupStage === 'final')?.week;
+const euroFinalWeek = calendar.fixtures.find((f) => f.kind === 'continental-final')?.week;
+const restWeeks = calendar.fixtures.filter((f) => f.kind === 'rest').map((f) => f.week);
+const tournamentWeeks = [...new Set(calendar.fixtures.filter((f) => f.kind === 'international' && f.internationalRound !== 'qualifier').map((f) => f.week))];
+const lateKnockout = calendar.fixtures.filter(
+  (f) =>
+    (f.kind === 'continental-knockout' || f.kind === 'continental-semi-final') &&
+    f.week > leagueWeeks,
+);
+console.log('week shape', {
+  total: calendar.totalWeeks,
+  lastLeague,
+  cupFinalWeek,
+  euroFinalWeek,
+  restWeeks,
+  tournamentWeeks,
+});
+if (lastLeague !== leagueWeeks || cupFinalWeek !== leagueWeeks + 1 || euroFinalWeek !== leagueWeeks + 2) {
+  console.error('cup final must follow the last league game; European final is the last club week');
+  process.exitCode = 1;
+}
+if (restWeeks.length !== INTERNATIONAL_BREAK_WEEKS || (euroFinalWeek != null && restWeeks[0] !== euroFinalWeek + 1)) {
+  console.error('national tournaments must start after a 3-week break from the European final');
+  process.exitCode = 1;
+}
+if (tournamentWeeks.length !== tournamentWeekCount('world-cup')) {
+  console.error('World Cup finals must occupy 5 weeks');
+  process.exitCode = 1;
+}
+if (calendar.totalWeeks !== leagueWeeks + 1 + 1 + INTERNATIONAL_BREAK_WEEKS + tournamentWeekCount('world-cup')) {
+  console.error(`La Liga World Cup season must be ${leagueWeeks + 1 + 1 + INTERNATIONAL_BREAK_WEEKS + 5} weeks`);
+  process.exitCode = 1;
+}
+if (lateKnockout.length > 0) {
+  console.error('continental knockouts before the final must sit inside the league weeks');
   process.exitCode = 1;
 }
 
@@ -295,7 +335,7 @@ if (madrid) {
     console.error('Real Madrid should generate well above 2 chances a game on average');
     process.exitCode = 1;
   }
-  const missingOpp = calendar.fixtures.filter((f) => !f.opponentLabel).length;
+  const missingOpp = calendar.fixtures.filter((f) => f.kind !== 'rest' && !f.opponentLabel).length;
   console.log('fixtures missing an opponent', missingOpp, '(expect 0)');
   console.log('domestic cup', sim.domesticCup, sim.domesticCupStage, '(expect copa-del-rey, round-of-16)');
   console.log('international tournament', sim.internationalTournament, sim.internationalPhase, '(expect world-cup + finals)');
@@ -407,6 +447,11 @@ const expectedEuro = [
 ];
 if (euroFinalsRounds.join() !== expectedEuro.join()) {
   console.error('season 4 must finish Euro qualifying then play 3 group games and a last-16 knockout');
+  process.exitCode = 1;
+}
+const euroFinalsWeeks = [...new Set(euroFinalsCalendar.fixtures.filter((f) => f.kind === 'international' && f.internationalRound !== 'qualifier').map((f) => f.week))];
+if (euroFinalsWeeks.length !== tournamentWeekCount('euro')) {
+  console.error('non-World Cup tournaments must occupy 4 weeks');
   process.exitCode = 1;
 }
 if (euroFinalsRounds.includes('round-of-32')) {
@@ -975,6 +1020,96 @@ if (barca && hilal && lafc) {
   console.log('seven failed seasons', afterSeven, 'poor factor', consecutivePoorFactor(7));
   if (afterSeven > 12_000_000) {
     console.error('seven consecutive seasons under 0.25 must collapse value far below €41m');
+    process.exitCode = 1;
+  }
+
+  const cheapTier = offerTierFromStanding({
+    careerRatio: 0.8,
+    marketValue: 900_000,
+    currentTier: 1,
+  });
+  console.log('€900k offer tier', cheapTier, 'value band', tierForMarketValue(900_000));
+  if (cheapTier <= 2) {
+    console.error('a €900k player must not attract Strong or Elite transfer offers');
+    process.exitCode = 1;
+  }
+  const cheapSale = resolveSeasonTransition({
+    season: { ...dummySeason, clubId: 'barcelona', goals: 8, gamesPlayed: 38 },
+    role: 'first-team',
+    clubId: 'barcelona',
+    parentClubId: 'barcelona',
+    seasonsAtCurrentClub: 3,
+    age: 26,
+    careerGoals: 80 + 56,
+    careerGames: 100 + 7 * 38,
+    nationality: 'spain',
+    loansUsed: 0,
+    seasonHistory: [
+      { ...dummySeason, seasonNumber: 2, clubId: 'barcelona', goals: 40, gamesPlayed: 50 },
+      { ...dummySeason, seasonNumber: 3, clubId: 'barcelona', goals: 40, gamesPlayed: 50 },
+      ...sevenPoor.slice(0, 6),
+    ],
+    contractYearsRemaining: 5,
+  });
+  const cheapPermTiers = (cheapSale.pendingTransfer?.offers ?? [])
+    .filter((o) => o.move === 'permanent')
+    .map((o) => getClub(o.clubId)?.tier ?? 1);
+  console.log('collapsed-value perm tiers', cheapPermTiers, 'value', afterSeven);
+  if (cheapPermTiers.some((tier) => tier <= 2)) {
+    console.error('collapsed-value players must not get Strong or Elite transfer offers');
+    process.exitCode = 1;
+  }
+}
+
+console.log('\n--- Title rival: score to avoid defeat; lose both and the league is gone ---');
+{
+  const madrid = getClub('real-madrid')!;
+  const rival = pickTitleRival(madrid);
+  const { calendar, sim } = hydrateSeason({
+    seasonNumber: 2,
+    club: madrid,
+    careerGoalRatio: 0.8,
+    nationId: 'spain',
+  });
+  const rivalFixture = calendar.fixtures.find((f) => f.kind === 'league' && f.opponentId === sim.titleRivalId);
+  if (!rival || !rivalFixture || sim.titleRivalId !== rival.id) {
+    console.error('every league must assign a title rival');
+    process.exitCode = 1;
+  } else {
+    const scored = resolveFixture(sim, rivalFixture, madrid, 1, () => 0.99);
+    console.log('rival after a goal', scored.result.outcome, 'vs', rival.name);
+    if (scored.result.outcome === 'loss') {
+      console.error('scoring against the title rival must prevent a defeat');
+      process.exitCode = 1;
+    }
+    const lostHome = {
+      ...sim,
+      rivalHomeOutcome: 'loss' as const,
+      rivalAwayOutcome: 'loss' as const,
+      leagueTable: sim.leagueTable.map((row) =>
+        row.clubId === madrid.id ? { ...row, position: 1, points: 90 } : row,
+      ),
+    };
+    console.log('lost both can win', canWinLeague(lostHome, madrid.id));
+    if (canWinLeague(lostHome, madrid.id)) {
+      console.error('losing home and away to the title rival must block the league title');
+      process.exitCode = 1;
+    }
+  }
+}
+
+console.log('\n--- Injury durations: 1-week common, season-ending rare ---');
+{
+  const oneWeek = Array.from({ length: 20_000 }, () => injuryDuration(47, () => Math.random()));
+  const ones = oneWeek.filter((d) => d === 1).length;
+  const full = oneWeek.filter((d) => d === 47).length;
+  console.log('injury P(1)', (ones / oneWeek.length).toFixed(3), 'P(47)', (full / oneWeek.length).toFixed(4), 'per-match', INJURY_CHANCE_PER_MATCH);
+  if (ones < oneWeek.length * 0.45) {
+    console.error('one-week injuries must be the common case');
+    process.exitCode = 1;
+  }
+  if (full > oneWeek.length * 0.02) {
+    console.error('a 47-week injury must stay rare');
     process.exitCode = 1;
   }
 }

@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import ShootingGame from '../../shooting/ShootingGame';
 import type { ShotResult } from '../../shooting/types';
+import { currentCalendarWeek } from '../calendar';
 import { getClub, leagueMatchWeeks } from '../data/clubs';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { getNation } from '../international';
@@ -48,9 +49,12 @@ export default function MatchScreen() {
         : `${chances} chances this game`
     : 'Your one big chance this game - make it count';
 
-  const progressLabel = simulated && liveMatch
-    ? `${competitionName ? `${competitionName} · ` : ''}${chances} chance${chances === 1 ? '' : 's'}`
+  const weekLabel = simulated && calendar && liveMatch
+    ? `Week ${currentCalendarWeek(calendar, liveMatch.fixtureIndex)} of ${calendar.totalWeeks}`
     : `Matchday ${matchNumber}/${club ? leagueMatchWeeks(club.league) : matchNumber}`;
+  const progressLabel = simulated && liveMatch
+    ? `${weekLabel}${competitionName ? ` · ${competitionName}` : ''} · ${chances} chance${chances === 1 ? '' : 's'}`
+    : weekLabel;
 
   return (
     <ShootingGame
