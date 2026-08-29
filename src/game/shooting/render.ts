@@ -1,3 +1,4 @@
+import { DIVE_LAYOUT_RAD } from './constants';
 import type { AimPoint } from './types';
 
 /** FIFA markings in metres. Boxes are drawn from these ratios to the goal
@@ -295,7 +296,7 @@ export interface KeeperPose {
   layout: number;
   /** 0 = on the ground, 1 = leaping toward the bar. */
   elevation: number;
-  /** Primary glove in aim space — the square on a save, short of it on a miss. */
+  /** Glove aim-space marker: on the dive side of the hips, short of the square on a miss. */
   hand: AimPoint;
 }
 
@@ -321,24 +322,91 @@ export function idleKeeperPose(): KeeperPose {
   };
 }
 
+/** Canvas radians for a dive: positive dir (right) rotates clockwise, so the
+ * head and both arms go toward that post and the legs trail the other way. */
+export function keeperDiveAngle(direction: number, layout: number): number {
+  if (direction === 0) return 0;
+  return direction * clamp(layout, 0, 1) * DIVE_LAYOUT_RAD;
+}
+
+interface KeeperLocalPt { x: number; y: number }
+
+/** Stick points in scale-units. Local +Y is the feet when standing; −Y is the
+ * head. After `keeperDiveAngle`, a left dive has gloves left of the hips and
+ * boots right of them. */
+export function keeperLocalPoints(pose: Pick<KeeperPose, 'direction' | 'stretch'>): {
+  diving: boolean;
+  head: KeeperLocalPt;
+  gloveL: KeeperLocalPt;
+  gloveR: KeeperLocalPt;
+  footL: KeeperLocalPt;
+  footR: KeeperLocalPt;
+  shoulderL: KeeperLocalPt;
+  shoulderR: KeeperLocalPt;
+} {
+  const stretch = clamp(pose.stretch, 0, 1);
+  const diving = pose.direction !== 0;
+  const head: KeeperLocalPt = { x: 0, y: -KEEPER_HEAD_FROM_HIP };
+  const shoulderY = -KEEPER_SHOULDER_FROM_HIP;
+  if (!diving) {
+    const gloveY = shoulderY - (1.0 + stretch * 1.4);
+    return {
+      diving: false,
+      head,
+      shoulderL: { x: -1.3, y: shoulderY },
+      shoulderR: { x: 1.3, y: shoulderY },
+      gloveL: { x: -1.55, y: gloveY },
+      gloveR: { x: 1.55, y: gloveY },
+      footL: { x: -0.7, y: KEEPER_HIP_FROM_FOOT },
+      footR: { x: 0.7, y: KEEPER_HIP_FROM_FOOT },
+    };
+  }
+  const arm = 2.4 + stretch * 2.2;
+  return {
+    diving: true,
+    head,
+    shoulderL: { x: -0.7, y: shoulderY },
+    shoulderR: { x: 0.7, y: shoulderY },
+    gloveL: { x: -0.35, y: head.y - arm },
+    gloveR: { x: 0.45, y: head.y - arm + 0.35 },
+    footL: { x: -0.5, y: KEEPER_HIP_FROM_FOOT + 0.45 },
+    footR: { x: 0.62, y: KEEPER_HIP_FROM_FOOT + 0.9 },
+  };
+}
+
+function rotateLocalX(lx: number, ly: number, ang: number): number {
+  return lx * Math.cos(ang) - ly * Math.sin(ang);
+}
+
+/** Aim-space x of hips, the furthest glove, and the furthest boot after rotate.
+ * Units of the limb offsets are scale-units (not aim), so only the order of
+ * glove / hip / foot is meaningful — that order is the dive silhouette. */
+export function keeperSilhouetteX(pose: KeeperPose): { hip: number; glove: number; foot: number } {
+  const ang = keeperDiveAngle(pose.direction, pose.layout);
+  const pts = keeperLocalPoints(pose);
+  const hip = pose.pos.x;
+  const g1 = hip + rotateLocalX(pts.gloveL.x, pts.gloveL.y, ang);
+  const g2 = hip + rotateLocalX(pts.gloveR.x, pts.gloveR.y, ang);
+  const f1 = hip + rotateLocalX(pts.footL.x, pts.footL.y, ang);
+  const f2 = hip + rotateLocalX(pts.footR.x, pts.footR.y, ang);
+  if (pose.direction < 0) {
+    return { hip, glove: Math.min(g1, g2), foot: Math.max(f1, f2) };
+  }
+  if (pose.direction > 0) {
+    return { hip, glove: Math.max(g1, g2), foot: Math.min(f1, f2) };
+  }
+  return { hip, glove: (g1 + g2) / 2, foot: (f1 + f2) / 2 };
+}
+
 export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose: KeeperPose) {
   const scale = keeperScale(view);
   const hips = goalToPixel(pose.pos, view);
-  const handPx = goalToPixel(pose.hand, view);
   const groundY = view.goal.botY;
   const dir = pose.direction;
   const layout = clamp(pose.layout, 0, 1);
-  // Counter-clockwise for a screen-right dive so the head stays central
-  // and the gloves go to the ball, rather than a standing side-reach.
-  const ang = -dir * layout * 1.22;
-  const cos = Math.cos(ang);
-  const sin = Math.sin(ang);
-  const shoulderLocalY = -scale * KEEPER_SHOULDER_FROM_HIP;
-
-  const toWorld = (lx: number, ly: number) => ({
-    x: hips.x + lx * cos - ly * sin,
-    y: hips.y + lx * sin + ly * cos,
-  });
+  const ang = keeperDiveAngle(dir, layout);
+  const pts = keeperLocalPoints(pose);
+  const s = (lx: number, ly: number) => ({ x: lx * scale, y: ly * scale });
 
   const shadowW = scale * (1.15 + layout * 2.6);
   ctx.save();
@@ -360,102 +428,91 @@ export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose:
   ctx.rotate(ang);
 
   const hipY = 0;
-  const shoulderY = shoulderLocalY;
-  const headY = -scale * KEEPER_HEAD_FROM_HIP;
-  const footY = scale * KEEPER_HIP_FROM_FOOT;
-  const diveSide = dir === 0 ? 0 : dir;
-  const kick = 0.7 + layout * 1.4 - pose.elevation * 0.25;
+  const shoulderY = -scale * KEEPER_SHOULDER_FROM_HIP;
+  const headPx = s(pts.head.x, pts.head.y);
+  const footL = s(pts.footL.x, pts.footL.y);
+  const footR = s(pts.footR.x, pts.footR.y);
+  const gloveL = s(pts.gloveL.x, pts.gloveL.y);
+  const gloveR = s(pts.gloveR.x, pts.gloveR.y);
+  const shoulderL = s(pts.shoulderL.x, pts.shoulderL.y);
+  const shoulderR = s(pts.shoulderR.x, pts.shoulderR.y);
 
-  ctx.strokeStyle = bootColor;
-  ctx.lineWidth = scale * 0.62;
-  ctx.lineCap = 'round';
-  for (const side of [-1, 1] as const) {
-    const along = diveSide === 0 ? side * kick * 0.55 : side === diveSide ? kick : -kick * 0.35;
-    const kneeX = scale * along * 0.55;
-    const kneeY = hipY + (footY - hipY) * 0.48 + (layout > 0.4 && side === diveSide ? scale * 0.4 : 0);
-    const footX = scale * along;
-    const footDrawY = footY * (1 - layout * 0.15);
+  const drawLeg = (foot: { x: number; y: number }, hipX: number) => {
+    const kneeX = hipX * 0.45 + foot.x * 0.55;
+    const kneeY = hipY + (foot.y - hipY) * 0.48;
+    ctx.strokeStyle = bootColor;
+    ctx.lineWidth = scale * 0.58;
+    ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(side * scale * 0.3, hipY);
+    ctx.moveTo(hipX, hipY);
     ctx.lineTo(kneeX, kneeY);
-    ctx.lineTo(footX, footDrawY);
+    ctx.lineTo(foot.x, foot.y);
     ctx.stroke();
     ctx.fillStyle = bootColor;
     ctx.beginPath();
-    ctx.ellipse(footX + side * scale * 0.1, footDrawY, scale * 0.38, scale * 0.24, 0, 0, Math.PI * 2);
+    ctx.ellipse(foot.x, foot.y, scale * 0.38, scale * 0.24, 0, 0, Math.PI * 2);
     ctx.fill();
-  }
+  };
+
+  drawLeg(footL, -scale * 0.28);
+  drawLeg(footR, scale * 0.28);
 
   ctx.fillStyle = shortsColor;
   ctx.beginPath();
-  ctx.ellipse(0, hipY + scale * 0.25, scale * 1.05, scale * 0.85, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, hipY + scale * 0.2, scale * (pts.diving ? 0.85 : 1.05), scale * (pts.diving ? 0.7 : 0.85), 0, 0, Math.PI * 2);
   ctx.fill();
 
-  const torsoGrad = ctx.createLinearGradient(-scale * 1.35, shoulderY, scale * 1.35, hipY);
+  const torsoGrad = ctx.createLinearGradient(0, shoulderY, 0, hipY);
   torsoGrad.addColorStop(0, kitLight);
   torsoGrad.addColorStop(1, kitDark);
   ctx.fillStyle = torsoGrad;
   ctx.beginPath();
-  ctx.moveTo(-scale * 1.3, shoulderY);
-  ctx.quadraticCurveTo(-scale * 1.5, (shoulderY + hipY) / 2, -scale * 0.9, hipY);
-  ctx.lineTo(scale * 0.9, hipY);
-  ctx.quadraticCurveTo(scale * 1.5, (shoulderY + hipY) / 2, scale * 1.3, shoulderY);
+  if (pts.diving) {
+    ctx.moveTo(-scale * 0.85, shoulderY);
+    ctx.quadraticCurveTo(-scale * 1.05, (shoulderY + hipY) / 2, -scale * 0.7, hipY);
+    ctx.lineTo(scale * 0.7, hipY);
+    ctx.quadraticCurveTo(scale * 1.05, (shoulderY + hipY) / 2, scale * 0.85, shoulderY);
+  } else {
+    ctx.moveTo(-scale * 1.3, shoulderY);
+    ctx.quadraticCurveTo(-scale * 1.5, (shoulderY + hipY) / 2, -scale * 0.9, hipY);
+    ctx.lineTo(scale * 0.9, hipY);
+    ctx.quadraticCurveTo(scale * 1.5, (shoulderY + hipY) / 2, scale * 1.3, shoulderY);
+  }
   ctx.closePath();
   ctx.fill();
-
-  ctx.fillStyle = skinColor;
-  ctx.beginPath();
-  ctx.arc(0, headY, scale * 0.95, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = 'rgba(0,0,0,0.18)';
-  ctx.beginPath();
-  ctx.arc(0, headY - scale * 0.08, scale * 0.95, Math.PI * 0.95, Math.PI * 2.05);
-  ctx.fill();
-  ctx.restore();
-
-  const leftShoulder = toWorld(-scale * 1.3, shoulderLocalY);
-  const rightShoulder = toWorld(scale * 1.3, shoulderLocalY);
-
-  const otherHand = goalToPixel(
-    {
-      x: pose.hand.x - (dir === 0 ? 0.08 : dir * 0.14),
-      y: pose.hand.y + (layout > 0.45 ? 0.1 : 0.02) * (pose.beaten ? 1 : 0.4),
-    },
-    view,
-  );
 
   const drawArm = (shoulder: { x: number; y: number }, glove: { x: number; y: number }) => {
     const mx = (shoulder.x + glove.x) / 2;
     const my = (shoulder.y + glove.y) / 2;
-    const dx = glove.x - shoulder.x;
-    const dy = glove.y - shoulder.y;
-    const len = Math.max(1, Math.hypot(dx, dy));
-    const elbowX = mx + (-dy / len) * scale * 0.7;
-    const elbowY = my + (dx / len) * scale * 0.35;
     ctx.strokeStyle = skinColor;
     ctx.lineWidth = scale * 0.5;
     ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(shoulder.x, shoulder.y);
-    ctx.lineTo(elbowX, elbowY);
+    ctx.lineTo(mx, my);
     ctx.lineTo(glove.x, glove.y);
     ctx.stroke();
     ctx.fillStyle = gloveColor;
     ctx.beginPath();
-    ctx.arc(glove.x, glove.y, scale * 0.4, 0, Math.PI * 2);
+    ctx.arc(glove.x, glove.y, scale * 0.42, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = pose.beaten ? '#1f2937' : '#166534';
     ctx.lineWidth = Math.max(1, scale * 0.1);
     ctx.stroke();
   };
 
-  if (dir < 0) {
-    drawArm(rightShoulder, otherHand);
-    drawArm(leftShoulder, handPx);
-  } else {
-    drawArm(leftShoulder, otherHand);
-    drawArm(rightShoulder, handPx);
-  }
+  drawArm(shoulderL, gloveL);
+  drawArm(shoulderR, gloveR);
+
+  ctx.fillStyle = skinColor;
+  ctx.beginPath();
+  ctx.arc(headPx.x, headPx.y, scale * 0.95, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.beginPath();
+  ctx.arc(headPx.x, headPx.y - scale * 0.08, scale * 0.95, Math.PI * 0.95, Math.PI * 2.05);
+  ctx.fill();
+  ctx.restore();
 }
 
 export function drawBall(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, rotation: number) {

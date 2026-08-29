@@ -281,10 +281,10 @@ export function cellCenter(cell: SaveCell): AimPoint {
 
 /**
  * One of 160 end-poses: every square has a save motion and a miss motion.
- * The body stays inside the posts; on a save the primary glove goes to the
- * square (including the furthest corners and the ground), on a miss it falls
- * short of the same square so the ball can go in. Low squares sprawl; high
- * squares leap; centre squares catch without a dive.
+ * Hips stay inside the posts. A dive lays the body toward the ball: both
+ * arms go with the head toward that post, legs trail the other way. Gloves
+ * reach along that axis (a miss is a shorter reach), they are not teleported
+ * onto the square. Centre squares catch without leaving their feet.
  */
 export function computeKeeperDive(
   actualAim: AimPoint,
@@ -299,6 +299,7 @@ export function computeKeeperDive(
   const heightT = (cell.row + 0.5) / SAVE_GRID_ROWS;
   const lowT = 1 - heightT;
   const isCentre = cell.col === 7 || cell.col === 8;
+  const centreBias = isCentre ? (cell.col === 7 ? -1 : 1) : 0;
 
   const layout = isCentre
     ? 0.04 + lowT * (saved ? 0.18 : 0.1)
@@ -313,20 +314,31 @@ export function computeKeeperDive(
       ? 0.38 + lateral * 0.42 + heightT * 0.2
       : 0.22 + lateral * 0.28 + heightT * 0.12;
 
-  const bodyMax = saved ? KEEPER_DIVE_MAX_X : KEEPER_DIVE_MAX_X * 0.68;
-  const bodyX = direction * lateral * bodyMax;
+  const armAim = 0.2 + stretch * 0.12;
+  const bodyMax = saved ? KEEPER_DIVE_MAX_X : KEEPER_DIVE_MAX_X * 0.7;
+  const bodyX = isCentre ? centreBias * 0.02 : direction * lateral * bodyMax;
   const bodyY = isCentre
     ? lerp(0.14, 0.4, heightT)
-    : lerp(0.07, 0.46, heightT);
+    : lerp(0.08, 0.42, heightT);
 
-  const hand: AimPoint = saved
-    ? { x: square.x, y: square.y }
-    : {
-        x: square.x * (isCentre ? 0.2 : 0.55),
-        y: square.y * 0.62 + KEEPER_STAND_Y * 0.18,
-      };
-  hand.x = clamp(hand.x, -GOAL_HALF_WIDTH, GOAL_HALF_WIDTH);
-  hand.y = clamp(hand.y, 0, GOAL_HEIGHT);
+  const hand: AimPoint = {
+    x: clamp(
+      isCentre ? bodyX + centreBias * 0.05 : bodyX + direction * armAim,
+      -GOAL_HALF_WIDTH,
+      GOAL_HALF_WIDTH,
+    ),
+    y: clamp(
+      isCentre
+        ? saved
+          ? 0.32 + heightT * 0.42
+          : 0.28 + heightT * 0.2
+        : saved
+          ? lerp(0.12, 0.72, heightT)
+          : lerp(0.1, 0.5, heightT),
+      0,
+      GOAL_HEIGHT,
+    ),
+  };
 
   const keeperStart: AimPoint = { x: 0, y: KEEPER_STAND_Y };
   const diveDistance = Math.hypot(bodyX - keeperStart.x, bodyY - keeperStart.y);

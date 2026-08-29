@@ -14,8 +14,10 @@ import {
   ballStartPixel,
   createPitchView,
   goalToPixel,
+  keeperSilhouetteX,
   randomBallStartXRatio,
   randomShotDistanceM,
+  type KeeperPose,
 } from '../src/game/shooting/render';
 import {
   aimToSaveCell,
@@ -317,13 +319,27 @@ if (keys.size !== 160) {
   process.exitCode = 1;
 }
 
+function poseFromDive(d: ReturnType<typeof computeKeeperDive>, beaten = false): KeeperPose {
+  return {
+    pos: d.target,
+    stretch: d.stretch,
+    direction: d.direction,
+    layout: d.layout,
+    elevation: d.elevation,
+    hand: d.hand,
+    beaten,
+  };
+}
+
 const stand = computeKeeperDive({ x: 0.02, y: 0.5 }, { col: 8, row: 2 }, true, DEFAULT_DIFFICULTY);
 const saveLeft = computeKeeperDive({ x: -0.92, y: 0.9 }, { col: 0, row: 4 }, true, DEFAULT_DIFFICULTY);
+const saveRight = computeKeeperDive({ x: 0.92, y: 0.9 }, { col: 15, row: 4 }, true, DEFAULT_DIFFICULTY);
 const missLeft = computeKeeperDive({ x: -0.92, y: 0.9 }, { col: 0, row: 4 }, false, DEFAULT_DIFFICULTY);
 const missRight = computeKeeperDive({ x: 0.92, y: 0.9 }, { col: 15, row: 4 }, false, DEFAULT_DIFFICULTY);
 const lowSave = computeKeeperDive({ x: -0.92, y: 0.1 }, { col: 0, row: 0 }, true, DEFAULT_DIFFICULTY);
 const nudge = computeKeeperDive({ x: -0.2, y: 0.4 }, { col: 6, row: 1 }, true, DEFAULT_DIFFICULTY);
-const topSq = cellCenter({ col: 0, row: 4 });
+const leftSil = keeperSilhouetteX(poseFromDive(saveLeft));
+const rightSil = keeperSilhouetteX(poseFromDive(saveRight));
 console.log(
   `stand: dir=${stand.direction} hips=${stand.target.x.toFixed(3)} layout=${stand.layout.toFixed(2)}`,
 );
@@ -331,12 +347,18 @@ console.log(
   `save top-left: dir=${saveLeft.direction} hips=${saveLeft.target.x.toFixed(3)} hand=(${saveLeft.hand.x.toFixed(2)},${saveLeft.hand.y.toFixed(2)}) layout=${saveLeft.layout.toFixed(2)} elev=${saveLeft.elevation.toFixed(2)}`,
 );
 console.log(
+  `left silhouette: glove=${leftSil.glove.toFixed(2)} hip=${leftSil.hip.toFixed(2)} foot=${leftSil.foot.toFixed(2)} (arms left, legs trail right)`,
+);
+console.log(
+  `right silhouette: glove=${rightSil.glove.toFixed(2)} hip=${rightSil.hip.toFixed(2)} foot=${rightSil.foot.toFixed(2)} (arms right, legs trail left)`,
+);
+console.log(
   `miss top-left: hand=(${missLeft.hand.x.toFixed(2)},${missLeft.hand.y.toFixed(2)}) layout=${missLeft.layout.toFixed(2)}`,
 );
 console.log(
   `low save: hips.y=${lowSave.target.y.toFixed(2)} layout=${lowSave.layout.toFixed(2)} (must sprawl on the ground)`,
 );
-if (stand.direction !== 0 || Math.abs(stand.target.x) > 1e-6 || stand.layout > 0.25) {
+if (stand.direction !== 0 || Math.abs(stand.target.x) > 0.04 || stand.layout > 0.25) {
   console.error('FAIL: a centre-square save must stay planted, not dive');
   process.exitCode = 1;
 }
@@ -348,12 +370,20 @@ if (Math.abs(saveLeft.target.x) > KEEPER_DIVE_MAX_X + 1e-9 || Math.abs(missRight
   console.error('FAIL: dive hips went past the allowed in-post range');
   process.exitCode = 1;
 }
-if (Math.abs(saveLeft.hand.x) > 1 + 1e-9 || Math.abs(saveLeft.hand.x - topSq.x) > 0.02) {
-  console.error('FAIL: a corner save must put the glove on that corner square, inside the posts');
+if (Math.abs(saveLeft.hand.x) > 1 + 1e-9 || saveLeft.hand.x >= saveLeft.target.x - 0.05) {
+  console.error('FAIL: a left-dive glove must stay inside the posts and on the left of the hips');
   process.exitCode = 1;
 }
 if (Math.abs(missLeft.hand.x) >= Math.abs(saveLeft.hand.x) - 0.05) {
-  console.error('FAIL: a corner miss must fall short of the square');
+  console.error('FAIL: a corner miss must fall short of the save reach');
+  process.exitCode = 1;
+}
+if (!(leftSil.glove < leftSil.hip - 0.4 && leftSil.hip < leftSil.foot - 0.4)) {
+  console.error('FAIL: a left full-stretch dive must have both arms left of the hips and legs trailing right');
+  process.exitCode = 1;
+}
+if (!(rightSil.glove > rightSil.hip + 0.4 && rightSil.hip > rightSil.foot + 0.4)) {
+  console.error('FAIL: a right full-stretch dive must have both arms right of the hips and legs trailing left');
   process.exitCode = 1;
 }
 if (saveLeft.layout < 0.55 || saveLeft.elevation < 0.8) {

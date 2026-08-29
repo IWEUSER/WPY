@@ -37,8 +37,13 @@ export const MAX_TRAVEL_MS = 1080;
 export const KEEPER_DIVE_MS_PER_UNIT = 300;
 
 /** Max |x| the keeper's hips travel, in normalized goal space (posts at ±1).
- * Hands may go further — up to the landing square — but the body stays in. */
-export const KEEPER_DIVE_MAX_X = 0.46;
+ * Feet trail the other way, so hips can sit closer to the ball than a standing
+ * side-reach would allow without putting a boot past the post. */
+export const KEEPER_DIVE_MAX_X = 0.58;
+
+/** Radians of body rotation at full layout. Positive dir (right) rotates
+ * clockwise: head and both arms go right, legs trail left. */
+export const DIVE_LAYOUT_RAD = 1.48;
 
 /** Standing hip height in normalized goal space (0 = ground, 1 = bar). */
 export const KEEPER_STAND_Y = 0.28;
