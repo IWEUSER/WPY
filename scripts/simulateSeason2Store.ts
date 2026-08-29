@@ -90,6 +90,10 @@ if (!s1record || s1record.age !== 16 || s1record.gamesPlayed !== 24 || s1record.
   console.error('Season 1 career record must store age, games and goals');
   process.exitCode = 1;
 }
+if (store.getState().careerGoals !== 0 || store.getState().careerGames !== 0) {
+  console.error('Trial and the reserve year must not count toward the overall career ratio');
+  process.exitCode = 1;
+}
 if (s1record.playerOfTheYear) {
   console.error('Season 1 has no league title, so it cannot award Player of the Year');
   process.exitCode = 1;
@@ -121,8 +125,26 @@ if (s2ClubVsCountry.length > 0) {
   console.error('International fixtures must not use club opponents');
   process.exitCode = 1;
 }
-if (!s2Intl.some((f) => f.internationalRound === 'qualifier') || !s2Intl.some((f) => f.internationalRound === 'final')) {
-  console.error('Season 2 must include World Cup qualifiers and the World Cup itself');
+const s2Expected = [
+  'qualifier',
+  'qualifier',
+  'qualifier',
+  'group',
+  'group',
+  'group',
+  'round-of-32',
+  'round-of-16',
+  'quarter-final',
+  'semi-final',
+  'final',
+];
+const s2Rounds = s2Intl.map((f) => f.internationalRound);
+if (s2Rounds.join() !== s2Expected.join()) {
+  console.error('Season 2 must include the remaining World Cup qualifiers and a last-32 tournament');
+  process.exitCode = 1;
+}
+if (!s2.seasonSim?.internationalSelected) {
+  console.error('A promoted first-team player with a strong reserve year must be selected in season 2');
   process.exitCode = 1;
 }
 
@@ -140,4 +162,8 @@ if (live) {
 const after = store.getState();
 console.log('after first S2 match:', after.lastMatchSummary);
 console.log('league pos', after.seasonStandings?.league.find((r) => r.clubId === after.clubId)?.position, 'pts', after.seasonStandings?.league.find((r) => r.clubId === after.clubId)?.points);
-console.log('phase', after.phase, 'career games', after.careerGames);
+console.log('phase', after.phase, 'career games', after.careerGames, '(expect 1 after first first-team match)');
+if (after.careerGames !== 1) {
+  console.error('Career games must start counting in season 2');
+  process.exitCode = 1;
+}

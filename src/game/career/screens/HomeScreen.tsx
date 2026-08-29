@@ -1,4 +1,5 @@
 import { getClub } from '../data/clubs';
+import { displaySeasonLabel } from '../seasonDisplay';
 import { useCareerStore } from '../store';
 
 export default function HomeScreen({ onPractice }: { onPractice: () => void }) {
@@ -27,7 +28,7 @@ export default function HomeScreen({ onPractice }: { onPractice: () => void }) {
           >
             Continue Career
             <span className="mt-1 block text-xs font-medium text-black/70">
-              Season {seasonNumber} · {club.name}
+              {displaySeasonLabel(seasonNumber)} · {club.name}
             </span>
           </button>
         )}

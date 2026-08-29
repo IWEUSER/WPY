@@ -33,11 +33,11 @@ export function applyCareerLayoutPreview(): void {
       clubId: 'real-madrid',
       role: 'first-team',
       matches: [],
-      goals: 22,
+      goals: 30,
       gamesPlayed: 38,
       ratioMet: true,
       age: 17,
-      leagueGoals: 18,
+      leagueGoals: 24,
       trophies: ['La Liga', 'Copa del Rey', 'Champions League'],
       topGoalscorer: true,
       playerOfTheYear: true,
@@ -49,11 +49,11 @@ export function applyCareerLayoutPreview(): void {
       clubId: 'real-madrid',
       role: 'first-team',
       matches: [],
-      goals: 14,
+      goals: 26,
       gamesPlayed: 36,
       ratioMet: true,
       age: 18,
-      leagueGoals: 11,
+      leagueGoals: 20,
       trophies: ['Super Cup'],
       topGoalscorer: false,
       playerOfTheYear: false,
@@ -66,8 +66,9 @@ export function applyCareerLayoutPreview(): void {
   const { calendar, sim } = hydrateSeason({
     seasonNumber: 4,
     club,
-    previousSeasonRatio: 0.61,
+    careerGoalRatio: 0.78,
     nationId: 'spain',
+    qualifierCarry: { tournament: 'euro', points: 7, played: 3 },
   });
 
   useCareerStore.setState({
@@ -82,8 +83,8 @@ export function applyCareerLayoutPreview(): void {
     nationalTeam: createNationalTeamState('spain'),
     availability: createAvailability(),
     seasonHistory: history,
-    careerGoals: 56,
-    careerGames: 98,
+    careerGoals: 58,
+    careerGames: 76,
     seasonCalendar: calendar,
     seasonSim: sim,
     seasonStandings: buildSeasonStandings(sim.leagueTable, sim.europeanStanding),
@@ -106,5 +107,6 @@ export function applyCareerLayoutPreview(): void {
       wonWpy: false,
     }),
     lastMatchSummary: 'Won 2–1 vs Barcelona · 1 goal from 3 chances',
+    intlQualifying: { tournament: 'euro', points: 7, played: 3 },
   });
 }

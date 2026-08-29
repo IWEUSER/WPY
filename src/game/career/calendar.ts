@@ -9,7 +9,7 @@ import {
   type DomesticCupId,
   type InternationalTournamentId,
 } from './data/competitions';
-import { qualifierCountFor } from './data/fifaRankings';
+import { qualifierCountFor, tournamentKnockoutRounds } from './data/fifaRankings';
 
 /**
  * What kind of fixture a calendar week holds. `continental-semi-final` and
@@ -46,7 +46,14 @@ export interface CalendarFixture {
   opponentLabel?: string;
   /** How many scoring chances the player gets - filled in by seasonSim. */
   playerChances?: number;
-  internationalRound?: 'qualifier' | 'group' | 'semi-final' | 'final';
+  internationalRound?:
+    | 'qualifier'
+    | 'group'
+    | 'round-of-32'
+    | 'round-of-16'
+    | 'quarter-final'
+    | 'semi-final'
+    | 'final';
 }
 
 export interface SeasonCalendar {
@@ -160,8 +167,8 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
 
   const campaign = internationalCampaignForSeason(seasonNumber, nationConfederation ?? confederation);
   if (includeInternational && campaign.tournament && campaign.phase !== 'none') {
-    const qualifierCount = qualifierCountFor(campaign.tournament);
-    const interval = leagueMatchWeeks / qualifierCount;
+    const qualifierCount = campaign.qualifierGames || qualifierCountFor(campaign.tournament);
+    const interval = leagueMatchWeeks / Math.max(1, qualifierCount);
     for (let i = 0; i < qualifierCount; i++) {
       const qualifierWeek = Math.max(1, Math.min(leagueMatchWeeks, Math.round((i + 0.5) * interval)));
       fixtures.push({
@@ -172,9 +179,17 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
       });
     }
     if (campaign.phase === 'qualifiers-and-tournament') {
-      fixtures.push({ week: ++week, kind: 'international', isDecisive: false, internationalRound: 'group' });
-      fixtures.push({ week: ++week, kind: 'international', isDecisive: true, internationalRound: 'semi-final' });
-      fixtures.push({ week: ++week, kind: 'international', isDecisive: true, internationalRound: 'final' });
+      for (let i = 0; i < 3; i++) {
+        fixtures.push({ week: ++week, kind: 'international', isDecisive: false, internationalRound: 'group' });
+      }
+      for (const round of tournamentKnockoutRounds(campaign.tournament)) {
+        fixtures.push({
+          week: ++week,
+          kind: 'international',
+          isDecisive: round === 'semi-final' || round === 'final',
+          internationalRound: round,
+        });
+      }
     }
   }
 

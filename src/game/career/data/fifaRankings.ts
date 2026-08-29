@@ -212,6 +212,25 @@ export function qualifierCountFor(tournament: InternationalTournamentId): number
   return 6;
 }
 
+export type InternationalKnockoutRound =
+  | 'round-of-32'
+  | 'round-of-16'
+  | 'quarter-final'
+  | 'semi-final'
+  | 'final';
+
+/** World Cup: last 32 through the final. Continental: last 16 through the final. */
+export function tournamentKnockoutRounds(tournament: InternationalTournamentId): InternationalKnockoutRound[] {
+  if (tournament === 'world-cup') {
+    return ['round-of-32', 'round-of-16', 'quarter-final', 'semi-final', 'final'];
+  }
+  return ['round-of-16', 'quarter-final', 'semi-final', 'final'];
+}
+
+export function tournamentGroupGames(): number {
+  return 3;
+}
+
 /**
  * Whether the player's country reaches the finals, combining FIFA ranking
  * (how many berths that confederation has) with qualifying-form points.
@@ -232,24 +251,27 @@ export function doesNationQualify(
   return points >= Math.ceil(maxPoints * 0.8);
 }
 
-export function qualifierOpponents(nationId: string, tournament: InternationalTournamentId) {
-  const nation = getNation(nationId);
-  if (!nation) return [];
-  const count = qualifierCountFor(tournament);
-  const pool = nationsInConfederation(nation.confederation).filter((n) => n.id !== nationId);
-  if (pool.length === 0) return [];
-  const selfRank = confederationRank(nationId);
-  const higher = pool.filter((n) => confederationRank(n.id) < selfRank);
-  const lower = pool.filter((n) => confederationRank(n.id) > selfRank);
-  const picks = [];
+function pickFrom<T extends { id: string }>(source: T[], used: Set<string>, fallback: T[]): T | undefined {
+  return source.find((n) => !used.has(n.id)) ?? fallback.find((n) => !used.has(n.id)) ?? source[0] ?? fallback[0];
+}
+
+/** Spread opponents across stronger, similar, and weaker sides — not a gauntlet of #1s. */
+export function pickMixedRankOpponents(
+  nationId: string,
+  count: number,
+  pool: { id: string; name: string; confederation: Confederation }[],
+): { id: string; name: string; confederation: Confederation }[] {
+  if (pool.length === 0 || count <= 0) return [];
+  const self = fifaRank(nationId);
+  const higher = pool.filter((n) => fifaRank(n.id) + 5 < self);
+  const peers = pool.filter((n) => Math.abs(fifaRank(n.id) - self) <= 20);
+  const lower = pool.filter((n) => fifaRank(n.id) > self + 12);
+  const bands = [lower, peers, higher, pool];
   const used = new Set<string>();
+  const picks: { id: string; name: string; confederation: Confederation }[] = [];
   for (let i = 0; i < count; i++) {
-    const fromHigher = i % 2 === 0 && higher.length > 0;
-    const source = fromHigher ? higher : lower.length > 0 ? lower : pool;
-    let pick = source.find((n) => !used.has(n.id)) ?? source[i % source.length];
-    if (pick && used.has(pick.id)) {
-      pick = pool.find((n) => !used.has(n.id)) ?? pick;
-    }
+    const source = bands[i % 3].length > 0 ? bands[i % 3] : pool;
+    const pick = pickFrom(source, used, pool);
     if (pick) {
       used.add(pick.id);
       picks.push(pick);
@@ -258,22 +280,54 @@ export function qualifierOpponents(nationId: string, tournament: InternationalTo
   return picks;
 }
 
-/** Group, semi-final and final opponents. World Cup draws from other confederations; continental tournaments stay in-region. */
+export function qualifierOpponents(nationId: string, tournament: InternationalTournamentId, count?: number) {
+  const nation = getNation(nationId);
+  if (!nation) return [];
+  const n = count ?? qualifierCountFor(tournament);
+  const pool = nationsInConfederation(nation.confederation).filter((x) => x.id !== nationId);
+  return pickMixedRankOpponents(nationId, n, pool);
+}
+
+/** Group then knockout opponents. World Cup mixes confederations; continental stays in-region. */
 export function tournamentOpponents(nationId: string, tournament: InternationalTournamentId) {
   const nation = getNation(nationId);
   if (!nation) return [];
-  const count = 3;
+  const groupCount = tournamentGroupGames();
+  const knockoutCount = tournamentKnockoutRounds(tournament).length;
+  const worldPool = NATIONS.filter((n) => n.id !== nationId);
+  const regional = nationsInConfederation(nation.confederation).filter((n) => n.id !== nationId);
   if (tournament === 'world-cup') {
     const confeds: Confederation[] = ['UEFA', 'CONMEBOL', 'CONCACAF', 'CAF', 'AFC', 'OFC'];
-    const fromOtherConfeds = confeds
+    const byConfed = confeds
       .filter((c) => c !== nation.confederation)
-      .map((c) => nationsInConfederation(c)[0])
-      .filter((n): n is NonNullable<typeof n> => Boolean(n));
-    const rest = NATIONS.filter(
-      (n) => n.id !== nationId && !fromOtherConfeds.some((p) => p.id === n.id),
-    ).sort((a, b) => fifaRank(a.id) - fifaRank(b.id));
-    return [...fromOtherConfeds, ...rest].slice(0, count);
+      .map((c) => nationsInConfederation(c))
+      .filter((list) => list.length > 0);
+    const group: typeof worldPool = [];
+    const used = new Set<string>();
+    const bandFor = (i: number) => {
+      const lists = byConfed.map((list) => {
+        if (i === 0) return list.filter((n) => fifaRank(n.id) > 40);
+        if (i === 1) return list.filter((n) => fifaRank(n.id) > 15 && fifaRank(n.id) <= 60);
+        return list.filter((n) => fifaRank(n.id) <= 25);
+      });
+      return lists;
+    };
+    for (let i = 0; i < groupCount; i++) {
+      const bands = bandFor(i);
+      const confedList = bands[i % Math.max(1, bands.length)] ?? [];
+      const pick =
+        confedList.find((n) => !used.has(n.id)) ??
+        worldPool.find((n) => !used.has(n.id) && (i === 0 ? fifaRank(n.id) > 30 : true));
+      if (pick) {
+        used.add(pick.id);
+        group.push(pick);
+      }
+    }
+    const remaining = worldPool.filter((n) => !used.has(n.id));
+    return [...group, ...pickMixedRankOpponents(nationId, knockoutCount, remaining)];
   }
-  const pool = nationsInConfederation(nation.confederation).filter((n) => n.id !== nationId);
-  return pool.slice(0, count);
+  return [
+    ...pickMixedRankOpponents(nationId, groupCount, regional),
+    ...pickMixedRankOpponents(nationId, knockoutCount, regional),
+  ];
 }

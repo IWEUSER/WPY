@@ -144,34 +144,43 @@ export const CONTINENTAL_TOURNAMENT_FOR_CONFEDERATION: Record<Confederation, Int
 };
 
 /**
- * International calendar:
- *  - Season 1 (and 5, 9…): no international football.
- *  - Season 2, 6, 10…: World Cup qualifiers during the club season, World Cup
- *    at the end.
- *  - Season 3, 7, 11…: continental qualifiers only (Euros / Copa / AFCON / …).
- *  - Season 4, 8, 12…: more continental qualifiers, then the tournament.
+ * International calendar (internal season numbers; the reserve year is 1):
+ *  - Season 1: no international football (reserves; player is not involved).
+ *  - Season 2, 6, 10…: remaining World Cup qualifiers (first half of the
+ *    campaign was played in the unused reserve year), then the World Cup.
+ *  - Season 3, 7, 11…: first half of continental qualifying.
+ *  - Season 4, 8, 12…: second half of continental qualifying, then the
+ *    tournament (Euros / Copa / AFCON / …).
  */
 export type InternationalCampaignPhase = 'none' | 'qualifiers' | 'qualifiers-and-tournament';
 
 export interface InternationalCampaign {
   tournament: InternationalTournamentId | null;
   phase: InternationalCampaignPhase;
+  /** How many qualifying matches the player is involved in this season. */
+  qualifierGames: number;
 }
 
 export function internationalCampaignForSeason(
   seasonNumber: number,
   confederation?: Confederation | null,
 ): InternationalCampaign {
-  if (seasonNumber < 2) return { tournament: null, phase: 'none' };
+  if (seasonNumber < 2) return { tournament: null, phase: 'none', qualifierGames: 0 };
   const cycle = (seasonNumber - 2) % 4;
-  if (cycle === 3) return { tournament: null, phase: 'none' };
-  if (cycle === 0) return { tournament: 'world-cup', phase: 'qualifiers-and-tournament' };
+  if (cycle === 3) return { tournament: null, phase: 'none', qualifierGames: 0 };
+  if (cycle === 0) {
+    return { tournament: 'world-cup', phase: 'qualifiers-and-tournament', qualifierGames: 3 };
+  }
   const continental = confederation
     ? CONTINENTAL_TOURNAMENT_FOR_CONFEDERATION[confederation]
     : 'continental-championship';
+  const full = continental === 'copa-america' || continental === 'gold-cup' || continental === 'ofc-nations-cup' ? 4 : 6;
+  const firstHalf = Math.floor(full / 2);
+  const secondHalf = Math.ceil(full / 2);
   return {
     tournament: continental,
     phase: cycle === 1 ? 'qualifiers' : 'qualifiers-and-tournament',
+    qualifierGames: cycle === 1 ? firstHalf : secondHalf,
   };
 }
 

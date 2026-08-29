@@ -2,9 +2,10 @@ import { calendarDomesticCup, calendarIncludesInternational, type SeasonCalendar
 import { getClub } from '../data/clubs';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { describeAvailability, isAvailable } from '../availabilityEngine';
-import { getNation, isSelectedForNationalTeam, selectionRatioForTier } from '../international';
+import { careerRatioForSelection, clubEligibleForNationalTeam, getNation, isSelectedForNationalTeam, selectionRatioForNation } from '../international';
 import type { SeasonStandings } from '../matchEngine';
-import { fixtureTitle, type SeasonSimState } from '../seasonSim';
+import { displaySeasonLabel } from '../seasonDisplay';
+import { fixtureTitle, internationalRoundLabel, type SeasonSimState } from '../seasonSim';
 import { useCareerStore, SEASON_LENGTH } from '../store';
 
 const ROLE_LABEL: Record<string, string> = {
@@ -26,6 +27,9 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const seasonStandings = useCareerStore((s) => s.seasonStandings);
   const seasonSim = useCareerStore((s) => s.seasonSim);
   const lastMatchSummary = useCareerStore((s) => s.lastMatchSummary);
+  const careerGoals = useCareerStore((s) => s.careerGoals);
+  const careerGames = useCareerStore((s) => s.careerGames);
+  const seasonHistory = useCareerStore((s) => s.seasonHistory);
   const advance = useCareerStore((s) => s.advance);
   const openCareerRecord = useCareerStore((s) => s.openCareerRecord);
 
@@ -61,7 +65,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
 
       <div className="rounded-2xl bg-white/5 p-4" style={{ borderLeft: `4px solid ${club.color}` }}>
         <p className="text-xs uppercase tracking-wide text-white/40">
-          Season {seasonNumber} · {ROLE_LABEL[role]}
+          {displaySeasonLabel(seasonNumber)} · {ROLE_LABEL[role]}
         </p>
         <h1 className="text-2xl font-extrabold">{club.name}</h1>
         <p className="text-xs text-white/50">
@@ -138,10 +142,17 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
 
         {nation && (
           <InternationalCard
+            nationId={nationality!}
             nationName={nation.name}
             clubTier={club.tier}
-            seasonRatio={ratio}
-            gamesPlayed={played}
+            seasonNumber={seasonNumber}
+            careerRatio={careerRatioForSelection(
+              careerGoals,
+              careerGames,
+              seasonHistory[0] && seasonHistory[0].gamesPlayed > 0
+                ? seasonHistory[0].goals / seasonHistory[0].gamesPlayed
+                : ratio,
+            )}
             sim={seasonSim}
           />
         )}
@@ -208,27 +219,33 @@ function StandingsCard({
 }
 
 function InternationalCard({
+  nationId,
   nationName,
   clubTier,
-  seasonRatio,
-  gamesPlayed,
+  seasonNumber,
+  careerRatio,
   sim,
 }: {
+  nationId: string;
   nationName: string;
   clubTier: 1 | 2 | 3 | 4 | 5;
-  seasonRatio: number;
-  gamesPlayed: number;
+  seasonNumber: number;
+  careerRatio: number;
   sim: SeasonSimState | null;
 }) {
-  const bar = selectionRatioForTier(clubTier);
-  const inForm = gamesPlayed > 0 && isSelectedForNationalTeam(clubTier, seasonRatio);
+  const bar = selectionRatioForNation(nationId);
+  const clubOk = clubEligibleForNationalTeam(clubTier);
+  const inForm = isSelectedForNationalTeam({ clubTier, careerGoalRatio: careerRatio, nationId });
   const tournamentName = sim?.internationalTournament
     ? INTERNATIONAL_TOURNAMENTS[sim.internationalTournament].name
     : null;
   const campaignLine = (() => {
+    if (seasonNumber < 2) return `${nationName} do not pick players during the reserve year.`;
+    if (!clubOk) return `Call-ups are for players at a higher club level.`;
     if (!sim?.internationalSelected || !tournamentName) return null;
     if (sim.internationalStage === 'qualifying') {
-      return `Qualifying for the ${tournamentName}: ${sim.qualifierPoints} pts from ${sim.qualifierPlayed}/${sim.qualifierTarget}.`;
+      const carried = sim.qualifierCarryPlayed > 0 ? ` (plus ${sim.qualifierCarryPoints} pts carried)` : '';
+      return `Qualifying for the ${tournamentName}: ${sim.qualifierPoints} pts from ${sim.qualifierPlayed}/${sim.qualifierTarget}${carried}.`;
     }
     if (sim.internationalStage === 'failed-qualifying') {
       return `Did not qualify for the ${tournamentName}.`;
@@ -238,18 +255,28 @@ function InternationalCard({
     }
     if (sim.internationalStage === 'champion') return `Won the ${tournamentName}.`;
     if (sim.internationalStage === 'eliminated') return `Out of the ${tournamentName}.`;
-    return `Playing at the ${tournamentName}.`;
+    if (sim.internationalStage === 'group') {
+      return `${tournamentName} group: ${sim.groupPoints} pts from ${sim.groupPlayed} games.`;
+    }
+    return `Playing at the ${tournamentName}${sim.internationalStage ? ` — ${internationalRoundLabel(sim.internationalStage as never)}` : ''}.`;
+  })();
+
+  const statusLine = (() => {
+    if (seasonNumber < 2) {
+      return 'International football begins in Season 1, once you are in the first team.';
+    }
+    if (!clubOk) {
+      return `Need a move to a higher-level club before ${nationName} will consider you.`;
+    }
+    if (inForm) return `On career form, ${nationName} would pick you.`;
+    return `Need a ${bar.toFixed(2)} career goals/game ratio — currently ${careerRatio.toFixed(2)}.`;
   })();
 
   return (
     <div className="rounded-2xl bg-white/5 p-4">
       <p className="text-xs uppercase tracking-wide text-white/40">{nationName} call-up</p>
-      <p className={`mt-1 text-sm font-semibold ${inForm ? 'text-emerald-300' : 'text-white/80'}`}>
-        {gamesPlayed === 0
-          ? `Need ${bar.toFixed(2)} goals/game at this club level to earn a call-up.`
-          : inForm
-            ? `On current form, ${nationName} would pick you.`
-            : `Need ${bar.toFixed(2)} goals/game at this club level - currently ${seasonRatio.toFixed(2)}.`}
+      <p className={`mt-1 text-sm font-semibold ${inForm && seasonNumber >= 2 ? 'text-emerald-300' : 'text-white/80'}`}>
+        {statusLine}
       </p>
       {campaignLine && <p className="mt-1 text-xs text-emerald-200/80">{campaignLine}</p>}
       <p className="mt-1 text-xs text-white/40">

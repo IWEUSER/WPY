@@ -1,5 +1,6 @@
 import { getClub } from '../data/clubs';
 import { awardLabels, seasonClubName, seasonRatio } from '../honoursDisplay';
+import { countsTowardCareerRecord, displaySeasonLabel } from '../seasonDisplay';
 import { useCareerStore } from '../store';
 import type { SeasonRecord } from '../types';
 
@@ -17,10 +18,12 @@ export default function CareerRecordScreen() {
   const returnToHub = useCareerStore((s) => s.returnToHub);
 
   const seasons: Array<SeasonRecord & { inProgress?: boolean }> = [
-    ...(current ? [{ ...current, inProgress: true }] : []),
-    ...[...history].reverse(),
+    ...(current && countsTowardCareerRecord(current.seasonNumber) ? [{ ...current, inProgress: true }] : []),
+    ...[...history].filter((s) => countsTowardCareerRecord(s.seasonNumber)).reverse(),
   ];
-  const wpyWins = [...history, ...(current?.wonWpy ? [current] : [])].filter((s) => s.wonWpy);
+  const wpyWins = [...history, ...(current?.wonWpy ? [current] : [])].filter(
+    (s) => s.wonWpy && countsTowardCareerRecord(s.seasonNumber),
+  );
   const ratio = careerGames > 0 ? careerGoals / careerGames : 0;
 
   return (
@@ -50,7 +53,7 @@ export default function CareerRecordScreen() {
             <ul className="mt-3 space-y-2">
               {wpyWins.map((season) => (
                 <li key={`wpy-${season.seasonNumber}`} className="flex items-baseline justify-between gap-3 text-sm">
-                  <span className="font-semibold text-amber-100">Season {season.seasonNumber}</span>
+                  <span className="font-semibold text-amber-100">{displaySeasonLabel(season.seasonNumber)}</span>
                   <span className="text-right text-xs text-white/50">
                     Age {season.age} · {seasonClubName(season)}
                   </span>
@@ -63,7 +66,9 @@ export default function CareerRecordScreen() {
 
       <div className="mt-5 flex flex-col gap-3">
         {seasons.length === 0 && (
-          <p className="text-sm text-white/50">Play your first season to start the record.</p>
+          <p className="text-sm text-white/50">
+            The reserve year is not part of the career record. First-team seasons will appear here.
+          </p>
         )}
         {seasons.map((season) => (
           <SeasonCard key={`${season.inProgress ? 'live' : 'done'}-${season.seasonNumber}`} season={season} />
@@ -92,7 +97,7 @@ function SeasonCard({ season }: { season: SeasonRecord & { inProgress?: boolean 
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-wide text-white/40">
-            Season {season.seasonNumber}
+            {displaySeasonLabel(season.seasonNumber)}
             {season.inProgress ? ' · in progress' : ''}
             {' · '}
             Age {season.age}

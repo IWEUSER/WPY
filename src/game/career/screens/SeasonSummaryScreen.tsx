@@ -1,5 +1,6 @@
 import { getClub } from '../data/clubs';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
+import { displaySeasonLabel, displaySeasonNumber } from '../seasonDisplay';
 import { resolveSeasonTransition } from '../transfers';
 import { useCareerStore, SEASON_LENGTH } from '../store';
 
@@ -67,7 +68,7 @@ export default function SeasonSummaryScreen() {
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-6 overflow-y-auto px-6 py-10 text-center text-white">
       <div>
-        <p className="text-xs uppercase tracking-wide text-white/40">Season {seasonNumber} complete</p>
+        <p className="text-xs uppercase tracking-wide text-white/40">{displaySeasonLabel(seasonNumber)} complete</p>
         <h1 className="mt-1 text-2xl font-extrabold">{preview.headline}</h1>
       </div>
 
@@ -130,7 +131,7 @@ export default function SeasonSummaryScreen() {
         onClick={continueAfterSeason}
         className="rounded-2xl bg-emerald-500 px-6 py-4 text-lg font-bold text-black shadow-lg shadow-emerald-500/20 transition active:scale-[0.98]"
       >
-        Continue to Season {seasonNumber + 1}
+        Continue to {displaySeasonNumber(seasonNumber + 1) === null ? 'the first team' : `Season ${displaySeasonNumber(seasonNumber + 1)}`}
       </button>
     </div>
   );

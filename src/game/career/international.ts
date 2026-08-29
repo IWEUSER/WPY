@@ -1,6 +1,7 @@
 import { createAvailability } from './availabilityEngine';
 import type { Confederation } from './data/competitions';
-import { clubsInCountry, goalRatioFromStrength, type ClubTier } from './data/clubs';
+import { clubsInCountry, type ClubTier } from './data/clubs';
+import { fifaRank } from './data/fifaRankings';
 import { NATIONS, getNation, type Nation } from './data/nations';
 import type { AvailabilityState } from './types';
 
@@ -12,13 +13,6 @@ export function nationHasDomesticLeague(nationId: string): boolean {
   return Boolean(nation && clubsInCountry(nation.name).length > 0);
 }
 
-/**
- * A player's international career: caps/goals plus its own availability
- * state. Deliberately reuses availabilityEngine's escalating miss-streak
- * rule wholesale (it's already generic, not club-specific) - a scoreless run
- * for the national team drops you from the squad exactly the same way a
- * scoreless run for your club does.
- */
 export interface NationalTeamState {
   nationId: string;
   availability: AvailabilityState;
@@ -35,35 +29,52 @@ export function confederationOfNation(nationId: string | null | undefined): Conf
   return getNation(nationId)?.confederation ?? null;
 }
 
-/** Threshold goal ratio needed to be picked, indexed by club tier (1 = elite
- * down to 5 = smallest) - index 0 is unused padding so `tier` can index
- * directly. Selectors expect you to be close to the standard of the club
- * you play for, so the bar rises with the pyramid. */
-const TYPICAL_STRENGTH_BY_TIER: Record<ClubTier, number> = {
-  1: 90,
-  2: 81,
-  3: 73,
-  4: 64,
-  5: 52,
-};
+/** Call-ups are only for first-team players at a proper senior club, not the lower pyramid. */
+export const MAX_CLUB_TIER_FOR_SELECTION: ClubTier = 3;
 
-export const SELECTION_RATIO_BY_TIER: readonly number[] = [
-  0,
-  goalRatioFromStrength(TYPICAL_STRENGTH_BY_TIER[1]),
-  goalRatioFromStrength(TYPICAL_STRENGTH_BY_TIER[2]),
-  goalRatioFromStrength(TYPICAL_STRENGTH_BY_TIER[3]),
-  goalRatioFromStrength(TYPICAL_STRENGTH_BY_TIER[4]),
-  goalRatioFromStrength(TYPICAL_STRENGTH_BY_TIER[5]),
-];
+/** Top-20 FIFA nations demand a 0.66 career ratio. */
+export const TOP_NATION_SELECTION_RATIO = 0.66;
 
-export function selectionRatioForTier(clubTier: ClubTier): number {
-  return SELECTION_RATIO_BY_TIER[clubTier];
+export function selectionRatioForNation(nationId: string): number {
+  const rank = fifaRank(nationId);
+  if (rank <= 20) return TOP_NATION_SELECTION_RATIO;
+  if (rank <= 50) return 0.5;
+  return 0.4;
+}
+
+/** @deprecated Use selectionRatioForNation — kept so old hub copy can migrate. */
+export function selectionRatioForTier(_clubTier: ClubTier): number {
+  return TOP_NATION_SELECTION_RATIO;
+}
+
+export function clubEligibleForNationalTeam(clubTier: ClubTier): boolean {
+  return clubTier <= MAX_CLUB_TIER_FOR_SELECTION;
 }
 
 /**
- * Whether the player earns international selection this season, based on
- * their club level and the goal ratio they posted there.
+ * Call-up uses the player's first-team career ratio (trial and the reserve
+ * year do not count) and the country's FIFA standing. Lower-league clubs
+ * are never selected.
  */
-export function isSelectedForNationalTeam(clubTier: ClubTier, seasonGoalRatio: number): boolean {
-  return seasonGoalRatio >= SELECTION_RATIO_BY_TIER[clubTier];
+export function isSelectedForNationalTeam(params: {
+  clubTier: ClubTier;
+  careerGoalRatio: number;
+  nationId: string | null;
+}): boolean {
+  if (!params.nationId) return false;
+  if (!clubEligibleForNationalTeam(params.clubTier)) return false;
+  return params.careerGoalRatio >= selectionRatioForNation(params.nationId);
+}
+
+/**
+ * Call-up uses first-team career ratio. Before any first-team games exist
+ * (the start of internal season 2), fall back to the reserve-year sample.
+ */
+export function careerRatioForSelection(
+  careerGoals: number,
+  careerGames: number,
+  reserveFallbackRatio: number,
+): number {
+  if (careerGames > 0) return careerGoals / careerGames;
+  return reserveFallbackRatio;
 }

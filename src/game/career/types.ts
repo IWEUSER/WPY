@@ -1,5 +1,6 @@
 import type { ShotResult } from '../shooting/types';
 import type { SeasonCalendar } from './calendar';
+import type { InternationalTournamentId } from './data/competitions';
 import type { NationalTeamState } from './international';
 import type { SeasonStandings } from './matchEngine';
 import type { LiveMatch, SeasonSimState } from './seasonSim';
@@ -108,4 +109,15 @@ export interface CareerState {
   formWindow: number[];
   wpyResult: WpyResult | null;
   lastMatchSummary: string | null;
+  /**
+   * First half of a split qualifying campaign (season 3 → season 4).
+   * Null outside that window.
+   */
+  intlQualifying: IntlQualifyingCarry | null;
+}
+
+export interface IntlQualifyingCarry {
+  tournament: InternationalTournamentId;
+  points: number;
+  played: number;
 }
