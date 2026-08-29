@@ -98,7 +98,16 @@ function readDevDistance(): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** DEV-only: ?pose=col,row,save|miss freezes the keeper in that square's motion. */
+function readDevPower(): number | null {
+  if (!import.meta.env.DEV) return null;
+  const raw = new URLSearchParams(window.location.search).get('power');
+  const n = raw ? Number(raw) : NaN;
+  return Number.isFinite(n) ? n : null;
+}
+
+/** DEV-only: ?pose=col,row,save|miss freezes the keeper in that square's motion.
+ * Optional &distance=&power= apply thunderbolt range so a close rocket miss
+ * shows the flinch rather than a full dive. */
 function readDevKeeperPose(): KeeperPose | null {
   if (!import.meta.env.DEV) return null;
   const raw = new URLSearchParams(window.location.search).get('pose');
@@ -110,7 +119,9 @@ function readDevKeeperPose(): KeeperPose | null {
   const saved = kind !== 'miss';
   const cell = { col, row };
   const square = cellCenter(cell);
-  const dive = computeKeeperDive(square, cell, saved, DEFAULT_DIFFICULTY);
+  const distanceM = readDevDistance() ?? 18;
+  const power = readDevPower() ?? 1;
+  const dive = computeKeeperDive(square, cell, saved, DEFAULT_DIFFICULTY, undefined, { power, distanceM });
   return {
     pos: dive.target,
     stretch: dive.stretch,
@@ -383,15 +394,10 @@ export default function ShootingGame({
           const trailLen = Math.round(lerpNum(5, 18, powerT));
           while (anim.ballTrail.length > trailLen) anim.ballTrail.shift();
 
-          const diveStart = result.keeperDive.reactionMs;
-          const diveElapsed = Math.max(0, elapsed - diveStart);
-          const diveTotal = Math.max(1, result.keeperDive.diveDurationMs - diveStart);
-          const diveT = Math.min(1, diveElapsed / diveTotal);
-          // A save is timed to the ball so the keeper is on it when it arrives.
-          // A miss can still be late, which is why the shot goes in.
           const saved = result.outcome === 'saved';
-          const poseT = saved ? t : diveT;
-          const diveEased = poseT * poseT * (3 - 2 * poseT);
+          // Dive with the shot, whether they hold it or not, so a thunderbolt
+          // still produces a throw — they just don't get there on a miss.
+          const diveEased = t * t * (3 - 2 * t);
 
           // Pose is the square's save or miss motion, interpolated from idle.
           const dive = result.keeperDive;
@@ -419,20 +425,15 @@ export default function ShootingGame({
           if (t >= 1) {
             anim.phase = 'result';
             anim.resultAtMs = now;
-            anim.keeperPose = saved
-              ? {
-                  pos: dive.target,
-                  stretch: dive.stretch,
-                  direction: dive.direction,
-                  layout: dive.layout,
-                  elevation: dive.elevation,
-                  hand: dive.hand,
-                  beaten: false,
-                }
-              : {
-                  ...anim.keeperPose,
-                  beaten: result.outcome === 'goal',
-                };
+            anim.keeperPose = {
+              pos: dive.target,
+              stretch: dive.stretch,
+              direction: dive.direction,
+              layout: dive.layout,
+              elevation: dive.elevation,
+              hand: dive.hand,
+              beaten: !saved,
+            };
             finishShot(result);
           }
         } else if (anim.phase === 'result' && anim.result) {

@@ -6,10 +6,11 @@ import {
   GOAL_HALF_WIDTH,
   GOAL_HEIGHT,
   KEEPER_DIVE_MAX_X,
-  KEEPER_DIVE_MS_PER_UNIT,
   KEEPER_STAND_Y,
   PLANTED_SAVE_COL_MAX,
   PLANTED_SAVE_COL_MIN,
+  THUNDERBOLT_POWER,
+  CLOSE_THUNDERBOLT_M,
   MAX_SWIPE_DISTANCE,
   MAX_TRAVEL_MS,
   MIN_SWIPE_DISTANCE,
@@ -191,8 +192,14 @@ export function computeNoise(power: number, curl: number, difficulty: ShotDiffic
 }
 
 export function computeTravelTimeMs(power: number, distanceM = 16.5): number {
-  const base = lerp(MAX_TRAVEL_MS, MIN_TRAVEL_MS, power / 1.3);
-  return base * clamp(distanceM / 16.5, 0.45, 1.55);
+  const powerT = clamp(power / 1.3, 0, 1);
+  const base = lerp(MAX_TRAVEL_MS, MIN_TRAVEL_MS, powerT);
+  return Math.max(MIN_TRAVEL_MS * 0.7, base * clamp(distanceM / 16.5, 0.45, 1.55));
+}
+
+/** True when a piledriver is struck from inside ~16 yards: too fast to dive. */
+export function isCloseThunderbolt(power: number, distanceM: number): boolean {
+  return power >= THUNDERBOLT_POWER && distanceM <= CLOSE_THUNDERBOLT_M + 1e-6;
 }
 
 export function classifyZoneX(x: number): ShotZoneX {
@@ -288,9 +295,9 @@ export function cellCenter(cell: SaveCell): AimPoint {
 
 /**
  * One of 160 end-poses. A save puts the gloves on that square so the keeper
- * obstructs the ball. Only the three centre columns catch on their feet;
- * every other square is a dive toward the post, legs trailing the other way.
- * A miss is the same motion falling short, and finishes after the ball.
+ * obstructs the ball. A miss is the same dive falling short — they still throw
+ * themselves unless it is a thunderbolt from 16 yards or closer. Only the
+ * three centre columns catch on their feet.
  */
 export function computeKeeperDive(
   actualAim: AimPoint,
@@ -298,48 +305,48 @@ export function computeKeeperDive(
   saved: boolean,
   difficulty: ShotDifficulty,
   travelTimeMs?: number,
+  shot?: { power?: number; distanceM?: number },
 ): KeeperDive {
   const cell = saveCell ?? aimToSaveCell(actualAim);
   const square = cellCenter(cell);
   const planted = isPlantedSaveCol(cell.col);
+  const closeRocket = !saved && isCloseThunderbolt(shot?.power ?? 0, shot?.distanceM ?? Number.POSITIVE_INFINITY);
   const lateral = diveIntensityForCell(cell);
-  const direction: -1 | 0 | 1 = planted ? 0 : square.x < 0 ? -1 : 1;
+  const direction: -1 | 0 | 1 = planted || closeRocket ? 0 : square.x < 0 ? -1 : 1;
   const heightT = (cell.row + 0.5) / SAVE_GRID_ROWS;
   const lowT = 1 - heightT;
 
-  const layout = planted
-    ? 0.02 + lowT * (saved ? 0.12 : 0.06)
+  const layout = planted || closeRocket
+    ? 0.02 + lowT * (saved ? 0.12 : 0.05)
     : saved
       ? clamp(0.48 + lateral * 0.52 + lowT * 0.18, 0.48, 1)
-      : clamp(0.28 + lateral * 0.4 + lowT * 0.15, 0.28, 0.85);
+      : clamp(0.42 + lateral * 0.5 + lowT * 0.16, 0.42, 0.92);
 
   const elevation = heightT;
-  const stretch = planted
+  const stretch = planted || closeRocket
     ? saved
       ? 0.2 + heightT * 0.55
-      : 0.08 + heightT * 0.25
+      : 0.05 + heightT * 0.1
     : saved
       ? 0.45 + lateral * 0.4 + heightT * 0.15
-      : 0.22 + lateral * 0.28 + heightT * 0.1;
+      : 0.32 + lateral * 0.32 + heightT * 0.12;
 
   const hand: AimPoint = saved
     ? { x: square.x, y: square.y }
-    : {
-        x: clamp(square.x * 0.58, -GOAL_HALF_WIDTH, GOAL_HALF_WIDTH),
-        y: clamp(square.y * 0.52 + KEEPER_STAND_Y * 0.25, 0, GOAL_HEIGHT),
-      };
+    : closeRocket
+      ? { x: square.x * 0.12, y: KEEPER_STAND_Y + square.y * 0.08 }
+      : {
+          x: clamp(square.x * 0.58, -GOAL_HALF_WIDTH, GOAL_HALF_WIDTH),
+          y: clamp(square.y * 0.52 + KEEPER_STAND_Y * 0.25, 0, GOAL_HEIGHT),
+        };
 
   const hips = hipsToPlaceGlovesAt(hand, { direction, layout, stretch });
   const bodyX = clamp(hips.x, -KEEPER_DIVE_MAX_X, KEEPER_DIVE_MAX_X);
   const bodyY = clamp(hips.y, 0.06, 0.58);
 
-  const keeperStart: AimPoint = { x: 0, y: KEEPER_STAND_Y };
-  const diveDistance = Math.hypot(bodyX - keeperStart.x, bodyY - keeperStart.y);
   const travel = travelTimeMs ?? 500;
-  const reactionMs = saved ? Math.min(50, travel * 0.1) : difficulty.keeperReactionMs;
-  const diveDurationMs = saved
-    ? travel
-    : Math.max(travel + 140, reactionMs + diveDistance * KEEPER_DIVE_MS_PER_UNIT);
+  const reactionMs = closeRocket ? travel : Math.min(50, travel * 0.1);
+  const diveDurationMs = travel;
 
   return {
     target: { x: bodyX, y: bodyY },
@@ -371,7 +378,9 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
     y: Math.max(0, intendedAim.y + gaussianRandom(0, noise * 0.75, rng)),
   };
 
-  const travelTimeMs = computeTravelTimeMs(power, gesture.distanceM ?? 16.5);
+  const distanceM = gesture.distanceM ?? 16.5;
+  const travelTimeMs = computeTravelTimeMs(power, distanceM);
+  const shotCtx = { power, distanceM };
 
   if (hitsWoodwork(actualAim)) {
     return {
@@ -381,7 +390,7 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
       power,
       curl,
       travelTimeMs,
-      keeperDive: computeKeeperDive(actualAim, aimToSaveCell(actualAim), false, difficulty, travelTimeMs),
+      keeperDive: computeKeeperDive(actualAim, aimToSaveCell(actualAim), false, difficulty, travelTimeMs, shotCtx),
       saveMargin: 0,
     };
   }
@@ -394,14 +403,14 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
       power,
       curl,
       travelTimeMs,
-      keeperDive: computeKeeperDive(actualAim, aimToSaveCell(actualAim), false, difficulty, travelTimeMs),
+      keeperDive: computeKeeperDive(actualAim, aimToSaveCell(actualAim), false, difficulty, travelTimeMs, shotCtx),
       saveMargin: 0,
     };
   }
 
   const saveCell = aimToSaveCell(actualAim);
   const saved = rng() < saveChanceForAim(actualAim, power, curl);
-  const keeperDive = computeKeeperDive(actualAim, saveCell, saved, difficulty, travelTimeMs);
+  const keeperDive = computeKeeperDive(actualAim, saveCell, saved, difficulty, travelTimeMs, shotCtx);
   const saveMargin = saved ? 1 - keeperDive.layout * 0.2 : 0;
 
   return {

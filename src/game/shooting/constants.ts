@@ -33,6 +33,12 @@ export const AIM_Y_OVERSHOOT = 1.15;
 export const MIN_TRAVEL_MS = 260;
 export const MAX_TRAVEL_MS = 1080;
 
+/** Swipe power at or above this counts as a thunderbolt / piledriver. */
+export const THUNDERBOLT_POWER = 1.4;
+/** A thunderbolt from this close is too fast to dive; the keeper can only flinch.
+ * From farther out they always throw themselves, even if the ball is already in. */
+export const CLOSE_THUNDERBOLT_YARDS = 16;
+export const CLOSE_THUNDERBOLT_M = CLOSE_THUNDERBOLT_YARDS * 0.9144;
 /** How many ms it takes the keeper to cover one normalized unit of dive distance. */
 export const KEEPER_DIVE_MS_PER_UNIT = 300;
 

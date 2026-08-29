@@ -3,7 +3,7 @@
  * check that outcomes are appropriately random (i.e. not ~100% or ~0% goals).
  * Run with: npm run simulate
  */
-import { DEFAULT_DIFFICULTY, KEEPER_DIVE_MAX_X, PLANTED_SAVE_COL_MAX, PLANTED_SAVE_COL_MIN, REFERENCE_SPEED, SAVE_GRID_COLS, SAVE_GRID_ROWS } from '../src/game/shooting/constants';
+import { CLOSE_THUNDERBOLT_M, CLOSE_THUNDERBOLT_YARDS, DEFAULT_DIFFICULTY, KEEPER_DIVE_MAX_X, MIN_TRAVEL_MS, PLANTED_SAVE_COL_MAX, PLANTED_SAVE_COL_MIN, REFERENCE_SPEED, SAVE_GRID_COLS, SAVE_GRID_ROWS } from '../src/game/shooting/constants';
 import {
   BALL_SCREEN_Y,
   FIFA,
@@ -25,7 +25,9 @@ import {
   computeIntendedShot,
   computeKeeperDive,
   computeSwipeCurl,
+  computeTravelTimeMs,
   diveIntensityForCell,
+  isCloseThunderbolt,
   isPlantedSaveCol,
   resolveShot,
   saveChanceForCell,
@@ -37,8 +39,8 @@ const SIM_H = 844;
 const SIM_DISTANCE = 16.5;
 
 /** Builds a swipe whose screen-space end sits on the requested aim point. */
-function gestureFor(aimX: number, aimY: number, power: number, curl = 0): SwipeGesture {
-  const view = createPitchView(SIM_W, SIM_H, SIM_DISTANCE);
+function gestureFor(aimX: number, aimY: number, power: number, curl = 0, distanceM = SIM_DISTANCE): SwipeGesture {
+  const view = createPitchView(SIM_W, SIM_H, distanceM);
   const ball = ballStartPixel(view, 0.5);
   const end = goalToPixel({ x: aimX, y: aimY }, view);
   const dx = end.x - ball.x;
@@ -57,7 +59,7 @@ function gestureFor(aimX: number, aimY: number, power: number, curl = 0): SwipeG
     endY: end.y,
     canvasW: SIM_W,
     canvasH: SIM_H,
-    distanceM: SIM_DISTANCE,
+    distanceM,
   };
 }
 
@@ -482,5 +484,60 @@ if (wrongWay > 0) {
 }
 if (pastPost > 0 || handPastPost > 0) {
   console.error('FAIL: keeper dive went past the post');
+  process.exitCode = 1;
+}
+
+console.log('\n--- Thunderbolt: dive from range, flinch only inside 16 yards ---');
+const boltTravel = computeTravelTimeMs(1.75, 16.5);
+console.log(`thunderbolt travel at 16.5m: ${boltTravel.toFixed(0)}ms (must stay positive and at least a frame)`);
+if (!(boltTravel >= MIN_TRAVEL_MS * 0.7 - 1e-6) || boltTravel > 1080) {
+  console.error('FAIL: thunderbolt travel time escaped a readable range (was previously able to go negative)');
+  process.exitCode = 1;
+}
+const farM = 25 * YARD_M;
+const closeM = 10 * YARD_M;
+const farBolt = computeKeeperDive(sq13, { col: 13, row: 2 }, false, DEFAULT_DIFFICULTY, 400, { power: 1.75, distanceM: farM });
+const closeBolt = computeKeeperDive(sq13, { col: 13, row: 2 }, false, DEFAULT_DIFFICULTY, 200, { power: 1.75, distanceM: closeM });
+const farSave = computeKeeperDive(sq13, { col: 13, row: 2 }, true, DEFAULT_DIFFICULTY, 400, { power: 1.75, distanceM: farM });
+console.log(
+  `25-yard thunderbolt miss: dir=${farBolt.direction} layout=${farBolt.layout.toFixed(2)} (must dive)`,
+);
+console.log(
+  `10-yard thunderbolt miss: dir=${closeBolt.direction} layout=${closeBolt.layout.toFixed(2)} (must barely move)`,
+);
+console.log(
+  `25-yard thunderbolt save: layout=${farSave.layout.toFixed(2)} hand=(${farSave.hand.x.toFixed(2)},${farSave.hand.y.toFixed(2)})`,
+);
+if (!isCloseThunderbolt(1.75, closeM) || isCloseThunderbolt(1.75, farM) || isCloseThunderbolt(1.0, closeM)) {
+  console.error('FAIL: close-thunderbolt gate should be high power AND 16 yards or less');
+  process.exitCode = 1;
+}
+if (CLOSE_THUNDERBOLT_YARDS !== 16 || Math.abs(CLOSE_THUNDERBOLT_M - 16 * YARD_M) > 1e-6) {
+  console.error('FAIL: close thunderbolt range must be 16 yards');
+  process.exitCode = 1;
+}
+if (farBolt.direction !== 1 || farBolt.layout < 0.4) {
+  console.error('FAIL: a thunderbolt from 25 yards must still produce a dive, even if it is a goal');
+  process.exitCode = 1;
+}
+if (closeBolt.layout > 0.18 || Math.abs(closeBolt.target.x) > 0.12) {
+  console.error('FAIL: a thunderbolt from 10 yards is too fast — the keeper should only flinch');
+  process.exitCode = 1;
+}
+if (Math.hypot(farSave.hand.x - sq13.x, farSave.hand.y - sq13.y) > 0.02) {
+  console.error('FAIL: a saved thunderbolt from range must still cover the ball');
+  process.exitCode = 1;
+}
+let standingFarBolt = 0;
+for (let i = 0; i < 80; i++) {
+  const g = gestureFor((Math.random() * 0.6 + 0.35) * (Math.random() < 0.5 ? -1 : 1), 0.3 + Math.random() * 0.5, 1.75, 0, farM);
+  const result = resolveShot(g, { rng: () => 0.99 });
+  if (result.outcome === 'goal' && !isPlantedSaveCol(aimToSaveCell(result.aim).col) && result.keeperDive.layout < 0.4) {
+    standingFarBolt++;
+  }
+}
+console.log(`25-yard thunderbolt goals with a standing keeper: ${standingFarBolt}/80 (expect 0)`);
+if (standingFarBolt > 0) {
+  console.error('FAIL: beaten thunderbolts from outside 16 yards must still be a dive');
   process.exitCode = 1;
 }
