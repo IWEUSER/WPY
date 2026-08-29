@@ -106,10 +106,10 @@ export function applyCareerLayoutPreview(): void {
       ? {
           kind: 'loan-or-transfer',
           detail: 'Loan offers let you return next season. Permanent offers follow your market value, not just this season.',
-          clubIds: ['mainz', 'leicester', 'sevilla', 'barcelona', 'bayern', 'atletico-madrid'],
+          clubIds: ['dortmund', 'real-sociedad', 'sevilla', 'barcelona', 'bayern', 'atletico-madrid'],
           offers: [
-            { clubId: 'mainz', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('mainz')!, value) },
-            { clubId: 'leicester', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('leicester')!, value) },
+            { clubId: 'dortmund', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('dortmund')!, value) },
+            { clubId: 'real-sociedad', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('real-sociedad')!, value) },
             { clubId: 'sevilla', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('sevilla')!, value) },
             { clubId: 'barcelona', move: 'permanent', fee: value, weeklyWage: weeklyWageForClub(getClub('barcelona')!, value) },
             { clubId: 'bayern', move: 'permanent', fee: value, weeklyWage: weeklyWageForClub(getClub('bayern')!, value) },
