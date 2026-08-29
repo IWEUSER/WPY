@@ -1,4 +1,5 @@
 import type { CalendarFixture } from './calendar';
+import { clampStrength, STRENGTH_CEILING, STRENGTH_FLOOR } from './data/clubs';
 
 /**
  * How many scoring chances the player gets in a given match, and whether
@@ -10,54 +11,61 @@ export interface MatchChances {
   isDecisive: boolean;
 }
 
-/**
- * Weighted distribution over 0-4 chances whose mean is exactly 2
- * (0*0.1 + 1*0.2 + 2*0.4 + 3*0.2 + 4*0.1 = 2.0) - used for any match that
- * isn't a decisive semi/final: league games, group-stage games, and each
- * leg of a two-legged knockout tie considered on its own.
- */
-const CHANCE_WEIGHTS: readonly (readonly [count: number, weight: number])[] = [
-  [0, 0.1],
-  [1, 0.2],
-  [2, 0.4],
-  [3, 0.2],
-  [4, 0.1],
-];
-
-function weightedPick(weights: readonly (readonly [number, number])[], rng: () => number): number {
-  const total = weights.reduce((sum, [, w]) => sum + w, 0);
-  let roll = rng() * total;
-  for (const [value, weight] of weights) {
-    if (roll < weight) return value;
-    roll -= weight;
-  }
-  return weights[weights.length - 1][0];
-}
+/** Mid-pyramid default when a caller has no club (tests, fallbacks). */
+const DEFAULT_STRENGTH = 70;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-/** A regular league or group-stage match: 0-4 chances, random game to game,
- * but distributed so the season's average lands on 2 per match. */
-export function chancesForLeagueMatch(rng: () => number = Math.random): MatchChances {
-  return { count: weightedPick(CHANCE_WEIGHTS, rng), isDecisive: false };
+/**
+ * Expected chances per non-decisive match. Elite sides (~94) average about
+ * 3.2 looks; the weakest (~52) average about 0.8. A striker at Mainz simply
+ * does not see the ball as often as one at Bayern, however clinical they are.
+ */
+export function meanChancesFromStrength(strength: number): number {
+  const t = (clampStrength(strength) - STRENGTH_FLOOR) / (STRENGTH_CEILING - STRENGTH_FLOOR);
+  return 0.8 + t * 2.4;
+}
+
+function binomial(n: number, p: number, rng: () => number): number {
+  let k = 0;
+  for (let i = 0; i < n; i++) {
+    if (rng() < p) k += 1;
+  }
+  return k;
+}
+
+function sampleChances(strength: number, rng: () => number): number {
+  const mean = meanChancesFromStrength(strength);
+  const p = clamp(mean / 4, 0.08, 0.88);
+  return binomial(4, p, rng);
+}
+
+export interface ChanceDrawOptions {
+  strength?: number;
+  rng?: () => number;
+}
+
+/** A regular league, cup, or group-stage match: 0-4 chances, scaled so
+ * stronger clubs generate more looks. */
+export function chancesForLeagueMatch(options: ChanceDrawOptions = {}): MatchChances {
+  const rng = options.rng ?? Math.random;
+  const strength = options.strength ?? DEFAULT_STRENGTH;
+  return { count: sampleChances(strength, rng), isDecisive: false };
 }
 
 /**
- * A two-legged continental knockout tie: each leg gets its own 0-4 chance
- * count, but the pair is balanced so the *tie's* average still lands on ~2
- * per leg (the locked design's example: 4 chances in one leg, 0 in the
- * other) - unlike league matches, whose two instances would be fully
- * independent draws.
+ * A two-legged continental knockout tie: each leg is drawn from the same
+ * club-strength distribution, so an elite side still sees more of the ball
+ * over the tie than a minnow.
  */
-export function chancesForKnockoutTie(rng: () => number = Math.random): [MatchChances, MatchChances] {
-  const firstLeg = Math.floor(rng() * 5); // uniform 0-4
-  const wobble = Math.floor(rng() * 3) - 1; // -1, 0, or +1 - keeps it from being perfectly predictable
-  const secondLeg = clamp(4 - firstLeg + wobble, 0, 4);
+export function chancesForKnockoutTie(options: ChanceDrawOptions = {}): [MatchChances, MatchChances] {
+  const rng = options.rng ?? Math.random;
+  const strength = options.strength ?? DEFAULT_STRENGTH;
   return [
-    { count: firstLeg, isDecisive: false },
-    { count: secondLeg, isDecisive: false },
+    { count: sampleChances(strength, rng), isDecisive: false },
+    { count: sampleChances(strength, rng), isDecisive: false },
   ];
 }
 
@@ -67,14 +75,13 @@ export function chancesForDecisiveMatch(): MatchChances {
   return { count: 1, isDecisive: true };
 }
 
-/** Resolves how many chances a given calendar fixture grants the player.
- * For a two-legged knockout tie's *pair*, prefer chancesForKnockoutTie() so
- * both legs are balanced together; this single-fixture entry point (used
- * when only one leg is known at a time, e.g. a league match) falls back to
- * the same weighted table as a standalone leg. */
-export function chancesForFixture(fixture: CalendarFixture, rng: () => number = Math.random): MatchChances {
+/** Resolves how many chances a given calendar fixture grants the player. */
+export function chancesForFixture(
+  fixture: CalendarFixture,
+  options: ChanceDrawOptions = {},
+): MatchChances {
   if (fixture.isDecisive) return chancesForDecisiveMatch();
-  return chancesForLeagueMatch(rng);
+  return chancesForLeagueMatch(options);
 }
 
 export type DecisiveOutcome = 'win' | 'lose';

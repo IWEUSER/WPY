@@ -173,7 +173,7 @@ function assignOpponentsAndChances(
         f.opponentId = opp.id;
         f.opponentLabel = opp.name;
       }
-      f.playerChances = chancesForLeagueMatch().count;
+      f.playerChances = chancesForLeagueMatch({ strength: club.strength }).count;
     } else if (f.kind === 'domestic-cup') {
       const opp = cupRivals[cupI % Math.max(1, cupRivals.length)];
       cupI += 1;
@@ -181,7 +181,7 @@ function assignOpponentsAndChances(
         f.opponentId = opp.id;
         f.opponentLabel = opp.name;
       }
-      f.playerChances = chancesForLeagueMatch().count;
+      f.playerChances = chancesForLeagueMatch({ strength: club.strength }).count;
     } else if (f.kind === 'continental-group' || f.kind === 'super-cup') {
       const oppId = euroRivals[euroI % Math.max(1, euroRivals.length)];
       euroI += 1;
@@ -190,12 +190,12 @@ function assignOpponentsAndChances(
         f.opponentId = opp.id;
         f.opponentLabel = opp.name;
       }
-      f.playerChances = chancesForLeagueMatch().count;
+      f.playerChances = chancesForLeagueMatch({ strength: club.strength }).count;
     } else if (f.kind === 'continental-knockout' && f.leg === 1) {
       const oppId = euroRivals[euroI % Math.max(1, euroRivals.length)];
       euroI += 1;
       const opp = oppId ? getClub(oppId) : undefined;
-      const [leg1, leg2] = chancesForKnockoutTie();
+      const [leg1, leg2] = chancesForKnockoutTie({ strength: club.strength });
       f.playerChances = leg1.count;
       if (opp) {
         f.opponentId = opp.id;
@@ -210,7 +210,7 @@ function assignOpponentsAndChances(
         }
       }
     } else if (f.kind === 'continental-knockout' && f.leg === 2 && f.playerChances === undefined) {
-      f.playerChances = chancesForLeagueMatch().count;
+      f.playerChances = chancesForLeagueMatch({ strength: club.strength }).count;
     } else if (f.kind === 'continental-semi-final' || f.kind === 'continental-final') {
       const oppId = euroRivals[euroI % Math.max(1, euroRivals.length)];
       euroI += 1;
@@ -227,7 +227,7 @@ function assignOpponentsAndChances(
         f.opponentId = opp.id;
         f.opponentLabel = opp.name;
       }
-      f.playerChances = f.isDecisive ? chancesForDecisiveMatch().count : chancesForLeagueMatch().count;
+      f.playerChances = f.isDecisive ? chancesForDecisiveMatch().count : chancesForLeagueMatch({ strength: club.strength }).count;
     }
   }
 

@@ -12,8 +12,9 @@ import {
   chancesForDecisiveMatch,
   chancesForKnockoutTie,
   chancesForLeagueMatch,
+  meanChancesFromStrength,
 } from '../src/game/career/chanceEngine';
-import { getClub } from '../src/game/career/data/clubs';
+import { getClub, goalRatioFromStrength } from '../src/game/career/data/clubs';
 import { NATIONS } from '../src/game/career/data/nations';
 import { internationalTournamentForSeason } from '../src/game/career/data/competitions';
 import { simulateClubMatch, simulateLeagueSeason } from '../src/game/career/matchEngine';
@@ -29,20 +30,38 @@ function average(values: number[]): number {
   return values.reduce((a, b) => a + b, 0) / values.length;
 }
 
-console.log('--- League/group chance distribution (target average: 2.00) ---');
-const leagueChances = Array.from({ length: N }, () => chancesForLeagueMatch().count);
-console.log(`average = ${average(leagueChances).toFixed(3)} over ${N} matches`);
-const histogram: Record<number, number> = {};
-for (const c of leagueChances) histogram[c] = (histogram[c] ?? 0) + 1;
+console.log('--- League chance distribution scales with club strength ---');
+function chanceStats(strength: number): { avg: number; hist: Record<number, number> } {
+  const values = Array.from({ length: N }, () => chancesForLeagueMatch({ strength }).count);
+  const hist: Record<number, number> = {};
+  for (const c of values) hist[c] = (hist[c] ?? 0) + 1;
+  return { avg: average(values), hist };
+}
+const eliteChances = chanceStats(94);
+const weakChances = chanceStats(52);
+console.log(`elite (94) average = ${eliteChances.avg.toFixed(3)} (target ~${meanChancesFromStrength(94).toFixed(2)})`);
+console.log(`weak  (52) average = ${weakChances.avg.toFixed(3)} (target ~${meanChancesFromStrength(52).toFixed(2)})`);
 for (let c = 0; c <= 4; c++) {
-  console.log(`  ${c} chances: ${(((histogram[c] ?? 0) / N) * 100).toFixed(1)}%`);
+  console.log(`  elite ${c}: ${(((eliteChances.hist[c] ?? 0) / N) * 100).toFixed(1)}%   weak ${c}: ${(((weakChances.hist[c] ?? 0) / N) * 100).toFixed(1)}%`);
+}
+if (eliteChances.avg < 2.8) {
+  console.error('elite clubs should average close to 3 chances a game');
+  process.exitCode = 1;
+}
+if (weakChances.avg > 1.1 || weakChances.avg < 0.5) {
+  console.error('weakest clubs should average about 0.8 chances a game');
+  process.exitCode = 1;
+}
+if (eliteChances.avg - weakChances.avg < 1.5) {
+  console.error('elite clubs must generate substantially more chances than the weakest');
+  process.exitCode = 1;
 }
 
-console.log('\n--- Knockout tie chance distribution (each leg 0-4, tie average: ~2/leg) ---');
+console.log('\n--- Knockout tie chance distribution (each leg follows club strength) ---');
 const firstLegs: number[] = [];
 const secondLegs: number[] = [];
 for (let i = 0; i < N; i++) {
-  const [first, second] = chancesForKnockoutTie();
+  const [first, second] = chancesForKnockoutTie({ strength: 94 });
   firstLegs.push(first.count);
   secondLegs.push(second.count);
 }
@@ -185,7 +204,11 @@ if (madrid) {
   console.log('fixtures', calendar.fixtures.length, kinds);
   console.log('european stage', sim.europeanStanding);
   console.log('international selected', sim.internationalSelected, sim.internationalStage);
-  console.log('mean pre-assigned chances', chanceAvg.toFixed(2), '(expect ~2, decisive matches pull it slightly down)');
+  console.log('mean pre-assigned chances', chanceAvg.toFixed(2), `(elite club, target ~${meanChancesFromStrength(madrid.strength).toFixed(2)}; decisive matches pull it down)`);
+  if (chanceAvg < 2.4) {
+    console.error('Real Madrid should generate well above 2 chances a game on average');
+    process.exitCode = 1;
+  }
   const missingOpp = calendar.fixtures.filter((f) => !f.opponentLabel).length;
   console.log('fixtures missing an opponent', missingOpp, '(expect 0)');
   console.log('domestic cup', sim.domesticCup, sim.domesticCupStage, '(expect copa-del-rey, round-of-16)');
@@ -208,6 +231,30 @@ if (NATIONS.length !== 211) {
 }
 console.log('season 2 Brazil tournament', internationalTournamentForSeason(2, 'CONMEBOL'), '(expect copa-america)');
 console.log('season 4 any', internationalTournamentForSeason(4, 'CAF'), '(expect world-cup)');
+
+console.log('\n--- Goal ratio bars follow club strength (0.75 elite → 0.25 weakest) ---');
+const city = getClub('man-city');
+const mainz = getClub('mainz');
+const luton = getClub('luton');
+console.log('Man City', city?.firstTeamGoalRatio, city?.reserveGoalRatio, '(expect 0.75)');
+console.log('Mainz', mainz?.firstTeamGoalRatio, '(between City and Luton)');
+console.log('Luton', luton?.firstTeamGoalRatio, luton?.reserveGoalRatio, '(expect 0.25)');
+if (city?.firstTeamGoalRatio !== 0.75 || city.reserveGoalRatio !== 0.75) {
+  console.error('Top clubs must require 0.75 goals/game');
+  process.exitCode = 1;
+}
+if (luton?.firstTeamGoalRatio !== 0.25 || luton.reserveGoalRatio !== 0.25) {
+  console.error('Lowest clubs must require 0.25 goals/game');
+  process.exitCode = 1;
+}
+if (!mainz || mainz.firstTeamGoalRatio <= 0.25 || mainz.firstTeamGoalRatio >= 0.75) {
+  console.error('Mainz should sit between the elite and weakest ratio bars');
+  process.exitCode = 1;
+}
+if (goalRatioFromStrength(94) !== 0.75 || goalRatioFromStrength(52) !== 0.25) {
+  console.error('goalRatioFromStrength endpoints drifted');
+  process.exitCode = 1;
+}
 
 console.log('\n--- Trial offers: German nationality gets 2/3 German clubs ---');
 let germanTrials = 0;

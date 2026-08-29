@@ -1,7 +1,6 @@
 import { createAvailability } from './availabilityEngine';
 import type { Confederation } from './data/competitions';
-import type { ClubTier } from './data/clubs';
-import { clubsInCountry } from './data/clubs';
+import { clubsInCountry, goalRatioFromStrength, type ClubTier } from './data/clubs';
 import { NATIONS, getNation, type Nation } from './data/nations';
 import type { AvailabilityState } from './types';
 
@@ -38,10 +37,24 @@ export function confederationOfNation(nationId: string | null | undefined): Conf
 
 /** Threshold goal ratio needed to be picked, indexed by club tier (1 = elite
  * down to 5 = smallest) - index 0 is unused padding so `tier` can index
- * directly. Bigger clubs put a player in front of more selectors, so a
- * lower ratio there still gets you picked over the same ratio at a tiny
- * club. */
-export const SELECTION_RATIO_BY_TIER: readonly number[] = [0, 0.3, 0.35, 0.42, 0.5, 0.6];
+ * directly. Selectors expect you to be close to the standard of the club
+ * you play for, so the bar rises with the pyramid. */
+const TYPICAL_STRENGTH_BY_TIER: Record<ClubTier, number> = {
+  1: 90,
+  2: 81,
+  3: 73,
+  4: 64,
+  5: 52,
+};
+
+export const SELECTION_RATIO_BY_TIER: readonly number[] = [
+  0,
+  goalRatioFromStrength(TYPICAL_STRENGTH_BY_TIER[1]),
+  goalRatioFromStrength(TYPICAL_STRENGTH_BY_TIER[2]),
+  goalRatioFromStrength(TYPICAL_STRENGTH_BY_TIER[3]),
+  goalRatioFromStrength(TYPICAL_STRENGTH_BY_TIER[4]),
+  goalRatioFromStrength(TYPICAL_STRENGTH_BY_TIER[5]),
+];
 
 export function selectionRatioForTier(clubTier: ClubTier): number {
   return SELECTION_RATIO_BY_TIER[clubTier];

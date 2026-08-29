@@ -39,7 +39,26 @@ export interface Club {
   firstTeamGoalRatio: number;
 }
 
-export const CLUBS: Club[] = [
+/** Strength range of the current pyramid, used to scale ratios and chances. */
+export const STRENGTH_FLOOR = 52;
+export const STRENGTH_CEILING = 94;
+export const MIN_GOAL_RATIO = 0.25;
+export const MAX_GOAL_RATIO = 0.75;
+
+export function clampStrength(strength: number): number {
+  return Math.min(STRENGTH_CEILING, Math.max(STRENGTH_FLOOR, strength));
+}
+
+/**
+ * First-team (and reserve) goals-per-game bar: 0.75 at the strongest clubs
+ * down to 0.25 at the weakest.
+ */
+export function goalRatioFromStrength(strength: number): number {
+  const t = (clampStrength(strength) - STRENGTH_FLOOR) / (STRENGTH_CEILING - STRENGTH_FLOOR);
+  return Math.round((MIN_GOAL_RATIO + t * (MAX_GOAL_RATIO - MIN_GOAL_RATIO)) * 100) / 100;
+}
+
+const CLUB_SEED: Club[] = [
   // England - Premier League
   { id: 'man-city', name: 'Manchester City', country: 'England', league: 'Premier League', tier: 1, strength: 94, color: '#6CABDD', reserveGoalRatio: 0.65, firstTeamGoalRatio: 0.5 },
   { id: 'liverpool', name: 'Liverpool', country: 'England', league: 'Premier League', tier: 1, strength: 93, color: '#C8102E', reserveGoalRatio: 0.65, firstTeamGoalRatio: 0.5 },
@@ -115,6 +134,11 @@ export const CLUBS: Club[] = [
   { id: 'kansas-city', name: 'Sporting Kansas City', country: 'United States', league: 'MLS', tier: 4, strength: 64, color: '#93B1E4', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
   { id: 'nashville', name: 'Nashville SC', country: 'United States', league: 'MLS', tier: 4, strength: 63, color: '#ECE83A', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
 ];
+
+export const CLUBS: Club[] = CLUB_SEED.map((club) => {
+  const ratio = goalRatioFromStrength(club.strength);
+  return { ...club, firstTeamGoalRatio: ratio, reserveGoalRatio: ratio };
+});
 
 export function getClub(id: string): Club | undefined {
   return CLUBS.find((c) => c.id === id);

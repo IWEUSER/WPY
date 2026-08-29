@@ -1,14 +1,14 @@
-import { CLUBS, getClub, loanCandidates, type Club, type ClubTier } from './data/clubs';
+import { CLUBS, getClub, goalRatioFromStrength, loanCandidates, type Club, type ClubTier } from './data/clubs';
 import { countryForNationality, pickClubsBiasedToCountry, nearbyTierClubs, tierPool } from './clubOffers';
 import type { PlayerRole, SeasonRecord } from './types';
 
-/** Maps a goals-per-game ratio onto the club tier it's good enough for,
- * calibrated against first-team expectations (see data/clubs.ts). */
+/** Maps a goals-per-game ratio onto the club tier it's good enough for.
+ * Calibrated against the 0.75 (elite) → 0.25 (smallest) first-team bars. */
 export function tierForRatio(ratio: number): ClubTier {
-  if (ratio >= 0.5) return 1;
-  if (ratio >= 0.42) return 2;
-  if (ratio >= 0.35) return 3;
-  if (ratio >= 0.28) return 4;
+  if (ratio >= goalRatioFromStrength(90)) return 1;
+  if (ratio >= goalRatioFromStrength(81)) return 2;
+  if (ratio >= goalRatioFromStrength(73)) return 3;
+  if (ratio >= goalRatioFromStrength(64)) return 4;
   return 5;
 }
 
