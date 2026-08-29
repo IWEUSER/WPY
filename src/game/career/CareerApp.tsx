@@ -9,6 +9,7 @@ import CareerRecordScreen from './screens/CareerRecordScreen';
 import MatchScreen from './screens/MatchScreen';
 import SeasonSummaryScreen from './screens/SeasonSummaryScreen';
 import TransferChoiceScreen from './screens/TransferChoiceScreen';
+import MatchResultScreen from './screens/MatchResultScreen';
 import { useCareerStore } from './store';
 import { applyCareerLayoutPreview } from './previewCareerLayout';
 
@@ -61,6 +62,8 @@ export default function CareerApp() {
       return <NationalityScreen />;
     case 'match':
       return <MatchScreen />;
+    case 'match-result':
+      return <MatchResultScreen />;
     case 'season-summary':
       return <SeasonSummaryScreen />;
     case 'transfer-choice':

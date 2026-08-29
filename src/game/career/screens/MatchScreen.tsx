@@ -1,11 +1,11 @@
 import { useRef } from 'react';
 import ShootingGame from '../../shooting/ShootingGame';
 import type { ShotResult } from '../../shooting/types';
-import { getClub } from '../data/clubs';
+import { getClub, leagueMatchWeeks } from '../data/clubs';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { getNation } from '../international';
 import { fixtureTitle } from '../seasonSim';
-import { useCareerStore, SEASON_LENGTH } from '../store';
+import { useCareerStore } from '../store';
 
 export default function MatchScreen() {
   const clubId = useCareerStore((s) => s.clubId);
@@ -50,7 +50,7 @@ export default function MatchScreen() {
 
   const progressLabel = simulated && liveMatch
     ? `${competitionName ? `${competitionName} · ` : ''}${chances} chance${chances === 1 ? '' : 's'}`
-    : `Matchday ${matchNumber}/${SEASON_LENGTH}`;
+    : `Matchday ${matchNumber}/${club ? leagueMatchWeeks(club.league) : matchNumber}`;
 
   return (
     <ShootingGame

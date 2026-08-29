@@ -1,5 +1,5 @@
 import { calendarDomesticCup, calendarIncludesInternational, type SeasonCalendar } from '../calendar';
-import { getClub } from '../data/clubs';
+import { getClub, leagueMatchWeeks } from '../data/clubs';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { describeAvailability, isAvailable } from '../availabilityEngine';
 import { careerRatioForSelection, clubEligibleForNationalTeam, getNation, isSelectedForNationalTeam, selectionRatioForNation } from '../international';
@@ -7,7 +7,7 @@ import type { SeasonStandings } from '../matchEngine';
 import { displaySeasonLabel } from '../seasonDisplay';
 import { formatEuros, playerMarketValueFromSeasons } from '../playerValue';
 import { fixtureTitle, internationalRoundLabel, nextPlayableFixture, remainingPlayableCount, type SeasonSimState } from '../seasonSim';
-import { useCareerStore, SEASON_LENGTH } from '../store';
+import { useCareerStore } from '../store';
 
 const ROLE_LABEL: Record<string, string> = {
   reserve: 'Reserve Team',
@@ -48,7 +48,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const available = isAvailable(availability);
   const remainingFixtures = seasonCalendar && seasonSim
     ? remainingPlayableCount(seasonCalendar, seasonSim)
-    : SEASON_LENGTH - season.matches.length;
+    : leagueMatchWeeks(club.league) - season.matches.length;
   const nextFixture = seasonCalendar && seasonSim ? nextPlayableFixture(seasonCalendar, seasonSim) : undefined;
   const marketValue = playerMarketValueFromSeasons({
     age,

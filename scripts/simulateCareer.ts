@@ -14,7 +14,7 @@ import {
   chancesForLeagueMatch,
   meanChancesFromStrength,
 } from '../src/game/career/chanceEngine';
-import { assignClubTier, CLUBS, clubsInLeague, getClub, goalRatioFromStrength, TIER_LABEL } from '../src/game/career/data/clubs';
+import { assignClubTier, CLUBS, clubsInLeague, getClub, goalRatioFromStrength, leagueMatchWeeks, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
 import { playerMarketValue, playerMarketValueFromSeasons, weeklyWageForClub } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { internationalCampaignForSeason, internationalTournamentForSeason } from '../src/game/career/data/competitions';
@@ -22,6 +22,8 @@ import { fifaRank } from '../src/game/career/data/fifaRankings';
 import { displaySeasonLabel, displaySeasonNumber } from '../src/game/career/seasonDisplay';
 import { isSelectedForNationalTeam, selectionRatioForNation } from '../src/game/career/international';
 import { simulateClubMatch, simulateLeagueSeason } from '../src/game/career/matchEngine';
+import { isFinalFixture } from '../src/game/career/calendar';
+import { leaguePhaseOpponents } from '../src/game/career/continentalDraw';
 import { hydrateSeason, nextPlayableFixture, resolveFixture, shouldSkipFixture } from '../src/game/career/seasonSim';
 import { offerClubsForTrial } from '../src/game/career/trial';
 import { resolveSeasonTransition } from '../src/game/career/transfers';
@@ -89,7 +91,7 @@ console.log(`distinct chance counts seen across 1000 draws: [${[...decisiveCount
 console.log('\n--- Season calendar shape (tier 1 UEFA club, season 2, Spain) ---');
 const calendar = buildSeasonCalendar({
   seasonNumber: 2,
-  leagueMatchWeeks: 24,
+  leagueMatchWeeks: leagueMatchWeeks('La Liga'),
   clubTier: 1,
   confederation: 'UEFA',
   country: 'Spain',
@@ -131,7 +133,7 @@ if (calendar.internationalTournament !== 'world-cup' || calendar.internationalPh
 console.log('\n--- Season 1 has no international football ---');
 const s1Calendar = buildSeasonCalendar({
   seasonNumber: 1,
-  leagueMatchWeeks: 24,
+  leagueMatchWeeks: leagueMatchWeeks('La Liga'),
   clubTier: 1,
   confederation: 'UEFA',
   country: 'Spain',
@@ -147,7 +149,7 @@ if (s1Intl !== 0) {
 console.log('\n--- Season calendar shape (tier 4 UEFA club, season 3 - no continental football) ---');
 const noEuropeCalendar = buildSeasonCalendar({
   seasonNumber: 3,
-  leagueMatchWeeks: 24,
+  leagueMatchWeeks: leagueMatchWeeks('2. Bundesliga'),
   clubTier: 4,
   confederation: 'UEFA',
   country: 'Germany',
@@ -155,8 +157,8 @@ const noEuropeCalendar = buildSeasonCalendar({
 const noEuropeKinds: Record<string, number> = {};
 for (const f of noEuropeCalendar.fixtures) noEuropeKinds[f.kind] = (noEuropeKinds[f.kind] ?? 0) + 1;
 console.log(`total weeks: ${noEuropeCalendar.totalWeeks}, fixtures: ${noEuropeCalendar.fixtures.length}`, noEuropeKinds);
-if ((noEuropeKinds.league ?? 0) !== 24 || (noEuropeKinds['domestic-cup'] ?? 0) !== 4) {
-  console.error('expected 24 league + 4 DFB-Pokal fixtures');
+if ((noEuropeKinds.league ?? 0) !== leagueMatchWeeks('2. Bundesliga') || (noEuropeKinds['domestic-cup'] ?? 0) !== 4) {
+  console.error('expected a full 2. Bundesliga season + 4 DFB-Pokal fixtures');
   process.exitCode = 1;
 }
 
@@ -682,8 +684,9 @@ console.log('\n--- League opponents home and away, never a third meeting ---');
 const playableLeagues = [...new Set(CLUBS.map((c) => c.league))];
 for (const league of playableLeagues) {
   const size = clubsInLeague(league).length;
-  if (size !== 13) {
-    console.error(`${league} has ${size} clubs; need 13 so every rival is played twice in 24 games`);
+  const target = TARGET_LEAGUE_SIZE[league];
+  if (!target || size !== target) {
+    console.error(`${league} has ${size} clubs; need ${target ?? 'a real division size'}`);
     process.exitCode = 1;
   }
 }
@@ -694,8 +697,8 @@ if (madrid) {
   for (const f of league) counts[f.opponentId!] = (counts[f.opponentId!] ?? 0) + 1;
   const rivals = clubsInLeague(madrid.league).filter((c) => c.id !== madrid.id);
   console.log('La Liga size', rivals.length + 1, 'league games', league.length, counts);
-  if (rivals.length !== 12) {
-    console.error('each league needs 13 clubs so 12 opponents can be played twice');
+  if (rivals.length !== TARGET_LEAGUE_SIZE['La Liga'] - 1) {
+    console.error('La Liga must have 20 clubs so every rival is played home and away');
     process.exitCode = 1;
   }
   if (Object.values(counts).some((n) => n !== 2) || Object.keys(counts).length !== rivals.length) {
@@ -788,8 +791,12 @@ const loanBack = resolveSeasonTransition({
   loansUsed: 1,
 });
 console.log('high loan ratio', loanBack.headline, loanBack.immediate?.role);
-if (loanBack.immediate?.role !== 'first-team') {
+if ((loanBack.pendingTransfer?.stay?.role ?? loanBack.immediate?.role) !== 'first-team') {
   console.error('meeting the parent first-team bar must return to the first team');
+  process.exitCode = 1;
+}
+if (!loanBack.pendingTransfer || loanBack.pendingTransfer.offers.filter((o) => o.move === 'permanent').length < 3) {
+  console.error('a successful loan return still offers parallel transfers');
   process.exitCode = 1;
 }
 const loanMiss = resolveSeasonTransition({
@@ -856,6 +863,68 @@ if (madrid) {
     process.exitCode = 1;
   }
   console.log('eliminated skips final', Boolean(final && shouldSkipFixture(final, out)), 'next after SF', afterSf?.kind, afterSf?.internationalRound ?? afterSf?.opponentLabel);
+}
+
+console.log('\n--- Super Cup only after a CL/EL win; semis are two-legged; 8 unique league-phase sides ---');
+if (madrid) {
+  const noCup = hydrateSeason({ seasonNumber: 2, club: madrid, careerGoalRatio: 0.8, nationId: 'spain' });
+  const withCup = hydrateSeason({
+    seasonNumber: 2,
+    club: madrid,
+    careerGoalRatio: 0.8,
+    nationId: 'spain',
+    includeSuperCup: true,
+    superCupOpponentId: 'bayern',
+  });
+  const superDefault = noCup.calendar.fixtures.filter((f) => f.kind === 'super-cup').length;
+  const superForced = withCup.calendar.fixtures.filter((f) => f.kind === 'super-cup');
+  const semis = noCup.calendar.fixtures.filter((f) => f.kind === 'continental-semi-final');
+  const groups = noCup.calendar.fixtures.filter((f) => f.kind === 'continental-group');
+  const groupIds = groups.map((f) => f.opponentId).filter(Boolean);
+  console.log('super default', superDefault, 'forced', superForced.length, superForced[0]?.opponentLabel, 'semis', semis.length, 'group unique', new Set(groupIds).size);
+  if (superDefault !== 0) {
+    console.error('a club that did not win Europe last season must not play the Super Cup');
+    process.exitCode = 1;
+  }
+  if (superForced.length !== 1 || superForced[0]?.opponentId !== 'bayern') {
+    console.error('the Super Cup must be scheduled against the other European champion');
+    process.exitCode = 1;
+  }
+  if (semis.length !== 2 || semis.some((f) => f.isDecisive)) {
+    console.error('Champions League semis must be two legs, not a single decisive match');
+    process.exitCode = 1;
+  }
+  if (new Set(groupIds).size !== 8 || groupIds.length !== 8) {
+    console.error('the UEFA league phase must be 8 different clubs');
+    process.exitCode = 1;
+  }
+  const phase = leaguePhaseOpponents(madrid, 'ucl', 8);
+  if (phase.length !== 8 || new Set(phase.map((c) => c.id)).size !== 8 || phase.some((c) => c.id === madrid.id)) {
+    console.error('league-phase draw must return 8 unique opponents');
+    process.exitCode = 1;
+  }
+  const wcFinal = noCup.calendar.fixtures.find((f) => f.kind === 'international' && f.internationalRound === 'final');
+  if (!wcFinal || !isFinalFixture(wcFinal)) {
+    console.error('the World Cup final must be treated as a final result screen');
+    process.exitCode = 1;
+  }
+}
+
+const secured = resolveSeasonTransition({
+  season: { ...dummySeason, goals: 24, gamesPlayed: 24, leagueGoals: 24, ratioMet: true },
+  role: 'first-team',
+  clubId: 'bayern',
+  parentClubId: 'bayern',
+  seasonsAtCurrentClub: 1,
+  age: 20,
+  careerGoals: 24,
+  careerGames: 24,
+  nationality: 'germany',
+  loansUsed: 0,
+});
+if (!secured.pendingTransfer || !secured.pendingTransfer.allowDecline || secured.pendingTransfer.offers.length < 3) {
+  console.error('every finished season must still table transfer offers in parallel');
+  process.exitCode = 1;
 }
 
 console.log('\n--- Bundesliga hierarchy: Mainz must almost never win the title ---');

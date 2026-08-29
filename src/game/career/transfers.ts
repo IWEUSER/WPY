@@ -28,7 +28,7 @@ function pickClubsFromTier(
   return pickClubsBiasedToCountry(preferred, count, country, minHome, extraHome);
 }
 
-export type TransferKind = 'loan' | 'sold' | 'promotion-offer' | 'loan-or-transfer';
+export type TransferKind = 'loan' | 'sold' | 'promotion-offer' | 'loan-or-transfer' | 'end-of-season';
 
 export interface ClubOfferTerms {
   clubId: string;
@@ -42,8 +42,10 @@ export interface PendingTransfer {
   detail: string;
   clubIds: string[];
   offers: ClubOfferTerms[];
-  /** Only 'promotion-offer' allows turning it down and staying put. */
+  /** Only declineable offers allow turning it down and staying put. */
   allowDecline: boolean;
+  /** Applied when the player declines and stays. */
+  stay?: SeasonTransitionImmediate;
 }
 
 export interface SeasonTransitionImmediate {
@@ -99,6 +101,7 @@ function pendingFromOffers(
   detail: string,
   offers: ClubOfferTerms[],
   allowDecline: boolean,
+  stay?: SeasonTransitionImmediate,
 ): PendingTransfer {
   return {
     kind,
@@ -106,6 +109,30 @@ function pendingFromOffers(
     clubIds: offers.map((o) => o.clubId),
     offers,
     allowDecline,
+    stay,
+  };
+}
+
+function parallelTransfers(
+  headline: string,
+  detail: string,
+  stay: SeasonTransitionImmediate,
+  value: number,
+  nationality: string | null | undefined,
+  excludeIds: string[],
+  preferredTier: ClubTier,
+): SeasonTransitionResult {
+  const clubs = pickClubsFromTier(preferredTier, 3, excludeIds, nationality);
+  return {
+    headline,
+    detail: `${detail} Transfer offers are on the table in parallel — stay, or move.`,
+    pendingTransfer: pendingFromOffers(
+      'end-of-season',
+      'These clubs have made an offer. You can stay where you are.',
+      offerTerms(clubs, 'permanent', value),
+      true,
+      stay,
+    ),
   };
 }
 
@@ -138,11 +165,15 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
   if (role === 'reserve') {
     const threshold = club.reserveGoalRatio;
     if (ratio >= threshold) {
-      return {
-        headline: 'Promoted to the First Team!',
-        detail: `You hit ${threshold.toFixed(2)} goals/game in the reserves - ${club.name} want you in the first-team squad now.`,
-        immediate: { clubId, parentClubId, role: 'first-team', seasonsAtCurrentClub: seasonsAtCurrentClub + 1 },
-      };
+      return parallelTransfers(
+        'Promoted to the First Team!',
+        `You hit ${threshold.toFixed(2)} goals/game in the reserves - ${club.name} want you in the first-team squad now.`,
+        { clubId, parentClubId, role: 'first-team', seasonsAtCurrentClub: seasonsAtCurrentClub + 1 },
+        value,
+        nationality,
+        [club.id],
+        club.tier,
+      );
     }
     const options = pickLoanClubs(club, nationality, 3, [club.id]);
     return {
@@ -161,11 +192,15 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     const parentClub = getClub(parentClubId);
     const returnBar = parentClub?.firstTeamGoalRatio ?? club.firstTeamGoalRatio;
     if (parentClub && ratio >= returnBar) {
-      return {
-        headline: `${parentClub.name} want you back - straight into the first team!`,
-        detail: `${ratio.toFixed(2)} goals/game on loan cleared ${parentClub.name}'s first-team bar of ${returnBar.toFixed(2)}.`,
-        immediate: { clubId: parentClubId, parentClubId, role: 'first-team', seasonsAtCurrentClub: 0 },
-      };
+      return parallelTransfers(
+        `${parentClub.name} want you back - straight into the first team!`,
+        `${ratio.toFixed(2)} goals/game on loan cleared ${parentClub.name}'s first-team bar of ${returnBar.toFixed(2)}.`,
+        { clubId: parentClubId, parentClubId, role: 'first-team', seasonsAtCurrentClub: 0 },
+        value,
+        nationality,
+        [club.id, parentClubId],
+        parentClub.tier,
+      );
     }
 
     const exclude = [club.id, parentClub?.id ?? ''];
@@ -233,17 +268,22 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
         'These clubs want to sign you - or stay put and keep building at your current club.',
         offerTerms(offers, 'permanent', value),
         true,
+        { clubId, parentClubId, role: 'first-team', seasonsAtCurrentClub: seasonsAtCurrentClub + 1 },
       ),
     };
   }
 
-  return {
-    headline: ratioMet ? 'Place secured' : 'Given more time to settle in',
-    detail: ratioMet
+  return parallelTransfers(
+    ratioMet ? 'Place secured' : 'Given more time to settle in',
+    ratioMet
       ? `You maintained ${threshold.toFixed(2)} goals/game at ${club.name} - your place is safe.`
       : `${club.name} are giving you a fair run before judging your ratio.`,
-    immediate: { clubId, parentClubId, role: 'first-team', seasonsAtCurrentClub: seasonsAtCurrentClub + 1 },
-  };
+    { clubId, parentClubId, role: 'first-team', seasonsAtCurrentClub: seasonsAtCurrentClub + 1 },
+    value,
+    nationality,
+    [club.id],
+    Math.max(1, club.tier - 1) as ClubTier,
+  );
 }
 
 function pickLoanClubs(

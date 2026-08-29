@@ -5,8 +5,8 @@
  *
  * Run with: npx tsx scripts/simulateSeason2Store.ts
  */
-import { useCareerStore, SEASON_LENGTH } from '../src/game/career/store';
-import { getClub } from '../src/game/career/data/clubs';
+import { useCareerStore } from '../src/game/career/store';
+import { getClub, leagueMatchWeeks } from '../src/game/career/data/clubs';
 import type { ShotResult } from '../src/game/shooting/types';
 
 function fakeShot(scored: boolean): ShotResult {
@@ -63,12 +63,16 @@ if (store.getState().phase !== 'hub') {
   process.exitCode = 1;
 }
 
-for (let i = 0; i < SEASON_LENGTH; i++) {
+const reserveGames = leagueMatchWeeks(getClub(clubId)?.league ?? 'La Liga');
+for (let i = 0; i < reserveGames; i++) {
   store.getState().advance();
   store.getState().recordMatchShot(fakeShot(true));
 }
 console.log('S1 done phase', store.getState().phase, 'goals', store.getState().currentSeason?.goals);
 store.getState().continueAfterSeason();
+if (store.getState().phase === 'transfer-choice') {
+  store.getState().resolveTransferChoice(null);
+}
 
 const s1record = store.getState().seasonHistory[0];
 console.log(
@@ -86,7 +90,7 @@ console.log(
     wonWpy: s1record.wonWpy,
   },
 );
-if (!s1record || s1record.age !== 16 || s1record.gamesPlayed !== 24 || s1record.goals !== 24) {
+if (!s1record || s1record.age !== 16 || s1record.gamesPlayed !== reserveGames || s1record.goals !== reserveGames) {
   console.error('Season 1 career record must store age, games and goals');
   process.exitCode = 1;
 }

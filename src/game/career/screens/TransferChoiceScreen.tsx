@@ -7,6 +7,7 @@ const KIND_LABEL: Record<string, string> = {
   sold: 'Interested clubs',
   'promotion-offer': 'Transfer offers',
   'loan-or-transfer': 'Loan and transfer offers',
+  'end-of-season': 'Transfer window',
 };
 
 export default function TransferChoiceScreen() {

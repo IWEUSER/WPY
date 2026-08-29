@@ -29,6 +29,7 @@ export function applyCareerLayoutPreview(): void {
       topGoalscorer: true,
       playerOfTheYear: false,
       wonWpy: false,
+      earnings: 0,
     }),
     season({
       seasonNumber: 2,
@@ -45,6 +46,7 @@ export function applyCareerLayoutPreview(): void {
       playerOfTheYear: true,
       wonWpy: true,
       wpyReason: 'Elite goal ratio plus winning the Champions League.',
+      earnings: 7_280_000,
     }),
     season({
       seasonNumber: 3,
@@ -60,6 +62,7 @@ export function applyCareerLayoutPreview(): void {
       topGoalscorer: false,
       playerOfTheYear: false,
       wonWpy: false,
+      earnings: 7_280_000,
     }),
   ];
 
@@ -78,18 +81,21 @@ export function applyCareerLayoutPreview(): void {
   const pendingTransfer: PendingTransfer | null =
     preview === 'transfer'
       ? {
-          kind: 'loan-or-transfer',
-          detail: 'Three loan offers and three transfer offers. After two loan spells you must move permanently.',
-          clubIds: ['mainz', 'leicester', 'lafc', 'barcelona', 'bayern', 'al-hilal'],
+          kind: 'end-of-season',
+          detail: 'These clubs have made an offer. You can stay where you are.',
+          clubIds: ['barcelona', 'bayern', 'al-hilal'],
           offers: [
-            { clubId: 'mainz', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('mainz')!, value) },
-            { clubId: 'leicester', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('leicester')!, value) },
-            { clubId: 'lafc', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('lafc')!, value) },
             { clubId: 'barcelona', move: 'permanent', fee: value, weeklyWage: weeklyWageForClub(getClub('barcelona')!, value) },
             { clubId: 'bayern', move: 'permanent', fee: value, weeklyWage: weeklyWageForClub(getClub('bayern')!, value) },
             { clubId: 'al-hilal', move: 'permanent', fee: value, weeklyWage: weeklyWageForClub(getClub('al-hilal')!, value) },
           ],
-          allowDecline: false,
+          allowDecline: true,
+          stay: {
+            clubId: 'real-madrid',
+            parentClubId: 'real-madrid',
+            role: 'first-team',
+            seasonsAtCurrentClub: 3,
+          },
         }
       : null;
 
@@ -101,7 +107,7 @@ export function applyCareerLayoutPreview(): void {
   nationalTeam = recordInternationalAppearance(nationalTeam, 'euro', false, 0);
 
   useCareerStore.setState({
-    phase: preview === 'record' ? 'career' : preview === 'transfer' ? 'transfer-choice' : 'hub',
+    phase: preview === 'record' ? 'career' : preview === 'transfer' ? 'transfer-choice' : preview === 'result' ? 'match-result' : 'hub',
     age: 19,
     seasonNumber: 4,
     clubId: 'real-madrid',
@@ -135,7 +141,16 @@ export function applyCareerLayoutPreview(): void {
       playerOfTheYear: false,
       wonWpy: false,
     }),
-    lastMatchSummary: 'Won 2–1 vs Barcelona · 1 goal from 3 chances',
+    lastMatchSummary: 'Spain won 1–0 vs Italy · 1 goal from 1 chance',
+    lastMatchResult: {
+      summary: 'Spain won 1–0 vs Italy · 1 goal from 1 chance',
+      isFinal: true,
+      won: true,
+      trophyName: 'European Championship',
+      afterPhase: 'season-summary',
+    },
+    weeklyWage: 280_000,
+    careerEarnings: 14_560_000,
     intlQualifying: { tournament: 'euro', points: 7, played: 3 },
     pendingTransfer,
   });

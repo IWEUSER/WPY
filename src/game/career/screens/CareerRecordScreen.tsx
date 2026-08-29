@@ -1,7 +1,7 @@
 import { getClub } from '../data/clubs';
 import { INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { awardLabels, seasonClubName, seasonRatio } from '../honoursDisplay';
-import { formatEuros, playerMarketValueFromSeasons } from '../playerValue';
+import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons } from '../playerValue';
 import { countsTowardCareerRecord, displaySeasonLabel } from '../seasonDisplay';
 import { useCareerStore } from '../store';
 import type { SeasonRecord } from '../types';
@@ -20,6 +20,8 @@ export default function CareerRecordScreen() {
   const nationalTeam = useCareerStore((s) => s.nationalTeam);
   const clubId = useCareerStore((s) => s.clubId);
   const age = useCareerStore((s) => s.age);
+  const careerEarnings = useCareerStore((s) => s.careerEarnings);
+  const weeklyWage = useCareerStore((s) => s.weeklyWage);
   const returnToHub = useCareerStore((s) => s.returnToHub);
 
   const seasons: Array<SeasonRecord & { inProgress?: boolean }> = [
@@ -59,6 +61,9 @@ export default function CareerRecordScreen() {
         return (
           <p className="mt-3 text-center text-sm text-white/60">
             Market value {formatEuros(value)}
+            {careerEarnings > 0 || weeklyWage > 0
+              ? ` · Earnings ${formatEuros(careerEarnings)}${weeklyWage > 0 ? ` · ${formatWeeklyWage(weeklyWage)}` : ''}`
+              : ''}
           </p>
         );
       })()}

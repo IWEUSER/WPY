@@ -12,10 +12,10 @@ import {
 import { qualifierCountFor, tournamentKnockoutRounds } from './data/fifaRankings';
 
 /**
- * What kind of fixture a calendar week holds. `continental-semi-final` and
- * `continental-final` are the two "decisive" rounds from the locked design -
- * a single match settled by the player's one defining chance (see
- * chanceEngine.ts) rather than a normal spread of chances.
+ * What kind of fixture a calendar week holds. Continental knockouts through
+ * the semi-final are two-legged. The continental final, Super Cup, domestic
+ * cup final, and international final are one-off decisive matches (see
+ * chanceEngine.ts).
  */
 export type FixtureKind =
   | 'league'
@@ -35,8 +35,8 @@ export interface CalendarFixture {
   continentalCup?: ContinentalCupId;
   domesticCup?: DomesticCupId;
   domesticCupStage?: DomesticCupStage;
-  /** Semis and finals are decided by one chance; everything else gets the
-   * regular league-style distribution. */
+  /** Finals and the Super Cup are decided by one chance; two-legged ties
+   * and league matches use the regular chance distribution. */
   isDecisive: boolean;
   /** Leg number for two-legged continental knockout ties. */
   leg?: 1 | 2;
@@ -78,16 +78,18 @@ export interface BuildCalendarParams {
   /** When false, skip the international window (player not selected). */
   includeInternational?: boolean;
   includeDomesticCup?: boolean;
+  /** UEFA Super Cup — only the previous CL/EL winner (or a newly joined club that won it). */
+  includeSuperCup?: boolean;
 }
 
 const GROUP_STAGE_MATCHDAYS = 8;
-const KNOCKOUT_ROUNDS_BEFORE_SEMI = 2; // e.g. round of 16, quarter-final - both two-legged.
+const KNOCKOUT_ROUNDS_BEFORE_SEMI = 2; // round of 16 and quarter-final, both two-legged.
 
-const DOMESTIC_CUP_WEEKS: { week: number; stage: DomesticCupStage }[] = [
-  { week: 3, stage: 'round-of-16' },
-  { week: 9, stage: 'quarter-final' },
-  { week: 15, stage: 'semi-final' },
-  { week: 21, stage: 'final' },
+const DOMESTIC_CUP_FRACTIONS: { fraction: number; stage: DomesticCupStage }[] = [
+  { fraction: 0.12, stage: 'round-of-16' },
+  { fraction: 0.38, stage: 'quarter-final' },
+  { fraction: 0.62, stage: 'semi-final' },
+  { fraction: 0.88, stage: 'final' },
 ];
 
 const KIND_ORDER: Record<FixtureKind, number> = {
@@ -119,6 +121,7 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
     nationConfederation,
     includeInternational = true,
     includeDomesticCup = true,
+    includeSuperCup = false,
   } = params;
   const cup = continentalCupForClub(clubTier, confederation);
   const domesticCup = includeDomesticCup && country ? domesticCupForCountry(country) : null;
@@ -129,22 +132,22 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
   }
 
   if (domesticCup) {
-    for (const round of DOMESTIC_CUP_WEEKS) {
-      const week = Math.min(leagueMatchWeeks, round.week);
+    for (const round of DOMESTIC_CUP_FRACTIONS) {
+      const week = Math.max(1, Math.min(leagueMatchWeeks, Math.round(round.fraction * leagueMatchWeeks)));
       fixtures.push({
         week,
         kind: 'domestic-cup',
         domesticCup,
         domesticCupStage: round.stage,
-        isDecisive: false,
+        isDecisive: round.stage === 'final',
       });
     }
   }
 
   let week = leagueMatchWeeks;
   if (cup) {
-    if (cup === 'ucl') {
-      fixtures.push({ week: 0, kind: 'super-cup', continentalCup: cup, isDecisive: false });
+    if (includeSuperCup) {
+      fixtures.push({ week: 0, kind: 'super-cup', continentalCup: cup, isDecisive: true });
     }
 
     // Group/league-phase matchdays are interleaved evenly across the
@@ -155,13 +158,13 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
       fixtures.push({ week: groupWeek, kind: 'continental-group', continentalCup: cup, isDecisive: false });
     }
 
-    // Two-legged knockout rounds, then the two single-match decisive rounds,
-    // all scheduled after the domestic season's own weeks.
+    // Two-legged knockout through the semi-final, then a one-off final.
     for (let round = 0; round < KNOCKOUT_ROUNDS_BEFORE_SEMI; round++) {
       fixtures.push({ week: ++week, kind: 'continental-knockout', continentalCup: cup, isDecisive: false, leg: 1 });
       fixtures.push({ week: ++week, kind: 'continental-knockout', continentalCup: cup, isDecisive: false, leg: 2 });
     }
-    fixtures.push({ week: ++week, kind: 'continental-semi-final', continentalCup: cup, isDecisive: true });
+    fixtures.push({ week: ++week, kind: 'continental-semi-final', continentalCup: cup, isDecisive: false, leg: 1 });
+    fixtures.push({ week: ++week, kind: 'continental-semi-final', continentalCup: cup, isDecisive: false, leg: 2 });
     fixtures.push({ week: ++week, kind: 'continental-final', continentalCup: cup, isDecisive: true });
   }
 
@@ -216,4 +219,11 @@ export function calendarIncludesInternational(calendar: SeasonCalendar): Interna
 
 export function calendarDomesticCup(calendar: SeasonCalendar): DomesticCupId | null {
   return calendar.domesticCup ?? calendar.fixtures.find((f) => f.domesticCup)?.domesticCup ?? null;
+}
+
+/** Club continental final, Super Cup, domestic-cup final, or international final. */
+export function isFinalFixture(fixture: CalendarFixture): boolean {
+  if (fixture.kind === 'continental-final' || fixture.kind === 'super-cup') return true;
+  if (fixture.kind === 'domestic-cup' && fixture.domesticCupStage === 'final') return true;
+  return fixture.kind === 'international' && fixture.internationalRound === 'final';
 }

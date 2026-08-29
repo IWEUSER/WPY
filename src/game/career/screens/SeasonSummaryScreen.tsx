@@ -2,7 +2,8 @@ import { getClub } from '../data/clubs';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { displaySeasonLabel, displaySeasonNumber } from '../seasonDisplay';
 import { countLoanSpells, resolveSeasonTransition } from '../transfers';
-import { useCareerStore, SEASON_LENGTH } from '../store';
+import { leagueMatchWeeks } from '../data/clubs';
+import { useCareerStore } from '../store';
 
 export default function SeasonSummaryScreen() {
   const clubId = useCareerStore((s) => s.clubId);
@@ -21,13 +22,14 @@ export default function SeasonSummaryScreen() {
   const nationality = useCareerStore((s) => s.nationality);
   const seasonHistory = useCareerStore((s) => s.seasonHistory);
   const continueAfterSeason = useCareerStore((s) => s.continueAfterSeason);
+  const lastMatchSummary = useCareerStore((s) => s.lastMatchSummary);
 
   const club = clubId ? getClub(clubId) : undefined;
   if (!club || !season || !clubId || !parentClubId) return null;
 
   const ratio = season.gamesPlayed > 0 ? season.goals / season.gamesPlayed : 0;
   const threshold = role === 'first-team' ? club.firstTeamGoalRatio : club.reserveGoalRatio;
-  const scheduled = seasonCalendar?.fixtures.length ?? SEASON_LENGTH;
+  const scheduled = seasonCalendar?.fixtures.length ?? leagueMatchWeeks(club.league);
   const gamesMissed = Math.max(0, scheduled - season.gamesPlayed);
   const us = seasonStandings?.league.find((r) => r.clubId === clubId);
 
@@ -125,6 +127,10 @@ export default function SeasonSummaryScreen() {
           <p className="mt-1 font-semibold">{wpyResult.won ? 'You won it.' : 'Not this season.'}</p>
           <p className="mt-1 text-xs">{wpyResult.reason}</p>
         </div>
+      )}
+
+      {lastMatchSummary && (
+        <div className="w-full max-w-sm rounded-2xl bg-white/5 px-4 py-3 text-sm text-white/80">{lastMatchSummary}</div>
       )}
 
       <p className="max-w-sm text-sm text-white/60">{preview.detail}</p>

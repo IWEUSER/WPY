@@ -1,6 +1,9 @@
-/** Matches per domestic season - an abstraction over real league calendars
- * (34-38 games), kept uniform so every league/tier plays on the same footing. */
-export const SEASON_LENGTH = 24;
+/** Fallback when a club's league size is unknown. Real seasons use
+ * `leagueMatchWeeks()` from the club list (home and away vs every rival). */
+export const SEASON_LENGTH = 38;
+
+/** Used to turn a weekly wage into season earnings. */
+export const WEEKS_PER_SEASON = 52;
 
 export const STARTING_AGE = 16;
 

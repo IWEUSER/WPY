@@ -1,6 +1,6 @@
 import type { ShotResult } from '../shooting/types';
 import type { SeasonCalendar } from './calendar';
-import type { InternationalTournamentId } from './data/competitions';
+import type { ContinentalCupId, InternationalTournamentId } from './data/competitions';
 import type { NationalTeamState } from './international';
 import type { SeasonStandings } from './matchEngine';
 import type { LiveMatch, SeasonSimState } from './seasonSim';
@@ -54,6 +54,8 @@ export interface SeasonRecord {
   topGoalscorerReason?: string | null;
   playerOfTheYearReason?: string | null;
   wpyReason?: string | null;
+  /** Weekly wage × 52 for this season. */
+  earnings?: number;
 }
 
 export interface TrialState {
@@ -71,7 +73,8 @@ export type CareerPhase =
   | 'match'
   | 'season-summary'
   | 'transfer-choice'
-  | 'career';
+  | 'career'
+  | 'match-result';
 
 export interface CareerState {
   phase: CareerPhase;
@@ -109,11 +112,24 @@ export interface CareerState {
   formWindow: number[];
   wpyResult: WpyResult | null;
   lastMatchSummary: string | null;
+  lastMatchResult: LastMatchResult | null;
+  weeklyWage: number;
+  careerEarnings: number;
+  previousContinentalChampion: ContinentalCupId | null;
+  previousChampionClubId: string | null;
   /**
    * First half of a split qualifying campaign (season 3 → season 4).
    * Null outside that window.
    */
   intlQualifying: IntlQualifyingCarry | null;
+}
+
+export interface LastMatchResult {
+  summary: string;
+  isFinal: boolean;
+  won: boolean;
+  trophyName: string | null;
+  afterPhase: 'hub' | 'season-summary';
 }
 
 export interface IntlQualifyingCarry {

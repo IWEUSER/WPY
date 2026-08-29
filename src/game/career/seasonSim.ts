@@ -1,15 +1,18 @@
 import type { CalendarFixture, DomesticCupStage, SeasonCalendar } from './calendar';
 import { buildSeasonCalendar } from './calendar';
+import { leaguePhaseOpponents } from './continentalDraw';
 import {
   chancesForDecisiveMatch,
   chancesForKnockoutTie,
   chancesForLeagueMatch,
 } from './chanceEngine';
-import { clubsInCountry, clubsInLeague, getClub, type Club } from './data/clubs';
+import { clubsInCountry, clubsInLeague, getClub, leagueMatchWeeks, type Club } from './data/clubs';
 import {
   confederationForCountry,
   continentalCupForClub,
+  CONTINENTAL_CUPS,
   DOMESTIC_CUPS,
+  INTERNATIONAL_TOURNAMENTS,
   internationalCampaignForSeason,
   type ContinentalCupId,
   type DomesticCupId,
@@ -38,7 +41,6 @@ import {
   type LeagueStanding,
 } from './matchEngine';
 import { shuffle } from './util';
-import { SEASON_LENGTH } from './constants';
 
 export type InternationalStage =
   | 'not-selected'
@@ -105,6 +107,8 @@ export interface HydrateSeasonParams {
   careerGoalRatio: number;
   nationId: string | null;
   qualifierCarry?: { tournament: InternationalTournamentId; points: number; played: number } | null;
+  includeSuperCup?: boolean;
+  superCupOpponentId?: string;
 }
 
 const GROUP_GAMES = 8;
@@ -125,7 +129,7 @@ export function emptyHonours(): SeasonHonours {
 const INTERNATIONAL_GROUP_ADVANCE_POINTS = 4;
 
 export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCalendar; sim: SeasonSimState } {
-  const { seasonNumber, club, careerGoalRatio, nationId, qualifierCarry } = params;
+  const { seasonNumber, club, careerGoalRatio, nationId, qualifierCarry, includeSuperCup, superCupOpponentId } = params;
   const clubConfederation = confederationForCountry(club.country);
   const nation = nationId ? getNation(nationId) : undefined;
   const cup = continentalCupForClub(club.tier, clubConfederation);
@@ -147,14 +151,23 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
 
   let calendar = buildSeasonCalendar({
     seasonNumber,
-    leagueMatchWeeks: SEASON_LENGTH,
+    leagueMatchWeeks: leagueMatchWeeks(club.league),
     clubTier: club.tier,
     confederation: clubConfederation,
     country: club.country,
     nationConfederation: nation?.confederation ?? null,
     includeInternational: internationalSelected,
+    includeSuperCup: Boolean(includeSuperCup && cup),
   });
-  calendar = assignOpponentsAndChances(calendar, club, cup, nationId, tournament, campaign.qualifierGames);
+  calendar = assignOpponentsAndChances(
+    calendar,
+    club,
+    cup,
+    nationId,
+    tournament,
+    campaign.qualifierGames,
+    superCupOpponentId,
+  );
 
   const leagueClubs = clubsInLeague(club.league);
   const leagueTable = leagueClubs.map((c) => emptyStanding(c.id));
@@ -198,14 +211,19 @@ function assignOpponentsAndChances(
   nationId: string | null,
   tournament: InternationalTournamentId | null,
   qualifierGames: number,
+  superCupOpponentId?: string,
 ): SeasonCalendar {
   const leagueRivals = leagueOpponentQueue(club);
-  const euroRivals = cup ? shuffle(clubsForContinentalCup(cup).filter((id) => id !== club.id)) : [];
+  const leaguePhase = cup ? leaguePhaseOpponents(club, cup, 8) : [];
+  const euroRivals = cup
+    ? shuffle(clubsForContinentalCup(cup).filter((id) => id !== club.id))
+    : [];
   const cupRivals = shuffle(clubsInCountry(club.country).filter((c) => c.id !== club.id));
   const qualifierRivals = nationId && tournament ? qualifierOpponents(nationId, tournament, qualifierGames) : [];
   const tournamentRivals = nationId && tournament ? tournamentOpponents(nationId, tournament) : [];
 
   let leagueI = 0;
+  let groupI = 0;
   let euroI = 0;
   let cupI = 0;
   let qualifierI = 0;
@@ -231,10 +249,19 @@ function assignOpponentsAndChances(
         f.opponentLabel = opp.name;
       }
       f.playerChances = chancesForLeagueMatch({ strength: club.strength }).count;
-    } else if (f.kind === 'continental-group' || f.kind === 'super-cup') {
-      const oppId = euroRivals[euroI % Math.max(1, euroRivals.length)];
-      euroI += 1;
-      const opp = oppId ? getClub(oppId) : undefined;
+    } else if (f.kind === 'super-cup') {
+      const opp = (superCupOpponentId ? getClub(superCupOpponentId) : undefined)
+        ?? (euroRivals[0] ? getClub(euroRivals[0]) : undefined);
+      if (opp) {
+        f.opponentId = opp.id;
+        f.opponentLabel = opp.name;
+      }
+      f.playerChances = chancesForDecisiveMatch().count;
+    } else if (f.kind === 'continental-group') {
+      const opp = leaguePhase[groupI] ?? (euroRivals[groupI % Math.max(1, euroRivals.length)]
+        ? getClub(euroRivals[groupI % Math.max(1, euroRivals.length)])
+        : undefined);
+      groupI += 1;
       if (opp) {
         f.opponentId = opp.id;
         f.opponentLabel = opp.name;
@@ -260,7 +287,27 @@ function assignOpponentsAndChances(
       }
     } else if (f.kind === 'continental-knockout' && f.leg === 2 && f.playerChances === undefined) {
       f.playerChances = chancesForLeagueMatch({ strength: club.strength }).count;
-    } else if (f.kind === 'continental-semi-final' || f.kind === 'continental-final') {
+    } else if (f.kind === 'continental-semi-final' && f.leg === 1) {
+      const oppId = euroRivals[euroI % Math.max(1, euroRivals.length)];
+      euroI += 1;
+      const opp = oppId ? getClub(oppId) : undefined;
+      const [leg1, leg2] = chancesForKnockoutTie({ strength: club.strength });
+      f.playerChances = leg1.count;
+      if (opp) {
+        f.opponentId = opp.id;
+        f.opponentLabel = opp.name;
+      }
+      const next = fixtures[i + 1];
+      if (next && next.kind === 'continental-semi-final' && next.leg === 2) {
+        next.playerChances = leg2.count;
+        if (opp) {
+          next.opponentId = opp.id;
+          next.opponentLabel = opp.name;
+        }
+      }
+    } else if (f.kind === 'continental-semi-final' && f.leg === 2 && f.playerChances === undefined) {
+      f.playerChances = chancesForLeagueMatch({ strength: club.strength }).count;
+    } else if (f.kind === 'continental-final') {
       const oppId = euroRivals[euroI % Math.max(1, euroRivals.length)];
       euroI += 1;
       const opp = oppId ? getClub(oppId) : undefined;
@@ -437,7 +484,16 @@ export function applyEuropeanResult(
   }
 
   if (fixture.kind === 'continental-semi-final') {
-    next.europeanStanding.stage = result.outcome === 'win' ? 'final' : 'eliminated';
+    next.knockoutAggFor += result.scoreFor;
+    next.knockoutAggAgainst += result.scoreAgainst;
+    if (fixture.leg === 2 || fixture.leg == null) {
+      const progressed =
+        next.knockoutAggFor > next.knockoutAggAgainst
+        || (next.knockoutAggFor === next.knockoutAggAgainst && Math.random() < 0.5);
+      next.knockoutAggFor = 0;
+      next.knockoutAggAgainst = 0;
+      next.europeanStanding.stage = progressed ? 'final' : 'eliminated';
+    }
     return next;
   }
 
@@ -571,12 +627,15 @@ export function fixtureTitle(
     return `${cupName} ${cupRoundLabel(fixture.domesticCupStage)}${vs}`;
   }
   if (fixture.kind === 'super-cup') return `Super Cup${vs}`;
-  if (fixture.kind === 'continental-group') return `Group stage${vs}`;
+  if (fixture.kind === 'continental-group') return `League phase${vs}`;
   if (fixture.kind === 'continental-knockout') {
     const leg = fixture.leg === 2 ? ' 2nd leg' : ' 1st leg';
     return `Knockout${leg}${vs}`;
   }
-  if (fixture.kind === 'continental-semi-final') return `Semi-final${vs}`;
+  if (fixture.kind === 'continental-semi-final') {
+    const leg = fixture.leg === 2 ? ' 2nd leg' : fixture.leg === 1 ? ' 1st leg' : '';
+    return `Semi-final${leg}${vs}`;
+  }
   if (fixture.kind === 'continental-final') return `Final${vs}`;
   if (fixture.kind === 'international') {
     const round = internationalRoundLabel(fixture.internationalRound);
@@ -586,6 +645,23 @@ export function fixtureTitle(
     return `${round}${vs}`;
   }
   return vs.trim();
+}
+
+export function trophyNameForFixture(
+  fixture: CalendarFixture,
+  tournament: InternationalTournamentId | null,
+): string | null {
+  if (fixture.kind === 'continental-final' && fixture.continentalCup) {
+    return CONTINENTAL_CUPS[fixture.continentalCup].name;
+  }
+  if (fixture.kind === 'super-cup') return 'Super Cup';
+  if (fixture.kind === 'domestic-cup' && fixture.domesticCupStage === 'final' && fixture.domesticCup) {
+    return DOMESTIC_CUPS[fixture.domesticCup].name;
+  }
+  if (fixture.kind === 'international' && fixture.internationalRound === 'final' && tournament) {
+    return INTERNATIONAL_TOURNAMENTS[tournament].name;
+  }
+  return null;
 }
 
 function settleOnPens(
