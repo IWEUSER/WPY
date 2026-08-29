@@ -10,9 +10,13 @@ import MatchScreen from './screens/MatchScreen';
 import SeasonSummaryScreen from './screens/SeasonSummaryScreen';
 import TransferChoiceScreen from './screens/TransferChoiceScreen';
 import { useCareerStore } from './store';
+import { applyCareerLayoutPreview } from './previewCareerLayout';
 
 if (import.meta.env.DEV) {
   (window as unknown as { __careerStore: typeof useCareerStore }).__careerStore = useCareerStore;
+  if (new URLSearchParams(window.location.search).has('preview-career')) {
+    applyCareerLayoutPreview();
+  }
 }
 
 export default function CareerApp() {
