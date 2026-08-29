@@ -49,7 +49,7 @@ export default function TransferChoiceScreen() {
                   {club.country} · {club.league}
                 </p>
                 <p className="mt-1 text-xs text-white/70">
-                  {offer.move === 'loan' ? 'Loan' : `Fee ${formatEuros(offer.fee)}`}
+                  {offer.move === 'loan' ? 'Loan' : offer.fee <= 0 ? 'Free' : `Fee ${formatEuros(offer.fee)}`}
                   {' · '}
                   {formatWeeklyWage(offer.weeklyWage)}
                 </p>

@@ -41,6 +41,50 @@ export interface MarketValueParams {
   club: Club;
 }
 
+export const DEFAULT_CONTRACT_YEARS = 5;
+
+/** Full fee on a 5-year deal; one year left is a fire sale; expired is free. */
+export function contractValueFactor(yearsRemaining: number): number {
+  if (yearsRemaining >= 5) return 1;
+  if (yearsRemaining === 4) return 0.88;
+  if (yearsRemaining === 3) return 0.72;
+  if (yearsRemaining === 2) return 0.48;
+  if (yearsRemaining === 1) return 0.22;
+  return 0;
+}
+
+export function nextContractYearsRemaining(yearsRemaining: number): number {
+  return yearsRemaining <= 1 ? DEFAULT_CONTRACT_YEARS : yearsRemaining - 1;
+}
+
+/** Trailing first-team/loan seasons below a goals-per-game bar. */
+export function consecutiveSeasonsBelow(seasons: SeasonRecord[], threshold: number): number {
+  let n = 0;
+  for (let i = seasons.length - 1; i >= 0; i--) {
+    const season = seasons[i];
+    if (!countsTowardCareerRecord(season.seasonNumber)) continue;
+    if (season.gamesPlayed <= 0) continue;
+    if (season.goals / season.gamesPlayed < threshold) n += 1;
+    else break;
+  }
+  return n;
+}
+
+/**
+ * Seven failed seasons under 0.25 cannot leave a former €250m star at €40m.
+ * Each extra collapse year compounds.
+ */
+export function consecutivePoorFactor(failedSeasons: number): number {
+  if (failedSeasons <= 0) return 1;
+  if (failedSeasons === 1) return 0.62;
+  if (failedSeasons === 2) return 0.36;
+  if (failedSeasons === 3) return 0.2;
+  if (failedSeasons === 4) return 0.11;
+  if (failedSeasons === 5) return 0.06;
+  if (failedSeasons === 6) return 0.035;
+  return 0.02;
+}
+
 export function clubLeagueScale(club: Club): number {
   return (club.strength / ANCHOR_STRENGTH) * leagueValueWeight(club.league);
 }
@@ -81,8 +125,10 @@ export function playerMarketValueFromSeasons(params: {
   careerGames: number;
   seasons: SeasonRecord[];
   fallbackClub: Club;
+  contractYearsRemaining?: number;
 }): number {
   const { age, careerGoals, careerGames, seasons, fallbackClub } = params;
+  const yearsLeft = params.contractYearsRemaining ?? DEFAULT_CONTRACT_YEARS;
   const careerRatio = careerGames > 0 ? careerGoals / careerGames : 0;
   const ratio = formAdjustedRatio(careerRatio, lastSeasonRatio(seasons));
   let weighted = 0;
@@ -95,7 +141,11 @@ export function playerMarketValueFromSeasons(params: {
     weight += season.goals;
   }
   const scale = weight > 0 ? weighted / weight : clubLeagueScale(fallbackClub);
-  return valueFromScale(age, ratio, careerGoals, scale);
+  const base = valueFromScale(age, ratio, careerGoals, scale);
+  const poor = consecutivePoorFactor(consecutiveSeasonsBelow(seasons, 0.25));
+  const contract = contractValueFactor(yearsLeft);
+  const raw = base * poor * (contract <= 0 ? 0.08 : contract);
+  return Math.max(100_000, Math.round(raw / 100_000) * 100_000);
 }
 
 /** Which transfer band a fee belongs in. A €100m+ player is never tier 5. */
@@ -119,13 +169,21 @@ function valueFromScale(age: number, ratio: number, careerGoals: number, scale: 
  * European side; MLS stays well below that band.
  */
 export function weeklyWageForClub(club: Club, marketValue: number): number {
-  let wageStrength = club.strength;
-  if (club.country === 'Saudi Arabia') wageStrength = Math.min(94, club.strength + 12);
-  if (club.league === 'MLS') wageStrength = Math.max(52, club.strength - 12);
-  const t = (clampStrength(wageStrength) - 52) / 42;
-  const base = 8_000 + t * t * 312_000;
-  const prestige = marketValue * 0.00035;
-  return Math.max(3_000, Math.round((base + prestige) / 1_000) * 1_000);
+  const tierBase: Record<ClubTier, number> = {
+    1: 95_000,
+    2: 22_000,
+    3: 7_500,
+    4: 2_200,
+    5: 800,
+  };
+  const t = (clampStrength(club.strength) - 52) / 42;
+  let wage = tierBase[club.tier] * (0.7 + 0.6 * t);
+  if (club.country === 'Saudi Arabia') wage *= 1.2;
+  if (club.league === 'MLS') wage *= 0.5;
+  const prestigeRate = club.tier === 1 ? 0.00016 : club.tier === 2 ? 0.00004 : 0.000012;
+  wage += marketValue * prestigeRate;
+  const floor = club.tier >= 5 ? 500 : club.tier >= 4 ? 800 : 1_200;
+  return Math.max(floor, Math.round(wage / 500) * 500);
 }
 
 export function formatEuros(amount: number): string {

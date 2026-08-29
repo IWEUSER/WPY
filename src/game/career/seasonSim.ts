@@ -28,7 +28,7 @@ import {
   tournamentOpponents,
   type InternationalKnockoutRound,
 } from './data/fifaRankings';
-import { getNation, isSelectedForNationalTeam } from './international';
+import { clubEligibleForNationalTeam, getNation, isSelectedForNationalTeam } from './international';
 import {
   applyMatchToTable,
   clubsForContinentalCup,
@@ -135,10 +135,10 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
   const cup = continentalCupForClub(club.tier, clubConfederation);
   const campaign = internationalCampaignForSeason(seasonNumber, nation?.confederation ?? clubConfederation);
   const tournament = campaign.tournament ?? null;
+  const clubOk = clubEligibleForNationalTeam(club.tier);
+  const campaignActive = Boolean(nationId && campaign.tournament && campaign.phase !== 'none' && clubOk);
   const internationalSelected = Boolean(
-    nationId &&
-      campaign.tournament &&
-      campaign.phase !== 'none' &&
+    campaignActive &&
       isSelectedForNationalTeam({
         clubTier: club.tier,
         careerGoalRatio,
@@ -156,7 +156,7 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
     confederation: clubConfederation,
     country: club.country,
     nationConfederation: nation?.confederation ?? null,
-    includeInternational: internationalSelected,
+    includeInternational: campaignActive,
     includeSuperCup: Boolean(includeSuperCup && cup),
   });
   calendar = assignOpponentsAndChances(
@@ -186,12 +186,12 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
       knockoutAggAgainst: 0,
       internationalStage: internationalSelected ? 'qualifying' : 'not-selected',
       internationalSelected,
-      internationalTournament: internationalSelected ? tournament : null,
-      internationalPhase: internationalSelected ? campaign.phase : 'none',
+      internationalTournament: campaignActive ? tournament : null,
+      internationalPhase: campaignActive ? campaign.phase : 'none',
       nationId: nationId ?? null,
       qualifierPoints: 0,
       qualifierPlayed: 0,
-      qualifierTarget: internationalSelected ? campaign.qualifierGames : 0,
+      qualifierTarget: campaignActive ? campaign.qualifierGames : 0,
       qualifierCarryPoints: carryMatches && qualifierCarry ? qualifierCarry.points : 0,
       qualifierCarryPlayed: carryMatches && qualifierCarry ? qualifierCarry.played : 0,
       groupPoints: 0,

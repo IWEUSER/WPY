@@ -115,6 +115,8 @@ export interface CareerState {
   lastMatchResult: LastMatchResult | null;
   weeklyWage: number;
   careerEarnings: number;
+  contractYears: number;
+  contractYearsRemaining: number;
   previousContinentalChampion: ContinentalCupId | null;
   previousChampionClubId: string | null;
   /**

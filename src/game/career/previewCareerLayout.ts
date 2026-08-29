@@ -169,8 +169,10 @@ export function applyCareerLayoutPreview(): void {
       trophyName: 'European Championship',
       afterPhase: 'season-summary',
     },
-    weeklyWage: 280_000,
+    weeklyWage: 140_000,
     careerEarnings: 14_560_000,
+    contractYears: 5,
+    contractYearsRemaining: 5,
     intlQualifying: { tournament: 'euro', points: 7, played: 3 },
     pendingTransfer,
   });

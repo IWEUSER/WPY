@@ -147,8 +147,12 @@ if (s2Rounds.join() !== s2Expected.join()) {
   console.error('Season 2 must include the remaining World Cup qualifiers and a last-32 tournament');
   process.exitCode = 1;
 }
-if (!s2.seasonSim?.internationalSelected) {
-  console.error('A promoted first-team player with a strong reserve year must be selected in season 2');
+if (s2.seasonSim?.internationalSelected) {
+  console.error('Call-up must wait until this season’s goal ratio meets the national bar');
+  process.exitCode = 1;
+}
+if (s2.contractYearsRemaining !== 5) {
+  console.error('Promotion onto a first-team deal should start a 5-year contract');
   process.exitCode = 1;
 }
 
@@ -175,6 +179,19 @@ if (reserveEarnings <= 0 || reserveEarnings !== after.weeklyWage * reserveGames)
 }
 if (after.careerEarnings !== reserveEarnings + after.weeklyWage) {
   console.error('career earnings must move by one weekly wage after each first-team match');
+  process.exitCode = 1;
+}
+const afterRatio =
+  after.currentSeason && after.currentSeason.gamesPlayed > 0
+    ? after.currentSeason.goals / after.currentSeason.gamesPlayed
+    : 0;
+console.log('after first match intl selected', after.seasonSim?.internationalSelected, 'season ratio', afterRatio.toFixed(2));
+if (afterRatio >= 0.66 && !after.seasonSim?.internationalSelected) {
+  console.error('hitting the national bar this season must trigger a call-up');
+  process.exitCode = 1;
+}
+if (afterRatio < 0.66 && after.seasonSim?.internationalSelected) {
+  console.error('a season ratio below the national bar must not keep the player selected');
   process.exitCode = 1;
 }
 if (after.careerGames !== 1) {

@@ -15,7 +15,7 @@ import {
   meanChancesFromStrength,
 } from '../src/game/career/chanceEngine';
 import { assignClubTier, CLUBS, clubsInLeague, getClub, goalRatioFromStrength, leagueMatchWeeks, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
-import { formAdjustedRatio, playerMarketValue, playerMarketValueFromSeasons, weeklyWageForClub } from '../src/game/career/playerValue';
+import { consecutivePoorFactor, contractValueFactor, formAdjustedRatio, playerMarketValue, playerMarketValueFromSeasons, weeklyWageForClub } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { internationalCampaignForSeason, internationalTournamentForSeason } from '../src/game/career/data/competitions';
 import { fifaRank } from '../src/game/career/data/fifaRankings';
@@ -769,13 +769,29 @@ if (barca && hilal && lafc) {
   const euroWage = weeklyWageForClub(barca, young);
   const saudiWage = weeklyWageForClub(hilal, young);
   const mlsWage = weeklyWageForClub(lafc, young);
-  console.log('wages Barca', euroWage, 'Hilal', saudiWage, 'LAFC', mlsWage);
-  if (saudiWage < euroWage * 0.7) {
-    console.error('Saudi wages should be comparable to top European clubs');
+  const luton = getClub('luton');
+  const villa = getClub('atletico-madrid') ?? getClub('arsenal');
+  const lowWage = luton ? weeklyWageForClub(luton, young) : 0;
+  const highWage = villa ? weeklyWageForClub(villa, young) : 0;
+  console.log('wages Barca', euroWage, 'Hilal', saudiWage, 'LAFC', mlsWage, 'low', lowWage, 'high-tier', highWage);
+  if (saudiWage < highWage * 0.8) {
+    console.error('Saudi wages should sit with high-tier Europe, not the elite band');
+    process.exitCode = 1;
+  }
+  if (saudiWage >= euroWage * 0.6) {
+    console.error('Saudi wages must stay below elite European salaries');
     process.exitCode = 1;
   }
   if (mlsWage >= saudiWage) {
     console.error('MLS wages must sit below Saudi');
+    process.exitCode = 1;
+  }
+  if (lowWage > 5_000) {
+    console.error('lowest-level weekly wages must sit well below €5k');
+    process.exitCode = 1;
+  }
+  if (highWage <= 0 || euroWage < highWage * 2.5) {
+    console.error('elite weekly wages must sit well above a high-tier club');
     process.exitCode = 1;
   }
 
@@ -835,6 +851,130 @@ if (barca && hilal && lafc) {
   }
   if (starPermTiers.some((tier) => tier >= 4)) {
     console.error('a high-value player must not be offered lower-league or smallest clubs');
+    process.exitCode = 1;
+  }
+
+  const fiveYear = playerMarketValueFromSeasons({
+    age: 20,
+    careerGoals: 80,
+    careerGames: 100,
+    seasons: [
+      { ...dummySeason, seasonNumber: 2, clubId: 'barcelona', goals: 40, gamesPlayed: 50 },
+      { ...dummySeason, seasonNumber: 3, clubId: 'barcelona', goals: 40, gamesPlayed: 50 },
+    ],
+    fallbackClub: barca,
+    contractYearsRemaining: 5,
+  });
+  const oneYear = playerMarketValueFromSeasons({
+    age: 20,
+    careerGoals: 80,
+    careerGames: 100,
+    seasons: [
+      { ...dummySeason, seasonNumber: 2, clubId: 'barcelona', goals: 40, gamesPlayed: 50 },
+      { ...dummySeason, seasonNumber: 3, clubId: 'barcelona', goals: 40, gamesPlayed: 50 },
+    ],
+    fallbackClub: barca,
+    contractYearsRemaining: 1,
+  });
+  console.log('contract 5yr', fiveYear, '1yr', oneYear, 'factor', contractValueFactor(1));
+  if (oneYear > fiveYear * 0.35) {
+    console.error('one year left on a contract must cut the fee far below a 5-year deal');
+    process.exitCode = 1;
+  }
+  const expiring = resolveSeasonTransition({
+    season: { ...dummySeason, clubId: 'barcelona', goals: 30, gamesPlayed: 38 },
+    role: 'first-team',
+    clubId: 'barcelona',
+    parentClubId: 'barcelona',
+    seasonsAtCurrentClub: 1,
+    age: 21,
+    careerGoals: 80,
+    careerGames: 100,
+    nationality: 'spain',
+    loansUsed: 0,
+    seasonHistory: [{ ...dummySeason, seasonNumber: 2, clubId: 'barcelona', goals: 40, gamesPlayed: 50 }],
+    contractYearsRemaining: 1,
+  });
+  const expiringFees = (expiring.pendingTransfer?.offers ?? []).filter((o) => o.move === 'permanent').map((o) => o.fee);
+  console.log('expiring fees', expiringFees);
+  if (expiringFees.some((fee) => fee !== 0)) {
+    console.error('when the contract expires, transfer fees must be zero');
+    process.exitCode = 1;
+  }
+
+  const firstSeason = resolveSeasonTransition({
+    season: { ...dummySeason, clubId: 'barcelona', goals: 20, gamesPlayed: 38 },
+    role: 'first-team',
+    clubId: 'barcelona',
+    parentClubId: 'barcelona',
+    seasonsAtCurrentClub: 0,
+    age: 19,
+    careerGoals: 20,
+    careerGames: 38,
+    nationality: 'spain',
+    loansUsed: 0,
+    contractYearsRemaining: 5,
+  });
+  const firstLoans = (firstSeason.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan');
+  const firstLoanTiers = firstLoans.map((o) => getClub(o.clubId)?.tier ?? 5);
+  console.log('first-season loans', firstLoans.length, 'tiers', firstLoanTiers);
+  if (firstLoans.length !== 3 || firstLoanTiers.some((tier) => tier >= 5)) {
+    console.error('the first season at a club must still offer value-matching loans');
+    process.exitCode = 1;
+  }
+
+  const twoPoor = [
+    { ...dummySeason, seasonNumber: 3, clubId: 'barcelona', goals: 12, gamesPlayed: 38 },
+    { ...dummySeason, seasonNumber: 4, clubId: 'barcelona', goals: 14, gamesPlayed: 38 },
+  ];
+  const twoPoorSale = resolveSeasonTransition({
+    season: twoPoor[1],
+    role: 'first-team',
+    clubId: 'barcelona',
+    parentClubId: 'barcelona',
+    seasonsAtCurrentClub: 2,
+    age: 22,
+    careerGoals: 66,
+    careerGames: 126,
+    nationality: 'spain',
+    loansUsed: 0,
+    seasonHistory: [
+      { ...dummySeason, seasonNumber: 2, clubId: 'barcelona', goals: 40, gamesPlayed: 50 },
+      twoPoor[0],
+    ],
+    contractYearsRemaining: 5,
+  });
+  const twoPoorTiers = (twoPoorSale.pendingTransfer?.offers ?? [])
+    .filter((o) => o.move === 'permanent')
+    .map((o) => getClub(o.clubId)?.tier ?? 5);
+  console.log('two sub-0.5 seasons perm tiers', twoPoorTiers);
+  if (twoPoorTiers.some((tier) => tier === 1)) {
+    console.error('two consecutive seasons under 0.5 must not offer elite clubs');
+    process.exitCode = 1;
+  }
+
+  const sevenPoor = Array.from({ length: 7 }, (_, i) => ({
+    ...dummySeason,
+    seasonNumber: 4 + i,
+    clubId: 'barcelona',
+    goals: 8,
+    gamesPlayed: 38,
+  }));
+  const afterSeven = playerMarketValueFromSeasons({
+    age: 26,
+    careerGoals: 80 + 56,
+    careerGames: 100 + 7 * 38,
+    seasons: [
+      { ...dummySeason, seasonNumber: 2, clubId: 'barcelona', goals: 40, gamesPlayed: 50 },
+      { ...dummySeason, seasonNumber: 3, clubId: 'barcelona', goals: 40, gamesPlayed: 50 },
+      ...sevenPoor,
+    ],
+    fallbackClub: barca,
+    contractYearsRemaining: 5,
+  });
+  console.log('seven failed seasons', afterSeven, 'poor factor', consecutivePoorFactor(7));
+  if (afterSeven > 12_000_000) {
+    console.error('seven consecutive seasons under 0.25 must collapse value far below €41m');
     process.exitCode = 1;
   }
 }

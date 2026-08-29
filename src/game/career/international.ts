@@ -91,9 +91,8 @@ export function clubEligibleForNationalTeam(clubTier: ClubTier): boolean {
 }
 
 /**
- * Call-up uses the player's first-team career ratio (trial and the reserve
- * year do not count) and the country's FIFA standing. Lower-league clubs
- * are never selected.
+ * Call-up uses this season's goals-per-game, not the career average.
+ * Lower-league clubs are never selected.
  */
 export function isSelectedForNationalTeam(params: {
   clubTier: ClubTier;
@@ -103,6 +102,12 @@ export function isSelectedForNationalTeam(params: {
   if (!params.nationId) return false;
   if (!clubEligibleForNationalTeam(params.clubTier)) return false;
   return params.careerGoalRatio >= selectionRatioForNation(params.nationId);
+}
+
+/** Current-season ratio. Zero games means not in form for a call-up yet. */
+export function seasonRatioForSelection(season: { goals: number; gamesPlayed: number } | null): number {
+  if (!season || season.gamesPlayed <= 0) return 0;
+  return season.goals / season.gamesPlayed;
 }
 
 /**

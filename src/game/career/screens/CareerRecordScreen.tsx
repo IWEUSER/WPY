@@ -22,6 +22,7 @@ export default function CareerRecordScreen() {
   const age = useCareerStore((s) => s.age);
   const careerEarnings = useCareerStore((s) => s.careerEarnings);
   const weeklyWage = useCareerStore((s) => s.weeklyWage);
+  const contractYearsRemaining = useCareerStore((s) => s.contractYearsRemaining);
   const returnToHub = useCareerStore((s) => s.returnToHub);
 
   const seasons: Array<SeasonRecord & { inProgress?: boolean }> = [
@@ -58,6 +59,7 @@ export default function CareerRecordScreen() {
                 careerGames,
                 seasons: [...history, ...(current ? [current] : [])],
                 fallbackClub: club,
+                contractYearsRemaining,
               })
             : null;
         if (value == null && careerEarnings <= 0 && weeklyWage <= 0) return null;

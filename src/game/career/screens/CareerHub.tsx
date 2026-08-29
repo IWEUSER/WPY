@@ -2,7 +2,7 @@ import { calendarDomesticCup, calendarIncludesInternational, type SeasonCalendar
 import { getClub, leagueMatchWeeks } from '../data/clubs';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { describeAvailability, isAvailable } from '../availabilityEngine';
-import { careerRatioForSelection, clubEligibleForNationalTeam, getNation, isSelectedForNationalTeam, selectionRatioForNation } from '../international';
+import { clubEligibleForNationalTeam, getNation, isSelectedForNationalTeam, seasonRatioForSelection, selectionRatioForNation } from '../international';
 import type { SeasonStandings } from '../matchEngine';
 import { displaySeasonLabel } from '../seasonDisplay';
 import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons } from '../playerValue';
@@ -34,6 +34,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const nationalTeam = useCareerStore((s) => s.nationalTeam);
   const careerEarnings = useCareerStore((s) => s.careerEarnings);
   const weeklyWage = useCareerStore((s) => s.weeklyWage);
+  const contractYearsRemaining = useCareerStore((s) => s.contractYearsRemaining);
   const advance = useCareerStore((s) => s.advance);
   const openCareerRecord = useCareerStore((s) => s.openCareerRecord);
 
@@ -58,6 +59,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
     careerGames,
     seasons: [...seasonHistory, season],
     fallbackClub: club,
+    contractYearsRemaining,
   });
 
   return (
@@ -93,6 +95,10 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
             {weeklyWage > 0 ? ` · ${formatWeeklyWage(weeklyWage)}` : ''}
           </p>
         )}
+        <p className="mt-1 text-xs text-white/50">
+          Contract {contractYearsRemaining} year{contractYearsRemaining === 1 ? '' : 's'} left
+          {contractYearsRemaining <= 1 ? ' · expiring' : ''}
+        </p>
         <SeasonCompetitions calendar={seasonCalendar} />
       </div>
 
@@ -166,13 +172,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
             nationName={nation.name}
             clubTier={club.tier}
             seasonNumber={seasonNumber}
-            careerRatio={careerRatioForSelection(
-              careerGoals,
-              careerGames,
-              seasonHistory[0] && seasonHistory[0].gamesPlayed > 0
-                ? seasonHistory[0].goals / seasonHistory[0].gamesPlayed
-                : ratio,
-            )}
+            careerRatio={seasonRatioForSelection(season)}
             sim={seasonSim}
             caps={nationalTeam?.caps ?? 0}
             intlGoals={nationalTeam?.goals ?? 0}
@@ -294,8 +294,8 @@ function InternationalCard({
     if (!clubOk) {
       return `Need a move to a higher-level club before ${nationName} will consider you.`;
     }
-    if (inForm) return `On career form, ${nationName} would pick you.`;
-    return `Need a ${bar.toFixed(2)} career goals/game ratio — currently ${careerRatio.toFixed(2)}.`;
+    if (inForm) return `This season’s ${careerRatio.toFixed(2)} goals/game is enough for ${nationName}.`;
+    return `Need a ${bar.toFixed(2)} goals/game ratio this season — currently ${careerRatio.toFixed(2)}.`;
   })();
 
   return (

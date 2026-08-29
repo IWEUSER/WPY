@@ -24,6 +24,7 @@ export default function SeasonSummaryScreen() {
   const seasonHistory = useCareerStore((s) => s.seasonHistory);
   const continueAfterSeason = useCareerStore((s) => s.continueAfterSeason);
   const lastMatchSummary = useCareerStore((s) => s.lastMatchSummary);
+  const contractYearsRemaining = useCareerStore((s) => s.contractYearsRemaining);
 
   const club = clubId ? getClub(clubId) : undefined;
   if (!club || !season || !clubId || !parentClubId) return null;
@@ -46,6 +47,7 @@ export default function SeasonSummaryScreen() {
     nationality,
     loansUsed: countLoanSpells(seasonHistory, season),
     seasonHistory,
+    contractYearsRemaining,
   });
 
   const honours: string[] = [];
