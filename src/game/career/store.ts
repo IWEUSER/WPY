@@ -139,6 +139,8 @@ function initialState(): CareerState {
 }
 
 interface CareerActions {
+  /** Opens nationality selection before the trial. */
+  startCareer: () => void;
   startTrial: () => void;
   recordTrialShot: (result: ShotResult) => void;
   finishTrial: () => void;
@@ -248,6 +250,8 @@ export const useCareerStore = create<CareerStore>()(
     (set) => ({
       ...initialState(),
 
+      startCareer: () => set({ phase: 'nationality-choice' }),
+
       startTrial: () => set({ phase: 'trial', trial: { shots: [], goals: 0, offeredClubIds: [] } }),
 
       recordTrialShot: (result) =>
@@ -260,7 +264,7 @@ export const useCareerStore = create<CareerStore>()(
       finishTrial: () =>
         set((state) => {
           if (!state.trial) return state;
-          const offered = offerClubsForTrial(state.trial.goals, 3);
+          const offered = offerClubsForTrial(state.trial.goals, 3, state.nationality);
           return {
             trial: { ...state.trial, offeredClubIds: offered.map((c) => c.id) },
             phase: 'club-offer',
@@ -278,14 +282,21 @@ export const useCareerStore = create<CareerStore>()(
           availability: createAvailability(),
           ...startSimulatedSeason(1, clubId, 'reserve', [], null),
           pendingTransfer: null,
-          phase: 'nationality-choice',
+          phase: 'hub',
         }),
 
       chooseNationality: (nationId) =>
-        set({
-          nationality: nationId,
-          nationalTeam: createNationalTeamState(nationId),
-          phase: 'hub',
+        set((state) => {
+          const nationalTeam = createNationalTeamState(nationId);
+          if (state.clubId) {
+            return { nationality: nationId, nationalTeam, phase: 'hub' };
+          }
+          return {
+            nationality: nationId,
+            nationalTeam,
+            phase: 'trial',
+            trial: { shots: [], goals: 0, offeredClubIds: [] },
+          };
         }),
 
       advance: () =>
@@ -428,6 +439,7 @@ export const useCareerStore = create<CareerStore>()(
             age: state.age,
             careerGoals: state.careerGoals,
             careerGames: state.careerGames,
+            nationality: state.nationality,
           });
 
           const finishedSeason: SeasonRecord = { ...season, ratioMet: !transition.pendingTransfer };
@@ -502,16 +514,30 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 3,
+      version: 4,
       migrate: (persisted) => {
         const state = persisted as Partial<CareerState>;
+        const sim = state.seasonSim;
         return {
           ...state,
           nationality: state.nationality ?? null,
           nationalTeam: state.nationalTeam ?? null,
           seasonCalendar: state.seasonCalendar ?? null,
           seasonStandings: state.seasonStandings ?? null,
-          seasonSim: state.seasonSim ?? null,
+          seasonSim: sim
+            ? {
+                ...sim,
+                domesticCup: sim.domesticCup ?? null,
+                domesticCupStage: sim.domesticCupStage ?? 'not-entered',
+                honours: {
+                  leagueChampion: sim.honours?.leagueChampion ?? false,
+                  continentalChampion: sim.honours?.continentalChampion ?? null,
+                  superCup: sim.honours?.superCup ?? false,
+                  internationalChampion: sim.honours?.internationalChampion ?? null,
+                  domesticCup: sim.honours?.domesticCup ?? null,
+                },
+              }
+            : null,
           liveMatch: state.liveMatch ?? null,
           formWindow: state.formWindow ?? [],
           wpyResult: state.wpyResult ?? null,

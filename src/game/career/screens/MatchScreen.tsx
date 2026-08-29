@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import ShootingGame from '../../shooting/ShootingGame';
 import type { ShotResult } from '../../shooting/types';
 import { getClub } from '../data/clubs';
-import { CONTINENTAL_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
+import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { fixtureTitle } from '../seasonSim';
 import { useCareerStore, SEASON_LENGTH } from '../store';
 
@@ -28,9 +28,11 @@ export default function MatchScreen() {
 
   const competitionName = fixture?.continentalCup
     ? CONTINENTAL_CUPS[fixture.continentalCup].name
-    : fixture?.kind === 'international' && seasonSim?.internationalTournament
-      ? INTERNATIONAL_TOURNAMENTS[seasonSim.internationalTournament].name
-      : null;
+    : fixture?.kind === 'domestic-cup' && fixture.domesticCup
+      ? DOMESTIC_CUPS[fixture.domesticCup].name
+      : fixture?.kind === 'international' && seasonSim?.internationalTournament
+        ? INTERNATIONAL_TOURNAMENTS[seasonSim.internationalTournament].name
+        : null;
 
   const chances = liveMatch?.chancesTotal ?? 1;
   const subtitle = simulated

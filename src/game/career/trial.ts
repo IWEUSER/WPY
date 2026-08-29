@@ -1,5 +1,5 @@
-import { CLUBS, clubsByTier, type Club, type ClubTier } from './data/clubs';
-import { shuffle } from './util';
+import { CLUBS, clubsByTier, clubsInCountry, type Club, type ClubTier } from './data/clubs';
+import { countryForNationality, pickClubsBiasedToCountry } from './clubOffers';
 
 export const TRIAL_SHOTS = 10;
 
@@ -12,16 +12,22 @@ export function tierForTrial(goals: number): ClubTier {
   return 5; // 0/10 -> the smallest club in the game
 }
 
-/** Picks up to `count` distinct clubs from the tier the trial performance earned. */
-export function offerClubsForTrial(goals: number, count = 3): Club[] {
+/**
+ * Picks up to `count` distinct clubs from the tier the trial performance
+ * earned. If the player's nationality has a league in the game, two of the
+ * three offers come from that country.
+ */
+export function offerClubsForTrial(goals: number, count = 3, nationality?: string | null): Club[] {
   const tier = tierForTrial(goals);
   let pool = clubsByTier(tier);
   if (pool.length < count) {
-    // Not enough clubs in this tier alone (e.g. tier 5) - top up from the
-    // next tier down so there's always a real choice of three.
     const fallbackTier = Math.min(5, tier + 1) as ClubTier;
     pool = [...pool, ...clubsByTier(fallbackTier)];
   }
-  if (pool.length < count) pool = CLUBS;
-  return shuffle(pool).slice(0, count);
+  if (pool.length < count) pool = [...pool, ...CLUBS];
+
+  const country = countryForNationality(nationality);
+  const extraHome = country ? clubsInCountry(country) : [];
+  const minHome = extraHome.length > 0 ? 2 : 0;
+  return pickClubsBiasedToCountry(pool, count, country, minHome, extraHome);
 }

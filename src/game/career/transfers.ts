@@ -1,5 +1,5 @@
 import { CLUBS, getClub, loanCandidates, type Club, type ClubTier } from './data/clubs';
-import { shuffle } from './util';
+import { countryForNationality, pickClubsBiasedToCountry, nearbyTierClubs, tierPool } from './clubOffers';
 import type { PlayerRole, SeasonRecord } from './types';
 
 /** Maps a goals-per-game ratio onto the club tier it's good enough for,
@@ -12,13 +12,17 @@ export function tierForRatio(ratio: number): ClubTier {
   return 5;
 }
 
-function pickClubsFromTier(tier: ClubTier, count: number, excludeIds: string[]): Club[] {
-  let pool = CLUBS.filter((c) => c.tier === tier && !excludeIds.includes(c.id));
-  if (pool.length < count) {
-    const fallback = CLUBS.filter((c) => !excludeIds.includes(c.id) && Math.abs(c.tier - tier) === 1);
-    pool = [...pool, ...fallback];
-  }
-  return shuffle(pool).slice(0, count);
+function pickClubsFromTier(
+  tier: ClubTier,
+  count: number,
+  excludeIds: string[],
+  nationality?: string | null,
+): Club[] {
+  const preferred = tierPool(tier, excludeIds);
+  const country = countryForNationality(nationality);
+  const extraHome = nearbyTierClubs(tier, excludeIds);
+  const minHome = country && CLUBS.some((c) => c.country === country && !excludeIds.includes(c.id)) ? 1 : 0;
+  return pickClubsBiasedToCountry(preferred, count, country, minHome, extraHome);
 }
 
 export type TransferKind = 'loan' | 'sold' | 'promotion-offer';
@@ -56,6 +60,7 @@ export interface SeasonTransitionParams {
   age: number;
   careerGoals: number;
   careerGames: number;
+  nationality?: string | null;
 }
 
 /**
@@ -65,7 +70,8 @@ export interface SeasonTransitionParams {
  * Doesn't mutate anything - the store applies whichever branch fires.
  */
 export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonTransitionResult {
-  const { season, role, clubId, parentClubId, seasonsAtCurrentClub, age, careerGoals, careerGames } = params;
+  const { season, role, clubId, parentClubId, seasonsAtCurrentClub, age, careerGoals, careerGames, nationality } =
+    params;
   const club = getClub(clubId);
   if (!club) {
     return { headline: 'Season complete', detail: '' };
@@ -81,7 +87,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
         immediate: { clubId, parentClubId, role: 'first-team', seasonsAtCurrentClub: seasonsAtCurrentClub + 1 },
       };
     }
-    const options = shuffle(loanCandidates(club)).slice(0, 2);
+    const options = pickLoanClubs(club, nationality, 2);
     return {
       headline: 'Ratio not met - a loan move is coming',
       detail: `${ratio.toFixed(2)} goals/game wasn't enough to convince ${club.name}. You're being sent out on loan to get regular first-team football.`,
@@ -111,7 +117,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       };
     }
     const saleTier = Math.max(tierForRatio(ratio), club.tier) as ClubTier;
-    const offers = pickClubsFromTier(saleTier, 3, [club.id, parentClub?.id ?? '']);
+    const offers = pickClubsFromTier(saleTier, 3, [club.id, parentClub?.id ?? ''], nationality);
     return {
       headline: 'Loan unsuccessful - you are being sold',
       detail: `${ratio.toFixed(2)} goals/game wasn't enough even for ${club.name}. ${parentClub?.name ?? 'Your parent club'} have decided to cash in.`,
@@ -131,7 +137,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
 
   if (!ratioMet && !graceActive) {
     const saleTier = Math.max(tierForRatio(ratio), club.tier) as ClubTier;
-    const offers = pickClubsFromTier(saleTier, 3, [club.id]);
+    const offers = pickClubsFromTier(saleTier, 3, [club.id], nationality);
     return {
       headline: `${club.name} have put you up for sale`,
       detail: `Your ratio slipped to ${ratio.toFixed(2)} goals/game, below the ${threshold.toFixed(2)} they expect.`,
@@ -147,7 +153,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
   const effectiveRatio = age < 28 ? (careerGames > 0 ? careerGoals / careerGames : 0) : ratio;
   const betterTier = tierForRatio(effectiveRatio);
   if (betterTier < club.tier) {
-    const offers = pickClubsFromTier(betterTier, 3, [club.id]);
+    const offers = pickClubsFromTier(betterTier, 3, [club.id], nationality);
     const basis = age < 28 ? 'career' : "last season's";
     return {
       headline: 'A bigger club has come calling',
@@ -168,4 +174,10 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       : `${club.name} are giving you a fair run before judging your ratio.`,
     immediate: { clubId, parentClubId, role: 'first-team', seasonsAtCurrentClub: seasonsAtCurrentClub + 1 },
   };
+}
+
+function pickLoanClubs(club: Club, nationality: string | null | undefined, count: number): Club[] {
+  const candidates = loanCandidates(club);
+  const country = countryForNationality(nationality);
+  return pickClubsBiasedToCountry(candidates, count, country, country ? 1 : 0, candidates);
 }

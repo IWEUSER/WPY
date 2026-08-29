@@ -4,7 +4,7 @@ import { useCareerStore } from '../store';
 export default function HomeScreen({ onPractice }: { onPractice: () => void }) {
   const clubId = useCareerStore((s) => s.clubId);
   const seasonNumber = useCareerStore((s) => s.seasonNumber);
-  const startTrial = useCareerStore((s) => s.startTrial);
+  const startCareer = useCareerStore((s) => s.startCareer);
   const resetCareer = useCareerStore((s) => s.resetCareer);
   const advance = useCareerStore((s) => s.advance);
 
@@ -35,11 +35,11 @@ export default function HomeScreen({ onPractice }: { onPractice: () => void }) {
         {!inProgress && (
           <button
             type="button"
-            onClick={startTrial}
+            onClick={startCareer}
             className="rounded-2xl bg-emerald-500 px-6 py-4 text-lg font-bold text-black shadow-lg shadow-emerald-500/20 transition active:scale-[0.98]"
           >
             Start Career
-            <span className="mt-1 block text-xs font-medium text-black/70">Take your trial, aged 16</span>
+            <span className="mt-1 block text-xs font-medium text-black/70">Pick your country, then take the trial</span>
           </button>
         )}
 

@@ -1,9 +1,11 @@
 import type { ClubTier } from './data/clubs';
 import {
   continentalCupForClub,
+  domesticCupForCountry,
   internationalTournamentForSeason,
   type Confederation,
   type ContinentalCupId,
+  type DomesticCupId,
   type InternationalTournamentId,
 } from './data/competitions';
 
@@ -15,6 +17,7 @@ import {
  */
 export type FixtureKind =
   | 'league'
+  | 'domestic-cup'
   | 'continental-group'
   | 'continental-knockout'
   | 'continental-semi-final'
@@ -22,10 +25,14 @@ export type FixtureKind =
   | 'super-cup'
   | 'international';
 
+export type DomesticCupStage = 'round-of-16' | 'quarter-final' | 'semi-final' | 'final';
+
 export interface CalendarFixture {
   week: number;
   kind: FixtureKind;
   continentalCup?: ContinentalCupId;
+  domesticCup?: DomesticCupId;
+  domesticCupStage?: DomesticCupStage;
   /** Semis and finals are decided by one chance; everything else gets the
    * regular league-style distribution. */
   isDecisive: boolean;
@@ -44,6 +51,8 @@ export interface SeasonCalendar {
   seasonNumber: number;
   totalWeeks: number;
   fixtures: CalendarFixture[];
+  internationalTournament?: InternationalTournamentId | null;
+  domesticCup?: DomesticCupId | null;
 }
 
 export interface BuildCalendarParams {
@@ -52,30 +61,74 @@ export interface BuildCalendarParams {
   leagueMatchWeeks: number;
   clubTier: ClubTier;
   confederation: Confederation;
+  /** Club country, used to schedule the domestic cup. */
+  country?: string;
+  /** Player's national confederation, used to pick Euro / Copa / AFCON / etc. */
+  nationConfederation?: Confederation | null;
   /** When false, skip the international window (player not selected). */
   includeInternational?: boolean;
+  includeDomesticCup?: boolean;
 }
 
 const GROUP_STAGE_MATCHDAYS = 8;
 const KNOCKOUT_ROUNDS_BEFORE_SEMI = 2; // e.g. round of 16, quarter-final - both two-legged.
 
+const DOMESTIC_CUP_WEEKS: { week: number; stage: DomesticCupStage }[] = [
+  { week: 3, stage: 'round-of-16' },
+  { week: 9, stage: 'quarter-final' },
+  { week: 15, stage: 'semi-final' },
+  { week: 21, stage: 'final' },
+];
+
+const KIND_ORDER: Record<FixtureKind, number> = {
+  'domestic-cup': 0,
+  'super-cup': 1,
+  'continental-group': 2,
+  'continental-knockout': 3,
+  'continental-semi-final': 4,
+  'continental-final': 5,
+  league: 6,
+  international: 7,
+};
+
 /**
- * Builds the season's week-by-week fixture list: league weeks plus, for
- * clubs that qualify, continental group/knockout weeks and an international
- * window - mixing league and Europe the way the locked design calls for.
+ * Builds the season's week-by-week fixture list: league weeks plus domestic
+ * cup ties, and for clubs that qualify, continental group/knockout weeks and
+ * an international window.
  *
- * This only lays out *what kind* of match happens each week; it does not
- * simulate opponents, results, or a league table. That's the season 2-20
- * simulation engine (see matchEngine.ts), which is designed to plug in
- * behind this calendar without changing its shape.
+ * This only lays out *what kind* of match happens each week; opponents and
+ * results are filled in by seasonSim.
  */
 export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar {
-  const { seasonNumber, leagueMatchWeeks, clubTier, confederation, includeInternational = true } = params;
+  const {
+    seasonNumber,
+    leagueMatchWeeks,
+    clubTier,
+    confederation,
+    country,
+    nationConfederation,
+    includeInternational = true,
+    includeDomesticCup = true,
+  } = params;
   const cup = continentalCupForClub(clubTier, confederation);
+  const domesticCup = includeDomesticCup && country ? domesticCupForCountry(country) : null;
   const fixtures: CalendarFixture[] = [];
 
   for (let week = 1; week <= leagueMatchWeeks; week++) {
     fixtures.push({ week, kind: 'league', isDecisive: false });
+  }
+
+  if (domesticCup) {
+    for (const round of DOMESTIC_CUP_WEEKS) {
+      const week = Math.min(leagueMatchWeeks, round.week);
+      fixtures.push({
+        week,
+        kind: 'domestic-cup',
+        domesticCup,
+        domesticCupStage: round.stage,
+        isDecisive: false,
+      });
+    }
   }
 
   let week = leagueMatchWeeks;
@@ -102,24 +155,33 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
     fixtures.push({ week: ++week, kind: 'continental-final', continentalCup: cup, isDecisive: true });
   }
 
-  const internationalTournament = internationalTournamentForSeason(seasonNumber);
+  const internationalTournament = internationalTournamentForSeason(seasonNumber, nationConfederation ?? confederation);
   if (includeInternational && internationalTournament) {
     fixtures.push({ week: ++week, kind: 'international', isDecisive: false, internationalRound: 'group' });
     fixtures.push({ week: ++week, kind: 'international', isDecisive: true, internationalRound: 'semi-final' });
     fixtures.push({ week: ++week, kind: 'international', isDecisive: true, internationalRound: 'final' });
   }
 
-  fixtures.sort((a, b) => a.week - b.week);
+  fixtures.sort((a, b) => a.week - b.week || KIND_ORDER[a.kind] - KIND_ORDER[b.kind]);
   return {
     seasonNumber,
     totalWeeks: Math.max(leagueMatchWeeks, week),
     fixtures,
+    internationalTournament: includeInternational ? internationalTournament : null,
+    domesticCup,
   };
 }
 
 /** Convenience lookup for the UI: which international tournament (if any)
- * this calendar's season includes, without pulling in the full competitions
- * module just to check. */
+ * this calendar actually scheduled. */
 export function calendarIncludesInternational(calendar: SeasonCalendar): InternationalTournamentId | null {
-  return internationalTournamentForSeason(calendar.seasonNumber);
+  if (calendar.internationalTournament) return calendar.internationalTournament;
+  if (calendar.fixtures.some((f) => f.kind === 'international')) {
+    return internationalTournamentForSeason(calendar.seasonNumber);
+  }
+  return null;
+}
+
+export function calendarDomesticCup(calendar: SeasonCalendar): DomesticCupId | null {
+  return calendar.domesticCup ?? calendar.fixtures.find((f) => f.domesticCup)?.domesticCup ?? null;
 }

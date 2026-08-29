@@ -6,6 +6,7 @@
  * Run with: npx tsx scripts/simulateSeason2Store.ts
  */
 import { useCareerStore, SEASON_LENGTH } from '../src/game/career/store';
+import { getClub } from '../src/game/career/data/clubs';
 import type { ShotResult } from '../src/game/shooting/types';
 
 function fakeShot(scored: boolean): ShotResult {
@@ -33,13 +34,34 @@ function fakeShot(scored: boolean): ShotResult {
 
 const store = useCareerStore;
 store.getState().resetCareer();
-store.getState().startTrial();
+store.getState().startCareer();
+console.log('after startCareer phase', store.getState().phase, '(expect nationality-choice)');
+if (store.getState().phase !== 'nationality-choice') {
+  console.error('Start Career must open nationality selection before the trial');
+  process.exitCode = 1;
+}
+store.getState().chooseNationality('spain');
+console.log('after nationality phase', store.getState().phase, 'nation', store.getState().nationality, '(expect trial / spain)');
+if (store.getState().phase !== 'trial' || store.getState().nationality !== 'spain') {
+  console.error('Choosing nationality with no club must start the trial');
+  process.exitCode = 1;
+}
 for (let i = 0; i < 10; i++) store.getState().recordTrialShot(fakeShot(true));
 store.getState().finishTrial();
-const clubId = store.getState().trial!.offeredClubIds[0];
+const offered = store.getState().trial!.offeredClubIds;
+const spanishOffers = offered.filter((id) => getClub(id)?.country === 'Spain').length;
+console.log('S1 offers', offered, `spanish=${spanishOffers}`);
+if (spanishOffers < 2) {
+  console.error('Spanish nationality should produce 2 of 3 trial offers from Spain');
+  process.exitCode = 1;
+}
+const clubId = offered[0];
 store.getState().chooseClub(clubId);
-store.getState().chooseNationality('spain');
 console.log('S1 club', clubId, 'phase', store.getState().phase, 'calendar', store.getState().seasonCalendar);
+if (store.getState().phase !== 'hub') {
+  console.error('Signing a club after nationality must go to the hub, not nationality again');
+  process.exitCode = 1;
+}
 
 for (let i = 0; i < SEASON_LENGTH; i++) {
   store.getState().advance();

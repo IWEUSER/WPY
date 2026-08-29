@@ -14,9 +14,14 @@ import {
   chancesForLeagueMatch,
 } from '../src/game/career/chanceEngine';
 import { getClub } from '../src/game/career/data/clubs';
-import { simulateClubMatch } from '../src/game/career/matchEngine';
+import { NATIONS } from '../src/game/career/data/nations';
+import { internationalTournamentForSeason } from '../src/game/career/data/competitions';
+import { simulateClubMatch, simulateLeagueSeason } from '../src/game/career/matchEngine';
 import { hydrateSeason } from '../src/game/career/seasonSim';
+import { offerClubsForTrial } from '../src/game/career/trial';
+import { resolveSeasonTransition } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
+import type { SeasonRecord } from '../src/game/career/types';
 
 const N = 50000;
 
@@ -51,16 +56,39 @@ console.log('\n--- Decisive matches (semi-final / final): always exactly 1 chanc
 const decisiveCounts = new Set(Array.from({ length: 1000 }, () => chancesForDecisiveMatch().count));
 console.log(`distinct chance counts seen across 1000 draws: [${[...decisiveCounts].join(', ')}] (expect [1])`);
 
-console.log('\n--- Season calendar shape (tier 1 UEFA club, season 2) ---');
-const calendar = buildSeasonCalendar({ seasonNumber: 2, leagueMatchWeeks: 24, clubTier: 1, confederation: 'UEFA' });
+console.log('\n--- Season calendar shape (tier 1 UEFA club, season 2, Spain) ---');
+const calendar = buildSeasonCalendar({
+  seasonNumber: 2,
+  leagueMatchWeeks: 24,
+  clubTier: 1,
+  confederation: 'UEFA',
+  country: 'Spain',
+  nationConfederation: 'UEFA',
+});
 console.log(`total weeks: ${calendar.totalWeeks}, fixtures: ${calendar.fixtures.length}`);
 const kindCounts: Record<string, number> = {};
 for (const f of calendar.fixtures) kindCounts[f.kind] = (kindCounts[f.kind] ?? 0) + 1;
 console.log(kindCounts);
+if ((kindCounts['domestic-cup'] ?? 0) !== 4) {
+  console.error('expected 4 domestic-cup fixtures (Copa del Rey)');
+  process.exitCode = 1;
+}
 
 console.log('\n--- Season calendar shape (tier 4 UEFA club, season 3 - no continental football) ---');
-const noEuropeCalendar = buildSeasonCalendar({ seasonNumber: 3, leagueMatchWeeks: 24, clubTier: 4, confederation: 'UEFA' });
-console.log(`total weeks: ${noEuropeCalendar.totalWeeks}, fixtures: ${noEuropeCalendar.fixtures.length} (expect 24, all league)`);
+const noEuropeCalendar = buildSeasonCalendar({
+  seasonNumber: 3,
+  leagueMatchWeeks: 24,
+  clubTier: 4,
+  confederation: 'UEFA',
+  country: 'Germany',
+});
+const noEuropeKinds: Record<string, number> = {};
+for (const f of noEuropeCalendar.fixtures) noEuropeKinds[f.kind] = (noEuropeKinds[f.kind] ?? 0) + 1;
+console.log(`total weeks: ${noEuropeCalendar.totalWeeks}, fixtures: ${noEuropeCalendar.fixtures.length}`, noEuropeKinds);
+if ((noEuropeKinds.league ?? 0) !== 24 || (noEuropeKinds['domestic-cup'] ?? 0) !== 4) {
+  console.error('expected 24 league + 4 DFB-Pokal fixtures');
+  process.exitCode = 1;
+}
 
 console.log('\n--- WPY: elite ratio + trophy always wins ---');
 console.log(
@@ -160,4 +188,89 @@ if (madrid) {
   console.log('mean pre-assigned chances', chanceAvg.toFixed(2), '(expect ~2, decisive matches pull it slightly down)');
   const missingOpp = calendar.fixtures.filter((f) => !f.opponentLabel).length;
   console.log('fixtures missing an opponent', missingOpp, '(expect 0)');
+  console.log('domestic cup', sim.domesticCup, sim.domesticCupStage, '(expect copa-del-rey, round-of-16)');
+  console.log('international tournament', sim.internationalTournament, '(expect euro in season 2 for Spain)');
+  if (sim.domesticCup !== 'copa-del-rey') {
+    console.error('Madrid season 2 should include Copa del Rey');
+    process.exitCode = 1;
+  }
+  if (sim.internationalTournament !== 'euro') {
+    console.error('Spanish player in season 2 should play the Euros');
+    process.exitCode = 1;
+  }
+}
+
+console.log('\n--- FIFA nations ---');
+console.log(`nations: ${NATIONS.length} (expect 211)`);
+if (NATIONS.length !== 211) {
+  console.error(`expected 211 FIFA nations, got ${NATIONS.length}`);
+  process.exitCode = 1;
+}
+console.log('season 2 Brazil tournament', internationalTournamentForSeason(2, 'CONMEBOL'), '(expect copa-america)');
+console.log('season 4 any', internationalTournamentForSeason(4, 'CAF'), '(expect world-cup)');
+
+console.log('\n--- Trial offers: German nationality gets 2/3 German clubs ---');
+let germanTrials = 0;
+for (let i = 0; i < 80; i++) {
+  const offers = offerClubsForTrial(5, 3, 'germany');
+  const home = offers.filter((c) => c.country === 'Germany').length;
+  if (home >= 2 && offers.length === 3) germanTrials += 1;
+}
+console.log(`2-of-3 German: ${germanTrials}/80`);
+if (germanTrials < 80) {
+  console.error('German trial offers must include 2 clubs from Germany');
+  process.exitCode = 1;
+}
+
+console.log('\n--- Transfer offers: at least one home-nation club ---');
+const dummySeason: SeasonRecord = {
+  seasonNumber: 2,
+  clubId: 'bayern',
+  role: 'first-team',
+  matches: [],
+  goals: 2,
+  gamesPlayed: 24,
+  ratioMet: false,
+};
+const sale = resolveSeasonTransition({
+  season: dummySeason,
+  role: 'first-team',
+  clubId: 'bayern',
+  parentClubId: 'bayern',
+  seasonsAtCurrentClub: 1,
+  age: 20,
+  careerGoals: 2,
+  careerGames: 24,
+  nationality: 'germany',
+});
+const saleClubs = sale.pendingTransfer?.clubIds ?? [];
+const saleHome = saleClubs.filter((id) => getClub(id)?.country === 'Germany').length;
+console.log('sale offers', saleClubs, `home=${saleHome}`);
+if (saleHome < 1) {
+  console.error('German player sale offers must include at least one German club');
+  process.exitCode = 1;
+}
+
+console.log('\n--- Bundesliga hierarchy: Mainz must almost never win the title ---');
+const leagueTrials = 400;
+const titleCounts: Record<string, number> = {};
+for (let i = 0; i < leagueTrials; i++) {
+  const table = simulateLeagueSeason('Bundesliga', 24);
+  const champ = table[0]?.clubId ?? 'none';
+  titleCounts[champ] = (titleCounts[champ] ?? 0) + 1;
+}
+const rankedTitles = Object.entries(titleCounts).sort((a, b) => b[1] - a[1]);
+for (const [id, n] of rankedTitles) {
+  console.log(`  ${id}: ${((n / leagueTrials) * 100).toFixed(1)}%`);
+}
+const mainzRate = (titleCounts.mainz ?? 0) / leagueTrials;
+const bayernRate = (titleCounts.bayern ?? 0) / leagueTrials;
+console.log(`Mainz titles ${((mainzRate) * 100).toFixed(2)}% (expect < 2%), Bayern ${((bayernRate) * 100).toFixed(1)}%`);
+if (mainzRate > 0.02) {
+  console.error('Mainz is winning the Bundesliga too often — strength gap is too small');
+  process.exitCode = 1;
+}
+if (bayernRate < 0.45) {
+  console.error('Bayern should be clear favourites in this pyramid');
+  process.exitCode = 1;
 }

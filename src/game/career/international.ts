@@ -1,29 +1,16 @@
 import { createAvailability } from './availabilityEngine';
-import { confederationForCountry, type Confederation } from './data/competitions';
+import type { Confederation } from './data/competitions';
 import type { ClubTier } from './data/clubs';
+import { clubsInCountry } from './data/clubs';
+import { NATIONS, getNation, type Nation } from './data/nations';
 import type { AvailabilityState } from './types';
 
-export interface Nation {
-  id: string;
-  name: string;
-  confederation: Confederation;
-}
+export type { Nation };
+export { NATIONS, getNation };
 
-/** One nation per country already represented in the club pyramid, so a
- * fresh save always has a real choice - add more nations here freely, since
- * nationality is independent of which club a player signs for. */
-export const NATIONS: Nation[] = [
-  { id: 'england', name: 'England', confederation: confederationForCountry('England') },
-  { id: 'spain', name: 'Spain', confederation: confederationForCountry('Spain') },
-  { id: 'italy', name: 'Italy', confederation: confederationForCountry('Italy') },
-  { id: 'germany', name: 'Germany', confederation: confederationForCountry('Germany') },
-  { id: 'france', name: 'France', confederation: confederationForCountry('France') },
-  { id: 'saudi-arabia', name: 'Saudi Arabia', confederation: confederationForCountry('Saudi Arabia') },
-  { id: 'united-states', name: 'United States', confederation: confederationForCountry('United States') },
-];
-
-export function getNation(id: string): Nation | undefined {
-  return NATIONS.find((n) => n.id === id);
+export function nationHasDomesticLeague(nationId: string): boolean {
+  const nation = getNation(nationId);
+  return Boolean(nation && clubsInCountry(nation.name).length > 0);
 }
 
 /**
@@ -44,6 +31,11 @@ export function createNationalTeamState(nationId: string): NationalTeamState {
   return { nationId, availability: createAvailability(), caps: 0, goals: 0 };
 }
 
+export function confederationOfNation(nationId: string | null | undefined): Confederation | null {
+  if (!nationId) return null;
+  return getNation(nationId)?.confederation ?? null;
+}
+
 /** Threshold goal ratio needed to be picked, indexed by club tier (1 = elite
  * down to 5 = smallest) - index 0 is unused padding so `tier` can index
  * directly. Bigger clubs put a player in front of more selectors, so a
@@ -57,10 +49,7 @@ export function selectionRatioForTier(clubTier: ClubTier): number {
 
 /**
  * Whether the player earns international selection this season, based on
- * their club level and the goal ratio they posted there. A real (if simple)
- * heuristic that the season 2-20 engine calls whenever national squads are
- * picked; TODO(season 2-20): wire this into an actual squad-selection +
- * fixture list once international matches join the calendar.
+ * their club level and the goal ratio they posted there.
  */
 export function isSelectedForNationalTeam(clubTier: ClubTier, seasonGoalRatio: number): boolean {
   return seasonGoalRatio >= SELECTION_RATIO_BY_TIER[clubTier];

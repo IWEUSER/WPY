@@ -61,7 +61,7 @@ export default function ClubOfferScreen() {
 
       <p className="max-w-sm text-xs text-white/40">
         You're only 16 - whichever club you join, you'll start out in the reserve team and need to hit their goal ratio to
-        earn a first-team promotion. After this you'll pick which country you represent.
+        earn a first-team promotion.
       </p>
     </div>
   );

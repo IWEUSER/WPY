@@ -77,9 +77,8 @@ export interface CareerState {
   careerGames: number;
   /** Set when a loan/sale/transfer decision needs the player to pick a club. */
   pendingTransfer: PendingTransfer | null;
-  /** Chosen international nationality (independent of current club) - null
-   * until picked. The player chooses this once after signing their first
-   * club; call-ups later use goal ratio + club level (see international.ts). */
+  /** Chosen international nationality - picked before the trial so home
+   * clubs can bid. Call-ups later use goal ratio + club level. */
   nationality: string | null;
   /** Caps, goals, and the same miss-streak drop rule as club football, scoped
    * to the national team. Null until a nationality is chosen. */

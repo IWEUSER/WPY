@@ -1,5 +1,5 @@
 import type { ClubTier } from './data/clubs';
-import { CLUBS, getClub } from './data/clubs';
+import { CLUBS, clubsInLeague, getClub } from './data/clubs';
 import {
   confederationForCountry,
   continentalCupForClub,
@@ -7,16 +7,19 @@ import {
 } from './data/competitions';
 
 /**
- * Probabilistic club-vs-club engine for seasons 2-20. Better clubs (lower
- * tier number) win more often, never deterministically. Regular league and
- * group fixtures use this independently of the player's chances; the
- * player's goals are then added as one extra input. Semi-finals and finals
- * bypass this entirely (see chanceEngine.resolveDecisiveMatch).
+ * Probabilistic club-vs-club engine for seasons 2-20. Stronger squads
+ * (`Club.strength`) win more often, never deterministically. Tier is only a
+ * fallback when a test passes no explicit strength. Regular league and group
+ * fixtures use this independently of the player's chances; the player's
+ * goals are then added as one extra input. Semi-finals and finals bypass
+ * this entirely (see chanceEngine.resolveDecisiveMatch).
  */
 
 export interface ClubMatchContext {
-  clubTier: ClubTier;
-  opponentTier: ClubTier;
+  clubTier?: ClubTier;
+  opponentTier?: ClubTier;
+  clubStrength?: number;
+  opponentStrength?: number;
   isHome: boolean;
 }
 
@@ -26,12 +29,28 @@ export interface ClubMatchResult {
   outcome: 'win' | 'draw' | 'loss';
 }
 
-function rating(tier: ClubTier): number {
-  return 5 - (tier - 1); // 5,4,3,2,1 - used only as a gap, not a multiplier
+/** Typical squad quality when a caller only knows tier. */
+export const TIER_STRENGTH: Record<ClubTier, number> = {
+  1: 90,
+  2: 81,
+  3: 73,
+  4: 64,
+  5: 52,
+};
+
+export function resolveStrength(strength: number | undefined, tier: ClubTier | undefined): number {
+  if (strength != null) return strength;
+  if (tier != null) return TIER_STRENGTH[tier];
+  return 70;
 }
 
-function sigmoid(x: number): number {
-  return 1 / (1 + Math.exp(-x));
+/**
+ * Elo-style win expectancy. Scale 14 is steeper than classic 20 so a 30-point
+ * gap (Bayern 94 vs Mainz 61) is close to a lock, while a 6-point gap is still
+ * a real contest.
+ */
+export function expectedScore(us: number, them: number): number {
+  return 1 / (1 + 10 ** ((them - us) / 14));
 }
 
 export function simulateClubMatch(
@@ -39,18 +58,22 @@ export function simulateClubMatch(
   rng: () => number = Math.random,
   playerGoals = 0,
 ): ClubMatchResult {
-  const diff = rating(context.clubTier) - rating(context.opponentTier) + (context.isHome ? 0.35 : -0.35);
-  const pWin = sigmoid(0.55 * diff) * 0.82;
-  const pDraw = 0.27 * Math.exp(-0.18 * diff * diff);
+  const us = resolveStrength(context.clubStrength, context.clubTier) + (context.isHome ? 3.5 : 0);
+  const them = resolveStrength(context.opponentStrength, context.opponentTier);
+  const diff = us - them;
+  const expected = expectedScore(us, them);
+  const pWin = expected * 0.78;
+  const pDraw = 0.24 * Math.exp(-((diff / 22) ** 2));
   const roll = rng();
   let outcome: ClubMatchResult['outcome'];
   if (roll < pWin) outcome = 'win';
   else if (roll < pWin + pDraw) outcome = 'draw';
   else outcome = 'loss';
 
-  const base = 1.1 + 0.12 * Math.abs(diff);
-  let scoreFor = poisson(base, rng);
-  let scoreAgainst = poisson(base * 0.85, rng);
+  const attack = 1.05 + 0.035 * Math.max(-12, Math.min(12, diff / 3));
+  const defence = 1.05 - 0.035 * Math.max(-12, Math.min(12, diff / 3));
+  let scoreFor = poisson(Math.max(0.35, attack), rng);
+  let scoreAgainst = poisson(Math.max(0.35, defence), rng);
   if (outcome === 'win' && scoreFor <= scoreAgainst) scoreFor = scoreAgainst + 1 + (rng() < 0.35 ? 1 : 0);
   if (outcome === 'loss' && scoreAgainst <= scoreFor) scoreAgainst = scoreFor + 1 + (rng() < 0.35 ? 1 : 0);
   if (outcome === 'draw') {
@@ -221,8 +244,60 @@ export function simulateRestOfLeagueRound(
     const home = getClub(homeId);
     const away = getClub(awayId);
     if (!home || !away) continue;
-    const result = simulateClubMatch({ clubTier: home.tier, opponentTier: away.tier, isHome: true }, rng);
+    const result = simulateClubMatch(
+      { clubStrength: home.strength, opponentStrength: away.strength, clubTier: home.tier, opponentTier: away.tier, isHome: true },
+      rng,
+    );
     next = applyMatchToTable(next, homeId, awayId, result);
   }
   return next;
+}
+
+/**
+ * Circle-method pairings for one round of a single round-robin. `round` is
+ * 0-indexed; home/away flip every full cycle so a 24-game season with 8 clubs
+ * is three cycles plus three leftover rounds.
+ */
+export function roundRobinPairs(clubIds: string[], round: number): [string, string][] {
+  const n = clubIds.length;
+  if (n < 2) return [];
+  const rotation = [...clubIds];
+  const cycle = n - 1;
+  const r = ((round % cycle) + cycle) % cycle;
+  for (let i = 0; i < r; i++) {
+    const last = rotation.pop();
+    if (last) rotation.splice(1, 0, last);
+  }
+  const pairs: [string, string][] = [];
+  for (let i = 0; i < n / 2; i++) {
+    const a = rotation[i];
+    const b = rotation[n - 1 - i];
+    const homeFirst = Math.floor(round / cycle) % 2 === 0;
+    pairs.push(homeFirst ? [a, b] : [b, a]);
+  }
+  return pairs;
+}
+
+/** Full NPC league season used to sanity-check title odds. */
+export function simulateLeagueSeason(
+  league: string,
+  rounds = 24,
+  rng: () => number = Math.random,
+): LeagueStanding[] {
+  const clubs = clubsInLeague(league);
+  let table = clubs.map((c) => emptyStanding(c.id));
+  const ids = clubs.map((c) => c.id);
+  for (let round = 0; round < rounds; round++) {
+    for (const [homeId, awayId] of roundRobinPairs(ids, round)) {
+      const home = getClub(homeId);
+      const away = getClub(awayId);
+      if (!home || !away) continue;
+      const result = simulateClubMatch(
+        { clubStrength: home.strength, opponentStrength: away.strength, clubTier: home.tier, opponentTier: away.tier, isHome: true },
+        rng,
+      );
+      table = applyMatchToTable(table, homeId, awayId, result);
+    }
+  }
+  return rankLeagueTable(table);
 }

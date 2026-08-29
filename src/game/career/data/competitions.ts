@@ -1,42 +1,34 @@
 import type { Club, ClubTier } from './clubs';
+import { confederationForCountry as confederationForNationCountry } from './nations';
 
 /**
  * Confederations group nations for international call-ups and the
- * continental international tournament (this game's Euros-equivalent) - kept
- * separate from a club's *domestic* league/country, since a player's
- * nationality is a free choice independent of who they play club football
- * for. Only the confederations covered by the current club pyramid (see
- * clubs.ts) are listed; more can be added without touching any game logic.
+ * continental championship the player's country qualifies for.
  */
-export type Confederation = 'UEFA' | 'CONCACAF' | 'AFC';
-
-const COUNTRY_CONFEDERATION: Record<string, Confederation> = {
-  England: 'UEFA',
-  Spain: 'UEFA',
-  Italy: 'UEFA',
-  Germany: 'UEFA',
-  France: 'UEFA',
-  'Saudi Arabia': 'AFC',
-  'United States': 'CONCACAF',
-};
+export type Confederation = 'UEFA' | 'CONMEBOL' | 'CONCACAF' | 'CAF' | 'AFC' | 'OFC';
 
 export function confederationForCountry(country: string): Confederation {
-  return COUNTRY_CONFEDERATION[country] ?? 'UEFA';
+  return confederationForNationCountry(country);
 }
 
-export type CompetitionKind = 'domestic-league' | 'continental-cup' | 'international-tournament' | 'super-cup';
+export type CompetitionKind =
+  | 'domestic-league'
+  | 'domestic-cup'
+  | 'continental-cup'
+  | 'international-tournament'
+  | 'super-cup';
 
 /**
  * A single unified shape for anything the calendar can schedule a fixture
  * against: the player's domestic league, a continental club cup, the annual
- * Super Cup, or an international tournament. `id` is stable and used to key
- * standings/results once the season 2-20 simulation exists.
+ * Super Cup, a domestic knockout cup, or an international tournament.
  */
 export interface Competition {
   id: string;
   name: string;
   kind: CompetitionKind;
   confederation?: Confederation;
+  country?: string;
 }
 
 export function domesticLeagueCompetition(club: Club): Competition {
@@ -52,6 +44,39 @@ export const CONTINENTAL_CUPS: Record<ContinentalCupId, Competition> = {
 };
 
 export const SUPER_CUP: Competition = { id: 'super-cup', name: 'Super Cup', kind: 'super-cup', confederation: 'UEFA' };
+
+export type DomesticCupId =
+  | 'fa-cup'
+  | 'copa-del-rey'
+  | 'coppa-italia'
+  | 'dfb-pokal'
+  | 'coupe-de-france'
+  | 'kings-cup'
+  | 'us-open-cup';
+
+export const DOMESTIC_CUPS: Record<DomesticCupId, Competition> = {
+  'fa-cup': { id: 'fa-cup', name: 'FA Cup', kind: 'domestic-cup', country: 'England' },
+  'copa-del-rey': { id: 'copa-del-rey', name: 'Copa del Rey', kind: 'domestic-cup', country: 'Spain' },
+  'coppa-italia': { id: 'coppa-italia', name: 'Coppa Italia', kind: 'domestic-cup', country: 'Italy' },
+  'dfb-pokal': { id: 'dfb-pokal', name: 'DFB-Pokal', kind: 'domestic-cup', country: 'Germany' },
+  'coupe-de-france': { id: 'coupe-de-france', name: 'Coupe de France', kind: 'domestic-cup', country: 'France' },
+  'kings-cup': { id: 'kings-cup', name: "King's Cup", kind: 'domestic-cup', country: 'Saudi Arabia' },
+  'us-open-cup': { id: 'us-open-cup', name: 'US Open Cup', kind: 'domestic-cup', country: 'United States' },
+};
+
+const DOMESTIC_CUP_BY_COUNTRY: Record<string, DomesticCupId> = {
+  England: 'fa-cup',
+  Spain: 'copa-del-rey',
+  Italy: 'coppa-italia',
+  Germany: 'dfb-pokal',
+  France: 'coupe-de-france',
+  'Saudi Arabia': 'kings-cup',
+  'United States': 'us-open-cup',
+};
+
+export function domesticCupForCountry(country: string): DomesticCupId | null {
+  return DOMESTIC_CUP_BY_COUNTRY[country] ?? null;
+}
 
 /**
  * Which continental cup (if any) a club plays in a given season.
@@ -73,23 +98,65 @@ export function continentalCupForClub(tier: ClubTier, confederation: Confederati
   return null;
 }
 
-export type InternationalTournamentId = 'world-cup' | 'continental-championship';
+export type InternationalTournamentId =
+  | 'world-cup'
+  | 'euro'
+  | 'copa-america'
+  | 'gold-cup'
+  | 'afcon'
+  | 'asian-cup'
+  | 'ofc-nations-cup'
+  | 'continental-championship';
 
 export const INTERNATIONAL_TOURNAMENTS: Record<InternationalTournamentId, Competition> = {
   'world-cup': { id: 'world-cup', name: 'World Cup', kind: 'international-tournament' },
-  'continental-championship': { id: 'continental-championship', name: 'Continental Championship', kind: 'international-tournament' },
+  euro: { id: 'euro', name: 'European Championship', kind: 'international-tournament', confederation: 'UEFA' },
+  'copa-america': {
+    id: 'copa-america',
+    name: 'Copa América',
+    kind: 'international-tournament',
+    confederation: 'CONMEBOL',
+  },
+  'gold-cup': { id: 'gold-cup', name: 'Gold Cup', kind: 'international-tournament', confederation: 'CONCACAF' },
+  afcon: { id: 'afcon', name: 'Africa Cup of Nations', kind: 'international-tournament', confederation: 'CAF' },
+  'asian-cup': { id: 'asian-cup', name: 'AFC Asian Cup', kind: 'international-tournament', confederation: 'AFC' },
+  'ofc-nations-cup': {
+    id: 'ofc-nations-cup',
+    name: 'OFC Nations Cup',
+    kind: 'international-tournament',
+    confederation: 'OFC',
+  },
+  /** Legacy id kept so older saves still resolve a label. */
+  'continental-championship': {
+    id: 'continental-championship',
+    name: 'Continental Championship',
+    kind: 'international-tournament',
+  },
+};
+
+export const CONTINENTAL_TOURNAMENT_FOR_CONFEDERATION: Record<Confederation, InternationalTournamentId> = {
+  UEFA: 'euro',
+  CONMEBOL: 'copa-america',
+  CONCACAF: 'gold-cup',
+  CAF: 'afcon',
+  AFC: 'asian-cup',
+  OFC: 'ofc-nations-cup',
 };
 
 /**
- * The World Cup and the continental championship alternate on a two-year
- * cadence, starting in the player's 2nd season (the first season with a
- * real, opponent-having calendar) - e.g. seasons 2, 4, 6, 8..., alternating
- * which tournament is on. Season numbers stand in for real-world years since
- * every career starts at age 16 in "season 1".
+ * The World Cup and the player's continental championship alternate on a
+ * two-year cadence, starting in the player's 2nd season (the first season
+ * with a real, opponent-having calendar) - seasons 2, 6, 10… are continental,
+ * seasons 4, 8, 12… are the World Cup.
  */
-export function internationalTournamentForSeason(seasonNumber: number): InternationalTournamentId | null {
+export function internationalTournamentForSeason(
+  seasonNumber: number,
+  confederation?: Confederation | null,
+): InternationalTournamentId | null {
   if (seasonNumber < 2 || seasonNumber % 2 !== 0) return null;
-  return seasonNumber % 4 === 0 ? 'world-cup' : 'continental-championship';
+  if (seasonNumber % 4 === 0) return 'world-cup';
+  if (confederation) return CONTINENTAL_TOURNAMENT_FOR_CONFEDERATION[confederation];
+  return 'continental-championship';
 }
 
 function slug(value: string): string {

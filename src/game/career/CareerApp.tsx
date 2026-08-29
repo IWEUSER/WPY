@@ -37,7 +37,7 @@ export default function CareerApp() {
     );
   }
 
-  // Existing saves created before the nationality screen still have a club
+  // Existing saves created before nationality-first still have a club
   // but no country - ask before they can keep playing.
   if (!nationality && phase !== 'menu' && phase !== 'trial' && phase !== 'club-offer' && phase !== 'nationality-choice') {
     return <NationalityScreen />;

@@ -1,6 +1,6 @@
-import { calendarIncludesInternational, type SeasonCalendar } from '../calendar';
+import { calendarDomesticCup, calendarIncludesInternational, type SeasonCalendar } from '../calendar';
 import { getClub } from '../data/clubs';
-import { CONTINENTAL_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
+import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { describeAvailability, isAvailable } from '../availabilityEngine';
 import { getNation, isSelectedForNationalTeam, selectionRatioForTier } from '../international';
 import type { SeasonStandings } from '../matchEngine';
@@ -86,7 +86,14 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         <div className="rounded-xl bg-white/5 px-4 py-3 text-sm text-white/80">{lastMatchSummary}</div>
       )}
 
-      {seasonStandings && <StandingsCard standings={seasonStandings} clubId={club.id} />}
+      {seasonStandings && (
+        <StandingsCard
+          standings={seasonStandings}
+          clubId={club.id}
+          cupName={seasonSim?.domesticCup ? DOMESTIC_CUPS[seasonSim.domesticCup].name : null}
+          cupStage={seasonSim?.domesticCupStage ?? null}
+        />
+      )}
 
       <div className="rounded-2xl bg-white/5 p-4">
         <div className="mb-2 flex items-baseline justify-between">
@@ -151,7 +158,17 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   );
 }
 
-function StandingsCard({ standings, clubId }: { standings: SeasonStandings; clubId: string }) {
+function StandingsCard({
+  standings,
+  clubId,
+  cupName,
+  cupStage,
+}: {
+  standings: SeasonStandings;
+  clubId: string;
+  cupName: string | null;
+  cupStage: string | null;
+}) {
   const us = standings.league.find((r) => r.clubId === clubId);
   const europe = standings.europeanStanding;
   const stageLabel: Record<string, string> = {
@@ -162,6 +179,7 @@ function StandingsCard({ standings, clubId }: { standings: SeasonStandings; club
     final: 'Final',
     eliminated: 'Eliminated',
     champion: 'Champions',
+    'not-entered': '—',
   };
 
   return (
@@ -186,6 +204,11 @@ function StandingsCard({ standings, clubId }: { standings: SeasonStandings; club
           </p>
         </div>
       </div>
+      {cupName && cupStage && cupStage !== 'not-entered' && (
+        <p className="mt-3 text-xs text-white/50">
+          {cupName}: {stageLabel[cupStage] ?? cupStage}
+        </p>
+      )}
     </div>
   );
 }
@@ -232,10 +255,16 @@ function SeasonCompetitions({ calendar }: { calendar: SeasonCalendar | null }) {
   if (!calendar) return null;
   const cupIds = new Set(calendar.fixtures.map((f) => f.continentalCup).filter((id) => id !== undefined));
   const international = calendarIncludesInternational(calendar);
-  if (cupIds.size === 0 && !international) return null;
+  const domesticCup = calendarDomesticCup(calendar);
+  if (cupIds.size === 0 && !international && !domesticCup) return null;
 
   return (
     <div className="mt-2 flex flex-wrap gap-1.5">
+      {domesticCup && (
+        <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/70">
+          {DOMESTIC_CUPS[domesticCup].name}
+        </span>
+      )}
       {[...cupIds].map((id) => (
         <span key={id} className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/70">
           {CONTINENTAL_CUPS[id].name}

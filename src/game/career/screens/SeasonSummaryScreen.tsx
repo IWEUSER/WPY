@@ -1,5 +1,5 @@
 import { getClub } from '../data/clubs';
-import { CONTINENTAL_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
+import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { resolveSeasonTransition } from '../transfers';
 import { useCareerStore, SEASON_LENGTH } from '../store';
 
@@ -17,6 +17,7 @@ export default function SeasonSummaryScreen() {
   const seasonSim = useCareerStore((s) => s.seasonSim);
   const seasonStandings = useCareerStore((s) => s.seasonStandings);
   const wpyResult = useCareerStore((s) => s.wpyResult);
+  const nationality = useCareerStore((s) => s.nationality);
   const continueAfterSeason = useCareerStore((s) => s.continueAfterSeason);
 
   const club = clubId ? getClub(clubId) : undefined;
@@ -37,6 +38,7 @@ export default function SeasonSummaryScreen() {
     age,
     careerGoals,
     careerGames,
+    nationality,
   });
 
   const honours: string[] = [];
@@ -47,6 +49,9 @@ export default function SeasonSummaryScreen() {
   if (seasonSim?.honours.superCup) honours.push('Won the Super Cup');
   if (seasonSim?.honours.internationalChampion) {
     honours.push(`Won the ${INTERNATIONAL_TOURNAMENTS[seasonSim.honours.internationalChampion].name}`);
+  }
+  if (seasonSim?.honours.domesticCup) {
+    honours.push(`Won the ${DOMESTIC_CUPS[seasonSim.honours.domesticCup].name}`);
   }
 
   return (
