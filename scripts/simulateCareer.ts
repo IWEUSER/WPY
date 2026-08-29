@@ -516,8 +516,13 @@ if (madrid) {
     'Spain WC opponents',
     intl.map((f) => `${f.internationalRound} ${f.opponentLabel} (#${fifaRank(f.opponentId!)})`),
   );
-  if (ranks.length === 0 || ranks.every((r) => r <= 10)) {
-    console.error('qualifying/tournament opponents must mix rankings, not all top-10 sides');
+  const qualRanks = quals.map((f) => fifaRank(f.opponentId!));
+  if (qualRanks.length === 0 || qualRanks.every((r) => r <= 10)) {
+    console.error('World Cup qualifying must mix in sides outside the world top 10');
+    process.exitCode = 1;
+  }
+  if (!qualRanks.some((r) => r > 25)) {
+    console.error('at least one qualifier should sit outside the world top 25');
     process.exitCode = 1;
   }
   if (new Set(quals.map((f) => f.opponentId)).size < quals.length) {

@@ -251,8 +251,18 @@ export function doesNationQualify(
   return points >= Math.ceil(maxPoints * 0.8);
 }
 
-function pickFrom<T extends { id: string }>(source: T[], used: Set<string>, fallback: T[]): T | undefined {
-  return source.find((n) => !used.has(n.id)) ?? fallback.find((n) => !used.has(n.id)) ?? source[0] ?? fallback[0];
+function pickSpread<T extends { id: string }>(
+  source: T[],
+  used: Set<string>,
+  fallback: T[],
+  /** 0 = strongest in the band, 1 = weakest. */
+  towardWeaker: number,
+): T | undefined {
+  const available = source.filter((n) => !used.has(n.id));
+  const pool = available.length > 0 ? available : fallback.filter((n) => !used.has(n.id));
+  if (pool.length === 0) return source[0] ?? fallback[0];
+  const idx = Math.min(pool.length - 1, Math.max(0, Math.round(towardWeaker * (pool.length - 1))));
+  return pool[idx];
 }
 
 /** Spread opponents across stronger, similar, and weaker sides — not a gauntlet of #1s. */
@@ -262,16 +272,26 @@ export function pickMixedRankOpponents(
   pool: { id: string; name: string; confederation: Confederation }[],
 ): { id: string; name: string; confederation: Confederation }[] {
   if (pool.length === 0 || count <= 0) return [];
+  const ranked = [...pool].sort((a, b) => fifaRank(a.id) - fifaRank(b.id));
   const self = fifaRank(nationId);
-  const higher = pool.filter((n) => fifaRank(n.id) + 5 < self);
-  const peers = pool.filter((n) => Math.abs(fifaRank(n.id) - self) <= 20);
-  const lower = pool.filter((n) => fifaRank(n.id) > self + 12);
-  const bands = [lower, peers, higher, pool];
+  const higher = ranked.filter((n) => fifaRank(n.id) + 5 < self);
+  const peers = ranked.filter((n) => Math.abs(fifaRank(n.id) - self) <= 20);
+  const lower = ranked.filter((n) => fifaRank(n.id) > self + 12);
   const used = new Set<string>();
   const picks: { id: string; name: string; confederation: Confederation }[] = [];
+  // Cycle weaker / peer / stronger, taking a mid-to-low slice of each band
+  // so Spain do not only draw France and England.
+  const towardWeaker = [0.55, 0.45, 0.25];
   for (let i = 0; i < count; i++) {
-    const source = bands[i % 3].length > 0 ? bands[i % 3] : pool;
-    const pick = pickFrom(source, used, pool);
+    const band = i % 3;
+    const source = (band === 0 ? lower : band === 1 ? peers : higher).length > 0
+      ? band === 0
+        ? lower
+        : band === 1
+          ? peers
+          : higher
+      : ranked;
+    const pick = pickSpread(source, used, ranked, towardWeaker[band]);
     if (pick) {
       used.add(pick.id);
       picks.push(pick);
