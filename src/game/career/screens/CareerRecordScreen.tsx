@@ -1,5 +1,7 @@
 import { getClub } from '../data/clubs';
+import { INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { awardLabels, seasonClubName, seasonRatio } from '../honoursDisplay';
+import { formatEuros, playerMarketValue } from '../playerValue';
 import { countsTowardCareerRecord, displaySeasonLabel } from '../seasonDisplay';
 import { useCareerStore } from '../store';
 import type { SeasonRecord } from '../types';
@@ -15,6 +17,9 @@ export default function CareerRecordScreen() {
   const current = useCareerStore((s) => s.currentSeason);
   const careerGoals = useCareerStore((s) => s.careerGoals);
   const careerGames = useCareerStore((s) => s.careerGames);
+  const nationalTeam = useCareerStore((s) => s.nationalTeam);
+  const clubId = useCareerStore((s) => s.clubId);
+  const age = useCareerStore((s) => s.age);
   const returnToHub = useCareerStore((s) => s.returnToHub);
 
   const seasons: Array<SeasonRecord & { inProgress?: boolean }> = [
@@ -36,10 +41,49 @@ export default function CareerRecordScreen() {
       </div>
 
       <div className="grid grid-cols-3 gap-2">
-        <StatTile value={String(careerGoals)} label="Goals" />
-        <StatTile value={String(careerGames)} label="Games" />
-        <StatTile value={ratio.toFixed(2)} label="Ratio" />
+        <StatTile value={String(careerGoals)} label="Club goals" />
+        <StatTile value={String(careerGames)} label="Club games" />
+        <StatTile value={ratio.toFixed(2)} label="Club ratio" />
       </div>
+
+      {(() => {
+        const club = clubId ? getClub(clubId) : undefined;
+        if (!club || careerGames === 0) return null;
+        const value = playerMarketValue({ age, ratio, careerGoals, club });
+        return (
+          <p className="mt-3 text-center text-sm text-white/60">
+            Market value {formatEuros(value)}
+          </p>
+        );
+      })()}
+
+      {nationalTeam && (
+        <section className="mt-5 rounded-2xl bg-white/5 p-4">
+          <p className="text-xs uppercase tracking-wide text-white/40">International</p>
+          <p className="mt-1 text-lg font-bold">
+            {nationalTeam.caps} caps · {nationalTeam.goals} goals
+          </p>
+          {(nationalTeam.byCompetition ?? []).length === 0 ? (
+            <p className="mt-2 text-xs text-white/40">No international appearances yet.</p>
+          ) : (
+            <ul className="mt-3 space-y-2 text-sm text-white/70">
+              {nationalTeam.byCompetition.map((row) => {
+                const name = INTERNATIONAL_TOURNAMENTS[row.tournament]?.name ?? row.tournament;
+                return (
+                  <li key={row.tournament}>
+                    <p className="font-semibold text-white/90">{name}</p>
+                    <p className="text-xs text-white/50">
+                      Qualifying {row.qualifyingGoals} in {row.qualifyingGames}
+                      {' · '}
+                      Tournament {row.finalsGoals} in {row.finalsGames}
+                    </p>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      )}
 
       <section className="mt-5 rounded-2xl bg-amber-400/10 p-4">
         <p className="text-xs uppercase tracking-wide text-amber-200/70">World Player of the Year</p>

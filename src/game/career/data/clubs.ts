@@ -9,8 +9,50 @@
  * actually wins leagues so a mid-table side cannot realistically take the title.
  */
 
-/** 1 = elite (Champions League regulars), 5 = smallest clubs in the game. */
+/**
+ * 1 = elite. Assigned globally from strength, then capped so MLS is never
+ * elite and Saudi clubs sit above MLS but below Europe's top tier.
+ */
 export type ClubTier = 1 | 2 | 3 | 4 | 5;
+
+export const TIER_LABEL: Record<ClubTier, string> = {
+  1: 'Elite',
+  2: 'Strong',
+  3: 'Mid-table',
+  4: 'Lower league',
+  5: 'Smallest club in the game',
+};
+
+const SECOND_DIVISIONS = new Set([
+  'Championship',
+  'La Liga 2',
+  'Serie B',
+  '2. Bundesliga',
+  'Ligue 2',
+]);
+
+/** Floor on the numeric tier (1 is best). MLS never 1–2; Saudi never 1. */
+export function leagueTierFloor(country: string, league: string): ClubTier {
+  if (league === 'MLS' || country === 'United States') return 3;
+  if (country === 'Saudi Arabia' || league === 'Saudi Pro League') return 2;
+  if (SECOND_DIVISIONS.has(league)) return 4;
+  return 1;
+}
+
+/** One global strength scale — not a separate "elite" per country. */
+export function tierFromStrength(strength: number): ClubTier {
+  if (strength >= 88) return 1;
+  if (strength >= 82) return 2;
+  if (strength >= 74) return 3;
+  if (strength >= 64) return 4;
+  return 5;
+}
+
+export function assignClubTier(country: string, league: string, strength: number): ClubTier {
+  const fromStrength = tierFromStrength(strength);
+  const floor = leagueTierFloor(country, league);
+  return Math.max(fromStrength, floor) as ClubTier;
+}
 
 export interface Club {
   id: string;
@@ -133,11 +175,122 @@ const CLUB_SEED: Club[] = [
   { id: 'cincinnati', name: 'FC Cincinnati', country: 'United States', league: 'MLS', tier: 3, strength: 69, color: '#FE5000', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
   { id: 'kansas-city', name: 'Sporting Kansas City', country: 'United States', league: 'MLS', tier: 4, strength: 64, color: '#93B1E4', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
   { id: 'nashville', name: 'Nashville SC', country: 'United States', league: 'MLS', tier: 4, strength: 63, color: '#ECE83A', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'atlanta', name: 'Atlanta United', country: 'United States', league: 'MLS', tier: 3, strength: 70, color: '#80000B', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'nycfc', name: 'New York City FC', country: 'United States', league: 'MLS', tier: 3, strength: 68, color: '#6CACE4', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'la-galaxy', name: 'LA Galaxy', country: 'United States', league: 'MLS', tier: 3, strength: 67, color: '#00245D', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'portland', name: 'Portland Timbers', country: 'United States', league: 'MLS', tier: 4, strength: 65, color: '#004812', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+  { id: 'chicago', name: 'Chicago Fire', country: 'United States', league: 'MLS', tier: 4, strength: 61, color: '#AF2626', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+
+  { id: 'tottenham', name: 'Tottenham', country: 'England', league: 'Premier League', tier: 2, strength: 84, color: '#132257', reserveGoalRatio: 0.55, firstTeamGoalRatio: 0.42 },
+  { id: 'man-united', name: 'Manchester United', country: 'England', league: 'Premier League', tier: 2, strength: 82, color: '#DA291C', reserveGoalRatio: 0.55, firstTeamGoalRatio: 0.42 },
+  { id: 'brighton', name: 'Brighton', country: 'England', league: 'Premier League', tier: 3, strength: 74, color: '#0057B8', reserveGoalRatio: 0.45, firstTeamGoalRatio: 0.35 },
+  { id: 'west-ham', name: 'West Ham', country: 'England', league: 'Premier League', tier: 4, strength: 71, color: '#7A263A', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'brentford', name: 'Brentford', country: 'England', league: 'Premier League', tier: 4, strength: 70, color: '#E30613', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+
+  { id: 'leicester', name: 'Leicester City', country: 'England', league: 'Championship', tier: 4, strength: 72, color: '#003090', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'leeds', name: 'Leeds United', country: 'England', league: 'Championship', tier: 4, strength: 71, color: '#FFCD00', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'southampton', name: 'Southampton', country: 'England', league: 'Championship', tier: 4, strength: 70, color: '#D71920', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'ipswich', name: 'Ipswich Town', country: 'England', league: 'Championship', tier: 4, strength: 68, color: '#0048A9', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+  { id: 'norwich', name: 'Norwich City', country: 'England', league: 'Championship', tier: 4, strength: 66, color: '#FFF200', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+  { id: 'sheff-utd', name: 'Sheffield United', country: 'England', league: 'Championship', tier: 4, strength: 65, color: '#EE2737', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+  { id: 'middlesbrough', name: 'Middlesbrough', country: 'England', league: 'Championship', tier: 4, strength: 64, color: '#E4000F', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+  { id: 'coventry', name: 'Coventry City', country: 'England', league: 'Championship', tier: 5, strength: 63, color: '#77C1E4', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'watford', name: 'Watford', country: 'England', league: 'Championship', tier: 5, strength: 62, color: '#FBEE23', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'hull', name: 'Hull City', country: 'England', league: 'Championship', tier: 5, strength: 61, color: '#F5A12D', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'preston', name: 'Preston North End', country: 'England', league: 'Championship', tier: 5, strength: 58, color: '#002F6C', reserveGoalRatio: 0.28, firstTeamGoalRatio: 0.24 },
+  { id: 'blackburn', name: 'Blackburn Rovers', country: 'England', league: 'Championship', tier: 5, strength: 57, color: '#009EE0', reserveGoalRatio: 0.28, firstTeamGoalRatio: 0.24 },
+
+  { id: 'athletic', name: 'Athletic Club', country: 'Spain', league: 'La Liga', tier: 3, strength: 78, color: '#EE2523', reserveGoalRatio: 0.45, firstTeamGoalRatio: 0.35 },
+  { id: 'sevilla', name: 'Sevilla', country: 'Spain', league: 'La Liga', tier: 3, strength: 76, color: '#D61921', reserveGoalRatio: 0.45, firstTeamGoalRatio: 0.35 },
+  { id: 'girona', name: 'Girona', country: 'Spain', league: 'La Liga', tier: 3, strength: 73, color: '#C4122E', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'valencia', name: 'Valencia', country: 'Spain', league: 'La Liga', tier: 4, strength: 72, color: '#EE3524', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'mallorca', name: 'Mallorca', country: 'Spain', league: 'La Liga', tier: 4, strength: 64, color: '#E20613', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+
+  { id: 'levante', name: 'Levante', country: 'Spain', league: 'La Liga 2', tier: 4, strength: 63, color: '#0033A0', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'valladolid', name: 'Valladolid', country: 'Spain', league: 'La Liga 2', tier: 4, strength: 62, color: '#7B2D8E', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'elche', name: 'Elche', country: 'Spain', league: 'La Liga 2', tier: 5, strength: 61, color: '#007A33', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+  { id: 'oviedo', name: 'Real Oviedo', country: 'Spain', league: 'La Liga 2', tier: 5, strength: 60, color: '#1B4E9B', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+  { id: 'zaragoza', name: 'Real Zaragoza', country: 'Spain', league: 'La Liga 2', tier: 5, strength: 59, color: '#0067B1', reserveGoalRatio: 0.28, firstTeamGoalRatio: 0.24 },
+  { id: 'eibar', name: 'Eibar', country: 'Spain', league: 'La Liga 2', tier: 5, strength: 58, color: '#1D1D1B', reserveGoalRatio: 0.28, firstTeamGoalRatio: 0.24 },
+  { id: 'sporting-gijon', name: 'Sporting Gijón', country: 'Spain', league: 'La Liga 2', tier: 5, strength: 57, color: '#E20613', reserveGoalRatio: 0.28, firstTeamGoalRatio: 0.24 },
+  { id: 'tenerife', name: 'Tenerife', country: 'Spain', league: 'La Liga 2', tier: 5, strength: 56, color: '#003DA5', reserveGoalRatio: 0.26, firstTeamGoalRatio: 0.23 },
+  { id: 'racing-santander', name: 'Racing Santander', country: 'Spain', league: 'La Liga 2', tier: 5, strength: 55, color: '#0072CE', reserveGoalRatio: 0.26, firstTeamGoalRatio: 0.23 },
+  { id: 'burgos', name: 'Burgos', country: 'Spain', league: 'La Liga 2', tier: 5, strength: 54, color: '#FFFFFF', reserveGoalRatio: 0.25, firstTeamGoalRatio: 0.22 },
+  { id: 'albacete', name: 'Albacete', country: 'Spain', league: 'La Liga 2', tier: 5, strength: 53, color: '#FFFFFF', reserveGoalRatio: 0.25, firstTeamGoalRatio: 0.22 },
+  { id: 'racing-ferrol', name: 'Racing Ferrol', country: 'Spain', league: 'La Liga 2', tier: 5, strength: 52, color: '#007A33', reserveGoalRatio: 0.25, firstTeamGoalRatio: 0.22 },
+
+  { id: 'lazio', name: 'Lazio', country: 'Italy', league: 'Serie A', tier: 3, strength: 78, color: '#87D8F7', reserveGoalRatio: 0.45, firstTeamGoalRatio: 0.35 },
+  { id: 'bologna', name: 'Bologna', country: 'Italy', league: 'Serie A', tier: 3, strength: 74, color: '#1B1B1B', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'udinese', name: 'Udinese', country: 'Italy', league: 'Serie A', tier: 4, strength: 68, color: '#8B1E21', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+  { id: 'genoa', name: 'Genoa', country: 'Italy', league: 'Serie A', tier: 4, strength: 67, color: '#AD1919', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+  { id: 'cagliari', name: 'Cagliari', country: 'Italy', league: 'Serie A', tier: 4, strength: 64, color: '#A00A2D', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+
+  { id: 'parma', name: 'Parma', country: 'Italy', league: 'Serie B', tier: 4, strength: 70, color: '#FFE05C', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'como', name: 'Como', country: 'Italy', league: 'Serie B', tier: 4, strength: 68, color: '#003DA5', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+  { id: 'palermo', name: 'Palermo', country: 'Italy', league: 'Serie B', tier: 4, strength: 64, color: '#E5A4CB', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+  { id: 'cremonese', name: 'Cremonese', country: 'Italy', league: 'Serie B', tier: 5, strength: 61, color: '#D21034', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+  { id: 'bari', name: 'Bari', country: 'Italy', league: 'Serie B', tier: 5, strength: 60, color: '#FFFFFF', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+  { id: 'sampdoria', name: 'Sampdoria', country: 'Italy', league: 'Serie B', tier: 5, strength: 59, color: '#004B87', reserveGoalRatio: 0.28, firstTeamGoalRatio: 0.24 },
+  { id: 'brescia', name: 'Brescia', country: 'Italy', league: 'Serie B', tier: 5, strength: 58, color: '#0054A6', reserveGoalRatio: 0.28, firstTeamGoalRatio: 0.24 },
+  { id: 'frosinone', name: 'Frosinone', country: 'Italy', league: 'Serie B', tier: 5, strength: 58, color: '#FFD100', reserveGoalRatio: 0.28, firstTeamGoalRatio: 0.24 },
+  { id: 'spezia', name: 'Spezia', country: 'Italy', league: 'Serie B', tier: 5, strength: 57, color: '#FFFFFF', reserveGoalRatio: 0.28, firstTeamGoalRatio: 0.24 },
+  { id: 'catanzaro', name: 'Catanzaro', country: 'Italy', league: 'Serie B', tier: 5, strength: 56, color: '#E30613', reserveGoalRatio: 0.26, firstTeamGoalRatio: 0.23 },
+  { id: 'cesena', name: 'Cesena', country: 'Italy', league: 'Serie B', tier: 5, strength: 54, color: '#FFFFFF', reserveGoalRatio: 0.25, firstTeamGoalRatio: 0.22 },
+  { id: 'sudtirol', name: 'Südtirol', country: 'Italy', league: 'Serie B', tier: 5, strength: 53, color: '#FFFFFF', reserveGoalRatio: 0.25, firstTeamGoalRatio: 0.22 },
+
+  { id: 'wolfsburg', name: 'Wolfsburg', country: 'Germany', league: 'Bundesliga', tier: 3, strength: 73, color: '#65B32E', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'union-berlin', name: 'Union Berlin', country: 'Germany', league: 'Bundesliga', tier: 4, strength: 72, color: '#EB1923', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'hoffenheim', name: 'Hoffenheim', country: 'Germany', league: 'Bundesliga', tier: 4, strength: 71, color: '#1C63B7', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'werder', name: 'Werder Bremen', country: 'Germany', league: 'Bundesliga', tier: 4, strength: 69, color: '#1D9053', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+  { id: 'augsburg', name: 'Augsburg', country: 'Germany', league: 'Bundesliga', tier: 4, strength: 64, color: '#BA3733', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+
+  { id: 'hamburg', name: 'Hamburger SV', country: 'Germany', league: '2. Bundesliga', tier: 4, strength: 70, color: '#1C63B7', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'koln', name: 'Köln', country: 'Germany', league: '2. Bundesliga', tier: 4, strength: 69, color: '#ED1C24', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+  { id: 'hertha', name: 'Hertha BSC', country: 'Germany', league: '2. Bundesliga', tier: 4, strength: 67, color: '#005CA9', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+  { id: 'schalke', name: 'Schalke 04', country: 'Germany', league: '2. Bundesliga', tier: 4, strength: 66, color: '#004D9D', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+  { id: 'hannover', name: 'Hannover 96', country: 'Germany', league: '2. Bundesliga', tier: 4, strength: 64, color: '#00993D', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+  { id: 'kiel', name: 'Holstein Kiel', country: 'Germany', league: '2. Bundesliga', tier: 5, strength: 62, color: '#005CA9', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'kaiserslautern', name: 'Kaiserslautern', country: 'Germany', league: '2. Bundesliga', tier: 5, strength: 61, color: '#E30613', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+  { id: 'magdeburg', name: 'Magdeburg', country: 'Germany', league: '2. Bundesliga', tier: 5, strength: 60, color: '#005CA9', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+  { id: 'nurnberg', name: 'Nürnberg', country: 'Germany', league: '2. Bundesliga', tier: 5, strength: 59, color: '#C4122E', reserveGoalRatio: 0.28, firstTeamGoalRatio: 0.24 },
+  { id: 'paderborn', name: 'Paderborn', country: 'Germany', league: '2. Bundesliga', tier: 5, strength: 58, color: '#005CA9', reserveGoalRatio: 0.28, firstTeamGoalRatio: 0.24 },
+  { id: 'greuther-furth', name: 'Greuther Fürth', country: 'Germany', league: '2. Bundesliga', tier: 5, strength: 57, color: '#007A33', reserveGoalRatio: 0.28, firstTeamGoalRatio: 0.24 },
+  { id: 'braunschweig', name: 'Eintracht Braunschweig', country: 'Germany', league: '2. Bundesliga', tier: 5, strength: 55, color: '#FDE100', reserveGoalRatio: 0.26, firstTeamGoalRatio: 0.23 },
+
+  { id: 'brest', name: 'Brest', country: 'France', league: 'Ligue 1', tier: 4, strength: 71, color: '#E30613', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'strasbourg', name: 'Strasbourg', country: 'France', league: 'Ligue 1', tier: 4, strength: 70, color: '#009FE3', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'reims', name: 'Reims', country: 'France', league: 'Ligue 1', tier: 4, strength: 66, color: '#E30613', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+  { id: 'toulouse', name: 'Toulouse', country: 'France', league: 'Ligue 1', tier: 4, strength: 67, color: '#6C1D45', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+  { id: 'nantes', name: 'Nantes', country: 'France', league: 'Ligue 1', tier: 4, strength: 65, color: '#FFE200', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+
+  { id: 'lorient', name: 'Lorient', country: 'France', league: 'Ligue 2', tier: 4, strength: 67, color: '#E87722', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+  { id: 'metz', name: 'Metz', country: 'France', league: 'Ligue 2', tier: 4, strength: 68, color: '#6F0F1C', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+  { id: 'bordeaux', name: 'Bordeaux', country: 'France', league: 'Ligue 2', tier: 5, strength: 63, color: '#001B49', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'paris-fc', name: 'Paris FC', country: 'France', league: 'Ligue 2', tier: 5, strength: 61, color: '#003DA5', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+  { id: 'caen', name: 'Caen', country: 'France', league: 'Ligue 2', tier: 5, strength: 60, color: '#E30613', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+  { id: 'guingamp', name: 'Guingamp', country: 'France', league: 'Ligue 2', tier: 5, strength: 59, color: '#E30613', reserveGoalRatio: 0.28, firstTeamGoalRatio: 0.24 },
+  { id: 'grenoble', name: 'Grenoble', country: 'France', league: 'Ligue 2', tier: 5, strength: 58, color: '#003DA5', reserveGoalRatio: 0.28, firstTeamGoalRatio: 0.24 },
+  { id: 'amiens', name: 'Amiens', country: 'France', league: 'Ligue 2', tier: 5, strength: 57, color: '#FFFFFF', reserveGoalRatio: 0.28, firstTeamGoalRatio: 0.24 },
+  { id: 'bastia', name: 'Bastia', country: 'France', league: 'Ligue 2', tier: 5, strength: 56, color: '#003DA5', reserveGoalRatio: 0.26, firstTeamGoalRatio: 0.23 },
+  { id: 'annecy', name: 'Annecy', country: 'France', league: 'Ligue 2', tier: 5, strength: 55, color: '#E30613', reserveGoalRatio: 0.26, firstTeamGoalRatio: 0.23 },
+  { id: 'pau', name: 'Pau', country: 'France', league: 'Ligue 2', tier: 5, strength: 54, color: '#FFD100', reserveGoalRatio: 0.25, firstTeamGoalRatio: 0.22 },
+  { id: 'rodez', name: 'Rodez', country: 'France', league: 'Ligue 2', tier: 5, strength: 53, color: '#E30613', reserveGoalRatio: 0.25, firstTeamGoalRatio: 0.22 },
+
+  { id: 'al-shabab', name: 'Al Shabab', country: 'Saudi Arabia', league: 'Saudi Pro League', tier: 3, strength: 69, color: '#FFFFFF', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'al-ettifaq', name: 'Al Ettifaq', country: 'Saudi Arabia', league: 'Saudi Pro League', tier: 4, strength: 66, color: '#007A33', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+  { id: 'al-raed', name: 'Al Raed', country: 'Saudi Arabia', league: 'Saudi Pro League', tier: 5, strength: 58, color: '#E30613', reserveGoalRatio: 0.28, firstTeamGoalRatio: 0.24 },
+  { id: 'al-khaleej', name: 'Al Khaleej', country: 'Saudi Arabia', league: 'Saudi Pro League', tier: 5, strength: 56, color: '#F5A12D', reserveGoalRatio: 0.26, firstTeamGoalRatio: 0.23 },
+  { id: 'damac', name: 'Damac', country: 'Saudi Arabia', league: 'Saudi Pro League', tier: 5, strength: 55, color: '#E87722', reserveGoalRatio: 0.26, firstTeamGoalRatio: 0.23 },
 ];
 
 export const CLUBS: Club[] = CLUB_SEED.map((club) => {
   const ratio = goalRatioFromStrength(club.strength);
-  return { ...club, firstTeamGoalRatio: ratio, reserveGoalRatio: ratio };
+  return {
+    ...club,
+    tier: assignClubTier(club.country, club.league, club.strength),
+    firstTeamGoalRatio: ratio,
+    reserveGoalRatio: ratio,
+  };
 });
 
 export function getClub(id: string): Club | undefined {

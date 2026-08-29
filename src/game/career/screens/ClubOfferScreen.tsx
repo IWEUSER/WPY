@@ -1,14 +1,6 @@
-import { getClub } from '../data/clubs';
+import { getClub, TIER_LABEL } from '../data/clubs';
 import { TRIAL_SHOTS } from '../trial';
 import { useCareerStore } from '../store';
-
-const TIER_LABEL: Record<number, string> = {
-  1: 'Elite',
-  2: 'Strong',
-  3: 'Mid-table',
-  4: 'Lower league',
-  5: 'Smallest club in the game',
-};
 
 export default function ClubOfferScreen() {
   const trial = useCareerStore((s) => s.trial);

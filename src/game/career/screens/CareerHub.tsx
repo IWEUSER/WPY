@@ -5,7 +5,8 @@ import { describeAvailability, isAvailable } from '../availabilityEngine';
 import { careerRatioForSelection, clubEligibleForNationalTeam, getNation, isSelectedForNationalTeam, selectionRatioForNation } from '../international';
 import type { SeasonStandings } from '../matchEngine';
 import { displaySeasonLabel } from '../seasonDisplay';
-import { fixtureTitle, internationalRoundLabel, type SeasonSimState } from '../seasonSim';
+import { formatEuros, playerMarketValue } from '../playerValue';
+import { fixtureTitle, internationalRoundLabel, nextPlayableFixture, remainingPlayableCount, type SeasonSimState } from '../seasonSim';
 import { useCareerStore, SEASON_LENGTH } from '../store';
 
 const ROLE_LABEL: Record<string, string> = {
@@ -30,6 +31,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const careerGoals = useCareerStore((s) => s.careerGoals);
   const careerGames = useCareerStore((s) => s.careerGames);
   const seasonHistory = useCareerStore((s) => s.seasonHistory);
+  const nationalTeam = useCareerStore((s) => s.nationalTeam);
   const advance = useCareerStore((s) => s.advance);
   const openCareerRecord = useCareerStore((s) => s.openCareerRecord);
 
@@ -44,10 +46,17 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const threshold = role === 'first-team' ? club.firstTeamGoalRatio : club.reserveGoalRatio;
   const ratioProgress = Math.min(1, threshold > 0 ? ratio / threshold : 0);
   const available = isAvailable(availability);
-  const remainingFixtures = seasonCalendar
-    ? Math.max(0, seasonCalendar.fixtures.length - (seasonSim?.fixtureIndex ?? 0))
+  const remainingFixtures = seasonCalendar && seasonSim
+    ? remainingPlayableCount(seasonCalendar, seasonSim)
     : SEASON_LENGTH - season.matches.length;
-  const nextFixture = seasonCalendar && seasonSim ? seasonCalendar.fixtures[seasonSim.fixtureIndex] : undefined;
+  const nextFixture = seasonCalendar && seasonSim ? nextPlayableFixture(seasonCalendar, seasonSim) : undefined;
+  const careerRatio = careerGames > 0 ? careerGoals / careerGames : ratio;
+  const marketValue = playerMarketValue({
+    age,
+    ratio: careerRatio,
+    careerGoals,
+    club,
+  });
 
   return (
     <div className="flex h-full w-full flex-col overflow-y-auto px-5 py-[max(1.25rem,env(safe-area-inset-top))] pb-10 text-white">
@@ -73,6 +82,9 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         </p>
         {nation && <p className="mt-1 text-xs text-white/50">International: {nation.name}</p>}
         {parentClub && <p className="mt-1 text-xs text-white/40">On loan from {parentClub.name}</p>}
+        {seasonNumber >= 2 && (
+          <p className="mt-1 text-xs text-white/50">Market value {formatEuros(marketValue)}</p>
+        )}
         <SeasonCompetitions calendar={seasonCalendar} />
       </div>
 
@@ -134,8 +146,8 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
           </p>
           {parentClub && (
             <p className="mt-2 text-xs text-emerald-300/80">
-              Hit {parentClub.reserveGoalRatio.toFixed(2)} and {parentClub.name} will bring you straight back into their
-              first team.
+              Hit {parentClub.firstTeamGoalRatio.toFixed(2)} and {parentClub.name} will bring you straight back into
+              their first team. Miss it and you choose another loan or a transfer — never the reserves.
             </p>
           )}
         </div>
@@ -154,6 +166,8 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
                 : ratio,
             )}
             sim={seasonSim}
+            caps={nationalTeam?.caps ?? 0}
+            intlGoals={nationalTeam?.goals ?? 0}
           />
         )}
 
@@ -225,6 +239,8 @@ function InternationalCard({
   seasonNumber,
   careerRatio,
   sim,
+  caps,
+  intlGoals,
 }: {
   nationId: string;
   nationName: string;
@@ -232,6 +248,8 @@ function InternationalCard({
   seasonNumber: number;
   careerRatio: number;
   sim: SeasonSimState | null;
+  caps: number;
+  intlGoals: number;
 }) {
   const bar = selectionRatioForNation(nationId);
   const clubOk = clubEligibleForNationalTeam(clubTier);
@@ -279,6 +297,11 @@ function InternationalCard({
         {statusLine}
       </p>
       {campaignLine && <p className="mt-1 text-xs text-emerald-200/80">{campaignLine}</p>}
+      {caps > 0 && (
+        <p className="mt-1 text-xs text-white/60">
+          {caps} cap{caps === 1 ? '' : 's'} · {intlGoals} international goal{intlGoals === 1 ? '' : 's'}
+        </p>
+      )}
       <p className="mt-1 text-xs text-white/40">
         When you play, you represent {nationName} — not your club.
       </p>

@@ -1,7 +1,7 @@
 import { getClub } from '../data/clubs';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { displaySeasonLabel, displaySeasonNumber } from '../seasonDisplay';
-import { resolveSeasonTransition } from '../transfers';
+import { countLoanSpells, resolveSeasonTransition } from '../transfers';
 import { useCareerStore, SEASON_LENGTH } from '../store';
 
 export default function SeasonSummaryScreen() {
@@ -19,6 +19,7 @@ export default function SeasonSummaryScreen() {
   const seasonStandings = useCareerStore((s) => s.seasonStandings);
   const wpyResult = useCareerStore((s) => s.wpyResult);
   const nationality = useCareerStore((s) => s.nationality);
+  const seasonHistory = useCareerStore((s) => s.seasonHistory);
   const continueAfterSeason = useCareerStore((s) => s.continueAfterSeason);
 
   const club = clubId ? getClub(clubId) : undefined;
@@ -40,6 +41,7 @@ export default function SeasonSummaryScreen() {
     careerGoals,
     careerGames,
     nationality,
+    loansUsed: countLoanSpells(seasonHistory, season),
   });
 
   const honours: string[] = [];

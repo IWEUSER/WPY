@@ -7,7 +7,7 @@ import { isInternationalFinalsSeason } from './data/competitions';
 import { evaluatePlayerOfTheYear, evaluateTopGoalscorer } from './domesticAwards';
 import { countsTowardCareerRecord } from './seasonDisplay';
 import { trophyLabels } from './honoursDisplay';
-import { careerRatioForSelection, createNationalTeamState } from './international';
+import { careerRatioForSelection, createNationalTeamState, recordInternationalAppearance } from './international';
 import { buildSeasonStandings } from './matchEngine';
 import {
   hydrateSeason,
@@ -16,7 +16,7 @@ import {
   type LiveMatch,
 } from './seasonSim';
 import { offerClubsForTrial, TRIAL_SHOTS } from './trial';
-import { resolveSeasonTransition } from './transfers';
+import { countLoanSpells, resolveSeasonTransition } from './transfers';
 import { evaluateWpy } from './wpy';
 import type { ShotResult } from '../shooting/types';
 import type { CareerState, MatchRecord, PlayerRole, SeasonRecord } from './types';
@@ -283,6 +283,14 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
         formWindow = pushForm(formWindow, 0);
       }
       lastMatchSummary = `${resolution.summary} · no chance this match`;
+      if (isInternational && nationalTeam) {
+        nationalTeam = recordInternationalAppearance(
+          nationalTeam,
+          sim.internationalTournament,
+          fixture.internationalRound === 'qualifier',
+          0,
+        );
+      }
       continue;
     }
 
@@ -453,10 +461,13 @@ export const useCareerStore = create<CareerStore>()(
           let nationalTeam = state.nationalTeam;
           if (isInternational && nationalTeam) {
             nationalTeam = {
-              ...nationalTeam,
+              ...recordInternationalAppearance(
+                nationalTeam,
+                sim.internationalTournament,
+                fixture.internationalRound === 'qualifier',
+                live.goals,
+              ),
               availability: applyMatchResult(nationalTeam.availability, scored),
-              caps: nationalTeam.caps + 1,
-              goals: nationalTeam.goals + live.goals,
             };
           } else {
             availability = applyMatchResult(availability, scored);
@@ -545,6 +556,7 @@ export const useCareerStore = create<CareerStore>()(
             careerGoals: state.careerGoals,
             careerGames: state.careerGames,
             nationality: state.nationality,
+            loansUsed: countLoanSpells(state.seasonHistory, season),
           });
 
           const finishedSeason: SeasonRecord = { ...season, ratioMet: !transition.pendingTransfer };
@@ -614,9 +626,11 @@ export const useCareerStore = create<CareerStore>()(
             };
           }
 
+          const offer = pending.offers?.find((o) => o.clubId === clubId);
+          const takeLoan = offer ? offer.move === 'loan' : pending.kind === 'loan';
           let role: PlayerRole;
           let parentClubId: string;
-          if (pending.kind === 'loan') {
+          if (takeLoan) {
             role = 'loan';
             parentClubId = state.parentClubId;
           } else {
@@ -659,7 +673,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 7,
+      version: 8,
       migrate: (persisted) => {
         const state = persisted as Partial<CareerState>;
         const sim = state.seasonSim;
@@ -680,7 +694,9 @@ export const useCareerStore = create<CareerStore>()(
         return {
           ...state,
           nationality: state.nationality ?? null,
-          nationalTeam: state.nationalTeam ?? null,
+          nationalTeam: state.nationalTeam
+            ? { ...state.nationalTeam, byCompetition: state.nationalTeam.byCompetition ?? [] }
+            : null,
           seasonCalendar: state.seasonCalendar ?? null,
           seasonStandings: state.seasonStandings ?? null,
           seasonHistory,
@@ -716,6 +732,18 @@ export const useCareerStore = create<CareerStore>()(
           formWindow: (state.seasonNumber ?? 1) < 2 ? [] : (state.formWindow ?? []),
           wpyResult: state.wpyResult ?? null,
           lastMatchSummary: state.lastMatchSummary ?? null,
+          pendingTransfer: state.pendingTransfer
+            ? {
+                ...state.pendingTransfer,
+                offers: state.pendingTransfer.offers ??
+                  (state.pendingTransfer.clubIds ?? []).map((clubId) => ({
+                    clubId,
+                    move: state.pendingTransfer?.kind === 'loan' ? 'loan' : 'permanent',
+                    fee: 0,
+                    weeklyWage: 0,
+                  })),
+              }
+            : null,
         };
       },
     },

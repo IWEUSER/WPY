@@ -199,7 +199,7 @@ function assignOpponentsAndChances(
   tournament: InternationalTournamentId | null,
   qualifierGames: number,
 ): SeasonCalendar {
-  const leagueRivals = shuffle(clubsInLeague(club.league).filter((c) => c.id !== club.id));
+  const leagueRivals = leagueOpponentQueue(club);
   const euroRivals = cup ? shuffle(clubsForContinentalCup(cup).filter((id) => id !== club.id)) : [];
   const cupRivals = shuffle(clubsInCountry(club.country).filter((c) => c.id !== club.id));
   const qualifierRivals = nationId && tournament ? qualifierOpponents(nationId, tournament, qualifierGames) : [];
@@ -216,7 +216,7 @@ function assignOpponentsAndChances(
   for (let i = 0; i < fixtures.length; i++) {
     const f = fixtures[i];
     if (f.kind === 'league') {
-      const opp = leagueRivals[leagueI % Math.max(1, leagueRivals.length)];
+      const opp = leagueRivals[leagueI];
       leagueI += 1;
       if (opp) {
         f.opponentId = opp.id;
@@ -287,6 +287,37 @@ function assignOpponentsAndChances(
   }
 
   return { ...calendar, fixtures };
+}
+
+/** Each league rival once, then once more — never a third meeting. */
+export function leagueOpponentQueue(club: Club): Club[] {
+  const rivals = shuffle(clubsInLeague(club.league).filter((c) => c.id !== club.id));
+  return [...rivals, ...shuffle(rivals)];
+}
+
+/** Skip cups/internationals the player is already out of, and 0-chance weeks. */
+export function isPlayableFixture(fixture: CalendarFixture, sim: SeasonSimState): boolean {
+  if (shouldSkipFixture(fixture, sim)) return false;
+  return (fixture.playerChances ?? 1) > 0;
+}
+
+export function nextPlayableFixture(
+  calendar: SeasonCalendar,
+  sim: SeasonSimState,
+): CalendarFixture | undefined {
+  for (let i = sim.fixtureIndex; i < calendar.fixtures.length; i++) {
+    const fixture = calendar.fixtures[i];
+    if (isPlayableFixture(fixture, sim)) return fixture;
+  }
+  return undefined;
+}
+
+export function remainingPlayableCount(calendar: SeasonCalendar, sim: SeasonSimState): number {
+  let n = 0;
+  for (let i = sim.fixtureIndex; i < calendar.fixtures.length; i++) {
+    if (isPlayableFixture(calendar.fixtures[i], sim)) n += 1;
+  }
+  return n;
 }
 
 export function shouldSkipFixture(fixture: CalendarFixture, sim: SeasonSimState): boolean {

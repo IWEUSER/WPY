@@ -1,9 +1,11 @@
 import { createAvailability } from './availabilityEngine';
 import { getClub } from './data/clubs';
-import { createNationalTeamState } from './international';
+import { createNationalTeamState, recordInternationalAppearance } from './international';
 import { buildSeasonStandings } from './matchEngine';
+import { playerMarketValue, weeklyWageForClub } from './playerValue';
 import { hydrateSeason } from './seasonSim';
 import { useCareerStore } from './store';
+import type { PendingTransfer } from './transfers';
 import type { SeasonRecord } from './types';
 
 function season(partial: SeasonRecord): SeasonRecord {
@@ -71,8 +73,36 @@ export function applyCareerLayoutPreview(): void {
     qualifierCarry: { tournament: 'euro', points: 7, played: 3 },
   });
 
+  const preview = new URLSearchParams(window.location.search).get('preview-career');
+  const madridClub = club;
+  const value = playerMarketValue({ age: 19, ratio: 58 / 76, careerGoals: 58, club: madridClub });
+  const pendingTransfer: PendingTransfer | null =
+    preview === 'transfer'
+      ? {
+          kind: 'loan-or-transfer',
+          detail: 'Three loan offers and three transfer offers. After two loan spells you must move permanently.',
+          clubIds: ['mainz', 'leicester', 'almeria', 'barcelona', 'bayern', 'al-hilal'],
+          offers: [
+            { clubId: 'mainz', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('mainz')!, value) },
+            { clubId: 'leicester', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('leicester')!, value) },
+            { clubId: 'almeria', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('almeria')!, value) },
+            { clubId: 'barcelona', move: 'permanent', fee: value, weeklyWage: weeklyWageForClub(getClub('barcelona')!, value) },
+            { clubId: 'bayern', move: 'permanent', fee: value, weeklyWage: weeklyWageForClub(getClub('bayern')!, value) },
+            { clubId: 'al-hilal', move: 'permanent', fee: value, weeklyWage: weeklyWageForClub(getClub('al-hilal')!, value) },
+          ],
+          allowDecline: false,
+        }
+      : null;
+
+  let nationalTeam = createNationalTeamState('spain');
+  nationalTeam = recordInternationalAppearance(nationalTeam, 'world-cup', true, 1);
+  nationalTeam = recordInternationalAppearance(nationalTeam, 'world-cup', true, 0);
+  nationalTeam = recordInternationalAppearance(nationalTeam, 'world-cup', false, 2);
+  nationalTeam = recordInternationalAppearance(nationalTeam, 'euro', true, 1);
+  nationalTeam = recordInternationalAppearance(nationalTeam, 'euro', false, 0);
+
   useCareerStore.setState({
-    phase: new URLSearchParams(window.location.search).get('preview-career') === 'record' ? 'career' : 'hub',
+    phase: preview === 'record' ? 'career' : preview === 'transfer' ? 'transfer-choice' : 'hub',
     age: 19,
     seasonNumber: 4,
     clubId: 'real-madrid',
@@ -80,7 +110,7 @@ export function applyCareerLayoutPreview(): void {
     role: 'first-team',
     seasonsAtCurrentClub: 3,
     nationality: 'spain',
-    nationalTeam: createNationalTeamState('spain'),
+    nationalTeam,
     availability: createAvailability(),
     seasonHistory: history,
     careerGoals: 58,
@@ -108,5 +138,6 @@ export function applyCareerLayoutPreview(): void {
     }),
     lastMatchSummary: 'Won 2–1 vs Barcelona · 1 goal from 3 chances',
     intlQualifying: { tournament: 'euro', points: 7, played: 3 },
+    pendingTransfer,
   });
 }

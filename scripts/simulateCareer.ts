@@ -14,14 +14,15 @@ import {
   chancesForLeagueMatch,
   meanChancesFromStrength,
 } from '../src/game/career/chanceEngine';
-import { getClub, goalRatioFromStrength } from '../src/game/career/data/clubs';
+import { assignClubTier, CLUBS, clubsInLeague, getClub, goalRatioFromStrength, TIER_LABEL } from '../src/game/career/data/clubs';
+import { playerMarketValue, weeklyWageForClub } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { internationalCampaignForSeason, internationalTournamentForSeason } from '../src/game/career/data/competitions';
 import { fifaRank } from '../src/game/career/data/fifaRankings';
 import { displaySeasonLabel, displaySeasonNumber } from '../src/game/career/seasonDisplay';
 import { isSelectedForNationalTeam, selectionRatioForNation } from '../src/game/career/international';
 import { simulateClubMatch, simulateLeagueSeason } from '../src/game/career/matchEngine';
-import { hydrateSeason, resolveFixture, shouldSkipFixture } from '../src/game/career/seasonSim';
+import { hydrateSeason, nextPlayableFixture, resolveFixture, shouldSkipFixture } from '../src/game/career/seasonSim';
 import { offerClubsForTrial } from '../src/game/career/trial';
 import { resolveSeasonTransition } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
@@ -649,6 +650,7 @@ const sale = resolveSeasonTransition({
   careerGoals: 2,
   careerGames: 24,
   nationality: 'germany',
+  loansUsed: 0,
 });
 const saleClubs = sale.pendingTransfer?.clubIds ?? [];
 const saleHome = saleClubs.filter((id) => getClub(id)?.country === 'Germany').length;
@@ -656,6 +658,174 @@ console.log('sale offers', saleClubs, `home=${saleHome}`);
 if (saleHome < 1) {
   console.error('German player sale offers must include at least one German club');
   process.exitCode = 1;
+}
+
+console.log('\n--- Global club hierarchy: MLS never elite, Saudi above MLS ---');
+const lafc = getClub('lafc');
+const hilal = getClub('al-hilal');
+const barca = getClub('barcelona');
+console.log('LAFC', lafc?.tier, TIER_LABEL[lafc?.tier ?? 5], 'Hilal', hilal?.tier, 'Barca', barca?.tier);
+if (!lafc || lafc.tier <= 2) {
+  console.error('MLS clubs must never be Elite or Strong');
+  process.exitCode = 1;
+}
+if (!hilal || hilal.tier === 1 || hilal.tier > (lafc.tier)) {
+  console.error('Saudi clubs must not be Elite, but should rank above MLS');
+  process.exitCode = 1;
+}
+if (assignClubTier('United States', 'MLS', 94) < 3 || assignClubTier('Saudi Arabia', 'Saudi Pro League', 94) === 1) {
+  console.error('league caps must keep MLS off the elite tier and Saudi off Elite');
+  process.exitCode = 1;
+}
+
+console.log('\n--- League opponents home and away, never a third meeting ---');
+const playableLeagues = [...new Set(CLUBS.map((c) => c.league))];
+for (const league of playableLeagues) {
+  const size = clubsInLeague(league).length;
+  if (size !== 13) {
+    console.error(`${league} has ${size} clubs; need 13 so every rival is played twice in 24 games`);
+    process.exitCode = 1;
+  }
+}
+if (madrid) {
+  const { calendar } = hydrateSeason({ seasonNumber: 2, club: madrid, careerGoalRatio: 0.8, nationId: 'spain' });
+  const league = calendar.fixtures.filter((f) => f.kind === 'league' && f.opponentId);
+  const counts: Record<string, number> = {};
+  for (const f of league) counts[f.opponentId!] = (counts[f.opponentId!] ?? 0) + 1;
+  const rivals = clubsInLeague(madrid.league).filter((c) => c.id !== madrid.id);
+  console.log('La Liga size', rivals.length + 1, 'league games', league.length, counts);
+  if (rivals.length !== 12) {
+    console.error('each league needs 13 clubs so 12 opponents can be played twice');
+    process.exitCode = 1;
+  }
+  if (Object.values(counts).some((n) => n !== 2) || Object.keys(counts).length !== rivals.length) {
+    console.error('every league rival must appear exactly twice');
+    process.exitCode = 1;
+  }
+}
+
+console.log('\n--- Transfer value: 18 at Barcelona 0.9 is ~€200m, then fades after 27 ---');
+if (barca && hilal && lafc) {
+  const young = playerMarketValue({ age: 18, ratio: 0.9, careerGoals: 22, club: barca });
+  const faded = playerMarketValue({ age: 30, ratio: 0.9, careerGoals: 22, club: barca });
+  const worse = playerMarketValue({ age: 18, ratio: 0.45, careerGoals: 22, club: barca });
+  console.log('Barca 18/0.9', young, '30/0.9', faded, '18/0.45', worse);
+  if (young < 170_000_000 || young > 230_000_000) {
+    console.error('an 18-year-old Barcelona 0.9 should be worth about €200m');
+    process.exitCode = 1;
+  }
+  if (faded >= young * 0.7) {
+    console.error('value must drop after 27 even with the same ratio');
+    process.exitCode = 1;
+  }
+  if (worse >= young * 0.7) {
+    console.error('a worse ratio must cut the fee');
+    process.exitCode = 1;
+  }
+  const euroWage = weeklyWageForClub(barca, young);
+  const saudiWage = weeklyWageForClub(hilal, young);
+  const mlsWage = weeklyWageForClub(lafc, young);
+  console.log('wages Barca', euroWage, 'Hilal', saudiWage, 'LAFC', mlsWage);
+  if (saudiWage < euroWage * 0.7) {
+    console.error('Saudi wages should be comparable to top European clubs');
+    process.exitCode = 1;
+  }
+  if (mlsWage >= saudiWage) {
+    console.error('MLS wages must sit below Saudi');
+    process.exitCode = 1;
+  }
+}
+
+console.log('\n--- Loan return never dumps the player into the reserves ---');
+const loanSeason: SeasonRecord = {
+  ...dummySeason,
+  role: 'loan',
+  clubId: 'mainz',
+  goals: 10,
+  gamesPlayed: 24,
+  leagueGoals: 10,
+};
+const loanBack = resolveSeasonTransition({
+  season: { ...loanSeason, goals: 20 },
+  role: 'loan',
+  clubId: 'mainz',
+  parentClubId: 'bayern',
+  seasonsAtCurrentClub: 0,
+  age: 18,
+  careerGoals: 20,
+  careerGames: 24,
+  nationality: 'germany',
+  loansUsed: 1,
+});
+console.log('high loan ratio', loanBack.headline, loanBack.immediate?.role);
+if (loanBack.immediate?.role !== 'first-team') {
+  console.error('meeting the parent first-team bar must return to the first team');
+  process.exitCode = 1;
+}
+const loanMiss = resolveSeasonTransition({
+  season: loanSeason,
+  role: 'loan',
+  clubId: 'mainz',
+  parentClubId: 'bayern',
+  seasonsAtCurrentClub: 0,
+  age: 18,
+  careerGoals: 10,
+  careerGames: 24,
+  nationality: 'germany',
+  loansUsed: 1,
+});
+const missMoves = loanMiss.pendingTransfer?.offers ?? [];
+const loanOffers = missMoves.filter((o) => o.move === 'loan').length;
+const transferOffers = missMoves.filter((o) => o.move === 'permanent').length;
+console.log('missed return', loanMiss.headline, 'loans', loanOffers, 'transfers', transferOffers, loanMiss.immediate?.role);
+if (loanMiss.immediate?.role === 'reserve' || loanOffers !== 3 || transferOffers !== 3) {
+  console.error('a missed loan return must offer 3 loans and 3 transfers, never reserves');
+  process.exitCode = 1;
+}
+const loanCap = resolveSeasonTransition({
+  season: loanSeason,
+  role: 'loan',
+  clubId: 'mainz',
+  parentClubId: 'bayern',
+  seasonsAtCurrentClub: 0,
+  age: 19,
+  careerGoals: 10,
+  careerGames: 24,
+  nationality: 'germany',
+  loansUsed: 2,
+});
+const capLoans = (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan').length;
+console.log('second loan used up', loanCap.headline, 'further loans', capLoans);
+if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.move === 'permanent').length < 3) {
+  console.error('after two loan spells the player must transfer');
+  process.exitCode = 1;
+}
+
+console.log('\n--- Next playable fixture skips eliminated finals and 0-chance weeks ---');
+if (madrid) {
+  const { calendar, sim } = hydrateSeason({ seasonNumber: 4, club: madrid, careerGoalRatio: 0.8, nationId: 'spain' });
+  const out = { ...sim, internationalSelected: true, internationalStage: 'eliminated' as const, internationalTournament: 'euro' as const };
+  const final = calendar.fixtures.find((f) => f.kind === 'international' && f.internationalRound === 'final');
+  if (final && !shouldSkipFixture(final, out)) {
+    console.error('a lost semi-final must skip the final');
+    process.exitCode = 1;
+  }
+  const sfIndex = calendar.fixtures.findIndex((f) => f.kind === 'international' && f.internationalRound === 'semi-final');
+  const afterSf = nextPlayableFixture(calendar, { ...out, fixtureIndex: Math.max(0, sfIndex + 1) });
+  if (afterSf?.internationalRound === 'final') {
+    console.error('hub next-match must not preview a final the nation is already out of');
+    process.exitCode = 1;
+  }
+  const zero = calendar.fixtures.find((f) => (f.playerChances ?? 1) === 0);
+  const playable = nextPlayableFixture(
+    { ...calendar, fixtures: zero ? [zero, ...calendar.fixtures.filter((f) => f !== zero)] : calendar.fixtures },
+    { ...sim, fixtureIndex: 0 },
+  );
+  if (zero && playable === zero) {
+    console.error('the next-match preview must not point at a 0-chance fixture');
+    process.exitCode = 1;
+  }
+  console.log('eliminated skips final', Boolean(final && shouldSkipFixture(final, out)), 'next after SF', afterSf?.kind, afterSf?.internationalRound ?? afterSf?.opponentLabel);
 }
 
 console.log('\n--- Bundesliga hierarchy: Mainz must almost never win the title ---');

@@ -1,5 +1,5 @@
 import { createAvailability } from './availabilityEngine';
-import type { Confederation } from './data/competitions';
+import type { Confederation, InternationalTournamentId } from './data/competitions';
 import { clubsInCountry, type ClubTier } from './data/clubs';
 import { fifaRank } from './data/fifaRankings';
 import { NATIONS, getNation, type Nation } from './data/nations';
@@ -13,15 +13,54 @@ export function nationHasDomesticLeague(nationId: string): boolean {
   return Boolean(nation && clubsInCountry(nation.name).length > 0);
 }
 
+export interface InternationalCompetitionRecord {
+  tournament: InternationalTournamentId;
+  qualifyingGames: number;
+  qualifyingGoals: number;
+  finalsGames: number;
+  finalsGoals: number;
+}
+
 export interface NationalTeamState {
   nationId: string;
   availability: AvailabilityState;
   caps: number;
   goals: number;
+  byCompetition: InternationalCompetitionRecord[];
 }
 
 export function createNationalTeamState(nationId: string): NationalTeamState {
-  return { nationId, availability: createAvailability(), caps: 0, goals: 0 };
+  return { nationId, availability: createAvailability(), caps: 0, goals: 0, byCompetition: [] };
+}
+
+export function emptyCompetitionRecord(
+  tournament: InternationalCompetitionRecord['tournament'],
+): InternationalCompetitionRecord {
+  return { tournament, qualifyingGames: 0, qualifyingGoals: 0, finalsGames: 0, finalsGoals: 0 };
+}
+
+export function recordInternationalAppearance(
+  team: NationalTeamState,
+  tournament: InternationalCompetitionRecord['tournament'] | null,
+  isQualifier: boolean,
+  goals: number,
+): NationalTeamState {
+  if (!tournament) {
+    return { ...team, caps: team.caps + 1, goals: team.goals + goals };
+  }
+  const existing = team.byCompetition.find((row) => row.tournament === tournament);
+  const row = existing ? { ...existing } : emptyCompetitionRecord(tournament);
+  if (isQualifier) {
+    row.qualifyingGames += 1;
+    row.qualifyingGoals += goals;
+  } else {
+    row.finalsGames += 1;
+    row.finalsGoals += goals;
+  }
+  const byCompetition = existing
+    ? team.byCompetition.map((r) => (r.tournament === tournament ? row : r))
+    : [...team.byCompetition, row];
+  return { ...team, caps: team.caps + 1, goals: team.goals + goals, byCompetition };
 }
 
 export function confederationOfNation(nationId: string | null | undefined): Confederation | null {

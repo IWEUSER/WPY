@@ -254,49 +254,49 @@ export function simulateRestOfLeagueRound(
 }
 
 /**
- * Circle-method pairings for one round of a single round-robin. `round` is
- * 0-indexed; home/away flip every full cycle so a 24-game season with 8 clubs
- * is three cycles plus three leftover rounds.
+ * Circle-method pairings for one round of a single round-robin. Odd-sized
+ * leagues get a bye so nobody is paired with themselves.
  */
 export function roundRobinPairs(clubIds: string[], round: number): [string, string][] {
   const n = clubIds.length;
   if (n < 2) return [];
-  const rotation = [...clubIds];
-  const cycle = n - 1;
+  const ids = n % 2 === 1 ? [...clubIds, '__bye__'] : [...clubIds];
+  const m = ids.length;
+  const rotation = [...ids];
+  const cycle = m - 1;
   const r = ((round % cycle) + cycle) % cycle;
   for (let i = 0; i < r; i++) {
     const last = rotation.pop();
     if (last) rotation.splice(1, 0, last);
   }
   const pairs: [string, string][] = [];
-  for (let i = 0; i < n / 2; i++) {
+  for (let i = 0; i < m / 2; i++) {
     const a = rotation[i];
-    const b = rotation[n - 1 - i];
+    const b = rotation[m - 1 - i];
+    if (a === '__bye__' || b === '__bye__') continue;
     const homeFirst = Math.floor(round / cycle) % 2 === 0;
     pairs.push(homeFirst ? [a, b] : [b, a]);
   }
   return pairs;
 }
 
-/** Full NPC league season used to sanity-check title odds. */
+/** Full NPC league season used to sanity-check title odds. Home and away
+ * against every other club — 24 games in a 13-team league. */
 export function simulateLeagueSeason(
   league: string,
-  rounds = 24,
+  _rounds = 24,
   rng: () => number = Math.random,
 ): LeagueStanding[] {
   const clubs = clubsInLeague(league);
   let table = clubs.map((c) => emptyStanding(c.id));
-  const ids = clubs.map((c) => c.id);
-  for (let round = 0; round < rounds; round++) {
-    for (const [homeId, awayId] of roundRobinPairs(ids, round)) {
-      const home = getClub(homeId);
-      const away = getClub(awayId);
-      if (!home || !away) continue;
+  for (const home of clubs) {
+    for (const away of clubs) {
+      if (home.id === away.id) continue;
       const result = simulateClubMatch(
         { clubStrength: home.strength, opponentStrength: away.strength, clubTier: home.tier, opponentTier: away.tier, isHome: true },
         rng,
       );
-      table = applyMatchToTable(table, homeId, awayId, result);
+      table = applyMatchToTable(table, home.id, away.id, result);
     }
   }
   return rankLeagueTable(table);

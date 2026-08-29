@@ -1,10 +1,12 @@
-import { getClub } from '../data/clubs';
+import { getClub, TIER_LABEL } from '../data/clubs';
+import { formatEuros, formatWeeklyWage } from '../playerValue';
 import { useCareerStore } from '../store';
 
 const KIND_LABEL: Record<string, string> = {
   loan: 'Loan offers',
-  sold: "Interested clubs",
+  sold: 'Interested clubs',
   'promotion-offer': 'Transfer offers',
+  'loan-or-transfer': 'Loan and transfer offers',
 };
 
 export default function TransferChoiceScreen() {
@@ -15,7 +17,10 @@ export default function TransferChoiceScreen() {
   const currentClub = clubId ? getClub(clubId) : undefined;
   if (!pending) return null;
 
-  const offers = pending.clubIds.map(getClub).filter((c) => c !== undefined);
+  const offers = (pending.offers?.length
+    ? pending.offers
+    : pending.clubIds.map((id) => ({ clubId: id, move: 'permanent' as const, fee: 0, weeklyWage: 0 }))
+  );
 
   return (
     <div className="flex h-full w-full flex-col items-center gap-6 overflow-y-auto px-6 py-[max(1.5rem,env(safe-area-inset-top))] text-center text-white">
@@ -26,22 +31,37 @@ export default function TransferChoiceScreen() {
       </div>
 
       <div className="flex w-full max-w-sm flex-col gap-3">
-        {offers.map((club) => (
-          <button
-            key={club.id}
-            type="button"
-            onClick={() => resolveTransferChoice(club.id)}
-            className="flex items-center gap-3 rounded-2xl bg-white/5 p-4 text-left backdrop-blur transition active:scale-[0.98]"
-            style={{ borderLeft: `4px solid ${club.color}` }}
-          >
-            <div className="flex-1">
-              <p className="font-bold">{club.name}</p>
-              <p className="text-xs text-white/50">
-                {club.country} · {club.league}
-              </p>
-            </div>
-          </button>
-        ))}
+        {offers.map((offer) => {
+          const club = getClub(offer.clubId);
+          if (!club) return null;
+          return (
+            <button
+              key={`${offer.move}-${club.id}`}
+              type="button"
+              onClick={() => resolveTransferChoice(club.id)}
+              className="flex items-center gap-3 rounded-2xl bg-white/5 p-4 text-left backdrop-blur transition active:scale-[0.98]"
+              style={{ borderLeft: `4px solid ${club.color}` }}
+            >
+              <div className="flex-1">
+                <p className="font-bold">{club.name}</p>
+                <p className="text-xs text-white/50">
+                  {club.country} · {club.league}
+                </p>
+                <p className="mt-1 text-xs text-white/70">
+                  {offer.move === 'loan' ? 'Loan' : `Fee ${formatEuros(offer.fee)}`}
+                  {' · '}
+                  {formatWeeklyWage(offer.weeklyWage)}
+                </p>
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                <span className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/70">
+                  {offer.move === 'loan' ? 'Loan' : 'Transfer'}
+                </span>
+                <span className="text-[10px] uppercase tracking-wide text-white/40">{TIER_LABEL[club.tier]}</span>
+              </div>
+            </button>
+          );
+        })}
       </div>
 
       {pending.allowDecline && currentClub && (
