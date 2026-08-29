@@ -27,7 +27,9 @@ export function offerClubsForTrial(goals: number, count = 3, nationality?: strin
   if (pool.length < count) pool = [...pool, ...CLUBS];
 
   const country = countryForNationality(nationality);
-  const extraHome = country ? clubsInCountry(country) : [];
+  const extraHome = country
+    ? clubsInCountry(country).filter((c) => Math.abs(c.tier - tier) <= 1)
+    : [];
   const minHome = extraHome.length > 0 ? 2 : 0;
   return pickClubsBiasedToCountry(pool, count, country, minHome, extraHome);
 }

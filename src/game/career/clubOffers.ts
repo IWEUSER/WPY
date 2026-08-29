@@ -22,21 +22,18 @@ export function pickClubsBiasedToCountry(
 
   const homePreferred = preferred.filter((c) => c.country === homeCountry);
   const homeExtra = extraHome.filter((c) => c.country === homeCountry);
-  const homePool = uniqueById([...homePreferred, ...homeExtra]);
-  const awayPool = preferred.filter((c) => c.country !== homeCountry);
-  const awayFallback = CLUBS.filter((c) => c.country !== homeCountry);
-
-  const homeNeeded = Math.min(minFromCountry, count, homePool.length);
-  const homePicks = shuffle(homePool).slice(0, homeNeeded);
+  const homeNeeded = Math.min(minFromCountry, count, uniqueById([...homePreferred, ...homeExtra]).length);
+  const homePicks = uniqueById([...shuffle(homePreferred), ...shuffle(homeExtra)]).slice(0, homeNeeded);
   const taken = new Set(homePicks.map((c) => c.id));
   const remaining = count - homePicks.length;
 
-  const away = uniqueById([...awayPool, ...awayFallback]).filter((c) => !taken.has(c.id));
-  const awayPicks = shuffle(away).slice(0, remaining);
+  const awayPool = preferred.filter((c) => c.country !== homeCountry && !taken.has(c.id));
+  const awayFallback = CLUBS.filter((c) => c.country !== homeCountry && !taken.has(c.id));
+  const awayPicks = uniqueById([...shuffle(awayPool), ...shuffle(awayFallback)]).slice(0, remaining);
   awayPicks.forEach((c) => taken.add(c.id));
 
   if (homePicks.length + awayPicks.length < count) {
-    const filler = uniqueById([...homePool, ...CLUBS]).filter((c) => !taken.has(c.id));
+    const filler = CLUBS.filter((c) => !taken.has(c.id));
     return [...homePicks, ...awayPicks, ...shuffle(filler)].slice(0, count);
   }
   return [...homePicks, ...awayPicks];

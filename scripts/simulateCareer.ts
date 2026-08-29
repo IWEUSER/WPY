@@ -211,14 +211,20 @@ console.log('season 4 any', internationalTournamentForSeason(4, 'CAF'), '(expect
 
 console.log('\n--- Trial offers: German nationality gets 2/3 German clubs ---');
 let germanTrials = 0;
+let germanTierOk = 0;
 for (let i = 0; i < 80; i++) {
   const offers = offerClubsForTrial(5, 3, 'germany');
-  const home = offers.filter((c) => c.country === 'Germany').length;
-  if (home >= 2 && offers.length === 3) germanTrials += 1;
+  const home = offers.filter((c) => c.country === 'Germany');
+  if (home.length >= 2 && offers.length === 3) germanTrials += 1;
+  if (home.every((c) => Math.abs(c.tier - 3) <= 1)) germanTierOk += 1;
 }
-console.log(`2-of-3 German: ${germanTrials}/80`);
+console.log(`2-of-3 German: ${germanTrials}/80; home clubs within a band of earned tier: ${germanTierOk}/80`);
 if (germanTrials < 80) {
   console.error('German trial offers must include 2 clubs from Germany');
+  process.exitCode = 1;
+}
+if (germanTierOk < 80) {
+  console.error('Home trial offers must stay near the tier the trial earned');
   process.exitCode = 1;
 }
 
