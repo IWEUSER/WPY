@@ -22,6 +22,13 @@ import { hydrateSeason, resolveFixture, shouldSkipFixture } from '../src/game/ca
 import { offerClubsForTrial } from '../src/game/career/trial';
 import { resolveSeasonTransition } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
+import {
+  evaluatePlayerOfTheYear,
+  evaluateTopGoalscorer,
+  goldenBootTarget,
+  goldenBootWinChance,
+  playerOfTheYearGoalTarget,
+} from '../src/game/career/domesticAwards';
 import type { SeasonRecord } from '../src/game/career/types';
 
 const N = 50000;
@@ -199,6 +206,39 @@ console.log(
     recentFormGames: 49,
   }),
 );
+
+console.log('\n--- Domestic awards: golden boot target + randomiser, POTY needs the league ---');
+const plTarget = goldenBootTarget('Premier League');
+const plPoty = playerOfTheYearGoalTarget('Premier League');
+console.log(`Premier League golden boot ${plTarget}, POTY bar ${plPoty}`);
+if (plTarget !== 16 || plPoty >= plTarget || plPoty < 10) {
+  console.error('POTY bar must sit below the golden-boot target');
+  process.exitCode = 1;
+}
+const below = Array.from({ length: 80 }, () => evaluateTopGoalscorer(plTarget - 1, 'Premier League').won);
+if (below.some(Boolean)) {
+  console.error('scoring under the golden-boot target must never win it');
+  process.exitCode = 1;
+}
+const exactTrials = 2000;
+let exactWins = 0;
+for (let i = 0; i < exactTrials; i++) {
+  if (evaluateTopGoalscorer(plTarget, 'Premier League').won) exactWins += 1;
+}
+const exactRate = exactWins / exactTrials;
+console.log(`exactly ${plTarget} goals won ${exactWins}/${exactTrials} = ${(exactRate * 100).toFixed(1)}% (expect ~${(goldenBootWinChance(plTarget, plTarget) * 100).toFixed(0)}%)`);
+if (exactRate < 0.4 || exactRate > 0.6) {
+  console.error('hitting the golden-boot target must be a coin-flip, not a lock');
+  process.exitCode = 1;
+}
+const noTitle = evaluatePlayerOfTheYear({ leagueChampion: false, leagueGoals: 30, league: 'Premier League' });
+const titleLow = evaluatePlayerOfTheYear({ leagueChampion: true, leagueGoals: plPoty - 1, league: 'Premier League' });
+const titleHigh = evaluatePlayerOfTheYear({ leagueChampion: true, leagueGoals: plPoty, league: 'Premier League' });
+console.log('POTY no title', noTitle.won, 'title but low goals', titleLow.won, 'title + bar', titleHigh.won);
+if (noTitle.won || titleLow.won || !titleHigh.won) {
+  console.error('Player of the Year needs the league title and the lower goal bar');
+  process.exitCode = 1;
+}
 
 console.log('\n--- Club match engine: better teams win more often, never always ---');
 function winRate(us: 1 | 2 | 3 | 4 | 5, them: 1 | 2 | 3 | 4 | 5, n = 8000): string {
@@ -424,6 +464,12 @@ const dummySeason: SeasonRecord = {
   goals: 2,
   gamesPlayed: 24,
   ratioMet: false,
+  age: 20,
+  leagueGoals: 2,
+  trophies: [],
+  topGoalscorer: false,
+  playerOfTheYear: false,
+  wonWpy: false,
 };
 const sale = resolveSeasonTransition({
   season: dummySeason,

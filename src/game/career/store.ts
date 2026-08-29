@@ -4,6 +4,8 @@ import { applyMatchResult, createAvailability, isAvailable, serveBannedGame } fr
 import { FORM_WINDOW_GAMES, SEASON_LENGTH, STARTING_AGE } from './constants';
 import { getClub } from './data/clubs';
 import { isInternationalFinalsSeason } from './data/competitions';
+import { evaluatePlayerOfTheYear, evaluateTopGoalscorer } from './domesticAwards';
+import { trophyLabels } from './honoursDisplay';
 import { createNationalTeamState } from './international';
 import { buildSeasonStandings } from './matchEngine';
 import {
@@ -20,8 +22,22 @@ import type { CareerState, MatchRecord, PlayerRole, SeasonRecord } from './types
 
 export { SEASON_LENGTH } from './constants';
 
-function freshSeason(seasonNumber: number, clubId: string, role: CareerState['role']): SeasonRecord {
-  return { seasonNumber, clubId, role, matches: [], goals: 0, gamesPlayed: 0, ratioMet: null };
+function freshSeason(seasonNumber: number, clubId: string, role: CareerState['role'], age: number): SeasonRecord {
+  return {
+    seasonNumber,
+    clubId,
+    role,
+    matches: [],
+    goals: 0,
+    gamesPlayed: 0,
+    ratioMet: null,
+    age,
+    leagueGoals: 0,
+    trophies: [],
+    topGoalscorer: false,
+    playerOfTheYear: false,
+    wonWpy: false,
+  };
 }
 
 function pushForm(window: number[], goalsThisMatch: number): number[] {
@@ -41,8 +57,9 @@ function startSimulatedSeason(
   role: PlayerRole,
   history: SeasonRecord[],
   nationId: string | null,
+  age: number,
 ): Pick<CareerState, 'currentSeason' | 'seasonCalendar' | 'seasonSim' | 'seasonStandings' | 'liveMatch' | 'wpyResult' | 'lastMatchSummary'> {
-  const season = freshSeason(seasonNumber, clubId, role);
+  const season = freshSeason(seasonNumber, clubId, role, age);
   if (seasonNumber < 2) {
     return {
       currentSeason: season,
@@ -110,6 +127,37 @@ function evaluateSeasonWpy(state: CareerState) {
   });
 }
 
+function attachSeasonAwards(state: CareerState): { season: SeasonRecord; wpyResult: CareerState['wpyResult'] } {
+  const season = state.currentSeason;
+  if (!season || !state.clubId) {
+    return { season: season as SeasonRecord, wpyResult: state.wpyResult };
+  }
+  const club = getClub(state.clubId);
+  const sim = state.seasonSim;
+  const wpyResult = evaluateSeasonWpy(state);
+  const league = club?.league ?? '';
+  const boot = evaluateTopGoalscorer(season.leagueGoals, league);
+  const poty = evaluatePlayerOfTheYear({
+    leagueChampion: sim?.honours.leagueChampion ?? false,
+    leagueGoals: season.leagueGoals,
+    league,
+  });
+  return {
+    wpyResult,
+    season: {
+      ...season,
+      age: state.age,
+      trophies: trophyLabels(sim?.honours, club),
+      topGoalscorer: boot.won,
+      playerOfTheYear: poty.won,
+      wonWpy: wpyResult?.won ?? false,
+      topGoalscorerReason: boot.reason,
+      playerOfTheYearReason: poty.reason,
+      wpyReason: wpyResult?.reason ?? null,
+    },
+  };
+}
+
 function initialState(): CareerState {
   return {
     phase: 'menu',
@@ -153,6 +201,8 @@ interface CareerActions {
   recordMatchShot: (result: ShotResult) => void;
   continueAfterSeason: () => void;
   resolveTransferChoice: (clubId: string | null) => void;
+  openCareerRecord: () => void;
+  returnToHub: () => void;
   resetCareer: () => void;
   returnToMenu: () => void;
 }
@@ -230,9 +280,10 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
     },
   };
   const nextState = { ...state, seasonSim: withHonours, currentSeason: season, availability, nationalTeam, formWindow, careerGames };
+  const awarded = attachSeasonAwards(nextState);
   return {
     seasonSim: withHonours,
-    currentSeason: season,
+    currentSeason: awarded.season,
     availability,
     nationalTeam,
     careerGames,
@@ -241,7 +292,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
     liveMatch: null,
     seasonStandings: buildSeasonStandings(withHonours.leagueTable, withHonours.europeanStanding),
     phase: 'season-summary',
-    wpyResult: evaluateSeasonWpy(nextState),
+    wpyResult: awarded.wpyResult,
   };
 }
 
@@ -280,7 +331,7 @@ export const useCareerStore = create<CareerStore>()(
           age: STARTING_AGE,
           seasonsAtCurrentClub: 0,
           availability: createAvailability(),
-          ...startSimulatedSeason(1, clubId, 'reserve', [], null),
+          ...startSimulatedSeason(1, clubId, 'reserve', [], null, STARTING_AGE),
           pendingTransfer: null,
           phase: 'hub',
         }),
@@ -320,7 +371,13 @@ export const useCareerStore = create<CareerStore>()(
           }
 
           if (season.matches.length >= SEASON_LENGTH) {
-            return { currentSeason: season, availability, phase: 'season-summary' };
+            const awarded = attachSeasonAwards({ ...state, currentSeason: season, availability });
+            return {
+              currentSeason: awarded.season,
+              availability,
+              phase: 'season-summary',
+              wpyResult: awarded.wpyResult,
+            };
           }
           return { currentSeason: season, availability, phase: 'match' };
         }),
@@ -359,6 +416,7 @@ export const useCareerStore = create<CareerStore>()(
             matches: [...season.matches, record],
             goals: season.goals + live.goals,
             gamesPlayed: season.gamesPlayed + 1,
+            leagueGoals: season.leagueGoals + (fixture.kind === 'league' ? live.goals : 0),
           };
 
           const isInternational = fixture.kind === 'international';
@@ -380,10 +438,11 @@ export const useCareerStore = create<CareerStore>()(
             ? { ...nextSim, honours: { ...nextSim.honours, leagueChampion: (nextSim.leagueTable.find((r) => r.clubId === state.clubId)?.position ?? 0) === 1 } }
             : nextSim;
           const merged = { ...state, seasonSim: withHonours, currentSeason: updatedSeason, formWindow: pushForm(state.formWindow, live.goals) };
+          const awarded = complete ? attachSeasonAwards(merged) : { season: updatedSeason, wpyResult: state.wpyResult };
 
           return {
             seasonSim: withHonours,
-            currentSeason: updatedSeason,
+            currentSeason: awarded.season,
             availability,
             nationalTeam,
             liveMatch: null,
@@ -393,7 +452,7 @@ export const useCareerStore = create<CareerStore>()(
             careerGoals: state.careerGoals + live.goals,
             careerGames: state.careerGames + 1,
             phase: complete ? 'season-summary' : 'hub',
-            wpyResult: complete ? evaluateSeasonWpy(merged) : state.wpyResult,
+            wpyResult: awarded.wpyResult,
           };
         }),
 
@@ -410,15 +469,25 @@ export const useCareerStore = create<CareerStore>()(
           const goals = season.goals + (scored ? 1 : 0);
           const gamesPlayed = season.gamesPlayed + 1;
           const availability = applyMatchResult(state.availability, scored);
-          const updatedSeason: SeasonRecord = { ...season, matches, goals, gamesPlayed };
+          const updatedSeason: SeasonRecord = {
+            ...season,
+            matches,
+            goals,
+            gamesPlayed,
+            leagueGoals: season.leagueGoals + (scored ? 1 : 0),
+          };
           const seasonComplete = matches.length >= SEASON_LENGTH;
+          const awarded = seasonComplete
+            ? attachSeasonAwards({ ...state, currentSeason: updatedSeason, availability })
+            : { season: updatedSeason, wpyResult: state.wpyResult };
           return {
-            currentSeason: updatedSeason,
+            currentSeason: awarded.season,
             availability,
             careerGoals: state.careerGoals + (scored ? 1 : 0),
             careerGames: state.careerGames + 1,
             formWindow: pushForm(state.formWindow, scored ? 1 : 0),
             phase: seasonComplete ? 'season-summary' : 'hub',
+            wpyResult: awarded.wpyResult,
           };
         }),
 
@@ -458,7 +527,7 @@ export const useCareerStore = create<CareerStore>()(
               availability: createAvailability(),
               pendingTransfer: null,
               phase: 'hub',
-              ...startSimulatedSeason(nextSeasonNumber, clubId, role, seasonHistory, state.nationality),
+              ...startSimulatedSeason(nextSeasonNumber, clubId, role, seasonHistory, state.nationality, nextAge),
             };
           }
 
@@ -482,7 +551,7 @@ export const useCareerStore = create<CareerStore>()(
               seasonsAtCurrentClub: state.seasonsAtCurrentClub + 1,
               availability: createAvailability(),
               phase: 'hub',
-              ...startSimulatedSeason(state.seasonNumber, state.clubId, state.role, state.seasonHistory, state.nationality),
+              ...startSimulatedSeason(state.seasonNumber, state.clubId, state.role, state.seasonHistory, state.nationality, state.age),
             };
           }
 
@@ -504,26 +573,44 @@ export const useCareerStore = create<CareerStore>()(
             seasonsAtCurrentClub: 0,
             availability: createAvailability(),
             phase: 'hub',
-            ...startSimulatedSeason(state.seasonNumber, clubId, role, state.seasonHistory, state.nationality),
+            ...startSimulatedSeason(state.seasonNumber, clubId, role, state.seasonHistory, state.nationality, state.age),
           };
         }),
 
       resetCareer: () => set(initialState()),
 
+      openCareerRecord: () => set({ phase: 'career' }),
+
+      returnToHub: () =>
+        set((state) => ({
+          phase: state.clubId ? 'hub' : 'menu',
+        })),
+
       returnToMenu: () => set({ phase: 'menu' }),
     }),
     {
       name: 'wpy-career-v1',
-      version: 5,
+      version: 6,
       migrate: (persisted) => {
         const state = persisted as Partial<CareerState>;
         const sim = state.seasonSim;
+        const padSeason = (season: SeasonRecord, index: number): SeasonRecord => ({
+          ...season,
+          age: season.age ?? (state.age ?? 16) - Math.max(0, (state.seasonHistory?.length ?? 0) - index),
+          leagueGoals: season.leagueGoals ?? season.goals,
+          trophies: season.trophies ?? [],
+          topGoalscorer: season.topGoalscorer ?? false,
+          playerOfTheYear: season.playerOfTheYear ?? false,
+          wonWpy: season.wonWpy ?? false,
+        });
         return {
           ...state,
           nationality: state.nationality ?? null,
           nationalTeam: state.nationalTeam ?? null,
           seasonCalendar: state.seasonCalendar ?? null,
           seasonStandings: state.seasonStandings ?? null,
+          seasonHistory: (state.seasonHistory ?? []).map(padSeason),
+          currentSeason: state.currentSeason ? padSeason(state.currentSeason, state.seasonHistory?.length ?? 0) : null,
           seasonSim: sim
             ? {
                 ...sim,

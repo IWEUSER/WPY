@@ -55,6 +55,8 @@ export default function SeasonSummaryScreen() {
   if (seasonSim?.honours.domesticCup) {
     honours.push(`Won the ${DOMESTIC_CUPS[seasonSim.honours.domesticCup].name}`);
   }
+  if (season.topGoalscorer) honours.push('Top goalscorer');
+  if (season.playerOfTheYear) honours.push('Player of the Year');
   const missedTournament =
     seasonSim?.internationalSelected &&
     seasonSim.internationalTournament &&

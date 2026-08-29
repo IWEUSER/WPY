@@ -70,6 +70,31 @@ for (let i = 0; i < SEASON_LENGTH; i++) {
 console.log('S1 done phase', store.getState().phase, 'goals', store.getState().currentSeason?.goals);
 store.getState().continueAfterSeason();
 
+const s1record = store.getState().seasonHistory[0];
+console.log(
+  'S1 record',
+  s1record && {
+    age: s1record.age,
+    clubId: s1record.clubId,
+    games: s1record.gamesPlayed,
+    goals: s1record.goals,
+    leagueGoals: s1record.leagueGoals,
+    ratio: s1record.gamesPlayed ? (s1record.goals / s1record.gamesPlayed).toFixed(2) : '0',
+    trophies: s1record.trophies,
+    topGoalscorer: s1record.topGoalscorer,
+    playerOfTheYear: s1record.playerOfTheYear,
+    wonWpy: s1record.wonWpy,
+  },
+);
+if (!s1record || s1record.age !== 16 || s1record.gamesPlayed !== 24 || s1record.goals !== 24) {
+  console.error('Season 1 career record must store age, games and goals');
+  process.exitCode = 1;
+}
+if (s1record.playerOfTheYear) {
+  console.error('Season 1 has no league title, so it cannot award Player of the Year');
+  process.exitCode = 1;
+}
+
 const s2 = store.getState();
 console.log('S2 phase', s2.phase, 'season', s2.seasonNumber, 'role', s2.role);
 console.log('S2 fixtures', s2.seasonCalendar?.fixtures.length, 'standings rows', s2.seasonStandings?.league.length);

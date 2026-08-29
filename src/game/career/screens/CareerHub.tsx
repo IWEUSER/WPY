@@ -22,13 +22,12 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const season = useCareerStore((s) => s.currentSeason);
   const seasonCalendar = useCareerStore((s) => s.seasonCalendar);
   const availability = useCareerStore((s) => s.availability);
-  const careerGoals = useCareerStore((s) => s.careerGoals);
-  const careerGames = useCareerStore((s) => s.careerGames);
   const nationality = useCareerStore((s) => s.nationality);
   const seasonStandings = useCareerStore((s) => s.seasonStandings);
   const seasonSim = useCareerStore((s) => s.seasonSim);
   const lastMatchSummary = useCareerStore((s) => s.lastMatchSummary);
   const advance = useCareerStore((s) => s.advance);
+  const openCareerRecord = useCareerStore((s) => s.openCareerRecord);
 
   const club = clubId ? getClub(clubId) : undefined;
   const parentClub = role === 'loan' && parentClubId ? getClub(parentClubId) : undefined;
@@ -48,14 +47,17 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
 
   return (
     <div className="flex h-full w-full flex-col overflow-y-auto px-5 py-[max(1.25rem,env(safe-area-inset-top))] pb-10 text-white">
-      <div className="mb-5 flex items-center justify-between">
+      <div className="mb-4 flex items-center justify-between">
         <button type="button" onClick={onOpenMenu} className="text-xs text-white/40 underline underline-offset-2">
           Menu
         </button>
-        <span className="text-xs text-white/40">Age {age}</span>
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={openCareerRecord} className="text-xs text-white/40 underline underline-offset-2">
+            Career
+          </button>
+          <span className="text-xs text-white/40">Age {age}</span>
+        </div>
       </div>
-
-      <div className="flex flex-col gap-5">
 
       <div className="rounded-2xl bg-white/5 p-4" style={{ borderLeft: `4px solid ${club.color}` }}>
         <p className="text-xs uppercase tracking-wide text-white/40">
@@ -65,17 +67,26 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         <p className="text-xs text-white/50">
           {club.country} · {club.league}
         </p>
-        {nation && (
-          <p className="mt-1 text-xs text-white/50">
-            International: {nation.name}
-          </p>
-        )}
+        {nation && <p className="mt-1 text-xs text-white/50">International: {nation.name}</p>}
         {parentClub && <p className="mt-1 text-xs text-white/40">On loan from {parentClub.name}</p>}
         <SeasonCompetitions calendar={seasonCalendar} />
       </div>
 
+      <button
+        type="button"
+        onClick={advance}
+        className="mt-4 w-full rounded-2xl bg-emerald-500 px-6 py-4 text-lg font-bold text-black shadow-lg shadow-emerald-500/20 transition active:scale-[0.98]"
+      >
+        {available ? 'Play Next Match' : 'Continue'}
+        {nextFixture && (
+          <span className="mt-1 block text-xs font-medium text-black/70">
+            {fixtureTitle(nextFixture, { playerNationName: nation?.name })}
+          </span>
+        )}
+      </button>
+
       <div
-        className={`rounded-xl px-4 py-3 text-sm font-semibold ${
+        className={`mt-4 rounded-xl px-4 py-3 text-sm font-semibold ${
           available ? 'bg-emerald-500/15 text-emerald-300' : 'bg-red-500/15 text-red-300'
         }`}
       >
@@ -83,78 +94,60 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
       </div>
 
       {lastMatchSummary && (
-        <div className="rounded-xl bg-white/5 px-4 py-3 text-sm text-white/80">{lastMatchSummary}</div>
+        <div className="mt-3 rounded-xl bg-white/5 px-4 py-3 text-sm text-white/80">{lastMatchSummary}</div>
       )}
 
-      {seasonStandings && (
-        <StandingsCard
-          standings={seasonStandings}
-          clubId={club.id}
-          cupName={seasonSim?.domesticCup ? DOMESTIC_CUPS[seasonSim.domesticCup].name : null}
-          cupStage={seasonSim?.domesticCupStage ?? null}
-        />
-      )}
-
-      <div className="rounded-2xl bg-white/5 p-4">
-        <div className="mb-2 flex items-baseline justify-between">
-          <span className="text-xs uppercase tracking-wide text-white/40">Season ratio</span>
-          <span className="text-sm font-bold">
-            {goals} goal{goals === 1 ? '' : 's'} / {played} played
-          </span>
-        </div>
-        <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/10">
-          <div
-            className={`h-full rounded-full ${ratioProgress >= 1 ? 'bg-emerald-400' : 'bg-amber-400'}`}
-            style={{ width: `${ratioProgress * 100}%` }}
+      <div className="mt-5 flex flex-col gap-5">
+        {seasonStandings && (
+          <StandingsCard
+            standings={seasonStandings}
+            clubId={club.id}
+            cupName={seasonSim?.domesticCup ? DOMESTIC_CUPS[seasonSim.domesticCup].name : null}
+            cupStage={seasonSim?.domesticCupStage ?? null}
           />
-        </div>
-        <p className="mt-2 text-xs text-white/50">
-          Need {threshold.toFixed(2)} goals/game to {role === 'first-team' ? 'keep your place' : 'earn a promotion'} ·
-          currently {ratio.toFixed(2)}
-        </p>
-        <p className="mt-1 text-xs text-white/40">
-          {remainingFixtures} match{remainingFixtures === 1 ? '' : 'es'} left this season
-          {nextFixture ? ` · next: ${fixtureTitle(nextFixture, { playerNationName: nation?.name })}` : ''}
-        </p>
-        {parentClub && (
-          <p className="mt-2 text-xs text-emerald-300/80">
-            Hit {parentClub.reserveGoalRatio.toFixed(2)} and {parentClub.name} will bring you straight back into their
-            first team.
-          </p>
         )}
-      </div>
 
-      {nation && (
-        <InternationalCard
-          nationName={nation.name}
-          clubTier={club.tier}
-          seasonRatio={ratio}
-          gamesPlayed={played}
-          sim={seasonSim}
-        />
-      )}
+        <div className="rounded-2xl bg-white/5 p-4">
+          <div className="mb-2 flex items-baseline justify-between">
+            <span className="text-xs uppercase tracking-wide text-white/40">Season ratio</span>
+            <span className="text-sm font-bold">
+              {goals} goal{goals === 1 ? '' : 's'} / {played} played
+            </span>
+          </div>
+          <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/10">
+            <div
+              className={`h-full rounded-full ${ratioProgress >= 1 ? 'bg-emerald-400' : 'bg-amber-400'}`}
+              style={{ width: `${ratioProgress * 100}%` }}
+            />
+          </div>
+          <p className="mt-2 text-xs text-white/50">
+            Need {threshold.toFixed(2)} goals/game to {role === 'first-team' ? 'keep your place' : 'earn a promotion'} ·
+            currently {ratio.toFixed(2)}
+          </p>
+          <p className="mt-1 text-xs text-white/40">
+            {remainingFixtures} match{remainingFixtures === 1 ? '' : 'es'} left this season
+            {nextFixture ? ` · next: ${fixtureTitle(nextFixture, { playerNationName: nation?.name })}` : ''}
+          </p>
+          {parentClub && (
+            <p className="mt-2 text-xs text-emerald-300/80">
+              Hit {parentClub.reserveGoalRatio.toFixed(2)} and {parentClub.name} will bring you straight back into their
+              first team.
+            </p>
+          )}
+        </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-xl bg-white/5 p-3 text-center">
-          <p className="text-lg font-bold">{careerGoals}</p>
-          <p className="text-[10px] uppercase tracking-wide text-white/40">Career goals</p>
-        </div>
-        <div className="rounded-xl bg-white/5 p-3 text-center">
-          <p className="text-lg font-bold">{careerGames}</p>
-          <p className="text-[10px] uppercase tracking-wide text-white/40">Career games</p>
-        </div>
-      </div>
+        {nation && (
+          <InternationalCard
+            nationName={nation.name}
+            clubTier={club.tier}
+            seasonRatio={ratio}
+            gamesPlayed={played}
+            sim={seasonSim}
+          />
+        )}
 
         <RecentForm matches={season.matches} />
       </div>
-
-      <button
-        type="button"
-        onClick={advance}
-        className="mt-8 rounded-2xl bg-emerald-500 px-6 py-4 text-lg font-bold text-black shadow-lg shadow-emerald-500/20 transition active:scale-[0.98]"
-      >
-        {available ? 'Play Next Match' : 'Continue'}
-      </button>
     </div>
   );
 }
@@ -266,13 +259,6 @@ function InternationalCard({
   );
 }
 
-/**
- * A honest, calendar-only hint at what else this season involves - the
- * competitions the club/country qualified for, not a live table (there's no
- * league-table/European-standing simulation yet - see matchEngine.ts). Once
- * that exists, this is where the locked design's "league position + European
- * standing only" summary will replace this simple badge list.
- */
 function SeasonCompetitions({ calendar }: { calendar: SeasonCalendar | null }) {
   if (!calendar) return null;
   const cupIds = new Set(calendar.fixtures.map((f) => f.continentalCup).filter((id) => id !== undefined));

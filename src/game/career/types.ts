@@ -42,6 +42,17 @@ export interface SeasonRecord {
   gamesPlayed: number;
   /** Set once the season is finalized - whether the ratio requirement was met. */
   ratioMet: boolean | null;
+  /** Age during this season. */
+  age: number;
+  /** Goals in league (or reserve) fixtures only - used by the golden boot. */
+  leagueGoals: number;
+  trophies: string[];
+  topGoalscorer: boolean;
+  playerOfTheYear: boolean;
+  wonWpy: boolean;
+  topGoalscorerReason?: string | null;
+  playerOfTheYearReason?: string | null;
+  wpyReason?: string | null;
 }
 
 export interface TrialState {
@@ -58,7 +69,8 @@ export type CareerPhase =
   | 'hub'
   | 'match'
   | 'season-summary'
-  | 'transfer-choice';
+  | 'transfer-choice'
+  | 'career';
 
 export interface CareerState {
   phase: CareerPhase;
