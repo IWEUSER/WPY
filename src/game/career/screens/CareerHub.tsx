@@ -5,7 +5,7 @@ import { describeAvailability, isAvailable } from '../availabilityEngine';
 import { careerRatioForSelection, clubEligibleForNationalTeam, getNation, isSelectedForNationalTeam, selectionRatioForNation } from '../international';
 import type { SeasonStandings } from '../matchEngine';
 import { displaySeasonLabel } from '../seasonDisplay';
-import { formatEuros, playerMarketValue } from '../playerValue';
+import { formatEuros, playerMarketValueFromSeasons } from '../playerValue';
 import { fixtureTitle, internationalRoundLabel, nextPlayableFixture, remainingPlayableCount, type SeasonSimState } from '../seasonSim';
 import { useCareerStore, SEASON_LENGTH } from '../store';
 
@@ -50,12 +50,12 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
     ? remainingPlayableCount(seasonCalendar, seasonSim)
     : SEASON_LENGTH - season.matches.length;
   const nextFixture = seasonCalendar && seasonSim ? nextPlayableFixture(seasonCalendar, seasonSim) : undefined;
-  const careerRatio = careerGames > 0 ? careerGoals / careerGames : ratio;
-  const marketValue = playerMarketValue({
+  const marketValue = playerMarketValueFromSeasons({
     age,
-    ratio: careerRatio,
     careerGoals,
-    club,
+    careerGames,
+    seasons: [...seasonHistory, season],
+    fallbackClub: club,
   });
 
   return (

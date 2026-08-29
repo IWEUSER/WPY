@@ -1,6 +1,6 @@
 import { CLUBS, getClub, goalRatioFromStrength, loanCandidates, type Club, type ClubTier } from './data/clubs';
 import { countryForNationality, pickClubsBiasedToCountry, nearbyTierClubs, tierPool } from './clubOffers';
-import { playerMarketValue, weeklyWageForClub } from './playerValue';
+import { playerMarketValueFromSeasons, weeklyWageForClub } from './playerValue';
 import type { PlayerRole, SeasonRecord } from './types';
 
 export const MAX_LOAN_SPELLS = 2;
@@ -74,6 +74,7 @@ export interface SeasonTransitionParams {
   nationality?: string | null;
   /** Completed loan seasons so far, including the one just finished. */
   loansUsed: number;
+  seasonHistory?: SeasonRecord[];
 }
 
 export function countLoanSpells(history: SeasonRecord[], current?: SeasonRecord | null): number {
@@ -109,13 +110,12 @@ function pendingFromOffers(
 }
 
 function playerValueFromParams(params: SeasonTransitionParams, club: Club): number {
-  const seasonRatio = params.season.gamesPlayed > 0 ? params.season.goals / params.season.gamesPlayed : 0;
-  const careerRatio = params.careerGames > 0 ? params.careerGoals / params.careerGames : seasonRatio;
-  return playerMarketValue({
+  return playerMarketValueFromSeasons({
     age: params.age,
-    ratio: careerRatio,
     careerGoals: params.careerGoals,
-    club,
+    careerGames: params.careerGames,
+    seasons: [...(params.seasonHistory ?? []), params.season],
+    fallbackClub: club,
   });
 }
 

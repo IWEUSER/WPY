@@ -1,7 +1,7 @@
 import { getClub } from '../data/clubs';
 import { INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { awardLabels, seasonClubName, seasonRatio } from '../honoursDisplay';
-import { formatEuros, playerMarketValue } from '../playerValue';
+import { formatEuros, playerMarketValueFromSeasons } from '../playerValue';
 import { countsTowardCareerRecord, displaySeasonLabel } from '../seasonDisplay';
 import { useCareerStore } from '../store';
 import type { SeasonRecord } from '../types';
@@ -49,7 +49,13 @@ export default function CareerRecordScreen() {
       {(() => {
         const club = clubId ? getClub(clubId) : undefined;
         if (!club || careerGames === 0) return null;
-        const value = playerMarketValue({ age, ratio, careerGoals, club });
+        const value = playerMarketValueFromSeasons({
+          age,
+          careerGoals,
+          careerGames,
+          seasons: [...history, ...(current ? [current] : [])],
+          fallbackClub: club,
+        });
         return (
           <p className="mt-3 text-center text-sm text-white/60">
             Market value {formatEuros(value)}

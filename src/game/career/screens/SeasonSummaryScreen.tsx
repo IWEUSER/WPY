@@ -42,6 +42,7 @@ export default function SeasonSummaryScreen() {
     careerGames,
     nationality,
     loansUsed: countLoanSpells(seasonHistory, season),
+    seasonHistory,
   });
 
   const honours: string[] = [];

@@ -1,4 +1,6 @@
-import { clampStrength, type Club } from './data/clubs';
+import { clampStrength, getClub, type Club } from './data/clubs';
+import { countsTowardCareerRecord } from './seasonDisplay';
+import type { SeasonRecord } from './types';
 
 /** 18 at Barcelona with a 0.9 ratio is the €200m anchor. */
 export const BARCELONA_ANCHOR_VALUE = 200_000_000;
@@ -39,18 +41,45 @@ export interface MarketValueParams {
   club: Club;
 }
 
+export function clubLeagueScale(club: Club): number {
+  return (club.strength / ANCHOR_STRENGTH) * leagueValueWeight(club.league);
+}
+
 export function playerMarketValue(params: MarketValueParams): number {
   const { age, ratio, careerGoals, club } = params;
-  const clubScale = club.strength / ANCHOR_STRENGTH;
+  return valueFromScale(age, ratio, careerGoals, clubLeagueScale(club));
+}
+
+/**
+ * Same formula, but the club/league multiplier is a goal-weighted average of
+ * every first-team season so a spell at Barcelona still counts after a move.
+ */
+export function playerMarketValueFromSeasons(params: {
+  age: number;
+  careerGoals: number;
+  careerGames: number;
+  seasons: SeasonRecord[];
+  fallbackClub: Club;
+}): number {
+  const { age, careerGoals, careerGames, seasons, fallbackClub } = params;
+  const ratio = careerGames > 0 ? careerGoals / careerGames : 0;
+  let weighted = 0;
+  let weight = 0;
+  for (const season of seasons) {
+    if (!countsTowardCareerRecord(season.seasonNumber)) continue;
+    const club = getClub(season.clubId);
+    if (!club || season.goals <= 0) continue;
+    weighted += clubLeagueScale(club) * season.goals;
+    weight += season.goals;
+  }
+  const scale = weight > 0 ? weighted / weight : clubLeagueScale(fallbackClub);
+  return valueFromScale(age, ratio, careerGoals, scale);
+}
+
+function valueFromScale(age: number, ratio: number, careerGoals: number, scale: number): number {
   const ratioScale = Math.max(0.12, ratio / ANCHOR_RATIO);
   const volume = Math.min(1.15, Math.max(0.55, 0.7 + careerGoals / 70));
-  const raw =
-    BARCELONA_ANCHOR_VALUE *
-    clubScale *
-    leagueValueWeight(club.league) *
-    ratioScale *
-    ageValueFactor(age) *
-    volume;
+  const raw = BARCELONA_ANCHOR_VALUE * scale * ratioScale * ageValueFactor(age) * volume;
   return Math.max(100_000, Math.round(raw / 100_000) * 100_000);
 }
 

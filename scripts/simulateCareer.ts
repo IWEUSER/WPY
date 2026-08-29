@@ -15,7 +15,7 @@ import {
   meanChancesFromStrength,
 } from '../src/game/career/chanceEngine';
 import { assignClubTier, CLUBS, clubsInLeague, getClub, goalRatioFromStrength, TIER_LABEL } from '../src/game/career/data/clubs';
-import { playerMarketValue, weeklyWageForClub } from '../src/game/career/playerValue';
+import { playerMarketValue, playerMarketValueFromSeasons, weeklyWageForClub } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { internationalCampaignForSeason, internationalTournamentForSeason } from '../src/game/career/data/competitions';
 import { fifaRank } from '../src/game/career/data/fifaRankings';
@@ -720,6 +720,36 @@ if (barca && hilal && lafc) {
   }
   if (worse >= young * 0.7) {
     console.error('a worse ratio must cut the fee');
+    process.exitCode = 1;
+  }
+  const mlsSpell = playerMarketValue({ age: 18, ratio: 0.9, careerGoals: 22, club: lafc });
+  if (mlsSpell >= young * 0.5) {
+    console.error('goals in MLS must be worth less than the same spell at Barcelona');
+    process.exitCode = 1;
+  }
+  const mixed = playerMarketValueFromSeasons({
+    age: 19,
+    careerGoals: 40,
+    careerGames: 48,
+    seasons: [
+      { ...dummySeason, seasonNumber: 2, clubId: 'barcelona', goals: 20, gamesPlayed: 24 },
+      { ...dummySeason, seasonNumber: 3, clubId: 'lafc', goals: 20, gamesPlayed: 24 },
+    ],
+    fallbackClub: lafc,
+  });
+  const allBarca = playerMarketValueFromSeasons({
+    age: 19,
+    careerGoals: 40,
+    careerGames: 48,
+    seasons: [
+      { ...dummySeason, seasonNumber: 2, clubId: 'barcelona', goals: 20, gamesPlayed: 24 },
+      { ...dummySeason, seasonNumber: 3, clubId: 'barcelona', goals: 20, gamesPlayed: 24 },
+    ],
+    fallbackClub: barca,
+  });
+  console.log('MLS spell', mlsSpell, 'mixed Barca/MLS', mixed, 'all Barca', allBarca);
+  if (mixed >= allBarca || mixed <= mlsSpell) {
+    console.error('value must sit between MLS and Barcelona when goals are split across both');
     process.exitCode = 1;
   }
   const euroWage = weeklyWageForClub(barca, young);

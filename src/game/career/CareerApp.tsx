@@ -14,9 +14,13 @@ import { applyCareerLayoutPreview } from './previewCareerLayout';
 
 if (import.meta.env.DEV) {
   (window as unknown as { __careerStore: typeof useCareerStore }).__careerStore = useCareerStore;
-  if (new URLSearchParams(window.location.search).has('preview-career')) {
-    applyCareerLayoutPreview();
-  }
+  const applyPreview = () => {
+    if (new URLSearchParams(window.location.search).has('preview-career')) {
+      applyCareerLayoutPreview();
+    }
+  };
+  applyPreview();
+  useCareerStore.persist.onFinishHydration(applyPreview);
 }
 
 export default function CareerApp() {

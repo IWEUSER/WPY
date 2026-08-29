@@ -557,6 +557,7 @@ export const useCareerStore = create<CareerStore>()(
             careerGames: state.careerGames,
             nationality: state.nationality,
             loansUsed: countLoanSpells(state.seasonHistory, season),
+            seasonHistory: state.seasonHistory,
           });
 
           const finishedSeason: SeasonRecord = { ...season, ratioMet: !transition.pendingTransfer };

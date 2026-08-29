@@ -80,11 +80,11 @@ export function applyCareerLayoutPreview(): void {
       ? {
           kind: 'loan-or-transfer',
           detail: 'Three loan offers and three transfer offers. After two loan spells you must move permanently.',
-          clubIds: ['mainz', 'leicester', 'almeria', 'barcelona', 'bayern', 'al-hilal'],
+          clubIds: ['mainz', 'leicester', 'lafc', 'barcelona', 'bayern', 'al-hilal'],
           offers: [
             { clubId: 'mainz', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('mainz')!, value) },
             { clubId: 'leicester', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('leicester')!, value) },
-            { clubId: 'almeria', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('almeria')!, value) },
+            { clubId: 'lafc', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('lafc')!, value) },
             { clubId: 'barcelona', move: 'permanent', fee: value, weeklyWage: weeklyWageForClub(getClub('barcelona')!, value) },
             { clubId: 'bayern', move: 'permanent', fee: value, weeklyWage: weeklyWageForClub(getClub('bayern')!, value) },
             { clubId: 'al-hilal', move: 'permanent', fee: value, weeklyWage: weeklyWageForClub(getClub('al-hilal')!, value) },
