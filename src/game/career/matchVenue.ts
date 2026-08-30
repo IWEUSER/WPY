@@ -82,6 +82,7 @@ export function resolveMatchStadium(args: {
     opponentSocks: opponent.socks,
     opponentPattern: opponent.pattern,
     awayShare: fixture ? fixtureCrowdAwayShare(fixture) : 0.2,
+    crowdFill: openingKind === 'youth-tournament' ? 'sparse' : openingKind === 'club-trial' ? 'empty' : 'full',
   });
 }
 
@@ -113,6 +114,7 @@ export function reserveStadium(club?: Club): StadiumAppearance {
     opponentColor: GENERIC_OPPONENT.primary,
     opponentPattern: 'solid',
     awayShare: 0.22,
+    crowdFill: 'sparse',
   });
 }
 
@@ -128,7 +130,7 @@ export function resolveCareerStadium(args: {
     return resolveMatchStadium({ ...args, openingKind: args.openingKind });
   }
   if ((args.seasonNumber != null && args.seasonNumber < 2) || args.role === 'reserve') {
-    return reserveStadium(args.club);
+    return { ...resolveMatchStadium(args), crowdFill: 'sparse' };
   }
   return resolveMatchStadium(args);
 }

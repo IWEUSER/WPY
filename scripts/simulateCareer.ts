@@ -227,11 +227,34 @@ const s1Calendar = buildSeasonCalendar({
   confederation: 'UEFA',
   country: 'Spain',
   nationConfederation: 'UEFA',
+  includeDomesticCup: false,
+  includeInternational: false,
+  continentalCup: null,
 });
+const s1Kinds = [...new Set(s1Calendar.fixtures.map((f) => f.kind))];
 const s1Intl = s1Calendar.fixtures.filter((f) => f.kind === 'international').length;
-console.log('season 1 international fixtures', s1Intl, '(expect 0)');
-if (s1Intl !== 0) {
-  console.error('there must be no international matches in season 1');
+console.log('season 1 fixtures', s1Calendar.fixtures.length, s1Kinds, 'intl', s1Intl);
+if (s1Intl !== 0 || s1Kinds.join() !== 'league' || s1Calendar.fixtures.length !== leagueMatchWeeks('La Liga')) {
+  console.error('the reserve year must be league-only: no cups, continentals, or internationals');
+  process.exitCode = 1;
+}
+const madridClubForReserve = getClub('real-madrid')!;
+const reserveHydrated = hydrateSeason({
+  seasonNumber: 1,
+  club: madridClubForReserve,
+  careerGoalRatio: 0,
+  nationId: 'spain',
+  leagueOnly: true,
+});
+const reserveKinds = [...new Set(reserveHydrated.calendar.fixtures.map((f) => f.kind))];
+const reserveChances = reserveHydrated.calendar.fixtures.map((f) => f.playerChances ?? -1);
+console.log('hydrated reserve', reserveHydrated.calendar.fixtures.length, reserveKinds, 'chance sample', reserveChances.slice(0, 6));
+if (
+  reserveKinds.join() !== 'league'
+  || reserveHydrated.calendar.fixtures.length !== leagueMatchWeeks('La Liga', madridClubForReserve)
+  || reserveChances.some((n) => n < 0)
+) {
+  console.error('hydrateSeason(leagueOnly) must be a full league with first-team chance rolls');
   process.exitCode = 1;
 }
 
@@ -2584,7 +2607,13 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
     role: 'reserve',
     openingKind: 'club-trial',
   });
-  const reserveLook = resolveCareerStadium({ club: madridClub, nation: spain, seasonNumber: 1, role: 'reserve' });
+  const reserveLook = resolveCareerStadium({
+    fixture: homeFx,
+    club: madridClub,
+    nation: spain,
+    seasonNumber: 1,
+    role: 'reserve',
+  });
   const firstTeamLook = resolveCareerStadium({
     fixture: homeFx,
     club: madridClub,
@@ -2624,13 +2653,19 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
     console.error('the unused open-pitch helper must stay an open pitch');
     process.exitCode = 1;
   }
+  if (youthLook.crowdFill !== 'sparse' || clubTrialLook.crowdFill !== 'empty' || reserveLook.crowdFill !== 'sparse') {
+    console.error('U16 crowds must be sparse, trial stands empty, and reserve crowds sparse');
+    process.exitCode = 1;
+  }
   if (
-    reserveLook.groundName !== UNLISTED_GROUND.name
-    || reserveLook.standTiers !== UNLISTED_GROUND.tiers
-    || (reserveLook.capacity ?? 0) >= LISTED_MIN_CAPACITY
-    || reserveStadium(madridClub).groundName !== UNLISTED_GROUND.name
+    reserveLook.groundName !== groundForClub('real-madrid').name
+    || reserveLook.crowdFill !== 'sparse'
   ) {
-    console.error('the reserve season must play in the generic municipal stadium');
+    console.error('the reserve season must use first-team grounds with a sparse crowd');
+    process.exitCode = 1;
+  }
+  if (reserveStadium(madridClub).crowdFill !== 'sparse') {
+    console.error('the unused municipal reserve helper must stay sparse');
     process.exitCode = 1;
   }
   if (firstTeamLook.groundName !== groundForClub('real-madrid').name || firstTeamLook.capacity !== 83_186) {

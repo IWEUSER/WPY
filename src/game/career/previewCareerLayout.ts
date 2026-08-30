@@ -218,6 +218,15 @@ export function applyCareerLayoutPreview(): void {
     careerGoalRatio: 0.78,
     nationId: preview === 'mls' ? 'united-states' : preview === 'saudi' ? 'saudi-arabia' : 'spain',
   });
+  const reserveSeason = preview === 'reserve'
+    ? hydrateSeason({
+        seasonNumber: 1,
+        club,
+        careerGoalRatio: 0,
+        nationId: 'spain',
+        leagueOnly: true,
+      })
+    : null;
 
   const isTrialPreview = preview === 'trial';
   const isYouthPreview = preview === 'youth';
@@ -426,12 +435,19 @@ export function applyCareerLayoutPreview(): void {
     seasonHistory: history,
     careerGoals: preview === 'end' ? 312 : 58,
     careerGames: preview === 'end' ? 540 : 76,
-    seasonCalendar: isTrialPreview || isReservePreview
-      ? openingCampaign?.calendar ?? null
-      : isYouthPreview || isClubTrialPreview
+    seasonCalendar: isReservePreview
+      ? reserveSeason?.calendar ?? null
+      : isTrialPreview || isYouthPreview || isClubTrialPreview
         ? openingCampaign?.calendar ?? null
         : calendar,
-    liveMatch: isYouthPreview || isClubTrialPreview
+    liveMatch: isReservePreview
+      ? {
+          fixtureIndex: 0,
+          chancesTotal: reserveSeason?.calendar.fixtures[0]?.playerChances ?? 2,
+          chancesTaken: 0,
+          goals: 0,
+        }
+      : isYouthPreview || isClubTrialPreview
       ? {
           fixtureIndex: 0,
           chancesTotal: openingCampaign?.calendar.fixtures[0]?.playerChances ?? (isClubTrialPreview ? 4 : 1),
@@ -441,7 +457,9 @@ export function applyCareerLayoutPreview(): void {
       : isMatchPreview
       ? { fixtureIndex: matchFixtureIndex, chancesTotal: 2, chancesTaken: 0, goals: 0 }
       : null,
-    seasonSim: promoteSummary
+    seasonSim: isReservePreview
+      ? reserveSeason?.sim ?? sim
+      : promoteSummary
       ? { ...sim, leagueTable: leicesterTable, honours: { ...sim.honours, leagueChampion: true } }
       : sim,
     seasonStandings: buildSeasonStandings(promoteSummary ? leicesterTable : sim.leagueTable, promoteSummary ? null : sim.europeanStanding),

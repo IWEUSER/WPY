@@ -137,6 +137,8 @@ export interface HydrateSeasonParams {
   /** Qualifier nations already faced — skip them while the pool still has unused sides. */
   excludeQualifierIds?: string[];
   rng?: () => number;
+  /** Reserve year: league fixtures only, no cups or continentals. */
+  leagueOnly?: boolean;
 }
 
 const GROUP_GAMES = 8;
@@ -159,14 +161,19 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
   const league = params.league ?? club.league;
   const clubConfederation = confederationForCountry(club.country);
   const nation = nationId ? getNation(nationId) : undefined;
-  const cup = params.continentalCup !== undefined ? params.continentalCup : clubContinentalCup(club);
+  const leagueOnly = Boolean(params.leagueOnly);
+  const cup = leagueOnly
+    ? null
+    : params.continentalCup !== undefined
+      ? params.continentalCup
+      : clubContinentalCup(club);
   const isMls = league === 'MLS';
-  const saudiSuper = league === 'Saudi Pro League' && qualifiesForSaudiSuperCup(club);
+  const saudiSuper = !leagueOnly && league === 'Saudi Pro League' && qualifiesForSaudiSuperCup(club);
   const campaign = internationalCampaignForSeason(seasonNumber, nation?.confederation ?? clubConfederation);
   const tournament = campaign.tournament ?? null;
   const clubOk = clubEligibleForNationalTeam(club.tier);
   const campaignActive = Boolean(
-    nationId && campaign.tournament && campaignSchedulesInternational(campaign.phase) && clubOk,
+    !leagueOnly && nationId && campaign.tournament && campaignSchedulesInternational(campaign.phase) && clubOk,
   );
   const internationalSelected = Boolean(
     campaignActive &&
@@ -190,9 +197,10 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
     country: club.country,
     nationConfederation: nation?.confederation ?? null,
     includeInternational: campaignActive,
-    includeSuperCup: Boolean(includeSuperCup && cup && clubConfederation === 'UEFA'),
-    includePlayoffs: isMls,
-    includeLeaguesCup: isMls,
+    includeDomesticCup: !leagueOnly,
+    includeSuperCup: Boolean(!leagueOnly && includeSuperCup && cup && clubConfederation === 'UEFA'),
+    includePlayoffs: !leagueOnly && isMls,
+    includeLeaguesCup: !leagueOnly && isMls,
     includeSaudiSuperCup: saudiSuper,
     league,
     continentalCup: cup,
@@ -247,8 +255,8 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
       titleRivalId: titleRival?.id ?? null,
       rivalHomeOutcome: null,
       rivalAwayOutcome: null,
-      playoffStage: isMls ? 'first-round' : null,
-      leaguesCupStage: isMls ? 'group' : 'not-entered',
+      playoffStage: !leagueOnly && isMls ? 'first-round' : null,
+      leaguesCupStage: !leagueOnly && isMls ? 'group' : 'not-entered',
       leaguesCupGroupPlayed: 0,
       leaguesCupGroupPoints: 0,
       superCupStage: saudiSuper ? 'semi-final' : 'not-entered',

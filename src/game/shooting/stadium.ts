@@ -55,7 +55,14 @@ export interface StadiumAppearance {
   groundName?: string;
   /** When false, skip the bowl and draw the original open pitch. */
   bowl?: boolean;
+  /** How full the stands are. First-team games stay packed. */
+  crowdFill?: CrowdFill;
 }
+
+export type CrowdFill = 'full' | 'sparse' | 'empty';
+
+export const SPARSE_CROWD_OCCUPANCY = 0.2;
+export const EMPTY_CROWD_OCCUPANCY = 0;
 
 export function stadiumScaleFromCapacity(capacity: number): StadiumScale {
   if (capacity >= 70_000) return 'elite';
@@ -248,6 +255,15 @@ function isStadiumScale(spec: StadiumScale | ClubGround): spec is StadiumScale {
   return spec === 'elite' || spec === 'strong' || spec === 'local';
 }
 
+export function occupancyForCrowdFill(
+  fill: CrowdFill | undefined,
+  packedOccupancy: number,
+): number {
+  if (fill === 'empty') return EMPTY_CROWD_OCCUPANCY;
+  if (fill === 'sparse') return SPARSE_CROWD_OCCUPANCY;
+  return packedOccupancy;
+}
+
 /** Terrace height, deck count, and roof from the home club's ground. */
 export function stadiumLayout(
   view: StadiumView,
@@ -388,6 +404,7 @@ function crowdLayer(w: number, h: number, view: StadiumView, stadium: StadiumApp
     String(profile.capacity),
     String(profile.tiers),
     profile.unique ?? '',
+    stadium.crowdFill ?? 'full',
     view.goal.botY.toFixed(1),
     view.goal.topY.toFixed(1),
   ].join('|');
@@ -403,7 +420,11 @@ function crowdLayer(w: number, h: number, view: StadiumView, stadium: StadiumApp
 
   ctx.clearRect(0, 0, w, h);
   const rng = mulberry32(hashKey(key));
-  const layout = stadiumLayout(view, profile);
+  const packed = stadiumLayout(view, profile);
+  const layout: StadiumLayout = {
+    ...packed,
+    occupancy: occupancyForCrowdFill(stadium.crowdFill, packed.occupancy),
+  };
   const night = Boolean(stadium.night);
   const fasciaFill = night ? '#0b1220' : '#334155';
 

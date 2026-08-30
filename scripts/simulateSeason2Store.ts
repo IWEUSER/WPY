@@ -73,6 +73,31 @@ function playOpeningMatch(goals: number) {
   store.getState().acknowledgeMatchResult();
 }
 
+function playSimSeason(scoreAll: boolean) {
+  let guard = 0;
+  while (guard++ < 160) {
+    const phase = store.getState().phase;
+    if (phase === 'season-summary' || phase === 'transfer-choice') break;
+    if (phase === 'match-result') {
+      store.getState().acknowledgeMatchResult();
+      continue;
+    }
+    if (phase === 'match') {
+      const live = store.getState().liveMatch;
+      if (!live) {
+        store.getState().advance();
+        continue;
+      }
+      for (let i = 0; i < live.chancesTotal; i++) {
+        store.getState().recordMatchChance(fakeShot(scoreAll));
+      }
+      store.getState().finishLiveMatch();
+      continue;
+    }
+    store.getState().advance();
+  }
+}
+
 function completeOpeningAndSign(): string | undefined {
   while (store.getState().phase === 'match' && store.getState().openingCampaign?.kind === 'youth-tournament') {
     playOpeningMatch(store.getState().liveMatch?.chancesTotal ?? 1);
@@ -120,11 +145,19 @@ if (store.getState().phase !== 'hub') {
   process.exitCode = 1;
 }
 
+const reserveCal = store.getState().seasonCalendar;
+const reserveKinds = [...new Set(reserveCal?.fixtures.map((f) => f.kind) ?? [])];
 const reserveGames = leagueMatchWeeks(getClub(clubId)?.league ?? 'La Liga');
-for (let i = 0; i < reserveGames; i++) {
-  store.getState().advance();
-  store.getState().recordMatchShot(fakeShot(true));
+console.log('S1 reserve calendar', reserveCal?.fixtures.length, reserveKinds, 'league weeks', reserveGames);
+if (!reserveCal || reserveKinds.join() !== 'league' || reserveCal.fixtures.length !== reserveGames) {
+  console.error('the reserve year must be a league-only first-team calendar');
+  process.exitCode = 1;
 }
+if (reserveCal.fixtures.some((f) => f.playerChances == null)) {
+  console.error('reserve league games must use the first-team chance roll');
+  process.exitCode = 1;
+}
+playSimSeason(true);
 console.log('S1 done phase', store.getState().phase, 'goals', store.getState().currentSeason?.goals);
 store.getState().continueAfterSeason();
 if (store.getState().phase === 'transfer-choice') {
@@ -147,8 +180,8 @@ console.log(
     wonWpy: s1record.wonWpy,
   },
 );
-if (!s1record || s1record.age !== 16 || s1record.gamesPlayed !== reserveGames || s1record.goals !== reserveGames) {
-  console.error('Season 1 career record must store age, games and goals');
+if (!s1record || s1record.age !== 16 || s1record.gamesPlayed !== reserveGames) {
+  console.error('Season 1 career record must store age and a full league of reserve games');
   process.exitCode = 1;
 }
 if (store.getState().careerGoals !== 0 || store.getState().careerGames !== 0) {
@@ -422,11 +455,7 @@ if (!loanParent) {
   console.error('opening flow must still produce a club before a failed reserve season');
   process.exit(1);
 }
-const loanReserveWeeks = leagueMatchWeeks(getClub(loanParent)?.league ?? 'La Liga');
-for (let i = 0; i < loanReserveWeeks; i++) {
-  store.getState().advance();
-  store.getState().recordMatchShot(fakeShot(false));
-}
+playSimSeason(false);
 store.getState().continueAfterSeason();
 console.log(
   'failed reserve phase',

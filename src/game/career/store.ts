@@ -164,6 +164,7 @@ function startSimulatedSeason(
     contractYearsRemaining?: number;
     continentalCup?: ContinentalCupId | null;
     excludeQualifierIds?: string[];
+    leagueOnly?: boolean;
   },
 ): Pick<
   CareerState,
@@ -201,7 +202,7 @@ function startSimulatedSeason(
   season = { ...season, sponsorship, earnings: (season.earnings ?? 0) + sponsorship };
   const careerEarnings = (extras?.careerEarnings ?? 0) + sponsorship;
 
-  if (seasonNumber < 2 || !club) {
+  if (!club) {
     return {
       currentSeason: season,
       seasonCalendar: null,
@@ -216,17 +217,19 @@ function startSimulatedSeason(
       careerEarnings,
     };
   }
+  const leagueOnly = extras?.leagueOnly ?? (seasonNumber < 2 || role === 'reserve');
   const { calendar, sim } = hydrateSeason({
     seasonNumber,
     club,
     careerGoalRatio: seasonRatioForSelection(season),
     nationId,
-    qualifierCarry,
-    includeSuperCup: superCup?.include,
-    superCupOpponentId: superCup?.opponentId,
+    qualifierCarry: leagueOnly ? null : qualifierCarry,
+    includeSuperCup: leagueOnly ? false : superCup?.include,
+    superCupOpponentId: leagueOnly ? undefined : superCup?.opponentId,
     league: league ?? club.league,
-    continentalCup: extras?.continentalCup,
-    excludeQualifierIds: extras?.excludeQualifierIds,
+    continentalCup: leagueOnly ? null : extras?.continentalCup,
+    excludeQualifierIds: leagueOnly ? undefined : extras?.excludeQualifierIds,
+    leagueOnly,
   });
   season = {
     ...season,
@@ -275,6 +278,19 @@ function attachSeasonAwards(state: CareerState): { season: SeasonRecord; wpyResu
   const season = state.currentSeason;
   if (!season || !state.clubId) {
     return { season: season as SeasonRecord, wpyResult: state.wpyResult };
+  }
+  if (state.seasonNumber < 2 || state.role === 'reserve') {
+    return {
+      season: {
+        ...season,
+        age: state.age,
+        trophies: [],
+        topGoalscorer: false,
+        playerOfTheYear: false,
+        wonWpy: false,
+      },
+      wpyResult: null,
+    };
   }
   const club = getClub(state.clubId);
   const sim = state.seasonSim;

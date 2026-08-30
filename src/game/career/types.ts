@@ -183,10 +183,8 @@ export interface CareerState {
   /** Caps, goals, and the same miss-streak drop rule as club football, scoped
    * to the national team. Null until a nationality is chosen. */
   nationalTeam: NationalTeamState | null;
-  /** This season's fixture list once there are real opponents (season 2+) -
-   * null in Season 1, which is reserve-team, no-opponents by design. Built
-   * by calendar.ts; consumed by the not-yet-implemented season 2-20 engine
-   * (see matchEngine.ts). */
+  /** This season's fixture list. The reserve year is league-only (no cups
+   * or continentals). First-team years add cups and internationals. */
   seasonCalendar: SeasonCalendar | null;
   /** Live league table + European stage for season 2+. Null in Season 1. */
   seasonStandings: SeasonStandings | null;
