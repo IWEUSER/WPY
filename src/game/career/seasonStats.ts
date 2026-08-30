@@ -31,9 +31,20 @@ export function recordClubAppearanceStats(
   played: boolean,
 ): SeasonRecord {
   if (!played) return season;
-  if (fixture.kind === 'league' || fixture.kind === 'domestic-cup' || fixture.kind === 'playoff') {
+  if (fixture.kind === 'league' || fixture.kind === 'playoff') {
     return {
       ...season,
+      leagueGames: (season.leagueGames ?? 0) + 1,
+      leagueGoals: season.leagueGoals + (fixture.kind === 'playoff' ? goals : 0),
+      domesticGames: (season.domesticGames ?? 0) + 1,
+      domesticGoals: (season.domesticGoals ?? 0) + goals,
+    };
+  }
+  if (fixture.kind === 'domestic-cup') {
+    return {
+      ...season,
+      cupGames: (season.cupGames ?? 0) + 1,
+      cupGoals: (season.cupGoals ?? 0) + goals,
       domesticGames: (season.domesticGames ?? 0) + 1,
       domesticGoals: (season.domesticGoals ?? 0) + goals,
     };
@@ -56,14 +67,54 @@ export function continentalLabel(cup: ContinentalStatKey): string {
   return CONTINENTAL_CUPS[cup].name;
 }
 
-export function aggregateDomestic(seasons: SeasonRecord[]): { games: number; goals: number } {
-  let games = 0;
-  let goals = 0;
+export interface GamesGoals {
+  games: number;
+  goals: number;
+}
+
+export interface DomesticSplit {
+  league: GamesGoals;
+  cup: GamesGoals;
+  total: GamesGoals;
+}
+
+export function seasonDomesticSplit(season: SeasonRecord): DomesticSplit {
+  const leagueGoals = season.leagueGoals ?? 0;
+  const cupGoals = season.cupGoals ?? Math.max(0, (season.domesticGoals ?? 0) - leagueGoals);
+  const cupGames = season.cupGames ?? 0;
+  const leagueGames = season.leagueGames ?? Math.max(0, (season.domesticGames ?? 0) - cupGames);
+  const games = leagueGames + cupGames;
+  const goals = leagueGoals + cupGoals;
+  return {
+    league: { games: leagueGames, goals: leagueGoals },
+    cup: { games: cupGames, goals: cupGoals },
+    total: {
+      games: season.domesticGames ?? games,
+      goals: season.domesticGoals ?? goals,
+    },
+  };
+}
+
+export function aggregateDomestic(seasons: SeasonRecord[]): GamesGoals {
+  return aggregateDomesticSplit(seasons).total;
+}
+
+export function aggregateDomesticSplit(seasons: SeasonRecord[]): DomesticSplit {
+  const next: DomesticSplit = {
+    league: { games: 0, goals: 0 },
+    cup: { games: 0, goals: 0 },
+    total: { games: 0, goals: 0 },
+  };
   for (const season of seasons) {
-    games += season.domesticGames ?? 0;
-    goals += season.domesticGoals ?? 0;
+    const row = seasonDomesticSplit(season);
+    next.league.games += row.league.games;
+    next.league.goals += row.league.goals;
+    next.cup.games += row.cup.games;
+    next.cup.goals += row.cup.goals;
+    next.total.games += row.total.games;
+    next.total.goals += row.total.goals;
   }
-  return { games, goals };
+  return next;
 }
 
 export function aggregateContinental(seasons: SeasonRecord[]): ContinentalSeasonStat[] {

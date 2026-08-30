@@ -66,6 +66,9 @@ function freshSeason(seasonNumber: number, clubId: string, role: CareerState['ro
     ratioMet: null,
     age,
     leagueGoals: 0,
+    leagueGames: 0,
+    cupGames: 0,
+    cupGoals: 0,
     domesticGames: 0,
     domesticGoals: 0,
     continentalStats: [],
@@ -1091,7 +1094,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 17,
+      version: 18,
       migrate: (persisted) => {
         const state = persisted as Partial<CareerState>;
         const sim = state.seasonSim;
@@ -1099,6 +1102,9 @@ export const useCareerStore = create<CareerStore>()(
           ...season,
           age: season.age ?? (state.age ?? 16) - Math.max(0, (state.seasonHistory?.length ?? 0) - index),
           leagueGoals: season.leagueGoals ?? season.goals,
+          leagueGames: season.leagueGames ?? season.domesticGames ?? season.gamesPlayed,
+          cupGames: season.cupGames ?? 0,
+          cupGoals: season.cupGoals ?? Math.max(0, (season.domesticGoals ?? 0) - (season.leagueGoals ?? season.goals)),
           domesticGames: season.domesticGames ?? season.gamesPlayed,
           domesticGoals: season.domesticGoals ?? season.leagueGoals ?? season.goals,
           continentalStats: season.continentalStats ?? [],

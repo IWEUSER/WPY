@@ -82,6 +82,11 @@ export interface SeasonRecord {
   age: number;
   /** Goals in league (or reserve) fixtures only - used by the golden boot. */
   leagueGoals: number;
+  /** League appearances this season (includes domestic playoffs). */
+  leagueGames?: number;
+  /** Domestic cup appearances and goals this season. */
+  cupGames?: number;
+  cupGoals?: number;
   /** League + domestic cup appearances this season. */
   domesticGames?: number;
   domesticGoals?: number;

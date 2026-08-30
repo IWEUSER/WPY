@@ -37,6 +37,7 @@ import { fifaRank, knockoutRankCap, tournamentOpponents, worldCupKnockoutRankCap
 import { displaySeasonLabel, displaySeasonNumber } from '../src/game/career/seasonDisplay';
 import { isSelectedForNationalTeam, selectionRatioForNation } from '../src/game/career/international';
 import { missedChanceWinFactor, simulateClubMatch, simulateLeagueSeason } from '../src/game/career/matchEngine';
+import { aggregateContinental, aggregateDomesticSplit, recordClubAppearanceStats, seasonDomesticSplit } from '../src/game/career/seasonStats';
 import { leaguePhaseOpponents } from '../src/game/career/continentalDraw';
 import { canWinLeague, hydrateSeason, leagueFixtureIsHome, nextPlayableFixture, pickTitleRival, resolveFixture, shouldSkipFixture } from '../src/game/career/seasonSim';
 import { offerClubsForTrial } from '../src/game/career/trial';
@@ -1890,6 +1891,40 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
   }
   if (formatGamesGoals(2, 0) !== '2 games · 0 goals') {
     console.error('international lines must show games and goals, not “0 in 2”');
+    process.exitCode = 1;
+  }
+
+  const splitSeason: SeasonRecord = {
+    ...dummySeason,
+    leagueGoals: 24,
+    leagueGames: 38,
+    cupGames: 4,
+    cupGoals: 2,
+    domesticGames: 42,
+    domesticGoals: 26,
+    continentalStats: [{ cup: 'ucl', games: 13, goals: 4 }],
+  };
+  const split = seasonDomesticSplit(splitSeason);
+  const careerSplit = aggregateDomesticSplit([splitSeason, { ...splitSeason, leagueGoals: 20, leagueGames: 36, cupGames: 4, cupGoals: 2, domesticGames: 40, domesticGoals: 22 }]);
+  const continentalOnly = aggregateContinental([splitSeason]);
+  console.log('domestic split', split, 'career', careerSplit, 'continental', continentalOnly);
+  if (split.league.goals !== 24 || split.cup.goals !== 2 || split.total.games !== 42) {
+    console.error('domestic tables must list league and cup games and goals separately');
+    process.exitCode = 1;
+  }
+  if (careerSplit.league.goals !== 44 || careerSplit.cup.games !== 8 || continentalOnly.some((row) => row.cup === 'ucl') === false) {
+    console.error('career domestic totals must not include Champions League games');
+    process.exitCode = 1;
+  }
+  const afterCup = recordClubAppearanceStats(splitSeason, {
+    week: 12,
+    kind: 'domestic-cup',
+    isDecisive: false,
+    domesticCup: 'copa-del-rey',
+    domesticCupStage: 'quarter-final',
+  }, 1, true);
+  if ((afterCup.cupGames ?? 0) !== 5 || (afterCup.cupGoals ?? 0) !== 3 || (afterCup.leagueGames ?? 0) !== 38) {
+    console.error('a cup tie must add to cup games and goals, not the league row');
     process.exitCode = 1;
   }
 }

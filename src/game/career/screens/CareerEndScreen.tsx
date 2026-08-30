@@ -1,12 +1,13 @@
 import { getClub } from '../data/clubs';
 import { INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
-import { awardLabels, careerAwardCounts, careerTrophyCounts, formatGamesGoals, formatInternationalSeason, seasonClubName, seasonLeagueLabel, seasonRatio } from '../honoursDisplay';
+import { awardLabels, careerAwardCounts, careerTrophyCounts, formatInternationalSeason, seasonClubName, seasonLeagueLabel, seasonRatio } from '../honoursDisplay';
 import { formatEuros } from '../playerValue';
 import { countsTowardCareerRecord, displaySeasonLabel } from '../seasonDisplay';
-import { aggregateContinental, aggregateDomestic, continentalLabel } from '../seasonStats';
+import { aggregateContinental, aggregateDomesticSplit, continentalLabel, seasonDomesticSplit } from '../seasonStats';
 import { useCareerStore } from '../store';
 import type { SeasonRecord } from '../types';
 import { HonoursPills } from './HonoursPills';
+import StatsTable, { DomesticStatsTable } from './StatsTable';
 
 export default function CareerEndScreen() {
   const history = useCareerStore((s) => s.seasonHistory);
@@ -26,7 +27,7 @@ export default function CareerEndScreen() {
     return true;
   });
   const wpyWins = seasons.filter((s) => s.wonWpy);
-  const domestic = aggregateDomestic(seasons);
+  const domestic = aggregateDomesticSplit(seasons);
   const continental = aggregateContinental(seasons);
   const intlGames = nationalTeam?.caps ?? 0;
   const intlGoals = nationalTeam?.goals ?? 0;
@@ -65,19 +66,20 @@ export default function CareerEndScreen() {
 
       <div className="mt-3 rounded-2xl bg-white/5 p-4 text-sm">
         <p className="text-xs uppercase tracking-wide text-white/40">Domestic</p>
-        <p className="mt-1 font-semibold">
-          {domestic.goals} goals in {domestic.games} games
-        </p>
-        {continental.length > 0 && (
-          <ul className="mt-3 space-y-1 text-xs text-white/70">
-            {continental.map((row) => (
-              <li key={row.cup}>
-                {continentalLabel(row.cup)} — {row.goals} goal{row.goals === 1 ? '' : 's'} in {row.games}
-              </li>
-            ))}
-          </ul>
-        )}
+        <DomesticStatsTable split={domestic} />
       </div>
+      {continental.length > 0 && (
+        <div className="mt-3 rounded-2xl bg-white/5 p-4 text-sm">
+          <p className="text-xs uppercase tracking-wide text-white/40">Continental</p>
+          <StatsTable
+            rows={continental.map((row) => ({
+              label: continentalLabel(row.cup),
+              games: row.games,
+              goals: row.goals,
+            }))}
+          />
+        </div>
+      )}
 
       {nationalTeam && (
         <div className="mt-3 rounded-2xl bg-white/5 p-4">
@@ -86,13 +88,17 @@ export default function CareerEndScreen() {
             {nationalTeam.caps} caps · {nationalTeam.goals} goals
           </p>
           {(nationalTeam.byCompetition ?? []).map((row) => (
-            <p key={row.tournament} className="mt-1 text-xs text-white/50">
-              {INTERNATIONAL_TOURNAMENTS[row.tournament]?.name ?? row.tournament}
-              {': '}
-              Qualifying {formatGamesGoals(row.qualifyingGames, row.qualifyingGoals)}
-              {' · '}
-              Tournament {formatGamesGoals(row.finalsGames, row.finalsGoals)}
-            </p>
+            <div key={row.tournament} className="mt-2">
+              <p className="text-xs font-semibold text-white/70">
+                {INTERNATIONAL_TOURNAMENTS[row.tournament]?.name ?? row.tournament}
+              </p>
+              <StatsTable
+                rows={[
+                  { label: 'Qualifying', games: row.qualifyingGames, goals: row.qualifyingGoals },
+                  { label: 'Tournament', games: row.finalsGames, goals: row.finalsGoals },
+                ]}
+              />
+            </div>
           ))}
           {seasons
             .filter((s) => formatInternationalSeason(s.international))
@@ -160,9 +166,30 @@ function SeasonCard({ season }: { season: SeasonRecord }) {
       </p>
       <h2 className="text-lg font-extrabold">{seasonClubName(season)}</h2>
       <p className="text-xs text-white/50">{seasonLeagueLabel(season)}</p>
-      <p className="mt-2 text-sm text-white/80">
-        {season.goals} goals in {season.gamesPlayed} · {seasonRatio(season).toFixed(2)}
-      </p>
+      <dl className="mt-3 grid grid-cols-3 gap-2 text-center">
+        <div>
+          <dt className="text-[10px] uppercase tracking-wide text-white/40">Games</dt>
+          <dd className="text-base font-bold">{season.gamesPlayed}</dd>
+        </div>
+        <div>
+          <dt className="text-[10px] uppercase tracking-wide text-white/40">Goals</dt>
+          <dd className="text-base font-bold">{season.goals}</dd>
+        </div>
+        <div>
+          <dt className="text-[10px] uppercase tracking-wide text-white/40">Ratio</dt>
+          <dd className="text-base font-bold">{seasonRatio(season).toFixed(2)}</dd>
+        </div>
+      </dl>
+      <DomesticStatsTable split={seasonDomesticSplit(season)} />
+      {(season.continentalStats ?? []).length > 0 && (
+        <StatsTable
+          rows={(season.continentalStats ?? []).map((row) => ({
+            label: continentalLabel(row.cup),
+            games: row.games,
+            goals: row.goals,
+          }))}
+        />
+      )}
       {(season.trophies ?? []).length > 0 && (
         <p className="mt-1 text-xs text-emerald-300">{(season.trophies ?? []).join(' · ')}</p>
       )}

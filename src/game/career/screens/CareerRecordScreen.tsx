@@ -1,13 +1,14 @@
 import { getClub } from '../data/clubs';
 import { INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { currentCalendarWeek } from '../calendar';
-import { awardLabels, careerAwardCounts, careerTrophyCounts, formatGamesGoals, formatInternationalSeason, seasonClubName, seasonLeagueLabel, seasonRatio } from '../honoursDisplay';
+import { awardLabels, careerAwardCounts, careerTrophyCounts, formatInternationalSeason, seasonClubName, seasonLeagueLabel, seasonRatio } from '../honoursDisplay';
 import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
 import { countsTowardCareerRecord, displaySeasonLabel } from '../seasonDisplay';
-import { aggregateContinental, aggregateDomestic, continentalLabel } from '../seasonStats';
+import { aggregateContinental, aggregateDomesticSplit, continentalLabel, seasonDomesticSplit } from '../seasonStats';
 import { useCareerStore } from '../store';
 import type { SeasonRecord } from '../types';
 import { HonoursPills } from './HonoursPills';
+import StatsTable, { DomesticStatsTable } from './StatsTable';
 
 const ROLE_LABEL: Record<string, string> = {
   reserve: 'Reserves',
@@ -39,8 +40,9 @@ export default function CareerRecordScreen() {
     (s) => s.wonWpy && countsTowardCareerRecord(s.seasonNumber),
   );
   const recordSeasons = [...history, ...(current && countsTowardCareerRecord(current.seasonNumber) ? [current] : [])];
-  const domestic = aggregateDomestic(recordSeasons.filter((s) => countsTowardCareerRecord(s.seasonNumber)));
-  const continental = aggregateContinental(recordSeasons.filter((s) => countsTowardCareerRecord(s.seasonNumber)));
+  const scoredSeasons = recordSeasons.filter((s) => countsTowardCareerRecord(s.seasonNumber));
+  const domestic = aggregateDomesticSplit(scoredSeasons);
+  const continental = aggregateContinental(scoredSeasons);
   const intlGames = nationalTeam?.caps ?? 0;
   const intlGoals = nationalTeam?.goals ?? 0;
   const totalGames = careerGames + intlGames;
@@ -70,19 +72,20 @@ export default function CareerRecordScreen() {
 
       <div className="mt-3 rounded-2xl bg-white/5 p-4 text-sm">
         <p className="text-xs uppercase tracking-wide text-white/40">Domestic</p>
-        <p className="mt-1 font-semibold">
-          {domestic.goals} goals in {domestic.games} games
-        </p>
-        {continental.length > 0 && (
-          <ul className="mt-3 space-y-1 text-xs text-white/70">
-            {continental.map((row) => (
-              <li key={row.cup}>
-                {continentalLabel(row.cup)} — {row.goals} goal{row.goals === 1 ? '' : 's'} in {row.games}
-              </li>
-            ))}
-          </ul>
-        )}
+        <DomesticStatsTable split={domestic} />
       </div>
+      {continental.length > 0 && (
+        <div className="mt-3 rounded-2xl bg-white/5 p-4 text-sm">
+          <p className="text-xs uppercase tracking-wide text-white/40">Continental</p>
+          <StatsTable
+            rows={continental.map((row) => ({
+              label: continentalLabel(row.cup),
+              games: row.games,
+              goals: row.goals,
+            }))}
+          />
+        </div>
+      )}
 
       {(() => {
         const club = clubId ? getClub(clubId) : undefined;
@@ -134,11 +137,12 @@ export default function CareerRecordScreen() {
                 return (
                   <li key={row.tournament}>
                     <p className="font-semibold text-white/90">{name} (career)</p>
-                    <p className="text-xs text-white/50">
-                      Qualifying {formatGamesGoals(row.qualifyingGames, row.qualifyingGoals)}
-                      {' · '}
-                      Tournament {formatGamesGoals(row.finalsGames, row.finalsGoals)}
-                    </p>
+                    <StatsTable
+                      rows={[
+                        { label: 'Qualifying', games: row.qualifyingGames, goals: row.qualifyingGoals },
+                        { label: 'Tournament', games: row.finalsGames, goals: row.finalsGoals },
+                      ]}
+                    />
                   </li>
                 );
               })}
@@ -260,15 +264,16 @@ function SeasonCard({ season }: { season: SeasonRecord & { inProgress?: boolean 
           <dd className="text-base font-bold">{seasonRatio(season).toFixed(2)}</dd>
         </div>
       </dl>
-      <p className="mt-2 text-xs text-white/50">
-        Domestic {formatGamesGoals(season.domesticGames ?? 0, season.domesticGoals ?? 0)}
-        {(season.continentalStats ?? []).map((row) => (
-          <span key={row.cup}>
-            {' · '}
-            {continentalLabel(row.cup)} {row.goals}
-          </span>
-        ))}
-      </p>
+      <DomesticStatsTable split={seasonDomesticSplit(season)} />
+      {(season.continentalStats ?? []).length > 0 && (
+        <StatsTable
+          rows={(season.continentalStats ?? []).map((row) => ({
+            label: continentalLabel(row.cup),
+            games: row.games,
+            goals: row.goals,
+          }))}
+        />
+      )}
       {(() => {
         const intl = formatInternationalSeason(season.international);
         if (!intl) return null;
