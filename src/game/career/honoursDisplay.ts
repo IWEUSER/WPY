@@ -2,7 +2,7 @@ import { getClub, type Club } from './data/clubs';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from './data/competitions';
 import { leagueDisplayName } from './data/leagueFormat';
 import type { SeasonHonours } from './seasonSim';
-import type { SeasonRecord } from './types';
+import type { InternationalSeasonRecord, SeasonRecord, TournamentSeasonOutcome } from './types';
 
 /** Competition titles won this season, in display order. */
 export function trophyLabels(
@@ -26,6 +26,15 @@ export function awardLabels(season: SeasonRecord): string[] {
   const labels: string[] = [];
   if (season.topGoalscorer) labels.push('Top goalscorer');
   if (season.playerOfTheYear) labels.push('Player of the Year');
+  const intl = season.international;
+  if (intl?.playerOfTheTournament && intl.tournament) {
+    const name = INTERNATIONAL_TOURNAMENTS[intl.tournament]?.name ?? intl.tournament;
+    labels.push(`${name} Player of the Tournament`);
+  }
+  if (intl?.topGoalscorer && intl.tournament) {
+    const name = INTERNATIONAL_TOURNAMENTS[intl.tournament]?.name ?? intl.tournament;
+    labels.push(`${name} top goalscorer`);
+  }
   return labels;
 }
 
@@ -47,8 +56,7 @@ export function careerTrophyCounts(seasons: SeasonRecord[]): CountedHonour[] {
 export function careerAwardCounts(seasons: SeasonRecord[]): CountedHonour[] {
   const names: string[] = [];
   for (const season of seasons) {
-    if (season.topGoalscorer) names.push('Top goalscorer');
-    if (season.playerOfTheYear) names.push('Player of the Year');
+    names.push(...awardLabels(season));
     if (season.wonWpy) names.push('World Player of the Year');
   }
   return countNames(names);
@@ -72,4 +80,72 @@ export function seasonLeagueLabel(season: SeasonRecord): string {
 
 export function seasonRatio(season: Pick<SeasonRecord, 'goals' | 'gamesPlayed'>): number {
   return season.gamesPlayed > 0 ? season.goals / season.gamesPlayed : 0;
+}
+
+export function tournamentOutcomeLabel(outcome: TournamentSeasonOutcome): string | null {
+  switch (outcome) {
+    case 'champion':
+      return 'Champions';
+    case 'final':
+      return 'Runners-up';
+    case 'semi-final':
+      return 'Reached the semi-finals';
+    case 'quarter-final':
+      return 'Reached the quarter-finals';
+    case 'round-of-16':
+      return 'Reached the round of 16';
+    case 'round-of-32':
+      return 'Reached the round of 32';
+    case 'group':
+      return 'Group stage';
+    case 'ongoing':
+      return 'Tournament in progress';
+    case 'did-not-qualify':
+      return 'Did not qualify';
+    default:
+      return null;
+  }
+}
+
+export function qualifyingOutcomeLabel(
+  outcome: InternationalSeasonRecord['qualifyingOutcome'],
+): string | null {
+  if (outcome === 'qualified') return 'qualified';
+  if (outcome === 'failed') return 'did not qualify';
+  if (outcome === 'ongoing') return 'in progress';
+  return null;
+}
+
+export function formatInternationalSeason(rec: InternationalSeasonRecord | undefined | null): {
+  name: string;
+  qualifying: string | null;
+  tournament: string | null;
+  awards: string[];
+} | null {
+  if (!rec || !rec.tournament) return null;
+  if (
+    rec.qualifyingGames <= 0 &&
+    rec.finalsGames <= 0 &&
+    rec.qualifyingOutcome === 'none' &&
+    rec.tournamentOutcome === 'none'
+  ) {
+    return null;
+  }
+  const name = INTERNATIONAL_TOURNAMENTS[rec.tournament]?.name ?? rec.tournament;
+  const qLabel = qualifyingOutcomeLabel(rec.qualifyingOutcome);
+  const qualifying =
+    rec.qualifyingGames > 0 || rec.qualifyingOutcome !== 'none'
+      ? `Qualifying ${formatGamesGoals(rec.qualifyingGames, rec.qualifyingGoals)}${qLabel ? ` · ${qLabel}` : ''}`
+      : null;
+  const tLabel = tournamentOutcomeLabel(rec.tournamentOutcome);
+  const tournament =
+    rec.finalsGames > 0 || (rec.tournamentOutcome !== 'none' && rec.tournamentOutcome !== 'did-not-qualify')
+      ? `${tLabel ?? 'Tournament'}${rec.finalsGames > 0 ? ` · ${formatGamesGoals(rec.finalsGames, rec.finalsGoals)}` : ''}`
+      : rec.tournamentOutcome === 'did-not-qualify' && rec.qualifyingOutcome !== 'failed'
+        ? 'Did not qualify'
+        : null;
+  const awards: string[] = [];
+  if (rec.playerOfTheTournament) awards.push('Player of the Tournament');
+  if (rec.topGoalscorer) awards.push('Top goalscorer');
+  return { name, qualifying, tournament, awards };
 }

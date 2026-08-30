@@ -43,6 +43,7 @@ import {
   emptyStanding,
   simulateClubMatch,
   simulateRestOfLeagueRound,
+  applyPlayerGoalsFloor,
   type ClubMatchResult,
   type EuropeanStanding,
   type LeagueStanding,
@@ -107,6 +108,8 @@ export interface SeasonSimState {
   leaguesCupGroupPlayed: number;
   leaguesCupGroupPoints: number;
   superCupStage: SuperCupStage | 'eliminated' | 'champion' | 'not-entered';
+  /** Furthest international round played this season (set when going out or winning). */
+  internationalReached: InternationalStage | null;
 }
 
 export interface LiveMatch {
@@ -129,6 +132,9 @@ export interface HydrateSeasonParams {
   league?: string;
   /** Last season's table / defending title. Undefined falls back to club tier. */
   continentalCup?: ContinentalCupId | null;
+  /** Qualifier nations already faced — skip them while the pool still has unused sides. */
+  excludeQualifierIds?: string[];
+  rng?: () => number;
 }
 
 const GROUP_GAMES = 8;
@@ -196,6 +202,8 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
     campaign.qualifierGames,
     superCupOpponentId,
     league,
+    params.excludeQualifierIds,
+    params.rng,
   );
 
   const leagueClubs = clubsForSeason(club, league);
@@ -238,6 +246,7 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
       leaguesCupGroupPlayed: 0,
       leaguesCupGroupPoints: 0,
       superCupStage: saudiSuper ? 'semi-final' : 'not-entered',
+      internationalReached: null,
     },
   };
 }
@@ -286,6 +295,8 @@ function assignOpponentsAndChances(
   qualifierGames: number,
   superCupOpponentId?: string,
   league?: string,
+  excludeQualifierIds?: string[],
+  rng: () => number = Math.random,
 ): SeasonCalendar {
   const leagueRivals = leagueOpponentQueue(club, league);
   const leaguePhase = cup ? leaguePhaseOpponents(club, cup, 8) : [];
@@ -309,8 +320,14 @@ function assignOpponentsAndChances(
   const saudiSuperRivals = shuffle(
     clubsInCountry('Saudi Arabia').filter((c) => c.id !== club.id && qualifiesForSaudiSuperCup(c)),
   );
-  const qualifierRivals = nationId && tournament ? qualifierOpponents(nationId, tournament, qualifierGames) : [];
-  const tournamentRivals = nationId && tournament ? tournamentOpponents(nationId, tournament) : [];
+  const qualifierRivals =
+    nationId && tournament
+      ? qualifierOpponents(nationId, tournament, qualifierGames, {
+          extraExcludeIds: excludeQualifierIds,
+          rng,
+        })
+      : [];
+  const tournamentRivals = nationId && tournament ? tournamentOpponents(nationId, tournament, rng) : [];
 
   let leagueI = 0;
   let groupI = 0;
@@ -779,10 +796,11 @@ export function applyInternationalResult(
     if (outcome === 'win') next.groupPoints += 3;
     else if (outcome === 'draw') next.groupPoints += 1;
     if (next.groupPlayed >= tournamentGroupGames()) {
-      next.internationalStage =
-        next.groupPoints >= INTERNATIONAL_GROUP_ADVANCE_POINTS
-          ? firstKnockoutStage(next.internationalTournament)
-          : 'eliminated';
+      const advanced = next.groupPoints >= INTERNATIONAL_GROUP_ADVANCE_POINTS;
+      next.internationalReached = 'group';
+      next.internationalStage = advanced
+        ? firstKnockoutStage(next.internationalTournament)
+        : 'eliminated';
     }
     return next;
   }
@@ -795,6 +813,7 @@ export function applyInternationalResult(
     knockout === 'final'
   ) {
     const progressed = outcome === 'win';
+    next.internationalReached = knockout;
     if (!progressed) {
       next.internationalStage = 'eliminated';
       return next;
@@ -989,6 +1008,8 @@ export function resolveFixture(
     const them = fixture.opponentId ? nationStrength(fixture.opponentId) : 70;
     result = settleNationIfDrawn(result, us, them, rng);
   }
+
+  result = applyPlayerGoalsFloor(result, playerGoals);
 
   let next = { ...sim };
   if (fixture.kind === 'league' && fixture.opponentId) {

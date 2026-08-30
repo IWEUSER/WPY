@@ -173,13 +173,14 @@ export const CONTINENTAL_TOURNAMENT_FOR_CONFEDERATION: Record<Confederation, Int
 /**
  * International calendar (internal season numbers; the reserve year is 1):
  *  - Season 1: no international football (reserves; player is not involved).
- *  - Season 2, 6, 10…: remaining World Cup qualifiers (first half of the
- *    campaign was played in the unused reserve year), then the World Cup.
- *  - Season 3, 7, 11…: first half of continental qualifying.
- *  - Season 4, 8, 12…: second half of continental qualifying, then the
- *    tournament (Euros / Copa / AFCON / …).
+ *  - Season 2, 6, 10…: World Cup qualifying (five matches), then the World Cup.
+ *  - Season 3, 7, 11…: first half of continental qualifying (five matches).
+ *  - Season 4, 8, 12…: second half of continental qualifying (five matches),
+ *    then the tournament (Euros / Copa / AFCON / …).
  */
 export type InternationalCampaignPhase = 'none' | 'qualifiers' | 'qualifiers-and-tournament';
+
+export const QUALIFIER_GAMES_PER_SEASON = 5;
 
 export interface InternationalCampaign {
   tournament: InternationalTournamentId | null;
@@ -196,18 +197,19 @@ export function internationalCampaignForSeason(
   const cycle = (seasonNumber - 2) % 4;
   if (cycle === 3) return { tournament: null, phase: 'none', qualifierGames: 0 };
   if (cycle === 0) {
-    return { tournament: 'world-cup', phase: 'qualifiers-and-tournament', qualifierGames: 3 };
+    return {
+      tournament: 'world-cup',
+      phase: 'qualifiers-and-tournament',
+      qualifierGames: QUALIFIER_GAMES_PER_SEASON,
+    };
   }
   const continental = confederation
     ? CONTINENTAL_TOURNAMENT_FOR_CONFEDERATION[confederation]
     : 'continental-championship';
-  const full = continental === 'copa-america' || continental === 'gold-cup' || continental === 'ofc-nations-cup' ? 4 : 6;
-  const firstHalf = Math.floor(full / 2);
-  const secondHalf = Math.ceil(full / 2);
   return {
     tournament: continental,
     phase: cycle === 1 ? 'qualifiers' : 'qualifiers-and-tournament',
-    qualifierGames: cycle === 1 ? firstHalf : secondHalf,
+    qualifierGames: QUALIFIER_GAMES_PER_SEASON,
   };
 }
 

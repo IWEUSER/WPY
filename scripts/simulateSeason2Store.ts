@@ -173,6 +173,8 @@ const s2Expected = [
   'qualifier',
   'qualifier',
   'qualifier',
+  'qualifier',
+  'qualifier',
   'group',
   'group',
   'group',
@@ -255,6 +257,69 @@ if (afterRatio < 0.66 && after.seasonSim?.internationalSelected) {
 if (after.careerGames !== 1) {
   console.error('Career games must start counting in season 2');
   process.exitCode = 1;
+}
+
+{
+  const snapshot = store.getState();
+  const cal = snapshot.seasonCalendar;
+  const domesticFinalIndex = cal?.fixtures.findIndex(
+    (f) => f.kind === 'domestic-cup' && f.domesticCupStage === 'final',
+  );
+  const cupFinalIndex = cal?.fixtures.findIndex((f) => f.kind === 'continental-final');
+  const finalIndex =
+    domesticFinalIndex != null && domesticFinalIndex >= 0
+      ? domesticFinalIndex
+      : cupFinalIndex != null && cupFinalIndex >= 0
+        ? cupFinalIndex
+        : -1;
+  const fixture = finalIndex >= 0 ? cal?.fixtures[finalIndex] : undefined;
+  if (finalIndex >= 0 && fixture && snapshot.seasonSim) {
+    store.setState({
+      injuryGamesRemaining: 1,
+      liveMatch: null,
+      lastMatchResult: null,
+      seasonSim: {
+        ...snapshot.seasonSim,
+        fixtureIndex: finalIndex,
+        domesticCupStage: fixture.kind === 'domestic-cup' ? 'final' : snapshot.seasonSim.domesticCupStage,
+        europeanStanding:
+          fixture.kind === 'continental-final' && snapshot.seasonSim.europeanStanding
+            ? { ...snapshot.seasonSim.europeanStanding, stage: 'final' }
+            : snapshot.seasonSim.europeanStanding,
+      },
+    });
+    store.getState().advance();
+    const injured = store.getState();
+    console.log('injured final', injured.phase, injured.lastMatchResult);
+    if (injured.phase !== 'match-result' || !injured.lastMatchResult?.isFinal) {
+      console.error('missing a final through injury must still show the result screen');
+      process.exitCode = 1;
+    }
+    if (!injured.lastMatchResult?.summary.includes('injured')) {
+      console.error('the injured-final result must say the player was injured');
+      process.exitCode = 1;
+    }
+    store.setState({
+      phase: snapshot.phase,
+      seasonSim: snapshot.seasonSim,
+      currentSeason: snapshot.currentSeason,
+      injuryGamesRemaining: 0,
+      liveMatch: snapshot.liveMatch,
+      lastMatchResult: snapshot.lastMatchResult,
+      lastMatchSummary: snapshot.lastMatchSummary,
+      seasonStandings: snapshot.seasonStandings,
+      availability: snapshot.availability,
+      nationalTeam: snapshot.nationalTeam,
+      careerGames: snapshot.careerGames,
+      careerGoals: snapshot.careerGoals,
+      careerEarnings: snapshot.careerEarnings,
+      formWindow: snapshot.formWindow,
+      wpyResult: snapshot.wpyResult,
+    });
+  } else {
+    console.error('Season 2 must include a final to test the injury result screen');
+    process.exitCode = 1;
+  }
 }
 const afterClub = after.clubId ? getClub(after.clubId) : undefined;
 const afterWeek =

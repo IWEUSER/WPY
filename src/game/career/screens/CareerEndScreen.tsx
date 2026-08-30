@@ -1,6 +1,6 @@
 import { getClub } from '../data/clubs';
 import { INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
-import { awardLabels, careerAwardCounts, careerTrophyCounts, formatGamesGoals, seasonClubName, seasonLeagueLabel, seasonRatio } from '../honoursDisplay';
+import { awardLabels, careerAwardCounts, careerTrophyCounts, formatGamesGoals, formatInternationalSeason, seasonClubName, seasonLeagueLabel, seasonRatio } from '../honoursDisplay';
 import { formatEuros } from '../playerValue';
 import { countsTowardCareerRecord, displaySeasonLabel } from '../seasonDisplay';
 import { aggregateContinental, aggregateDomestic, continentalLabel } from '../seasonStats';
@@ -94,6 +94,20 @@ export default function CareerEndScreen() {
               Tournament {formatGamesGoals(row.finalsGames, row.finalsGoals)}
             </p>
           ))}
+          {seasons
+            .filter((s) => formatInternationalSeason(s.international))
+            .map((s) => {
+              const line = formatInternationalSeason(s.international);
+              if (!line) return null;
+              return (
+                <p key={`intl-${s.seasonNumber}`} className="mt-1 text-xs text-white/50">
+                  {displaySeasonLabel(s.seasonNumber)} · {line.name}
+                  {line.qualifying ? ` · ${line.qualifying}` : ''}
+                  {line.tournament ? ` · ${line.tournament}` : ''}
+                  {line.awards.length > 0 ? ` · ${line.awards.join(' · ')}` : ''}
+                </p>
+              );
+            })}
         </div>
       )}
 
@@ -152,6 +166,17 @@ function SeasonCard({ season }: { season: SeasonRecord }) {
       {(season.trophies ?? []).length > 0 && (
         <p className="mt-1 text-xs text-emerald-300">{(season.trophies ?? []).join(' · ')}</p>
       )}
+      {(() => {
+        const intl = formatInternationalSeason(season.international);
+        if (!intl) return null;
+        return (
+          <p className="mt-1 text-xs text-white/50">
+            {intl.name}
+            {intl.qualifying ? ` · ${intl.qualifying}` : ''}
+            {intl.tournament ? ` · ${intl.tournament}` : ''}
+          </p>
+        );
+      })()}
       {awards.length > 0 && <p className="mt-1 text-xs text-white/50">{awards.join(' · ')}</p>}
     </article>
   );

@@ -42,6 +42,33 @@ export interface ContinentalSeasonStat {
   goals: number;
 }
 
+export type QualifyingSeasonOutcome = 'none' | 'ongoing' | 'qualified' | 'failed';
+
+export type TournamentSeasonOutcome =
+  | 'none'
+  | 'did-not-qualify'
+  | 'ongoing'
+  | 'group'
+  | 'round-of-32'
+  | 'round-of-16'
+  | 'quarter-final'
+  | 'semi-final'
+  | 'final'
+  | 'champion';
+
+export interface InternationalSeasonRecord {
+  tournament: InternationalTournamentId | null;
+  qualifyingGames: number;
+  qualifyingGoals: number;
+  qualifyingOutcome: QualifyingSeasonOutcome;
+  finalsGames: number;
+  finalsGoals: number;
+  /** Furthest round reached this season, or champion / did-not-qualify / none. */
+  tournamentOutcome: TournamentSeasonOutcome;
+  playerOfTheTournament: boolean;
+  topGoalscorer: boolean;
+}
+
 export interface SeasonRecord {
   seasonNumber: number;
   clubId: string;
@@ -73,6 +100,8 @@ export interface SeasonRecord {
   sponsorship?: number;
   /** League this season was played in (may differ after promotion). */
   league?: string;
+  /** Qualifying + tournament outcome for this season’s international campaign. */
+  international?: InternationalSeasonRecord;
 }
 
 export interface TrialState {
@@ -168,4 +197,6 @@ export interface IntlQualifyingCarry {
   tournament: InternationalTournamentId;
   points: number;
   played: number;
+  /** Qualifier opponents already faced in this split campaign. */
+  opponentIds?: string[];
 }

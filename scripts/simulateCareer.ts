@@ -16,7 +16,7 @@ import { consecutivePoorFactor, contractValueFactor, formAdjustedRatio, loanCont
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { clubContinentalCup, internationalCampaignForSeason, internationalTournamentForSeason } from '../src/game/career/data/competitions';
 import { cupFromLeaguePosition, continentalQualificationForNextSeason } from '../src/game/career/europeanQualification';
-import { fifaRank, tournamentOpponents } from '../src/game/career/data/fifaRankings';
+import { fifaRank, tournamentOpponents, worldCupKnockoutRankCap } from '../src/game/career/data/fifaRankings';
 import { displaySeasonLabel, displaySeasonNumber } from '../src/game/career/seasonDisplay';
 import { isSelectedForNationalTeam, selectionRatioForNation } from '../src/game/career/international';
 import { missedChanceWinFactor, simulateClubMatch, simulateLeagueSeason } from '../src/game/career/matchEngine';
@@ -32,7 +32,11 @@ import {
   goldenBootWinChance,
   playerOfTheYearGoalTarget,
 } from '../src/game/career/domesticAwards';
-import { careerAwardCounts, careerTrophyCounts, formatGamesGoals, seasonLeagueLabel } from '../src/game/career/honoursDisplay';
+import {
+  evaluateInternationalTournamentAwards,
+  internationalAwardWinChance,
+} from '../src/game/career/internationalAwards';
+import { formatInternationalSeason, careerAwardCounts, careerTrophyCounts, formatGamesGoals, seasonLeagueLabel } from '../src/game/career/honoursDisplay';
 import type { SeasonRecord } from '../src/game/career/types';
 
 const N = 50000;
@@ -114,6 +118,8 @@ const expectedWc = [
   'qualifier',
   'qualifier',
   'qualifier',
+  'qualifier',
+  'qualifier',
   'group',
   'group',
   'group',
@@ -124,7 +130,7 @@ const expectedWc = [
   'final',
 ];
 if (s2Rounds.join() !== expectedWc.join()) {
-  console.error('season 2 must play the remaining World Cup qualifiers then a 32-team World Cup');
+  console.error('season 2 must play five World Cup qualifiers then a 32-team World Cup');
   process.exitCode = 1;
 }
 if (calendar.internationalTournament !== 'world-cup' || calendar.internationalPhase !== 'qualifiers-and-tournament') {
@@ -456,8 +462,8 @@ const euroQualCalendar = buildSeasonCalendar({
 });
 const euroQualRounds = euroQualCalendar.fixtures.filter((f) => f.kind === 'international').map((f) => f.internationalRound);
 console.log('season 3 international rounds', euroQualRounds);
-if (euroQualRounds.some((r) => r !== 'qualifier') || euroQualRounds.length !== 3) {
-  console.error('season 3 must only schedule the first half of continental qualifiers');
+if (euroQualRounds.some((r) => r !== 'qualifier') || euroQualRounds.length !== 5) {
+  console.error('season 3 must only schedule continental qualifiers (five matches)');
   process.exitCode = 1;
 }
 
@@ -472,6 +478,8 @@ const euroFinalsCalendar = buildSeasonCalendar({
 const euroFinalsRounds = euroFinalsCalendar.fixtures.filter((f) => f.kind === 'international').map((f) => f.internationalRound);
 console.log('season 4 international rounds', euroFinalsRounds);
 const expectedEuro = [
+  'qualifier',
+  'qualifier',
   'qualifier',
   'qualifier',
   'qualifier',
@@ -530,16 +538,16 @@ if (madridClub) {
   }
 }
 
-if (internationalCampaignForSeason(2, 'UEFA').qualifierGames !== 3) {
-  console.error('season 2 World Cup qualifying must be the remaining half (3 games)');
+if (internationalCampaignForSeason(2, 'UEFA').qualifierGames !== 5) {
+  console.error('season 2 World Cup qualifying must be 5 games');
   process.exitCode = 1;
 }
-if (internationalCampaignForSeason(3, 'UEFA').qualifierGames !== 3) {
-  console.error('season 3 Euro qualifying must be the first half (3 games)');
+if (internationalCampaignForSeason(3, 'UEFA').qualifierGames !== 5) {
+  console.error('season 3 Euro qualifying must be 5 games');
   process.exitCode = 1;
 }
-if (internationalCampaignForSeason(4, 'UEFA').qualifierGames !== 3) {
-  console.error('season 4 Euro qualifying must be the second half (3 games)');
+if (internationalCampaignForSeason(4, 'UEFA').qualifierGames !== 5) {
+  console.error('season 4 Euro qualifying must be 5 games');
   process.exitCode = 1;
 }
 
@@ -617,13 +625,10 @@ if (madrid) {
   }
   const groupIds = finals.filter((f) => f.internationalRound === 'group').map((f) => f.opponentId);
   const earlyKo = finals.filter(
-    (f) =>
-      f.internationalRound === 'round-of-32' ||
-      f.internationalRound === 'round-of-16' ||
-      f.internationalRound === 'quarter-final',
+    (f) => f.internationalRound === 'round-of-32' || f.internationalRound === 'round-of-16',
   );
   if (earlyKo.some((f) => groupIds.includes(f.opponentId))) {
-    console.error('group opponents must not reappear before the semi-final');
+    console.error('group opponents must not reappear before the quarter-final');
     process.exitCode = 1;
   }
   if (new Set(groupIds).size < groupIds.length) {
@@ -654,8 +659,8 @@ if (madridClub) {
     console.error('season 3 must not qualify or fail — it is only the first half of the campaign');
     process.exitCode = 1;
   }
-  if (s3State.qualifierPlayed !== 3) {
-    console.error('season 3 must play three continental qualifiers');
+  if (s3State.qualifierPlayed !== 5) {
+    console.error('season 3 must play five continental qualifiers');
     process.exitCode = 1;
   }
 
@@ -671,8 +676,8 @@ if (madridClub) {
     },
   });
   console.log('S4 carry', s4.sim.qualifierCarryPoints, s4.sim.qualifierCarryPlayed, 'target', s4.sim.qualifierTarget);
-  if (s4.sim.qualifierCarryPlayed !== 3 || s4.sim.qualifierTarget !== 3) {
-    console.error('season 4 must seed the first half of qualifying and play the second half');
+  if (s4.sim.qualifierCarryPlayed !== 5 || s4.sim.qualifierTarget !== 5) {
+    console.error('season 4 must seed the first half of qualifying and play five more');
     process.exitCode = 1;
   }
 }
@@ -1791,12 +1796,12 @@ console.log('\n--- International group sides stay out of early knockouts ---');
   for (let i = 0; i < 40; i++) {
     const drawn = tournamentOpponents('spain', 'world-cup');
     const group = drawn.slice(0, 3).map((n) => n.id);
-    const early = drawn.slice(3, 6).map((n) => n.id);
+    const early = drawn.slice(3, 5).map((n) => n.id);
     if (early.some((id) => group.includes(id))) groupReuse += 1;
   }
-  console.log('WC group reused before SF across 40 draws', groupReuse);
+  console.log('WC group reused before QF across 40 draws', groupReuse);
   if (groupReuse > 0) {
-    console.error('World Cup group opponents must not appear before the semi-final');
+    console.error('World Cup group opponents must not appear before the quarter-final');
     process.exitCode = 1;
   }
   const euro = tournamentOpponents('spain', 'euro');
@@ -1855,6 +1860,188 @@ if (madrid) {
   const intlSf = calendar.fixtures.find((f) => f.kind === 'international' && f.internationalRound === 'semi-final');
   if (cupFinal?.isDecisive || euroFinal?.isDecisive || intlSf?.isDecisive) {
     console.error('domestic, European and international finals must not be one-chance matches');
+    process.exitCode = 1;
+  }
+}
+
+console.log('\n--- Five unique qualifying opponents, not a repeating draw ---');
+{
+  const draws: string[][] = [];
+  for (let i = 0; i < 12; i++) {
+    const { calendar } = hydrateSeason({
+      seasonNumber: 2,
+      club: getClub('real-madrid')!,
+      careerGoalRatio: 0.8,
+      nationId: 'spain',
+    });
+    const quals = calendar.fixtures
+      .filter((f) => f.kind === 'international' && f.internationalRound === 'qualifier' && f.opponentId)
+      .map((f) => f.opponentId as string);
+    draws.push(quals);
+    if (quals.length !== 5) {
+      console.error(`World Cup qualifying must schedule 5 matches, got ${quals.length}`);
+      process.exitCode = 1;
+    }
+    if (new Set(quals).size !== quals.length) {
+      console.error('a qualifying campaign must not repeat an opponent');
+      process.exitCode = 1;
+    }
+  }
+  const identical = draws.filter((d) => d.join() === draws[0].join()).length;
+  console.log('Spain WC qualifier draws', draws.map((d) => d.join(', ')), `same-as-first ${identical}/12`);
+  if (identical === 12) {
+    console.error('qualifying opponents must vary across seasons rather than repeating the same countries');
+    process.exitCode = 1;
+  }
+
+  const s3 = hydrateSeason({
+    seasonNumber: 3,
+    club: getClub('real-madrid')!,
+    careerGoalRatio: 0.8,
+    nationId: 'spain',
+  });
+  const s3Quals = s3.calendar.fixtures
+    .filter((f) => f.kind === 'international' && f.internationalRound === 'qualifier' && f.opponentId)
+    .map((f) => f.opponentId as string);
+  const s4 = hydrateSeason({
+    seasonNumber: 4,
+    club: getClub('real-madrid')!,
+    careerGoalRatio: 0.8,
+    nationId: 'spain',
+    excludeQualifierIds: s3Quals,
+  });
+  const s4Quals = s4.calendar.fixtures
+    .filter((f) => f.kind === 'international' && f.internationalRound === 'qualifier' && f.opponentId)
+    .map((f) => f.opponentId as string);
+  const overlap = s4Quals.filter((id) => s3Quals.includes(id));
+  console.log('S3 Euro quals', s3Quals, 'S4 excluding those', s4Quals, 'overlap', overlap);
+  if (overlap.length > 0) {
+    console.error('season 4 continental qualifying must not reuse season 3 opponents while UEFA still has unused sides');
+    process.exitCode = 1;
+  }
+}
+
+console.log('\n--- World Cup knockout rank caps ---');
+{
+  if (worldCupKnockoutRankCap('quarter-final') !== 16 || worldCupKnockoutRankCap('semi-final') !== 8 || worldCupKnockoutRankCap('final') !== 8) {
+    console.error('World Cup QF must be top 16 and SF/final top 8');
+    process.exitCode = 1;
+  }
+  let qfOver = 0;
+  let sfOver = 0;
+  let finalOver = 0;
+  for (let i = 0; i < 30; i++) {
+    const drawn = tournamentOpponents('spain', 'world-cup');
+    const qf = drawn[5];
+    const sf = drawn[6];
+    const fin = drawn[7];
+    if (!qf || fifaRank(qf.id) > 16) qfOver += 1;
+    if (!sf || fifaRank(sf.id) > 8) sfOver += 1;
+    if (!fin || fifaRank(fin.id) > 8) finalOver += 1;
+  }
+  console.log('WC rank-cap misses QF/SF/final', qfOver, sfOver, finalOver);
+  if (qfOver > 0 || sfOver > 0 || finalOver > 0) {
+    console.error('World Cup quarter-finals must be top 16 and semi-final/final top 8');
+    process.exitCode = 1;
+  }
+}
+
+console.log('\n--- Player goals cannot produce a 1–0 when the player scored two ---');
+{
+  let undercounted = 0;
+  let oneNilWithTwo = 0;
+  for (let i = 0; i < 400; i++) {
+    const r = simulateClubMatch(
+      { clubStrength: 90, opponentStrength: 88, isHome: true },
+      Math.random,
+      2,
+      2,
+    );
+    if (r.scoreFor < 2) undercounted += 1;
+    if (r.scoreFor === 1 && r.scoreAgainst === 0) oneNilWithTwo += 1;
+  }
+  console.log('undercounted player goals', undercounted, '1-0 with 2 goals', oneNilWithTwo);
+  if (undercounted > 0 || oneNilWithTwo > 0) {
+    console.error('the scoreline must be at least the number of goals the player scored');
+    process.exitCode = 1;
+  }
+  const madridClub = getClub('real-madrid')!;
+  const { calendar, sim } = hydrateSeason({
+    seasonNumber: 2,
+    club: madridClub,
+    careerGoalRatio: 0.8,
+    nationId: 'spain',
+  });
+  const finalFx = calendar.fixtures.find((f) => f.kind === 'continental-final') ?? calendar.fixtures.find((f) => f.kind === 'international' && f.internationalRound === 'final');
+  if (finalFx) {
+    let badFinal = 0;
+    for (let i = 0; i < 80; i++) {
+      const { result } = resolveFixture(sim, finalFx, madridClub, 2);
+      if (result.scoreFor < 2) badFinal += 1;
+    }
+    console.log('finals with 2 player goals undercounted', badFinal);
+    if (badFinal > 0) {
+      console.error('a final win screen must not show 1–0 when the player scored two');
+      process.exitCode = 1;
+    }
+  }
+}
+
+console.log('\n--- World Cup and continental tournament awards ---');
+{
+  if (
+    internationalAwardWinChance('world-cup', 5) !== 0 ||
+    internationalAwardWinChance('world-cup', 6) !== 0.5 ||
+    internationalAwardWinChance('world-cup', 7) !== 0.75 ||
+    internationalAwardWinChance('world-cup', 8) !== 0.9 ||
+    internationalAwardWinChance('world-cup', 9) !== 0.9
+  ) {
+    console.error('World Cup award chances must be 6/50, 7/75, 8+/90');
+    process.exitCode = 1;
+  }
+  if (
+    internationalAwardWinChance('euro', 4) !== 0 ||
+    internationalAwardWinChance('euro', 5) !== 0.5 ||
+    internationalAwardWinChance('euro', 6) !== 0.75 ||
+    internationalAwardWinChance('euro', 7) !== 0.9
+  ) {
+    console.error('continental award chances must be 5/50, 6/75, 7+/90');
+    process.exitCode = 1;
+  }
+  const always = evaluateInternationalTournamentAwards({
+    tournament: 'world-cup',
+    finalsGoals: 8,
+    rng: () => 0,
+  });
+  const never = evaluateInternationalTournamentAwards({
+    tournament: 'world-cup',
+    finalsGoals: 8,
+    rng: () => 0.99,
+  });
+  const below = evaluateInternationalTournamentAwards({
+    tournament: 'world-cup',
+    finalsGoals: 5,
+    rng: () => 0,
+  });
+  console.log('award rolls always/never/below', always, never, below);
+  if (!always.playerOfTheTournament || !always.topGoalscorer || never.playerOfTheTournament || never.topGoalscorer || below.playerOfTheTournament) {
+    console.error('tournament awards must roll independently against the chance table');
+    process.exitCode = 1;
+  }
+  const line = formatInternationalSeason({
+    tournament: 'world-cup',
+    qualifyingGames: 5,
+    qualifyingGoals: 3,
+    qualifyingOutcome: 'qualified',
+    finalsGames: 6,
+    finalsGoals: 4,
+    tournamentOutcome: 'quarter-final',
+    playerOfTheTournament: false,
+    topGoalscorer: false,
+  });
+  console.log('career intl line', line);
+  if (!line || !line.qualifying?.includes('qualified') || !line.tournament?.includes('quarter-finals')) {
+    console.error('career record must show each qualifying period and tournament outcome');
     process.exitCode = 1;
   }
 }

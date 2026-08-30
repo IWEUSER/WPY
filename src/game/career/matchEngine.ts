@@ -97,12 +97,23 @@ export function simulateClubMatch(
     scoreFor = tied;
     scoreAgainst = tied;
   }
-  scoreFor = Math.min(6, scoreFor + Math.max(0, playerGoals));
+  scoreFor = scoreFor + Math.max(0, playerGoals);
   scoreAgainst = Math.min(6, scoreAgainst);
   if (playerGoals > 0 && scoreFor <= scoreAgainst && outcome !== 'draw') {
     // A player goal can still turn a simulated loss into a draw/win - teammates aren't the whole story.
-    scoreFor = scoreAgainst + (rng() < 0.55 ? 1 : 0);
+    const attempt = scoreAgainst + (rng() < 0.55 ? 1 : 0);
+    scoreFor = Math.max(scoreFor, attempt);
   }
+  return applyPlayerGoalsFloor({ scoreFor, scoreAgainst, outcome: outcomeOf(scoreFor, scoreAgainst) }, playerGoals);
+}
+
+/** The printed scoreline can never be below the goals the player actually scored. */
+export function applyPlayerGoalsFloor(result: ClubMatchResult, playerGoals: number): ClubMatchResult {
+  if (playerGoals <= 0 || result.scoreFor >= playerGoals) {
+    return { ...result, outcome: outcomeOf(result.scoreFor, result.scoreAgainst) };
+  }
+  const scoreFor = playerGoals;
+  const scoreAgainst = result.scoreAgainst;
   return { scoreFor, scoreAgainst, outcome: outcomeOf(scoreFor, scoreAgainst) };
 }
 

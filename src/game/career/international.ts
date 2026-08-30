@@ -3,7 +3,7 @@ import type { Confederation, InternationalTournamentId } from './data/competitio
 import { clubsInCountry, type ClubTier } from './data/clubs';
 import { fifaRank } from './data/fifaRankings';
 import { NATIONS, getNation, type Nation } from './data/nations';
-import type { AvailabilityState } from './types';
+import type { AvailabilityState, InternationalSeasonRecord } from './types';
 
 export type { Nation };
 export { NATIONS, getNation };
@@ -27,6 +27,8 @@ export interface NationalTeamState {
   caps: number;
   goals: number;
   byCompetition: InternationalCompetitionRecord[];
+  /** Qualifier opponents faced recently — avoid redrawing them while the pool lasts. */
+  recentQualifierOpponentIds?: string[];
 }
 
 export function createNationalTeamState(nationId: string): NationalTeamState {
@@ -121,4 +123,136 @@ export function careerRatioForSelection(
 ): number {
   if (careerGames > 0) return careerGoals / careerGames;
   return reserveFallbackRatio;
+}
+
+export function emptyInternationalSeason(
+  tournament: InternationalTournamentId | null,
+): InternationalSeasonRecord {
+  return {
+    tournament,
+    qualifyingGames: 0,
+    qualifyingGoals: 0,
+    qualifyingOutcome: 'none',
+    finalsGames: 0,
+    finalsGoals: 0,
+    tournamentOutcome: 'none',
+    playerOfTheTournament: false,
+    topGoalscorer: false,
+  };
+}
+
+export function bumpInternationalSeason(
+  rec: InternationalSeasonRecord | undefined,
+  tournament: InternationalTournamentId | null,
+  isQualifier: boolean,
+  goals: number,
+): InternationalSeasonRecord {
+  const next: InternationalSeasonRecord = rec
+    ? { ...rec, tournament: rec.tournament ?? tournament }
+    : emptyInternationalSeason(tournament);
+  if (isQualifier) {
+    next.qualifyingGames += 1;
+    next.qualifyingGoals += goals;
+  } else {
+    next.finalsGames += 1;
+    next.finalsGoals += goals;
+  }
+  return next;
+}
+
+export function rememberQualifierOpponents(
+  team: NationalTeamState | null,
+  ids: string[],
+): NationalTeamState | null {
+  if (!team || ids.length === 0) return team;
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const id of [...ids, ...(team.recentQualifierOpponentIds ?? [])]) {
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    unique.push(id);
+    if (unique.length >= 24) break;
+  }
+  return { ...team, recentQualifierOpponentIds: unique };
+}
+
+export function qualifierExcludeIds(
+  team: NationalTeamState | null,
+  carryOpponentIds?: string[] | null,
+): string[] {
+  return [...(team?.recentQualifierOpponentIds ?? []), ...(carryOpponentIds ?? [])];
+}
+
+type InternationalSnapshotSim = {
+  internationalSelected: boolean;
+  internationalTournament: InternationalTournamentId | null;
+  internationalPhase: string;
+  internationalStage: string;
+  internationalReached?: string | null;
+  nationQualified: boolean;
+  qualifierTarget: number;
+};
+
+export function snapshotInternationalOutcomes(
+  rec: InternationalSeasonRecord,
+  sim: InternationalSnapshotSim | null,
+): InternationalSeasonRecord {
+  const tournament = rec.tournament ?? sim?.internationalTournament ?? null;
+  if (!sim?.internationalSelected && rec.qualifyingGames === 0 && rec.finalsGames === 0) {
+    return { ...rec, tournament };
+  }
+
+  let qualifyingOutcome: InternationalSeasonRecord['qualifyingOutcome'] = rec.qualifyingOutcome;
+  if (rec.qualifyingGames <= 0 && (sim?.qualifierTarget ?? 0) <= 0) {
+    qualifyingOutcome = 'none';
+  } else if (sim?.internationalStage === 'failed-qualifying') {
+    qualifyingOutcome = 'failed';
+  } else if (sim?.internationalPhase === 'qualifiers') {
+    qualifyingOutcome = 'ongoing';
+  } else if (rec.qualifyingGames > 0) {
+    if (
+      sim?.nationQualified ||
+      rec.finalsGames > 0 ||
+      (sim?.internationalStage != null &&
+        sim.internationalStage !== 'qualifying' &&
+        sim.internationalStage !== 'not-selected' &&
+        sim.internationalStage !== 'failed-qualifying')
+    ) {
+      qualifyingOutcome = 'qualified';
+    }
+  }
+
+  let tournamentOutcome: InternationalSeasonRecord['tournamentOutcome'] = 'none';
+  if (sim?.internationalPhase === 'qualifiers') {
+    tournamentOutcome = 'none';
+  } else if (sim?.internationalStage === 'failed-qualifying') {
+    tournamentOutcome = 'did-not-qualify';
+  } else if (sim?.internationalStage === 'champion') {
+    tournamentOutcome = 'champion';
+  } else if (sim?.internationalStage === 'eliminated') {
+    const reached = sim.internationalReached;
+    tournamentOutcome = isTournamentOutcome(reached) ? reached : 'group';
+  } else if (isTournamentOutcome(sim?.internationalStage)) {
+    tournamentOutcome = sim.internationalStage as InternationalSeasonRecord['tournamentOutcome'];
+  } else if (rec.finalsGames > 0) {
+    tournamentOutcome = 'ongoing';
+  }
+
+  return { ...rec, tournament, qualifyingOutcome, tournamentOutcome };
+}
+
+function isTournamentOutcome(
+  value: string | null | undefined,
+): value is InternationalSeasonRecord['tournamentOutcome'] {
+  return (
+    value === 'group' ||
+    value === 'round-of-32' ||
+    value === 'round-of-16' ||
+    value === 'quarter-final' ||
+    value === 'semi-final' ||
+    value === 'final' ||
+    value === 'champion' ||
+    value === 'ongoing' ||
+    value === 'did-not-qualify'
+  );
 }

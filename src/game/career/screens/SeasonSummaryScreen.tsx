@@ -3,6 +3,7 @@ import { getClub } from '../data/clubs';
 import { leagueDisplayName } from '../data/leagueFormat';
 import { formatEuros, formatWeeklyWage } from '../playerValue';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
+import { formatInternationalSeason } from '../honoursDisplay';
 import { displaySeasonLabel, displaySeasonNumber } from '../seasonDisplay';
 import { countLoanSpells, resolveSeasonTransition } from '../transfers';
 import { leagueMatchWeeks } from '../data/clubs';
@@ -75,6 +76,15 @@ export default function SeasonSummaryScreen() {
   }
   if (season.topGoalscorer) honours.push('Top goalscorer');
   if (season.playerOfTheYear) honours.push('Player of the Year');
+  if (season.international?.playerOfTheTournament && season.international.tournament) {
+    honours.push(
+      `${INTERNATIONAL_TOURNAMENTS[season.international.tournament].name} Player of the Tournament`,
+    );
+  }
+  if (season.international?.topGoalscorer && season.international.tournament) {
+    honours.push(`${INTERNATIONAL_TOURNAMENTS[season.international.tournament].name} top goalscorer`);
+  }
+  const intlLine = formatInternationalSeason(season.international);
   const missedTournament =
     seasonSim?.internationalSelected &&
     seasonSim.internationalTournament &&
@@ -128,6 +138,17 @@ export default function SeasonSummaryScreen() {
       {honours.length > 0 && (
         <div className="w-full max-w-sm rounded-2xl bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
           {honours.join(' · ')}
+        </div>
+      )}
+
+      {intlLine && (
+        <div className="w-full max-w-sm rounded-2xl bg-white/5 px-4 py-3 text-sm text-white/70">
+          <p className="font-semibold text-white/90">{intlLine.name}</p>
+          {intlLine.qualifying && <p className="mt-1 text-xs text-white/50">{intlLine.qualifying}</p>}
+          {intlLine.tournament && <p className="mt-1 text-xs text-white/50">{intlLine.tournament}</p>}
+          {intlLine.awards.length > 0 && (
+            <p className="mt-1 text-xs text-sky-200/80">{intlLine.awards.join(' · ')}</p>
+          )}
         </div>
       )}
 

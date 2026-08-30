@@ -207,9 +207,8 @@ export function slotsForTournament(tournament: InternationalTournamentId, confed
   return CONTINENTAL_SLOTS[confederation];
 }
 
-export function qualifierCountFor(tournament: InternationalTournamentId): number {
-  if (tournament === 'copa-america' || tournament === 'gold-cup' || tournament === 'ofc-nations-cup') return 4;
-  return 6;
+export function qualifierCountFor(_tournament: InternationalTournamentId): number {
+  return 5;
 }
 
 export type InternationalKnockoutRound =
@@ -257,12 +256,20 @@ function pickSpread<T extends { id: string }>(
   fallback: T[],
   /** 0 = strongest in the band, 1 = weakest. */
   towardWeaker: number,
+  rng?: () => number,
 ): T | undefined {
   const available = source.filter((n) => !used.has(n.id));
   const pool = available.length > 0 ? available : fallback.filter((n) => !used.has(n.id));
-  if (pool.length === 0) return source[0] ?? fallback[0];
-  const idx = Math.min(pool.length - 1, Math.max(0, Math.round(towardWeaker * (pool.length - 1))));
+  if (pool.length === 0) return source.find((n) => !used.has(n.id)) ?? fallback.find((n) => !used.has(n.id));
+  const jitter = rng ? (rng() - 0.5) * 0.55 : 0;
+  const t = Math.min(1, Math.max(0, towardWeaker + jitter));
+  const idx = Math.min(pool.length - 1, Math.max(0, Math.round(t * (pool.length - 1))));
   return pool[idx];
+}
+
+export interface OpponentPickOptions {
+  extraExcludeIds?: string[];
+  rng?: () => number;
 }
 
 /** Spread opponents across stronger, similar, and weaker sides — not a gauntlet of #1s. */
@@ -270,9 +277,12 @@ export function pickMixedRankOpponents(
   nationId: string,
   count: number,
   pool: { id: string; name: string; confederation: Confederation }[],
+  options?: OpponentPickOptions,
 ): { id: string; name: string; confederation: Confederation }[] {
-  if (pool.length === 0 || count <= 0) return [];
-  const ranked = [...pool].sort((a, b) => fifaRank(a.id) - fifaRank(b.id));
+  const exclude = new Set(options?.extraExcludeIds ?? []);
+  const filtered = pool.filter((n) => n.id !== nationId && !exclude.has(n.id));
+  if (filtered.length === 0 || count <= 0) return [];
+  const ranked = [...filtered].sort((a, b) => fifaRank(a.id) - fifaRank(b.id));
   const self = fifaRank(nationId);
   const higher = ranked.filter((n) => fifaRank(n.id) + 5 < self);
   const peers = ranked.filter((n) => Math.abs(fifaRank(n.id) - self) <= 20);
@@ -291,7 +301,7 @@ export function pickMixedRankOpponents(
           ? peers
           : higher
       : ranked;
-    const pick = pickSpread(source, used, ranked, towardWeaker[band]);
+    const pick = pickSpread(source, used, ranked, towardWeaker[band], options?.rng);
     if (pick) {
       used.add(pick.id);
       picks.push(pick);
@@ -300,33 +310,60 @@ export function pickMixedRankOpponents(
   return picks;
 }
 
-export function qualifierOpponents(nationId: string, tournament: InternationalTournamentId, count?: number) {
+export function qualifierOpponents(
+  nationId: string,
+  tournament: InternationalTournamentId,
+  count?: number,
+  options?: OpponentPickOptions,
+) {
   const nation = getNation(nationId);
   if (!nation) return [];
   const n = count ?? qualifierCountFor(tournament);
   const pool = nationsInConfederation(nation.confederation).filter((x) => x.id !== nationId);
-  return pickMixedRankOpponents(nationId, n, pool);
+  let exclude = [...(options?.extraExcludeIds ?? [])];
+  let picks = pickMixedRankOpponents(nationId, n, pool, { extraExcludeIds: exclude, rng: options?.rng });
+  while (picks.length < n && exclude.length > 0) {
+    exclude = exclude.slice(1);
+    picks = pickMixedRankOpponents(nationId, n, pool, { extraExcludeIds: exclude, rng: options?.rng });
+  }
+  if (picks.length < n) {
+    picks = pickMixedRankOpponents(nationId, n, pool, { rng: options?.rng });
+  }
+  return picks;
 }
 
 const GROUP_REUSE_KNOCKOUT = new Set<InternationalKnockoutRound>(['semi-final', 'final']);
+
+/** World Cup quarter-finals are FIFA top 16; semi-final and final are top 8. */
+export function worldCupKnockoutRankCap(round: InternationalKnockoutRound): number | undefined {
+  if (round === 'quarter-final') return 16;
+  if (round === 'semi-final' || round === 'final') return 8;
+  return undefined;
+}
 
 function drawKnockoutOpponents(
   nationId: string,
   rounds: InternationalKnockoutRound[],
   pool: { id: string; name: string; confederation: Confederation }[],
   groupIds: Set<string>,
+  options?: { rankCapForRound?: (round: InternationalKnockoutRound) => number | undefined; rng?: () => number },
 ): { id: string; name: string; confederation: Confederation }[] {
   const used = new Set<string>();
   const picks: { id: string; name: string; confederation: Confederation }[] = [];
   for (const round of rounds) {
+    const cap = options?.rankCapForRound?.(round);
+    const rankedPool = cap != null ? pool.filter((n) => fifaRank(n.id) <= cap) : pool;
+    const roundPool = rankedPool.length > 0 ? rankedPool : pool;
     const allowGroup = GROUP_REUSE_KNOCKOUT.has(round);
-    const eligible = pool.filter((n) => {
+    const eligible = roundPool.filter((n) => {
       if (used.has(n.id)) return false;
       if (!allowGroup && groupIds.has(n.id)) return false;
       return true;
     });
-    const fallback = pool.filter((n) => !used.has(n.id));
-    const pick = pickMixedRankOpponents(nationId, 1, eligible.length > 0 ? eligible : fallback)[0];
+    const unusedInCap = roundPool.filter((n) => !used.has(n.id));
+    const pickPool =
+      eligible.length > 0 ? eligible : unusedInCap.length > 0 ? unusedInCap : roundPool;
+    const pick = pickMixedRankOpponents(nationId, 1, pickPool, { rng: options?.rng })[0];
     if (pick) {
       used.add(pick.id);
       picks.push(pick);
@@ -336,14 +373,22 @@ function drawKnockoutOpponents(
 }
 
 /** Group then knockout opponents. World Cup mixes confederations; continental stays in-region.
- * Group sides cannot reappear until the semi-final. */
-export function tournamentOpponents(nationId: string, tournament: InternationalTournamentId) {
+ * Group sides cannot reappear until the semi-final. World Cup QF is top 16 only; SF/final top 8. */
+export function tournamentOpponents(
+  nationId: string,
+  tournament: InternationalTournamentId,
+  rng: () => number = Math.random,
+) {
   const nation = getNation(nationId);
   if (!nation) return [];
   const groupCount = tournamentGroupGames();
   const knockoutRounds = tournamentKnockoutRounds(tournament);
   const worldPool = NATIONS.filter((n) => n.id !== nationId);
   const regional = nationsInConfederation(nation.confederation).filter((n) => n.id !== nationId);
+  const knockoutOpts = {
+    rng,
+    rankCapForRound: tournament === 'world-cup' ? worldCupKnockoutRankCap : undefined,
+  };
   if (tournament === 'world-cup') {
     const confeds: Confederation[] = ['UEFA', 'CONMEBOL', 'CONCACAF', 'CAF', 'AFC', 'OFC'];
     const byConfed = confeds
@@ -363,8 +408,9 @@ export function tournamentOpponents(nationId: string, tournament: InternationalT
     for (let i = 0; i < groupCount; i++) {
       const bands = bandFor(i);
       const confedList = bands[i % Math.max(1, bands.length)] ?? [];
+      const unused = confedList.filter((n) => !used.has(n.id));
       const pick =
-        confedList.find((n) => !used.has(n.id)) ??
+        (unused.length > 0 ? unused[Math.floor(rng() * unused.length)] : undefined) ??
         worldPool.find((n) => !used.has(n.id) && (i === 0 ? fifaRank(n.id) > 30 : true));
       if (pick) {
         used.add(pick.id);
@@ -372,9 +418,9 @@ export function tournamentOpponents(nationId: string, tournament: InternationalT
       }
     }
     const groupIds = new Set(group.map((n) => n.id));
-    return [...group, ...drawKnockoutOpponents(nationId, knockoutRounds, worldPool, groupIds)];
+    return [...group, ...drawKnockoutOpponents(nationId, knockoutRounds, worldPool, groupIds, knockoutOpts)];
   }
-  const group = pickMixedRankOpponents(nationId, groupCount, regional);
+  const group = pickMixedRankOpponents(nationId, groupCount, regional, { rng });
   const groupIds = new Set(group.map((n) => n.id));
-  return [...group, ...drawKnockoutOpponents(nationId, knockoutRounds, regional, groupIds)];
+  return [...group, ...drawKnockoutOpponents(nationId, knockoutRounds, regional, groupIds, { rng })];
 }

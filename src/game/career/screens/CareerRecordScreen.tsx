@@ -1,7 +1,7 @@
 import { getClub } from '../data/clubs';
 import { INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { currentCalendarWeek } from '../calendar';
-import { awardLabels, careerAwardCounts, careerTrophyCounts, formatGamesGoals, seasonClubName, seasonLeagueLabel, seasonRatio } from '../honoursDisplay';
+import { awardLabels, careerAwardCounts, careerTrophyCounts, formatGamesGoals, formatInternationalSeason, seasonClubName, seasonLeagueLabel, seasonRatio } from '../honoursDisplay';
 import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
 import { countsTowardCareerRecord, displaySeasonLabel } from '../seasonDisplay';
 import { aggregateContinental, aggregateDomestic, continentalLabel } from '../seasonStats';
@@ -133,7 +133,7 @@ export default function CareerRecordScreen() {
                 const name = INTERNATIONAL_TOURNAMENTS[row.tournament]?.name ?? row.tournament;
                 return (
                   <li key={row.tournament}>
-                    <p className="font-semibold text-white/90">{name}</p>
+                    <p className="font-semibold text-white/90">{name} (career)</p>
                     <p className="text-xs text-white/50">
                       Qualifying {formatGamesGoals(row.qualifyingGames, row.qualifyingGoals)}
                       {' · '}
@@ -142,6 +142,29 @@ export default function CareerRecordScreen() {
                   </li>
                 );
               })}
+            </ul>
+          )}
+          {recordSeasons.some((s) => formatInternationalSeason(s.international)) && (
+            <ul className="mt-4 space-y-2 border-t border-white/10 pt-3 text-sm text-white/70">
+              {recordSeasons
+                .filter((s) => formatInternationalSeason(s.international))
+                .sort((a, b) => a.seasonNumber - b.seasonNumber)
+                .map((s) => {
+                  const line = formatInternationalSeason(s.international);
+                  if (!line) return null;
+                  return (
+                    <li key={`intl-${s.seasonNumber}`}>
+                      <p className="font-semibold text-white/90">
+                        {displaySeasonLabel(s.seasonNumber)} · {line.name}
+                      </p>
+                      {line.qualifying && <p className="text-xs text-white/50">{line.qualifying}</p>}
+                      {line.tournament && <p className="text-xs text-white/50">{line.tournament}</p>}
+                      {line.awards.length > 0 && (
+                        <p className="text-xs text-sky-200/80">{line.awards.join(' · ')}</p>
+                      )}
+                    </li>
+                  );
+                })}
             </ul>
           )}
         </section>
@@ -246,6 +269,18 @@ function SeasonCard({ season }: { season: SeasonRecord & { inProgress?: boolean 
           </span>
         ))}
       </p>
+      {(() => {
+        const intl = formatInternationalSeason(season.international);
+        if (!intl) return null;
+        return (
+          <p className="mt-2 text-xs text-white/50">
+            {intl.name}
+            {intl.qualifying ? ` · ${intl.qualifying}` : ''}
+            {intl.tournament ? ` · ${intl.tournament}` : ''}
+            {intl.awards.length > 0 ? ` · ${intl.awards.join(' · ')}` : ''}
+          </p>
+        );
+      })()}
 
       <div className="mt-3">
         <p className="text-[10px] uppercase tracking-wide text-white/40">Tournaments won</p>
