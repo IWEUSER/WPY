@@ -47,7 +47,7 @@ export interface StadiumAppearance {
   scale?: StadiumScale;
   /** Seats — stand height is proportional to this. Camp Nou is the ceiling. */
   capacity?: number;
-  /** How many decks are stacked behind the goal (1, 2, 3, or 5). */
+  /** How many decks are stacked behind the goal (1–5). */
   standTiers?: StandTiers;
   unique?: 'camp-nou';
   groundName?: string;
@@ -195,58 +195,33 @@ export function standTopFrac(capacity: number, unique?: 'camp-nou'): number {
   return lerp(0.48, 0.055, t ** 0.9);
 }
 
+/**
+ * Even seating rings with a thinner concrete walkway between each pair.
+ * Walkways stay well below deck height so they read as separators, not extra
+ * tiers. The goal sits in front of the lower bowl — it must not split a ring.
+ */
+export function deckWalkwayPx(standHeight: number, tiers: number): number {
+  if (tiers <= 1) return 0;
+  return Math.max(8, Math.min(16, standHeight * 0.038));
+}
+
 function deckBands(
   top: number,
   bottom: number,
   tiers: number,
-  crossbarY?: number,
 ): { top: number; bottom: number }[] {
   const height = Math.max(8, bottom - top);
   if (tiers <= 1) return [{ top, bottom }];
-  const gap = Math.max(
-    14,
-    Math.min(28, height * (0.2 / Math.max(2, tiers))),
-  );
-  const minDeck = 16;
+  const gap = deckWalkwayPx(height, tiers);
   const evenUsable = height - gap * (tiers - 1);
   const evenH = evenUsable / tiers;
-
-  const needAbove = (minDeck + gap) * (tiers - 1);
-  const snap = crossbarY != null
-    && crossbarY - top >= needAbove
-    && bottom - crossbarY >= minDeck;
-
-  if (!snap) {
-    const decks: { top: number; bottom: number }[] = [];
-    let y = top;
-    for (let i = 0; i < tiers; i++) {
-      const deckBot = i === tiers - 1 ? bottom : y + evenH;
-      decks.push({ top: y, bottom: deckBot });
-      y = deckBot + gap;
-    }
-    return decks;
-  }
-
-  // Lower bowl sits behind the goal; remaining rings stack above the bar
-  // so the crossbar is not counted as an extra deck.
-  const split = Math.min(
-    bottom - minDeck - gap,
-    Math.max(top + needAbove - gap, crossbarY - 3),
-  );
-  const upperBottom = split;
-  const upperCount = tiers - 1;
-  const upperH = upperBottom - top;
-  const upperGap = gap;
-  const upperUsable = upperH - upperGap * (upperCount - 1);
-  const upperDeck = upperUsable / upperCount;
   const decks: { top: number; bottom: number }[] = [];
   let y = top;
-  for (let i = 0; i < upperCount; i++) {
-    const deckBot = i === upperCount - 1 ? upperBottom : y + upperDeck;
+  for (let i = 0; i < tiers; i++) {
+    const deckBot = i === tiers - 1 ? bottom : y + evenH;
     decks.push({ top: y, bottom: deckBot });
-    y = deckBot + upperGap;
+    y = deckBot + gap;
   }
-  decks.push({ top: split + gap, bottom });
   return decks;
 }
 
@@ -276,7 +251,7 @@ export function stadiumLayout(
     tiers: ground.tiers,
     capacity: ground.capacity,
     unique: ground.unique,
-    decks: deckBands(top, bottom, ground.tiers, view.goal.topY),
+    decks: deckBands(top, bottom, ground.tiers),
   };
 }
 
@@ -330,20 +305,14 @@ function paintPackedFans(
     }
     for (let x = Math.floor(minX) - colW; x < maxX + colW; x += colW) {
       if (rng() > layout.occupancy) continue;
-      const px = x + stagger;
-      const py = y;
+      const jitterX = Math.round((rng() - 0.5) * colW * 0.35);
+      const jitterY = Math.round((rng() - 0.5) * rowH * 0.55);
+      const px = x + stagger + jitterX;
+      const py = y + jitterY;
       const u = Math.max(0, Math.min(1, (px + colW / 2) / Math.max(1, viewW)));
       const visiting = u > 1 - Math.min(0.42, Math.max(0.14, stadium.awayShare ?? 0.2));
       const paleSection = visiting ? paleAway : paleHome;
 
-      const jitterY = Math.round((rng() - 0.5) * rowH * 0.28);
-      const headH = Math.max(1, Math.round(rowH * 0.42));
-      const headW = Math.max(1, Math.round(colW * 0.78));
-      ctx.fillStyle = HAIR_TONES[(rng() * HAIR_TONES.length) | 0];
-      ctx.fillRect(px + Math.round((colW - headW) / 2), py + jitterY, headW, headH);
-
-      const bodyH = Math.max(1, Math.round(rowH * 0.48));
-      const bodyY = py + rowH - bodyH + jitterY;
       const jacket = rng() < (paleSection ? 0.52 : 0.22);
       const civilian = !jacket && rng() < 0.18;
       ctx.fillStyle = jacket
@@ -359,12 +328,18 @@ function paintPackedFans(
               stadium.awayShare ?? 0.2,
               u,
             );
-      ctx.fillRect(px, bodyY, colW - 1, bodyH);
+      // Shirt fills the cell first so dark hair never draws a full-width stripe.
+      ctx.fillRect(px, py, colW - 1, rowH);
 
-      const faceW = Math.max(1, Math.round(colW * 0.45));
-      const faceH = Math.max(1, Math.round(rowH * 0.22));
+      const headH = Math.max(1, Math.round(rowH * 0.34));
+      const headW = Math.max(1, Math.round(colW * 0.48));
+      ctx.fillStyle = HAIR_TONES[(rng() * HAIR_TONES.length) | 0];
+      ctx.fillRect(px + Math.round((colW - headW) / 2), py, headW, headH);
+
+      const faceW = Math.max(1, Math.round(colW * 0.32));
+      const faceH = Math.max(1, Math.round(rowH * 0.18));
       ctx.fillStyle = SKIN_TONES[(rng() * SKIN_TONES.length) | 0];
-      ctx.fillRect(px + Math.round((colW - faceW) / 2), py + jitterY + Math.round(rowH * 0.22), faceW, faceH);
+      ctx.fillRect(px + Math.round((colW - faceW) / 2), py + Math.max(1, Math.round(headH * 0.45)), faceW, faceH);
     }
   }
   ctx.restore();
@@ -408,27 +383,31 @@ function crowdLayer(w: number, h: number, view: StadiumView, stadium: StadiumApp
   const rng = mulberry32(hashKey(key));
   const layout = stadiumLayout(view, profile);
   const night = Boolean(stadium.night);
-  const terrace = mixHex(stadium.homeColor, night ? '#0f172a' : '#292524', 0.78);
   const fasciaFill = night ? '#0b1220' : '#334155';
-  const fasciaLip = night ? '#f8fafc' : '#f1f5f9';
-  const fasciaShade = night ? '#020617' : '#1e293b';
 
   ctx.fillStyle = fasciaFill;
   ctx.fillRect(0, layout.top, w, Math.max(1, layout.bottom - layout.top));
 
+  const step = layout.decks.length > 1 ? Math.max(5, Math.round(w * 0.01)) : 0;
+  const walkway = night ? '#1e293b' : '#64748b';
+  const walkwayEdge = night ? '#475569' : '#94a3b8';
+
   for (let i = 0; i < layout.decks.length; i++) {
     const deck = layout.decks[i];
+    const inset = (layout.decks.length - 1 - i) * step;
+    const deckW = Math.max(1, w - inset * 2);
+    // Alternate kit-wash vs charcoal so 3 / 4 / 5 rings count as colour blocks.
     const deckTint = i % 2 === 0
-      ? terrace
-      : mixHex(terrace, night ? '#000000' : '#111827', 0.22);
+      ? mixHex(stadium.homeColor, night ? '#1e293b' : '#334155', 0.52)
+      : mixHex(stadium.homeColor, night ? '#020617' : '#0f172a', 0.82);
     ctx.fillStyle = deckTint;
-    ctx.fillRect(0, deck.top, w, Math.max(1, deck.bottom - deck.top));
+    ctx.fillRect(inset, deck.top, deckW, Math.max(1, deck.bottom - deck.top));
     paintPackedFans(
       ctx,
-      { x: 0, y: deck.top },
-      { x: w, y: deck.top },
-      { x: w, y: deck.bottom },
-      { x: 0, y: deck.bottom },
+      { x: inset, y: deck.top },
+      { x: inset + deckW, y: deck.top },
+      { x: inset + deckW, y: deck.bottom },
+      { x: inset, y: deck.bottom },
       rng,
       stadium,
       w,
@@ -436,15 +415,16 @@ function crowdLayer(w: number, h: number, view: StadiumView, stadium: StadiumApp
     );
     if (i < layout.decks.length - 1) {
       const next = layout.decks[i + 1];
+      const nextInset = (layout.decks.length - 1 - (i + 1)) * step;
       const gapTop = deck.bottom;
       const gapH = Math.max(1, next.top - deck.bottom);
-      ctx.fillStyle = fasciaFill;
-      ctx.fillRect(0, gapTop, w, gapH);
-      ctx.fillStyle = fasciaShade;
-      ctx.fillRect(0, gapTop, w, Math.max(2, Math.round(gapH * 0.35)));
-      const rail = Math.max(3, Math.min(5, Math.round(gapH * 0.28)));
-      ctx.fillStyle = fasciaLip;
-      ctx.fillRect(0, next.top - rail, w, rail);
+      const gapX = nextInset;
+      const gapW = Math.max(1, w - nextInset * 2);
+      ctx.fillStyle = walkway;
+      ctx.fillRect(gapX, gapTop, gapW, gapH);
+      const lip = Math.max(1, Math.min(2, Math.round(gapH * 0.22)));
+      ctx.fillStyle = walkwayEdge;
+      ctx.fillRect(gapX, next.top - lip, gapW, lip);
     }
   }
 

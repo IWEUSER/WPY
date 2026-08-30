@@ -2341,15 +2341,21 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
     }
     const heights = layout.decks.map((d) => d.bottom - d.top);
     const spread = Math.max(...heights) - Math.min(...heights);
-    const upper = heights.slice(0, -1);
-    const upperSpread = upper.length ? Math.max(...upper) - Math.min(...upper) : 0;
-    if (spread > 1.2 && upperSpread > 1.2) {
-      console.error(`${label} decks must be even rings, spread ${spread.toFixed(2)}px`);
+    if (spread > 1.2) {
+      console.error(`${label} decks must be the same height, spread ${spread.toFixed(2)}px`);
       process.exitCode = 1;
     }
-    if (n >= 2 && layout.aisleEvery !== 0) {
-      console.error(`${label} must not paint vomitory aisles inside stacked decks`);
-      process.exitCode = 1;
+    if (n >= 2) {
+      const walkway = layout.decks[1].top - layout.decks[0].bottom;
+      const minDeck = Math.min(...heights);
+      if (walkway >= minDeck * 0.35) {
+        console.error(`${label} walkways must stay thinner than the seating rings`);
+        process.exitCode = 1;
+      }
+      if (layout.aisleEvery !== 0) {
+        console.error(`${label} must not paint vomitory aisles inside stacked decks`);
+        process.exitCode = 1;
+      }
     }
   };
   evenDecks(cityL, 3, 'Etihad');
