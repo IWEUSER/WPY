@@ -18,7 +18,7 @@ import { nationKit } from '../src/game/career/data/nationColours';
 import { resolveMatchStadium } from '../src/game/career/matchVenue';
 import { crowdSwatch, kitFromColor, kitFromScheme, luminance } from '../src/game/shooting/kitPalette';
 import { createPitchView, MAX_SHOT_DISTANCE_M, MIN_SHOT_DISTANCE_M } from '../src/game/shooting/render';
-import { standBottomY } from '../src/game/shooting/stadium';
+import { standBottomY, crowdCellSize } from '../src/game/shooting/stadium';
 import { clubKit } from '../src/game/career/data/clubKits';
 import { clubContinentalCup, internationalCampaignForSeason, internationalTournamentForSeason } from '../src/game/career/data/competitions';
 import { cupFromLeaguePosition, continentalQualificationForNextSeason } from '../src/game/career/europeanQualification';
@@ -2195,6 +2195,17 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
   }
   if (closeStand <= close.h * 0.22) {
     console.error('a 6-yard camera must extend the crowd below a 22% screen cap');
+    process.exitCode = 1;
+  }
+  const closeCell = crowdCellSize(closeStand - close.h * 0.028);
+  const farCell = crowdCellSize(farStand - far.h * 0.028);
+  console.log('crowd cell close/far', closeCell.rowH.toFixed(2), farCell.rowH.toFixed(2));
+  if (closeCell.rowH < 6) {
+    console.error('close-up fans must be large enough to read as people, not a flat wall');
+    process.exitCode = 1;
+  }
+  if (closeCell.rowH <= farCell.rowH) {
+    console.error('close-up fans must scale larger than the 30-yard terrace speckle');
     process.exitCode = 1;
   }
 }
