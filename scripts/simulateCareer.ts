@@ -2287,7 +2287,7 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
   }
   const eliteBowl = stadiumLayout(close, 'elite');
   const localBowl = stadiumLayout(close, 'local');
-  console.log('bowl top elite/local', eliteBowl.top.toFixed(1), localBowl.top.toFixed(1), 'aisles', eliteBowl.aisleEvery, localBowl.aisleEvery);
+  console.log('bowl top elite/local', eliteBowl.top.toFixed(1), localBowl.top.toFixed(1), 'decks', eliteBowl.decks.length, localBowl.decks.length);
   if (localBowl.top <= eliteBowl.top + 80) {
     console.error('a local ground must show more sky above the terrace than an elite bowl');
     process.exitCode = 1;
@@ -2296,8 +2296,8 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
     console.error('Camp Nou-scale bowls need a roof; municipal two-deck stands do not');
     process.exitCode = 1;
   }
-  if (eliteBowl.aisleEvery >= localBowl.aisleEvery) {
-    console.error('elite bowls should have more tiers than a local terrace');
+  if (eliteBowl.decks.length <= localBowl.decks.length) {
+    console.error('elite bowls should have more decks than a local terrace');
     process.exitCode = 1;
   }
 
@@ -2331,6 +2331,35 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
     console.error('deck counts must follow the stadium table');
     process.exitCode = 1;
   }
+  const cityL = stadiumLayout(close, groundForClub('man-city'));
+  const fourL = stadiumLayout(close, { name: 'Four-deck', capacity: 55_000, tiers: 4 });
+  const evenDecks = (layout: ReturnType<typeof stadiumLayout>, n: number, label: string) => {
+    if (layout.decks.length !== n) {
+      console.error(`${label} must be ${n} decks, got ${layout.decks.length}`);
+      process.exitCode = 1;
+      return;
+    }
+    const heights = layout.decks.map((d) => d.bottom - d.top);
+    const spread = Math.max(...heights) - Math.min(...heights);
+    if (spread > 1.2) {
+      console.error(`${label} decks must be even, spread ${spread.toFixed(2)}px`);
+      process.exitCode = 1;
+    }
+    if (n >= 2 && layout.aisleEvery !== 0) {
+      console.error(`${label} must not paint vomitory aisles inside stacked decks`);
+      process.exitCode = 1;
+    }
+  };
+  evenDecks(cityL, 3, 'Etihad');
+  evenDecks(barcaL, 5, 'Camp Nou');
+  evenDecks(fourL, 4, 'four-deck bowl');
+  evenDecks(getafeL, 2, 'Getafe');
+  console.log(
+    'even decks city/barca/four',
+    cityL.decks.map((d) => (d.bottom - d.top).toFixed(1)).join('/'),
+    barcaL.decks.map((d) => (d.bottom - d.top).toFixed(1)).join('/'),
+    fourL.decks.map((d) => (d.bottom - d.top).toFixed(1)).join('/'),
+  );
   if (!(dortmundL.top < lazioL.top && lazioL.top < liverpoolL.top)) {
     console.error('single-deck stands must still scale height with capacity');
     process.exitCode = 1;

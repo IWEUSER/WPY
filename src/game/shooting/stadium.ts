@@ -198,14 +198,27 @@ export function standTopFrac(capacity: number, unique?: 'camp-nou'): number {
 function deckBands(top: number, bottom: number, tiers: number): { top: number; bottom: number }[] {
   const height = Math.max(8, bottom - top);
   if (tiers <= 1) return [{ top, bottom }];
-  const fascia = Math.max(3.2, Math.min(11, height * 0.026));
-  const usable = height - fascia * (tiers - 1);
+  // One concourse between decks — never a lip inside the crowd, or a 3-deck
+  // bowl reads as six uneven bands (City / Allianz / Emirates).
+  const concourse = Math.max(
+    7,
+    Math.min(18, height * (0.1 / Math.max(2, tiers))),
+  );
+  let gap = concourse;
+  let usable = height - gap * (tiers - 1);
+  const minDeck = 12;
+  if (usable / tiers < minDeck) {
+    gap = Math.max(4, (height - minDeck * tiers) / Math.max(1, tiers - 1));
+    usable = height - gap * (tiers - 1);
+  }
   const deckH = usable / tiers;
   const decks: { top: number; bottom: number }[] = [];
   let y = top;
   for (let i = 0; i < tiers; i++) {
-    decks.push({ top: y, bottom: y + deckH });
-    y += deckH + fascia;
+    const deckTop = i === 0 ? top : y;
+    const deckBot = i === tiers - 1 ? bottom : deckTop + deckH;
+    decks.push({ top: deckTop, bottom: deckBot });
+    y = deckBot + gap;
   }
   return decks;
 }
@@ -229,7 +242,7 @@ export function stadiumLayout(
   return {
     top,
     bottom,
-    aisleEvery: ground.tiers === 1 ? 16 : ground.tiers === 2 ? 12 : ground.tiers === 3 ? 9 : 7,
+    aisleEvery: ground.tiers === 1 ? 22 : 0,
     occupancy: lerp(0.8, 0.995, ground.unique === 'camp-nou' ? 1 : t),
     roof,
     scale,
@@ -262,7 +275,7 @@ function paintPackedFans(
   const maxX = Math.max(tl.x, tr.x, br.x, bl.x);
   const minY = Math.min(tl.y, tr.y, br.y, bl.y);
   const maxY = Math.max(tl.y, tr.y, br.y, bl.y);
-  const standH = Math.max(8, maxY - minY);
+  const standH = Math.max(8, layout.bottom - layout.top);
   const { rowH: rawRow, colW: rawCol } = crowdCellSize(standH);
   const rowH = Math.max(3, Math.round(rawRow));
   const colW = Math.max(3, Math.round(rawCol));
@@ -388,14 +401,14 @@ function crowdLayer(w: number, h: number, view: StadiumView, stadium: StadiumApp
       w,
       layout,
     );
-    // Lip at the front of each deck so stacked tiers read as separate rings.
-    const lipH = Math.max(2, Math.min(5, (deck.bottom - deck.top) * 0.06));
-    ctx.fillStyle = fasciaLip;
-    ctx.fillRect(0, deck.bottom - lipH, w, lipH);
     if (i < layout.decks.length - 1) {
       const next = layout.decks[i + 1];
+      const gapTop = deck.bottom;
+      const gapH = Math.max(1, next.top - deck.bottom);
       ctx.fillStyle = fasciaFill;
-      ctx.fillRect(0, deck.bottom, w, Math.max(1, next.top - deck.bottom));
+      ctx.fillRect(0, gapTop, w, gapH);
+      ctx.fillStyle = fasciaLip;
+      ctx.fillRect(0, gapTop, w, Math.max(1, Math.min(2, gapH * 0.28)));
     }
   }
 

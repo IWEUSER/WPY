@@ -173,7 +173,7 @@ function readDevStadium(): StadiumAppearance | null {
   const capacityN = capacityRaw ? Number(capacityRaw) : NaN;
   const tiersN = tiersRaw ? Number(tiersRaw) : NaN;
   const capacity = Number.isFinite(capacityN) ? capacityN : ground?.capacity;
-  const standTiers = (tiersN === 1 || tiersN === 2 || tiersN === 3 || tiersN === 5)
+  const standTiers = (tiersN === 1 || tiersN === 2 || tiersN === 3 || tiersN === 4 || tiersN === 5)
     ? tiersN
     : ground?.tiers;
   return {

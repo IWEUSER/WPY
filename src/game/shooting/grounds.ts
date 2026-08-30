@@ -5,7 +5,7 @@
  * shorter than Real Sociedad (the smallest listed ground).
  */
 
-export type StandTiers = 1 | 2 | 3 | 5;
+export type StandTiers = 1 | 2 | 3 | 4 | 5;
 
 export interface ClubGround {
   name: string;
