@@ -2341,8 +2341,10 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
     }
     const heights = layout.decks.map((d) => d.bottom - d.top);
     const spread = Math.max(...heights) - Math.min(...heights);
-    if (spread > 1.2) {
-      console.error(`${label} decks must be even, spread ${spread.toFixed(2)}px`);
+    const upper = heights.slice(0, -1);
+    const upperSpread = upper.length ? Math.max(...upper) - Math.min(...upper) : 0;
+    if (spread > 1.2 && upperSpread > 1.2) {
+      console.error(`${label} decks must be even rings, spread ${spread.toFixed(2)}px`);
       process.exitCode = 1;
     }
     if (n >= 2 && layout.aisleEvery !== 0) {

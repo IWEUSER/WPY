@@ -195,31 +195,58 @@ export function standTopFrac(capacity: number, unique?: 'camp-nou'): number {
   return lerp(0.48, 0.055, t ** 0.9);
 }
 
-function deckBands(top: number, bottom: number, tiers: number): { top: number; bottom: number }[] {
+function deckBands(
+  top: number,
+  bottom: number,
+  tiers: number,
+  crossbarY?: number,
+): { top: number; bottom: number }[] {
   const height = Math.max(8, bottom - top);
   if (tiers <= 1) return [{ top, bottom }];
-  // One concourse between decks — never a lip inside the crowd, or a 3-deck
-  // bowl reads as six uneven bands (City / Allianz / Emirates).
-  const concourse = Math.max(
+  const gap = Math.max(
     14,
     Math.min(28, height * (0.2 / Math.max(2, tiers))),
   );
-  let gap = concourse;
-  let usable = height - gap * (tiers - 1);
-  const minDeck = 12;
-  if (usable / tiers < minDeck) {
-    gap = Math.max(4, (height - minDeck * tiers) / Math.max(1, tiers - 1));
-    usable = height - gap * (tiers - 1);
+  const minDeck = 16;
+  const evenUsable = height - gap * (tiers - 1);
+  const evenH = evenUsable / tiers;
+
+  const needAbove = (minDeck + gap) * (tiers - 1);
+  const snap = crossbarY != null
+    && crossbarY - top >= needAbove
+    && bottom - crossbarY >= minDeck;
+
+  if (!snap) {
+    const decks: { top: number; bottom: number }[] = [];
+    let y = top;
+    for (let i = 0; i < tiers; i++) {
+      const deckBot = i === tiers - 1 ? bottom : y + evenH;
+      decks.push({ top: y, bottom: deckBot });
+      y = deckBot + gap;
+    }
+    return decks;
   }
-  const deckH = usable / tiers;
+
+  // Lower bowl sits behind the goal; remaining rings stack above the bar
+  // so the crossbar is not counted as an extra deck.
+  const split = Math.min(
+    bottom - minDeck - gap,
+    Math.max(top + needAbove - gap, crossbarY - 3),
+  );
+  const upperBottom = split;
+  const upperCount = tiers - 1;
+  const upperH = upperBottom - top;
+  const upperGap = gap;
+  const upperUsable = upperH - upperGap * (upperCount - 1);
+  const upperDeck = upperUsable / upperCount;
   const decks: { top: number; bottom: number }[] = [];
   let y = top;
-  for (let i = 0; i < tiers; i++) {
-    const deckTop = i === 0 ? top : y;
-    const deckBot = i === tiers - 1 ? bottom : deckTop + deckH;
-    decks.push({ top: deckTop, bottom: deckBot });
-    y = deckBot + gap;
+  for (let i = 0; i < upperCount; i++) {
+    const deckBot = i === upperCount - 1 ? upperBottom : y + upperDeck;
+    decks.push({ top: y, bottom: deckBot });
+    y = deckBot + upperGap;
   }
+  decks.push({ top: split + gap, bottom });
   return decks;
 }
 
@@ -249,7 +276,7 @@ export function stadiumLayout(
     tiers: ground.tiers,
     capacity: ground.capacity,
     unique: ground.unique,
-    decks: deckBands(top, bottom, ground.tiers),
+    decks: deckBands(top, bottom, ground.tiers, view.goal.topY),
   };
 }
 

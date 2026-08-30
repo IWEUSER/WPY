@@ -275,6 +275,8 @@ export function drawGoal(ctx: CanvasRenderingContext2D, view: PitchView) {
   ctx.beginPath();
   ctx.rect(w / 2 - halfW, topY, halfW * 2, botY - topY);
   ctx.clip();
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.55)';
+  ctx.fillRect(w / 2 - halfW, topY, halfW * 2, botY - topY);
   ctx.strokeStyle = 'rgba(255,255,255,0.22)';
   ctx.lineWidth = 1;
   const netCols = 16;
