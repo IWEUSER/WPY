@@ -2340,15 +2340,21 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
       return;
     }
     const heights = layout.decks.map((d) => d.bottom - d.top);
-    const spread = Math.max(...heights) - Math.min(...heights);
-    if (spread > 1.2) {
-      console.error(`${label} decks must be the same height, spread ${spread.toFixed(2)}px`);
+    const packed = heights.slice(0, -1);
+    const packedSpread = packed.length ? Math.max(...packed) - Math.min(...packed) : 0;
+    const lastTaller = heights.length > 1 && heights[heights.length - 1] > heights[0] + 1.2;
+    if (packedSpread > 1.2 || (!lastTaller && Math.max(...heights) - Math.min(...heights) > 1.2)) {
+      console.error(`${label} decks must be even rings, spread packed=${packedSpread.toFixed(2)}`);
+      process.exitCode = 1;
+    }
+    if (lastTaller && layout.decks[layout.decks.length - 1].top > close.goal.topY + 4) {
+      console.error(`${label} lowest ring should meet the crossbar so the goal is not an extra deck`);
       process.exitCode = 1;
     }
     if (n >= 2) {
       const walkway = layout.decks[1].top - layout.decks[0].bottom;
-      const minDeck = Math.min(...heights);
-      if (walkway >= minDeck * 0.35) {
+      const minPacked = Math.min(...(packed.length ? packed : heights));
+      if (walkway >= minPacked * 0.4) {
         console.error(`${label} walkways must stay thinner than the seating rings`);
         process.exitCode = 1;
       }
