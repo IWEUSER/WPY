@@ -2,7 +2,7 @@ import { getClub } from '../data/clubs';
 import { INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { currentCalendarWeek } from '../calendar';
 import { awardLabels, careerAwardCounts, careerTrophyCounts, formatGamesGoals, seasonClubName, seasonLeagueLabel, seasonRatio } from '../honoursDisplay';
-import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons } from '../playerValue';
+import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
 import { countsTowardCareerRecord, displaySeasonLabel } from '../seasonDisplay';
 import { aggregateContinental, aggregateDomestic, continentalLabel } from '../seasonStats';
 import { useCareerStore } from '../store';
@@ -99,10 +99,12 @@ export default function CareerRecordScreen() {
                 calendarWeek: week,
               })
             : null;
+        const fee = value != null ? transferFeeFromValue(value, contractYearsRemaining) : null;
         if (value == null && careerEarnings <= 0 && weeklyWage <= 0) return null;
         return (
           <p className="mt-3 text-center text-sm text-white/60">
             {value != null ? `Market value ${formatEuros(value)}` : ''}
+            {fee != null ? ` · Transfer fee ${fee <= 0 ? 'Free' : formatEuros(fee)}` : ''}
             {value != null && (careerEarnings > 0 || weeklyWage > 0) ? ' · ' : ''}
             {careerEarnings > 0 || weeklyWage > 0
               ? `Earnings ${formatEuros(careerEarnings)}${weeklyWage > 0 ? ` · ${formatWeeklyWage(weeklyWage)}` : ''}`

@@ -7,7 +7,7 @@ import { describeInjury } from '../injury';
 import { clubEligibleForNationalTeam, getNation, isSelectedForNationalTeam, seasonRatioForSelection, selectionRatioForNation } from '../international';
 import type { SeasonStandings } from '../matchEngine';
 import { displaySeasonLabel } from '../seasonDisplay';
-import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons } from '../playerValue';
+import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
 import { conferenceTable, fixtureTitle, internationalRoundLabel, nextPlayableFixture, type SeasonSimState } from '../seasonSim';
 import { useCareerStore } from '../store';
 
@@ -70,6 +70,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
     seasonNumber,
     calendarWeek: week,
   });
+  const transferFee = transferFeeFromValue(marketValue, contractYearsRemaining);
 
   return (
     <div className="flex h-full w-full flex-col overflow-y-auto px-5 py-[max(1.25rem,env(safe-area-inset-top))] pb-10 text-white">
@@ -98,7 +99,10 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         {nation && <p className="mt-1 text-xs text-white/50">International: {nation.name}</p>}
         {parentClub && <p className="mt-1 text-xs text-white/40">On loan from {parentClub.name}</p>}
         {seasonNumber >= 2 && (
-          <p className="mt-1 text-xs text-white/50">Market value {formatEuros(marketValue)}</p>
+          <p className="mt-1 text-xs text-white/50">
+            Market value {formatEuros(marketValue)}
+            {` · Transfer fee ${transferFee <= 0 ? 'Free' : formatEuros(transferFee)}`}
+          </p>
         )}
         {(careerEarnings > 0 || weeklyWage > 0) && (
           <p className="mt-1 text-xs text-white/50">

@@ -208,18 +208,31 @@ export function applyCareerLayoutPreview(): void {
     fallbackClub: club,
   });
   const pendingTransfer: PendingTransfer | null =
-    preview === 'transfer'
+    preview === 'expired'
+      ? {
+          kind: 'end-of-season',
+          detail: 'Out of contract: more clubs can bid because there is no fee. You can stay where you are.',
+          clubIds: ['real-madrid', 'man-city', 'psg', 'bayern', 'arsenal', 'chelsea'],
+          offers: ['real-madrid', 'man-city', 'psg', 'bayern', 'arsenal', 'chelsea'].map((clubId) => ({
+            clubId,
+            move: 'permanent' as const,
+            fee: 0,
+            weeklyWage: weeklyWageForClub(getClub(clubId)!, value),
+          })),
+          allowDecline: true,
+        }
+      : preview === 'transfer'
       ? {
           kind: 'loan-or-transfer',
-          detail: 'Loan offers let you return next season. Permanent offers follow your market value, not just this season.',
-          clubIds: ['dortmund', 'real-sociedad', 'sevilla', 'barcelona', 'bayern', 'atletico-madrid'],
+          detail: 'Loan wages follow your value. A €200m fee is only payable by PSG, Real Madrid or Manchester City.',
+          clubIds: ['dortmund', 'real-sociedad', 'sevilla', 'psg', 'real-madrid', 'man-city'],
           offers: [
             { clubId: 'dortmund', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('dortmund')!, value) },
             { clubId: 'real-sociedad', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('real-sociedad')!, value) },
             { clubId: 'sevilla', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('sevilla')!, value) },
-            { clubId: 'barcelona', move: 'permanent', fee: value, weeklyWage: weeklyWageForClub(getClub('barcelona')!, value) },
-            { clubId: 'bayern', move: 'permanent', fee: value, weeklyWage: weeklyWageForClub(getClub('bayern')!, value) },
-            { clubId: 'atletico-madrid', move: 'permanent', fee: value, weeklyWage: weeklyWageForClub(getClub('atletico-madrid')!, value) },
+            { clubId: 'psg', move: 'permanent', fee: value, weeklyWage: weeklyWageForClub(getClub('psg')!, value) },
+            { clubId: 'real-madrid', move: 'permanent', fee: value, weeklyWage: weeklyWageForClub(getClub('real-madrid')!, value) },
+            { clubId: 'man-city', move: 'permanent', fee: value, weeklyWage: weeklyWageForClub(getClub('man-city')!, value) },
           ],
           allowDecline: false,
         }
@@ -252,7 +265,7 @@ export function applyCareerLayoutPreview(): void {
     phase:
       preview === 'record'
         ? 'career'
-        : preview === 'transfer'
+        :       preview === 'transfer' || preview === 'expired'
           ? 'transfer-choice'
           : preview === 'result'
             ? 'match-result'
@@ -337,8 +350,8 @@ export function applyCareerLayoutPreview(): void {
     },
     weeklyWage: preview === 'end' ? 40_000 : promoteSummary && leicester ? weeklyWageForClub(leicester, value, 'Championship') : 140_000,
     careerEarnings: preview === 'end' ? 86_400_000 : 14_560_000,
-    contractYears: preview === 'end' ? 1 : promoteSummary ? 2 : 5,
-    contractYearsRemaining: preview === 'end' ? 1 : promoteSummary ? 2 : 5,
+    contractYears: preview === 'end' ? 1 : promoteSummary || preview === 'expired' ? 2 : preview === 'hub' ? 2 : 5,
+    contractYearsRemaining: preview === 'end' || preview === 'expired' ? 1 : promoteSummary || preview === 'hub' ? 2 : 5,
     clubLeague: preview === 'end' || preview === 'mls' ? 'MLS' : preview === 'saudi' ? 'Saudi Pro League' : promoteSummary ? 'Championship' : 'La Liga',
     seasonSponsorship: preview === 'end' ? 280_000 : 9_300_000,
     injuryGamesRemaining: 0,

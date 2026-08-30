@@ -64,14 +64,33 @@ export function newContractYears(age: number): number {
   return maxContractYearsForAge(age);
 }
 
-/** Full fee on a 5-year deal; one year left is a fire sale; expired is free. */
+/** Full fee on a 5-year deal; expired / final year is a free transfer. */
 export function contractValueFactor(yearsRemaining: number): number {
   if (yearsRemaining >= 5) return 1;
   if (yearsRemaining === 4) return 0.88;
   if (yearsRemaining === 3) return 0.72;
   if (yearsRemaining === 2) return 0.48;
-  if (yearsRemaining === 1) return 0.22;
   return 0;
+}
+
+/** Only these sides can fund a €200m+ transfer. */
+export const MEGA_CLUB_IDS = new Set(['psg', 'real-madrid', 'man-city']);
+export const MEGA_TRANSFER_FEE = 180_000_000;
+
+export function clubTransferBudget(club: Club): number {
+  if (MEGA_CLUB_IDS.has(club.id)) return 260_000_000;
+  if (club.tier === 1) return 130_000_000;
+  if (club.tier === 2) return 60_000_000;
+  if (club.tier === 3) return 25_000_000;
+  if (club.tier === 4) return 8_000_000;
+  return 2_500_000;
+}
+
+/** What a buying club would actually pay. Market value itself ignores the deal. */
+export function transferFeeFromValue(marketValue: number, yearsRemaining: number): number {
+  const factor = contractValueFactor(yearsRemaining);
+  if (factor <= 0) return 0;
+  return Math.round((marketValue * factor) / 100_000) * 100_000;
 }
 
 export function nextContractYearsRemaining(yearsRemaining: number, age: number): number {
@@ -187,7 +206,6 @@ export function playerMarketValueFromSeasons(params: {
     return YOUTH_MARKET_VALUE;
   }
   const { age, fallbackClub } = params;
-  const yearsLeft = params.contractYearsRemaining ?? DEFAULT_CONTRACT_YEARS;
   let careerGoals = params.careerGoals;
   let careerGames = params.careerGames;
   const seasons = params.seasons.filter((season) => {
@@ -211,8 +229,7 @@ export function playerMarketValueFromSeasons(params: {
   const scale = weight > 0 ? weighted / weight : clubLeagueScale(fallbackClub);
   const base = valueFromScale(age, ratio, careerGoals, scale);
   const poor = consecutivePoorFactor(consecutiveSeasonsBelow(seasons, 0.25));
-  const contract = contractValueFactor(yearsLeft);
-  const raw = base * poor * (contract <= 0 ? 0.08 : contract);
+  const raw = base * poor;
   return Math.max(100_000, Math.round(raw / 100_000) * 100_000);
 }
 

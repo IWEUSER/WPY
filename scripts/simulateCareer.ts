@@ -16,7 +16,7 @@ import {
   meanChancesFromStrength,
 } from '../src/game/career/chanceEngine';
 import { assignClubTier, CLUBS, clubsForSeason, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, leagueMatchWeeks, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
-import { consecutivePoorFactor, contractValueFactor, formAdjustedRatio, loanContractYearsRemaining, maxContractYearsForAge, playerMarketValue, playerMarketValueFromSeasons, RESERVE_CONTRACT_YEARS, seasonalSponsorship, tierForMarketValue, weeklyWageForClub, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
+import { consecutivePoorFactor, contractValueFactor, formAdjustedRatio, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, playerMarketValue, playerMarketValueFromSeasons, RESERVE_CONTRACT_YEARS, seasonalSponsorship, tierForMarketValue, transferFeeFromValue, weeklyWageForClub, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { internationalCampaignForSeason, internationalTournamentForSeason } from '../src/game/career/data/competitions';
 import { fifaRank } from '../src/game/career/data/fifaRankings';
@@ -946,9 +946,15 @@ if (barca && hilal && lafc) {
     fallbackClub: barca,
     contractYearsRemaining: 1,
   });
-  console.log('contract 5yr', fiveYear, '1yr', oneYear, 'factor', contractValueFactor(1));
-  if (oneYear > fiveYear * 0.35) {
-    console.error('one year left on a contract must cut the fee far below a 5-year deal');
+  const feeFive = transferFeeFromValue(fiveYear, 5);
+  const feeOne = transferFeeFromValue(oneYear, 1);
+  console.log('contract value 5yr', fiveYear, '1yr', oneYear, 'fees', feeFive, feeOne, 'factor', contractValueFactor(1));
+  if (fiveYear !== oneYear) {
+    console.error('intrinsic market value must ignore contract length');
+    process.exitCode = 1;
+  }
+  if (feeOne !== 0 || feeFive !== fiveYear) {
+    console.error('an expiring deal must be a free transfer; a 5-year deal asks the full fee');
     process.exitCode = 1;
   }
   const expiring = resolveSeasonTransition({
@@ -965,10 +971,41 @@ if (barca && hilal && lafc) {
     seasonHistory: [{ ...dummySeason, seasonNumber: 2, clubId: 'barcelona', goals: 40, gamesPlayed: 50 }],
     contractYearsRemaining: 1,
   });
-  const expiringFees = (expiring.pendingTransfer?.offers ?? []).filter((o) => o.move === 'permanent').map((o) => o.fee);
-  console.log('expiring fees', expiringFees);
+  const expiringPerm = (expiring.pendingTransfer?.offers ?? []).filter((o) => o.move === 'permanent');
+  const expiringFees = expiringPerm.map((o) => o.fee);
+  const expiringTiers = expiringPerm.map((o) => getClub(o.clubId)?.tier ?? 5);
+  console.log('expiring fees', expiringFees, 'count', expiringPerm.length, 'tiers', expiringTiers);
   if (expiringFees.some((fee) => fee !== 0)) {
     console.error('when the contract expires, transfer fees must be zero');
+    process.exitCode = 1;
+  }
+  if (expiringPerm.length < 5 || expiringTiers.some((tier) => tier >= 4)) {
+    console.error('an expiring star must get more quality-club free bids, not weaker clubs');
+    process.exitCode = 1;
+  }
+  const paidStar = resolveSeasonTransition({
+    season: { ...dummySeason, clubId: 'barcelona', goals: 30, gamesPlayed: 38 },
+    role: 'first-team',
+    clubId: 'barcelona',
+    parentClubId: 'barcelona',
+    seasonsAtCurrentClub: 1,
+    age: 21,
+    careerGoals: 80,
+    careerGames: 100,
+    nationality: 'spain',
+    loansUsed: 0,
+    seasonHistory: [{ ...dummySeason, seasonNumber: 2, clubId: 'barcelona', goals: 40, gamesPlayed: 50 }],
+    contractYearsRemaining: 5,
+  });
+  const paidPerm = (paidStar.pendingTransfer?.offers ?? []).filter((o) => o.move === 'permanent');
+  const paidIds = paidPerm.map((o) => o.clubId);
+  console.log('€200m 5yr bidders', paidIds, paidPerm.map((o) => o.fee));
+  if (paidIds.length === 0 || paidIds.some((id) => !MEGA_CLUB_IDS.has(id))) {
+    console.error('a €200m fee must only attract PSG, Real Madrid or Manchester City');
+    process.exitCode = 1;
+  }
+  if (paidPerm.some((o) => o.fee < 180_000_000)) {
+    console.error('a 5-year deal at star value must ask a mega-club fee');
     process.exitCode = 1;
   }
 
