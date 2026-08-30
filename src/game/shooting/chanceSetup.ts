@@ -1,0 +1,193 @@
+import {
+  CAM_BEHIND_M,
+  CAMERA_FOCAL,
+  FIFA,
+  YARD_M,
+  randomBallStartXRatio,
+  randomShotDistanceM,
+  worldToScreen,
+  type PitchView,
+} from './render';
+
+/** Minimum gap from the ball to an open-play defender, when the pitch allows it. */
+export const DEFENDER_GAP_YARDS = 10;
+export const DEFENDER_GAP_M = DEFENDER_GAP_YARDS * YARD_M;
+
+/** Don't plant a defender on the goal line itself. */
+const MIN_DEFENDER_Z_M = 2.2;
+/** How far off the ball→goal-centre line a close-range cover must stand. */
+const CLOSE_COVER_MIN_OFFSET_M = 1.65;
+const CLOSE_COVER_MAX_OFFSET_M = 2.85;
+
+export interface DefenderPose {
+  worldX: number;
+  /** Metres from the goal line toward the ball. */
+  z: number;
+  /** Which post they shade: −1 left, +1 right from the shooter's view. */
+  coverSide: -1 | 1;
+}
+
+export type ChanceKind = 'open' | 'penalty';
+
+export interface ChanceSetup {
+  kind: ChanceKind;
+  distanceM: number;
+  ballStartXRatio: number;
+  defender: DefenderPose | null;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+/**
+ * World X of the idle ball. The camera sits a fixed distance behind the ball,
+ * so this does not depend on canvas size.
+ */
+export function ballWorldXFromRatio(xRatio: number): number {
+  return (xRatio - 0.5) * CAM_BEHIND_M / CAMERA_FOCAL;
+}
+
+/** X on the straight line from the ball to the centre of the goal, at depth z. */
+export function lineToGoalCentreX(ballWorldX: number, shotDistanceM: number, z: number): number {
+  if (shotDistanceM <= 1e-6) return 0;
+  return ballWorldX * (z / shotDistanceM);
+}
+
+/**
+ * Penalties a club of this strength typically wins in a 38-game league season.
+ * Weak sides (~52) sit around 3; elite sides (~94) around 8; a mid-table 70
+ * is about 5 — the Premier League average.
+ */
+export function expectedPenaltiesPerSeason(clubStrength: number): number {
+  const t = clamp((clubStrength - 52) / (94 - 52), 0, 1);
+  return 3.2 + t * 4.8;
+}
+
+/**
+ * Expected player chances across a 38-game league season. Mirrors
+ * `meanChancesFromStrength` in the career chance engine so penalty frequency
+ * stays a season rate, not an arbitrary per-shot spice.
+ */
+export function expectedChancesPerLeagueSeason(clubStrength: number): number {
+  const t = clamp((clubStrength - 52) / (94 - 52), 0, 1);
+  const meanPerMatch = 0.8 + t * 2.4;
+  return meanPerMatch * 38;
+}
+
+/** Per-chance probability that this look is a penalty. */
+export function penaltyChanceProbability(clubStrength = 70): number {
+  const chances = expectedChancesPerLeagueSeason(clubStrength);
+  return clamp(expectedPenaltiesPerSeason(clubStrength) / Math.max(1, chances), 0.02, 0.14);
+}
+
+export function rollIsPenalty(clubStrength: number, rng: () => number): boolean {
+  return rng() < penaltyChanceProbability(clubStrength);
+}
+
+export function canKeepTenYardGap(shotDistanceM: number): boolean {
+  return shotDistanceM - DEFENDER_GAP_M >= MIN_DEFENDER_Z_M - 1e-6;
+}
+
+/**
+ * Place one outfield defender. When the ball is far enough from goal they
+ * stand at least 10 yards from it, biased toward the goal so they shrink
+ * the target. When the ball has spawned too close for that gap, they stand
+ * near the six-yard line but off the shooting line, shading one post.
+ */
+export function placeDefender(
+  shotDistanceM: number,
+  ballStartXRatio: number,
+  rng: () => number = Math.random,
+): DefenderPose {
+  const ballWorldX = ballWorldXFromRatio(ballStartXRatio);
+  const coverSide: -1 | 1 = rng() < 0.5 ? -1 : 1;
+  const maxZ = shotDistanceM - DEFENDER_GAP_M;
+
+  if (maxZ >= MIN_DEFENDER_Z_M) {
+    const t = 0.12 + rng() * 0.5;
+    const z = MIN_DEFENDER_Z_M + t * (maxZ - MIN_DEFENDER_Z_M);
+    const offset = 1.4 + rng() * 1.8;
+    const worldX = clamp(lineToGoalCentreX(ballWorldX, shotDistanceM, z) + coverSide * offset, -7.5, 7.5);
+    return { worldX, z, coverSide };
+  }
+
+  const z = clamp(Math.min(shotDistanceM * 0.38, 3.2), 1.55, Math.max(1.55, shotDistanceM - 1.15));
+  const offset = CLOSE_COVER_MIN_OFFSET_M + rng() * (CLOSE_COVER_MAX_OFFSET_M - CLOSE_COVER_MIN_OFFSET_M);
+  const worldX = clamp(lineToGoalCentreX(ballWorldX, shotDistanceM, z) + coverSide * offset, -3.45, 3.45);
+  return { worldX, z, coverSide };
+}
+
+export function defenderDistanceFromBallM(
+  defender: DefenderPose,
+  shotDistanceM: number,
+  ballStartXRatio: number,
+): number {
+  const ballWorldX = ballWorldXFromRatio(ballStartXRatio);
+  return Math.hypot(defender.worldX - ballWorldX, defender.z - shotDistanceM);
+}
+
+export function defenderOffsetFromShootingLineM(
+  defender: DefenderPose,
+  shotDistanceM: number,
+  ballStartXRatio: number,
+): number {
+  const ballWorldX = ballWorldXFromRatio(ballStartXRatio);
+  return Math.abs(defender.worldX - lineToGoalCentreX(ballWorldX, shotDistanceM, defender.z));
+}
+
+/**
+ * Screen-space body check. The ball has to have reached the defender's
+ * depth (caller) and not be lofted over their head.
+ */
+export function defenderBlocksBall(
+  view: PitchView,
+  defender: DefenderPose,
+  ballPx: { x: number; y: number },
+  ballRadiusPx: number,
+): boolean {
+  const meterPx = view.halfWidthPx(1, defender.z);
+  const feet = worldToScreen(view, defender.worldX, defender.z);
+  const heightM = 1.82;
+  const headY = feet.y - heightM * meterPx;
+  if (ballPx.y + ballRadiusPx < headY) return false;
+
+  const torsoX = feet.x;
+  const torsoY = feet.y - 0.95 * meterPx;
+  const bodyR = 0.34 * meterPx;
+  if (Math.hypot(ballPx.x - torsoX, ballPx.y - torsoY) < bodyR + ballRadiusPx) return true;
+
+  const hipsY = feet.y - 0.42 * meterPx;
+  const legsR = 0.22 * meterPx;
+  return Math.hypot(ballPx.x - torsoX, ballPx.y - hipsY) < legsR + ballRadiusPx;
+}
+
+export interface RollChanceOptions {
+  clubStrength?: number;
+  rng?: () => number;
+  forcePenalty?: boolean;
+  forceDistanceM?: number;
+  disableDefender?: boolean;
+}
+
+export function rollChanceSetup(options: RollChanceOptions = {}): ChanceSetup {
+  const rng = options.rng ?? Math.random;
+  const clubStrength = options.clubStrength ?? 70;
+  const takePenalty = Boolean(options.forcePenalty) || (
+    options.forceDistanceM === undefined && rollIsPenalty(clubStrength, rng)
+  );
+
+  if (takePenalty) {
+    return {
+      kind: 'penalty',
+      distanceM: FIFA.penaltySpot,
+      ballStartXRatio: 0.5,
+      defender: null,
+    };
+  }
+
+  const distanceM = options.forceDistanceM ?? randomShotDistanceM(rng);
+  const ballStartXRatio = randomBallStartXRatio(rng);
+  const defender = options.disableDefender ? null : placeDefender(distanceM, ballStartXRatio, rng);
+  return { kind: 'open', distanceM, ballStartXRatio, defender };
+}

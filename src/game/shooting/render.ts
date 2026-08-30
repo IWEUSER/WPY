@@ -124,6 +124,20 @@ export function ballStartPixel(view: PitchView, xRatio = 0.5): { x: number; y: n
   return { x: xRatio * view.w, y: BALL_SCREEN_Y * view.h };
 }
 
+/** World X,Z (metres; z = 0 at the goal line) → canvas pixels. Feet / grass. */
+export function worldToScreen(view: PitchView, worldX: number, worldZ: number): { x: number; y: number } {
+  return {
+    x: view.w / 2 + worldX * view.halfWidthPx(1, worldZ),
+    y: view.screenY(worldZ),
+  };
+}
+
+export function screenXToWorldX(view: PitchView, screenX: number, worldZ: number): number {
+  const meterPx = view.halfWidthPx(1, worldZ);
+  if (meterPx < 1e-6) return 0;
+  return (screenX - view.w / 2) / meterPx;
+}
+
 export function ballRadiusNear(view: PitchView): number {
   return view.w * 0.028;
 }
@@ -539,6 +553,111 @@ export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose:
     ctx.strokeStyle = pose.beaten ? '#1f2937' : '#166534';
     ctx.lineWidth = Math.max(1, scale * 0.1);
     ctx.stroke();
+  };
+
+  drawArm(shoulderL, gloveL);
+  drawArm(shoulderR, gloveR);
+
+  ctx.fillStyle = skinColor;
+  ctx.beginPath();
+  ctx.arc(headPx.x, headPx.y, scale * 0.95, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.beginPath();
+  ctx.arc(headPx.x, headPx.y - scale * 0.08, scale * 0.95, Math.PI * 0.95, Math.PI * 2.05);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** Standing outfield defender in opposition kit, scaled by their world depth. */
+export function drawDefender(ctx: CanvasRenderingContext2D, view: PitchView, worldX: number, worldZ: number) {
+  const meterPx = view.halfWidthPx(1, worldZ);
+  const feet = worldToScreen(view, worldX, worldZ);
+  const heightM = 1.82;
+  const scale = (heightM * meterPx) / KEEPER_FIGURE_HEIGHT;
+  const hips = { x: feet.x, y: feet.y - KEEPER_HIP_FROM_FOOT * scale };
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(feet.x, feet.y + scale * 0.1, scale * 1.15, scale * 0.32, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.34)';
+  ctx.fill();
+  ctx.restore();
+
+  const kitLight = '#1d4ed8';
+  const kitDark = '#1e3a8a';
+  const shortsColor = '#f8fafc';
+  const skinColor = '#dfa878';
+  const bootColor = '#181818';
+  const pose = { direction: 0, stretch: 0, layout: 0 };
+  const pts = keeperLocalPoints(pose);
+  const s = (lx: number, ly: number) => ({ x: lx * scale, y: ly * scale });
+
+  ctx.save();
+  ctx.translate(hips.x, hips.y);
+
+  const hipY = 0;
+  const shoulderY = -scale * KEEPER_SHOULDER_FROM_HIP;
+  const headPx = s(pts.head.x, pts.head.y);
+  const footL = s(pts.footL.x, pts.footL.y);
+  const footR = s(pts.footR.x, pts.footR.y);
+  const shoulderL = s(pts.shoulderL.x, pts.shoulderL.y);
+  const shoulderR = s(pts.shoulderR.x, pts.shoulderR.y);
+  const gloveL = s(pts.gloveL.x, pts.gloveL.y);
+  const gloveR = s(pts.gloveR.x, pts.gloveR.y);
+
+  const drawLeg = (foot: { x: number; y: number }, hipX: number) => {
+    const kneeX = hipX * 0.45 + foot.x * 0.55;
+    const kneeY = hipY + (foot.y - hipY) * 0.48;
+    ctx.strokeStyle = bootColor;
+    ctx.lineWidth = scale * 0.58;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(hipX, hipY);
+    ctx.lineTo(kneeX, kneeY);
+    ctx.lineTo(foot.x, foot.y);
+    ctx.stroke();
+    ctx.fillStyle = bootColor;
+    ctx.beginPath();
+    ctx.ellipse(foot.x, foot.y, scale * 0.38, scale * 0.24, 0, 0, Math.PI * 2);
+    ctx.fill();
+  };
+
+  drawLeg(footL, -scale * 0.28);
+  drawLeg(footR, scale * 0.28);
+
+  ctx.fillStyle = shortsColor;
+  ctx.beginPath();
+  ctx.ellipse(0, hipY + scale * 0.2, scale * 1.05, scale * 0.85, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const torsoGrad = ctx.createLinearGradient(0, shoulderY, 0, hipY);
+  torsoGrad.addColorStop(0, kitLight);
+  torsoGrad.addColorStop(1, kitDark);
+  ctx.fillStyle = torsoGrad;
+  ctx.beginPath();
+  ctx.moveTo(-scale * 1.3, shoulderY);
+  ctx.quadraticCurveTo(-scale * 1.5, (shoulderY + hipY) / 2, -scale * 0.9, hipY);
+  ctx.lineTo(scale * 0.9, hipY);
+  ctx.quadraticCurveTo(scale * 1.5, (shoulderY + hipY) / 2, scale * 1.3, shoulderY);
+  ctx.closePath();
+  ctx.fill();
+
+  const drawArm = (shoulder: { x: number; y: number }, hand: { x: number; y: number }) => {
+    const mx = (shoulder.x + hand.x) / 2;
+    const my = (shoulder.y + hand.y) / 2;
+    ctx.strokeStyle = skinColor;
+    ctx.lineWidth = scale * 0.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(shoulder.x, shoulder.y);
+    ctx.lineTo(mx, my);
+    ctx.lineTo(hand.x, hand.y);
+    ctx.stroke();
+    ctx.fillStyle = skinColor;
+    ctx.beginPath();
+    ctx.arc(hand.x, hand.y, scale * 0.28, 0, Math.PI * 2);
+    ctx.fill();
   };
 
   drawArm(shoulderL, gloveL);

@@ -36,7 +36,7 @@ export interface SwipeGesture {
 export type ShotZoneX = 'far-left' | 'left' | 'center' | 'right' | 'far-right';
 export type ShotZoneY = 'low' | 'mid' | 'high';
 
-export type ShotOutcomeKind = 'goal' | 'saved' | 'post' | 'wide' | 'over';
+export type ShotOutcomeKind = 'goal' | 'saved' | 'post' | 'wide' | 'over' | 'blocked';
 
 export interface KeeperDive {
   /** Where the keeper's hips travel to. Always the correct side; |x| stays inside the posts. */

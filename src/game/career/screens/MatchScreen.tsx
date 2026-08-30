@@ -62,6 +62,7 @@ export default function MatchScreen() {
       progressLabel={progressLabel}
       hideStatsBar
       maxShots={chances}
+      clubStrength={club?.strength}
       onShotResolved={(result) => {
         lastResultRef.current = result;
         if (simulated) recordMatchChance(result);

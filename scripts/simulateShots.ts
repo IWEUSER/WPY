@@ -17,8 +17,22 @@ import {
   keeperSilhouetteX,
   randomBallStartXRatio,
   randomShotDistanceM,
+  worldToScreen,
   type KeeperPose,
 } from '../src/game/shooting/render';
+import {
+  DEFENDER_GAP_M,
+  ballWorldXFromRatio,
+  canKeepTenYardGap,
+  defenderBlocksBall,
+  defenderDistanceFromBallM,
+  defenderOffsetFromShootingLineM,
+  expectedChancesPerLeagueSeason,
+  expectedPenaltiesPerSeason,
+  penaltyChanceProbability,
+  placeDefender,
+  rollChanceSetup,
+} from '../src/game/shooting/chanceSetup';
 import {
   aimToSaveCell,
   cellCenter,
@@ -64,7 +78,7 @@ function gestureFor(aimX: number, aimY: number, power: number, curl = 0, distanc
 }
 
 function tally(label: string, gestures: SwipeGesture[]) {
-  const counts: Record<string, number> = { goal: 0, saved: 0, post: 0, wide: 0, over: 0 };
+  const counts: Record<string, number> = { goal: 0, saved: 0, post: 0, wide: 0, over: 0, blocked: 0 };
   for (const g of gestures) {
     const result = resolveShot(g);
     counts[result.outcome]++;
@@ -72,7 +86,7 @@ function tally(label: string, gestures: SwipeGesture[]) {
   const total = gestures.length;
   const pct = (n: number) => ((n / total) * 100).toFixed(1) + '%';
   console.log(
-    `${label.padEnd(34)} goal=${pct(counts.goal)} saved=${pct(counts.saved)} post=${pct(counts.post)} wide=${pct(counts.wide)} over=${pct(counts.over)}`,
+    `${label.padEnd(34)} goal=${pct(counts.goal)} saved=${pct(counts.saved)} post=${pct(counts.post)} wide=${pct(counts.wide)} over=${pct(counts.over)} blocked=${pct(counts.blocked)}`,
   );
 }
 
@@ -539,5 +553,105 @@ for (let i = 0; i < 80; i++) {
 console.log(`25-yard thunderbolt goals with a standing keeper: ${standingFarBolt}/80 (expect 0)`);
 if (standingFarBolt > 0) {
   console.error('FAIL: beaten thunderbolts from outside 16 yards must still be a dive');
+  process.exitCode = 1;
+}
+
+console.log('\n--- Defender placement: 10-yard gap, or off the shooting line near goal ---');
+const farSamples = 400;
+let gapFail = 0;
+let gapMin = Infinity;
+for (let i = 0; i < farSamples; i++) {
+  const dist = 14 + (i / farSamples) * (MAX_SHOT_DISTANCE_M - 14);
+  const xRatio = 0.1 + (i % 9) * 0.1;
+  const def = placeDefender(dist, xRatio, () => ((i * 17 + 3) % 1000) / 1000);
+  const gap = defenderDistanceFromBallM(def, dist, xRatio);
+  gapMin = Math.min(gapMin, gap);
+  if (!canKeepTenYardGap(dist) || gap + 1e-6 < DEFENDER_GAP_M) gapFail++;
+}
+console.log(`open-play gap min=${gapMin.toFixed(2)}m over ${farSamples} samples (need ≥ ${DEFENDER_GAP_M.toFixed(2)}m)`);
+if (gapFail > 0) {
+  console.error(`FAIL: ${gapFail} open-play defenders stood inside 10 yards of the ball`);
+  process.exitCode = 1;
+}
+
+const closeDist = MIN_SHOT_DISTANCE_M;
+let lineFail = 0;
+let closeOnLine = 0;
+for (let i = 0; i < 200; i++) {
+  const xRatio = 0.12 + (i % 8) * 0.1;
+  const def = placeDefender(closeDist, xRatio, () => ((i * 31 + 11) % 1000) / 1000);
+  const offset = defenderOffsetFromShootingLineM(def, closeDist, xRatio);
+  if (offset < 1.6) lineFail++;
+  const ballX = ballWorldXFromRatio(xRatio);
+  if (Math.abs(def.worldX - ballX) < 0.35 && def.z < closeDist * 0.55) closeOnLine++;
+}
+console.log(`close-range (6-yard) off-line samples: line-offset fails=${lineFail}/200 on-line=${closeOnLine}/200`);
+if (lineFail > 0 || closeOnLine > 0) {
+  console.error('FAIL: a close-range defender must shade a post, not stand in front of the ball');
+  process.exitCode = 1;
+}
+if (canKeepTenYardGap(closeDist)) {
+  console.error('FAIL: a 6-yard spawn cannot keep a 10-yard gap to goal');
+  process.exitCode = 1;
+}
+
+const view18 = createPitchView(SIM_W, SIM_H, 18);
+const cover = placeDefender(18, 0.5, () => 0.2);
+const torso = worldToScreen(view18, cover.worldX, cover.z);
+const meterPx = view18.halfWidthPx(1, cover.z);
+const hitBall = { x: torso.x, y: torso.y - 0.95 * meterPx };
+const missBall = { x: torso.x + 2.4 * meterPx, y: torso.y - 0.95 * meterPx };
+const lobBall = { x: torso.x, y: torso.y - 2.2 * meterPx };
+const radius = 8;
+const hit = defenderBlocksBall(view18, cover, hitBall, radius);
+const miss = defenderBlocksBall(view18, cover, missBall, radius);
+const lob = defenderBlocksBall(view18, cover, lobBall, radius);
+console.log(`collision: into-body=${hit} wide=${miss} over-head=${lob} (expect true / false / false)`);
+if (!hit || miss || lob) {
+  console.error('FAIL: defender collision did not distinguish a body hit from a miss or a lob');
+  process.exitCode = 1;
+}
+
+console.log('\n--- Penalty chances: spot, no defender, season rate ---');
+const pen = rollChanceSetup({ forcePenalty: true });
+console.log(`forced penalty: dist=${pen.distanceM}m xRatio=${pen.ballStartXRatio} defender=${pen.defender}`);
+if (pen.kind !== 'penalty' || pen.distanceM !== FIFA.penaltySpot || pen.ballStartXRatio !== 0.5 || pen.defender !== null) {
+  console.error('FAIL: a penalty must sit on the spot, centred, with no defender');
+  process.exitCode = 1;
+}
+const forcedOpen = rollChanceSetup({ forceDistanceM: 18, rng: () => 0 });
+if (forcedOpen.kind !== 'open' || forcedOpen.defender === null) {
+  console.error('FAIL: a forced open-play distance must still spawn a defender');
+  process.exitCode = 1;
+}
+
+const p52 = penaltyChanceProbability(52);
+const p70 = penaltyChanceProbability(70);
+const p94 = penaltyChanceProbability(94);
+const pens52 = expectedPenaltiesPerSeason(52);
+const pens70 = expectedPenaltiesPerSeason(70);
+const pens94 = expectedPenaltiesPerSeason(94);
+console.log(
+  `pens/season: weak=${pens52.toFixed(1)} mid=${pens70.toFixed(1)} elite=${pens94.toFixed(1)}  per-chance=${(p52 * 100).toFixed(1)}% / ${(p70 * 100).toFixed(1)}% / ${(p94 * 100).toFixed(1)}%`,
+);
+if (!(pens52 < pens70 && pens70 < pens94 && pens52 > 2.5 && pens94 < 9.5 && pens70 > 4.5 && pens70 < 6.5)) {
+  console.error('FAIL: penalty season rate is not in the 3–8 range scaled by club strength');
+  process.exitCode = 1;
+}
+const midChances = expectedChancesPerLeagueSeason(70);
+if (Math.abs(p70 * midChances - pens70) > 1e-6) {
+  console.error('FAIL: per-chance penalty probability does not reconstruct the season rate');
+  process.exitCode = 1;
+}
+
+let rolledPens = 0;
+const ROLL_N = 20000;
+for (let i = 0; i < ROLL_N; i++) {
+  if (rollChanceSetup({ clubStrength: 70 }).kind === 'penalty') rolledPens++;
+}
+const rolledRate = rolledPens / ROLL_N;
+console.log(`rolled penalty rate at strength 70: ${(rolledRate * 100).toFixed(2)}% (expect ~${(p70 * 100).toFixed(2)}%)`);
+if (Math.abs(rolledRate - p70) > 0.012) {
+  console.error('FAIL: rolled penalty frequency drifted from the season-rate probability');
   process.exitCode = 1;
 }

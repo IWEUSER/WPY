@@ -9,16 +9,22 @@ import {
   ballStartPixel,
   createPitchView,
   drawBall,
+  drawDefender,
   drawGoal,
   drawKeeper,
   drawPitch,
   drawTrail,
   goalToPixel,
-  randomBallStartXRatio,
-  randomShotDistanceM,
   idleKeeperPose,
   type KeeperPose,
 } from './render';
+import {
+  defenderBlocksBall,
+  rollChanceSetup,
+  type ChanceKind,
+  type ChanceSetup,
+  type DefenderPose,
+} from './chanceSetup';
 import type { ShotOutcomeKind, ShotResult, SwipeGesture } from './types';
 import StatsBar, { type ShotStats } from './StatsBar';
 
@@ -48,6 +54,8 @@ interface AnimState {
   ballStartXRatio: number;
   /** Metres from the ball to the goal line. */
   shotDistanceM: number;
+  chanceKind: ChanceKind;
+  defender: DefenderPose | null;
 }
 
 const RESULT_HOLD_MS = 1500;
@@ -60,6 +68,7 @@ const OUTCOME_LABEL: Record<ShotOutcomeKind, string> = {
   post: 'OFF THE WOODWORK',
   wide: 'WIDE',
   over: 'OVER THE BAR',
+  blocked: 'BLOCKED',
 };
 
 const OUTCOME_COLOR: Record<ShotOutcomeKind, string> = {
@@ -68,6 +77,7 @@ const OUTCOME_COLOR: Record<ShotOutcomeKind, string> = {
   post: '#fbbf24',
   wide: '#f87171',
   over: '#f87171',
+  blocked: '#fb923c',
 };
 
 /** Describes how hard the shot was struck, for on-screen feedback. */
@@ -103,6 +113,29 @@ function readDevPower(): number | null {
   const raw = new URLSearchParams(window.location.search).get('power');
   const n = raw ? Number(raw) : NaN;
   return Number.isFinite(n) ? n : null;
+}
+
+function readDevPenalty(): boolean {
+  if (!import.meta.env.DEV) return false;
+  const raw = new URLSearchParams(window.location.search).get('penalty');
+  return raw === '1' || raw === 'true';
+}
+
+function readDevDefenderOff(): boolean {
+  if (!import.meta.env.DEV) return false;
+  const raw = new URLSearchParams(window.location.search).get('defender');
+  return raw === 'off' || raw === '0';
+}
+
+function nextChance(clubStrength?: number): ChanceSetup {
+  const forcePenalty = readDevPenalty();
+  const forceDistance = readDevDistance();
+  return rollChanceSetup({
+    clubStrength,
+    forcePenalty,
+    forceDistanceM: forcePenalty ? undefined : (forceDistance ?? undefined),
+    disableDefender: readDevDefenderOff(),
+  });
 }
 
 /** DEV-only: ?pose=col,row,save|miss freezes the keeper in that square's motion.
@@ -165,6 +198,8 @@ export interface ShootingGameProps {
   onShotResolved?: (result: ShotResult) => void;
   /** Fired once the final shot (per maxShots) has finished its result animation. */
   onComplete?: () => void;
+  /** Club strength (≈52–94). Scales how often a chance is a penalty. */
+  clubStrength?: number;
 }
 
 export default function ShootingGame({
@@ -176,6 +211,7 @@ export default function ShootingGame({
   maxShots,
   onShotResolved,
   onComplete,
+  clubStrength,
 }: ShootingGameProps = {}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -186,7 +222,9 @@ export default function ShootingGame({
   const [stats, setStats] = useState<ShotStats>({ shots: 0, goals: 0, streak: 0, bestStreak: 0 });
   const [muted, setMuted] = useState(false);
 
-  const [ballHintX, setBallHintX] = useState(0.5);
+  const [initialChance] = useState(() => nextChance(clubStrength));
+  const [ballHintX, setBallHintX] = useState(initialChance.ballStartXRatio);
+  const [chanceKind, setChanceKind] = useState<ChanceKind>(initialChance.kind);
 
   const shotsTakenRef = useRef(0);
   const maxShotsRef = useRef(maxShots);
@@ -195,6 +233,8 @@ export default function ShootingGame({
   onShotResolvedRef.current = onShotResolved;
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
+  const clubStrengthRef = useRef(clubStrength);
+  clubStrengthRef.current = clubStrength;
 
   const animRef = useRef<AnimState>({
     phase: 'idle',
@@ -210,8 +250,10 @@ export default function ShootingGame({
     resultAtMs: 0,
     shakeMagnitude: 0,
     shakeUntilMs: 0,
-    ballStartXRatio: randomBallStartXRatio(),
-    shotDistanceM: readDevDistance() ?? randomShotDistanceM(),
+    ballStartXRatio: initialChance.ballStartXRatio,
+    shotDistanceM: initialChance.distanceM,
+    chanceKind: initialChance.kind,
+    defender: initialChance.defender,
   });
 
   useEffect(() => {
@@ -220,6 +262,7 @@ export default function ShootingGame({
 
   useEffect(() => {
     setBallHintX(animRef.current.ballStartXRatio);
+    setChanceKind(animRef.current.chanceKind);
   }, []);
 
   // Keep canvas sized to its container (handles rotation/resizing responsively).
@@ -246,17 +289,18 @@ export default function ShootingGame({
 
   const resetForNextShot = useCallback(() => {
     const { w, h } = sizeRef.current;
-    const xRatio = randomBallStartXRatio();
-    const distanceM = readDevDistance() ?? randomShotDistanceM();
-    const view = createPitchView(w, h, distanceM);
-    const start = ballStartPixel(view, xRatio);
+    const chance = nextChance(clubStrengthRef.current);
+    const view = createPitchView(w, h, chance.distanceM);
+    const start = ballStartPixel(view, chance.ballStartXRatio);
     const anim = animRef.current;
     anim.phase = 'idle';
     anim.dragStart = null;
     anim.dragPoints = [];
     anim.result = null;
-    anim.ballStartXRatio = xRatio;
-    anim.shotDistanceM = distanceM;
+    anim.ballStartXRatio = chance.ballStartXRatio;
+    anim.shotDistanceM = chance.distanceM;
+    anim.chanceKind = chance.kind;
+    anim.defender = chance.defender;
     anim.ballPixel = start;
     anim.ballRadius = ballRadiusNear(view);
     anim.ballRotation = 0;
@@ -264,7 +308,8 @@ export default function ShootingGame({
     anim.keeperPose = makeIdleKeeper();
     anim.shakeMagnitude = 0;
     anim.shakeUntilMs = 0;
-    setBallHintX(xRatio);
+    setBallHintX(chance.ballStartXRatio);
+    setChanceKind(chance.kind);
     setUiPhase('idle');
     setResultLabel(null);
   }, []);
@@ -311,6 +356,7 @@ export default function ShootingGame({
       }
     } else if (result.outcome === 'saved') audio.playSave();
     else if (result.outcome === 'post') audio.playPost();
+    else if (result.outcome === 'blocked') audio.playBlock();
     else audio.playMiss();
   }, []);
 
@@ -346,6 +392,7 @@ export default function ShootingGame({
           const devPose = readDevKeeperPose();
           const devCell = readDevPoseCell();
           drawKeeper(ctx, view, devPose ?? anim.keeperPose);
+          if (anim.defender) drawDefender(ctx, view, anim.defender.worldX, anim.defender.z);
           if (anim.phase === 'dragging' && anim.dragStart && anim.dragPoints.length > 1) {
             // Show the actual curved path being swiped, not just a straight
             // line - this is the live feedback for how much bend/curl the
@@ -420,9 +467,21 @@ export default function ShootingGame({
 
           drawTrail(ctx, anim.ballTrail);
           drawKeeper(ctx, view, anim.keeperPose);
+          if (anim.defender) drawDefender(ctx, view, anim.defender.worldX, anim.defender.z);
           drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
 
-          if (t >= 1) {
+          const ballZ = anim.shotDistanceM * (1 - eased);
+          if (
+            anim.defender
+            && ballZ <= anim.defender.z + 0.45
+            && defenderBlocksBall(view, anim.defender, anim.ballPixel, anim.ballRadius)
+          ) {
+            const blocked: ShotResult = { ...result, outcome: 'blocked' };
+            anim.result = blocked;
+            anim.phase = 'result';
+            anim.resultAtMs = now;
+            finishShot(blocked);
+          } else if (t >= 1) {
             anim.phase = 'result';
             anim.resultAtMs = now;
             anim.keeperPose = {
@@ -438,6 +497,7 @@ export default function ShootingGame({
           }
         } else if (anim.phase === 'result' && anim.result) {
           drawKeeper(ctx, view, anim.keeperPose);
+          if (anim.defender) drawDefender(ctx, view, anim.defender.worldX, anim.defender.z);
           drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
           if (now - anim.resultAtMs > RESULT_HOLD_MS) {
             const limit = maxShotsRef.current;
@@ -548,11 +608,18 @@ export default function ShootingGame({
         <div>
           <h1 className="text-lg font-bold tracking-wide sm:text-xl">{title ?? 'World Player of the Year'}</h1>
           <p className="text-xs text-white/50">{subtitle ?? 'Swipe the ball to shoot'}</p>
-          {progressLabel && (
-            <p className="mt-1 inline-block rounded-full bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-white/80">
-              {progressLabel}
-            </p>
-          )}
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            {progressLabel && (
+              <p className="inline-block rounded-full bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-white/80">
+                {progressLabel}
+              </p>
+            )}
+            {chanceKind === 'penalty' && (
+              <p className="inline-block rounded-full bg-amber-400/20 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-amber-200">
+                Penalty · no defender
+              </p>
+            )}
+          </div>
         </div>
         {!hideMuteButton && (
           <button
