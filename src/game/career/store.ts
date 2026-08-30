@@ -47,7 +47,21 @@ import {
   type LiveMatch,
   type SeasonSimState,
 } from './seasonSim';
-import { offerClubsForTrial, TRIAL_SHOTS } from './trial';
+import { offerClubsForTrial, trialContractWon, TRIAL_SHOTS } from './trial';
+import {
+  applyTrialMatch,
+  applyYouthMatch,
+  assignOpeningTrialClub,
+  beginClubTrial,
+  clubTrialComplete,
+  createYouthCampaign,
+  openingMatchSummary,
+  rejectAndDropTrial,
+  resolveOpeningMatch,
+  youthTournamentComplete,
+  youthTrophyName,
+} from './openingFlow';
+import { getNation } from './international';
 import { countLoanSpells, resolveSeasonTransition } from './transfers';
 import { evaluateWpy } from './wpy';
 import type { ShotResult } from '../shooting/types';
@@ -304,6 +318,119 @@ function attachSeasonAwards(state: CareerState): { season: SeasonRecord; wpyResu
   };
 }
 
+function liveFromOpening(campaign: CareerState['openingCampaign']): NonNullable<CareerState['liveMatch']> | null {
+  if (!campaign) return null;
+  const fixture = campaign.calendar.fixtures[campaign.fixtureIndex];
+  if (!fixture) return null;
+  return {
+    fixtureIndex: campaign.fixtureIndex,
+    chancesTotal: fixture.playerChances ?? 1,
+    chancesTaken: 0,
+    goals: 0,
+  };
+}
+
+function finishOpeningMatch(state: CareerState): Partial<CareerState> {
+  const campaign = state.openingCampaign;
+  const live = state.liveMatch;
+  if (!campaign || !live) return {};
+  const fixture = campaign.calendar.fixtures[live.fixtureIndex];
+  if (!fixture) return {};
+  const nationId = state.nationality;
+  const result = resolveOpeningMatch(fixture, live.goals, campaign.trialClubId, nationId);
+  const nationName = nationId ? getNation(nationId)?.name : undefined;
+  const summary = `${openingMatchSummary(fixture, result, nationName)} · ${live.goals} goal${live.goals === 1 ? '' : 's'} from ${live.chancesTotal} chance${live.chancesTotal === 1 ? '' : 's'}`;
+
+  if (campaign.kind === 'youth-tournament' && nationId) {
+    const next = applyYouthMatch(campaign, fixture, result, live.goals, nationId);
+    const done = youthTournamentComplete(next);
+    const trophyName = youthTrophyName(next, fixture, result.outcome === 'win');
+    if (done) {
+      const assigned = assignOpeningTrialClub(next, nationId);
+      return {
+        openingCampaign: assigned,
+        seasonCalendar: assigned.calendar,
+        liveMatch: null,
+        lastMatchSummary: summary,
+        lastMatchResult: {
+          summary,
+          isFinal: fixture.internationalRound === 'final',
+          won: result.outcome === 'win',
+          trophyName,
+          afterPhase: 'opening-brief',
+        },
+        phase: 'match-result',
+      };
+    }
+    return {
+      openingCampaign: next,
+      seasonCalendar: next.calendar,
+      liveMatch: null,
+      lastMatchSummary: summary,
+      lastMatchResult: {
+        summary,
+        isFinal: fixture.internationalRound === 'final',
+        won: result.outcome === 'win',
+        trophyName,
+        afterPhase: 'match',
+      },
+      phase: 'match-result',
+    };
+  }
+
+  const next = applyTrialMatch(campaign, live.goals);
+  if (!clubTrialComplete(next)) {
+    return {
+      openingCampaign: next,
+      seasonCalendar: next.calendar,
+      liveMatch: null,
+      lastMatchSummary: summary,
+      lastMatchResult: {
+        summary,
+        isFinal: false,
+        won: result.outcome === 'win',
+        trophyName: null,
+        afterPhase: 'match',
+      },
+      phase: 'match-result',
+    };
+  }
+
+  const club = next.trialClubId ? getClub(next.trialClubId) : undefined;
+  const signed = club ? trialContractWon(club, next.goals, next.gamesPlayed) : false;
+  if (signed && club) {
+    return {
+      openingCampaign: next,
+      liveMatch: null,
+      lastMatchSummary: summary,
+      lastMatchResult: {
+        summary,
+        isFinal: false,
+        won: result.outcome === 'win',
+        trophyName: null,
+        afterPhase: 'club-offer',
+      },
+      trial: { shots: [], goals: next.goals, offeredClubIds: [club.id] },
+      phase: 'match-result',
+    };
+  }
+  const dropped = rejectAndDropTrial(next, state.nationality);
+  return {
+    openingCampaign: dropped,
+    seasonCalendar: dropped.calendar,
+    liveMatch: null,
+    lastMatchSummary: summary,
+    lastMatchResult: {
+      summary,
+      isFinal: false,
+      won: result.outcome === 'win',
+      trophyName: null,
+      afterPhase: 'opening-brief',
+    },
+    phase: 'match-result',
+  };
+}
+
 function initialState(): CareerState {
   return {
     phase: 'menu',
@@ -314,6 +441,7 @@ function initialState(): CareerState {
     role: 'reserve',
     seasonsAtCurrentClub: 0,
     trial: null,
+    openingCampaign: null,
     availability: createAvailability(),
     currentSeason: null,
     seasonHistory: [],
@@ -380,6 +508,7 @@ interface CareerActions {
   /** Opens nationality selection before the trial. */
   startCareer: () => void;
   startTrial: () => void;
+  startOpeningTrial: () => void;
   recordTrialShot: (result: ShotResult) => void;
   finishTrial: () => void;
   chooseClub: (clubId: string) => void;
@@ -577,6 +706,25 @@ export const useCareerStore = create<CareerStore>()(
 
       startTrial: () => set({ phase: 'trial', trial: { shots: [], goals: 0, offeredClubIds: [] } }),
 
+      startOpeningTrial: () =>
+        set((state) => {
+          if (state.phase !== 'opening-brief' || !state.openingCampaign || !state.nationality) return {};
+          let opening = state.openingCampaign;
+          if (opening.kind === 'youth-tournament') {
+            opening = beginClubTrial(opening, state.nationality, opening.trialTier ?? undefined);
+          }
+          const live = liveFromOpening(opening);
+          if (!live) return { openingCampaign: opening, phase: 'opening-brief' };
+          return {
+            openingCampaign: opening,
+            clubId: opening.trialClubId,
+            trial: null,
+            liveMatch: live,
+            seasonCalendar: opening.calendar,
+            phase: 'match',
+          };
+        }),
+
       recordTrialShot: (result) =>
         set((state) => {
           if (!state.trial) return state;
@@ -617,6 +765,7 @@ export const useCareerStore = create<CareerStore>()(
               contractYearsRemaining: RESERVE_CONTRACT_YEARS,
             }),
             pendingTransfer: null,
+            openingCampaign: null,
             phase: 'hub' as const,
           };
         }),
@@ -627,16 +776,36 @@ export const useCareerStore = create<CareerStore>()(
           if (state.clubId) {
             return { nationality: nationId, nationalTeam, phase: 'hub' };
           }
+          const opening = createYouthCampaign(nationId);
           return {
             nationality: nationId,
             nationalTeam,
-            phase: 'trial',
-            trial: { shots: [], goals: 0, offeredClubIds: [] },
+            openingCampaign: opening,
+            trial: null,
+            liveMatch: liveFromOpening(opening),
+            seasonCalendar: opening.calendar,
+            phase: 'match',
           };
         }),
 
       advance: () =>
         set((state) => {
+          if (state.openingCampaign && !state.seasonSim) {
+            if (state.lastMatchResult) return { phase: 'match-result' };
+            if (state.liveMatch) return { phase: 'match' };
+            if (state.trial?.offeredClubIds.length) return { phase: 'club-offer' };
+            if (
+              state.openingCampaign.kind === 'youth-tournament' &&
+              youthTournamentComplete(state.openingCampaign)
+            ) {
+              return { phase: 'opening-brief' };
+            }
+            const live = liveFromOpening(state.openingCampaign);
+            if (live && state.openingCampaign.kind === 'youth-tournament') {
+              return { phase: 'match', liveMatch: live, seasonCalendar: state.openingCampaign.calendar };
+            }
+            return { phase: 'opening-brief' };
+          }
           if (state.seasonCalendar && state.seasonSim) {
             const updates = openNextSimFixture(state);
             if (updates.phase === 'season-summary' && updates.seasonSim) {
@@ -685,10 +854,12 @@ export const useCareerStore = create<CareerStore>()(
       finishLiveMatch: () =>
         set((state) => {
           const live = state.liveMatch;
+          if (!live) return state;
+          if (state.openingCampaign) return finishOpeningMatch(state);
           const sim = state.seasonSim;
           const calendar = state.seasonCalendar;
           const season = state.currentSeason;
-          if (!live || !sim || !calendar || !season || !state.clubId) return state;
+          if (!sim || !calendar || !season || !state.clubId) return state;
           const club = getClub(state.clubId);
           const fixture = calendar.fixtures[live.fixtureIndex];
           if (!club || !fixture) return state;
@@ -792,9 +963,28 @@ export const useCareerStore = create<CareerStore>()(
         }),
 
       acknowledgeMatchResult: () =>
-        set((state) => ({
-          phase: state.lastMatchResult?.afterPhase ?? (state.clubId ? 'hub' : 'menu'),
-        })),
+        set((state) => {
+          const after = state.lastMatchResult?.afterPhase;
+          if (after === 'match' && state.openingCampaign) {
+            const live = liveFromOpening(state.openingCampaign);
+            return {
+              phase: live ? 'match' : 'opening-brief',
+              liveMatch: live,
+              lastMatchResult: null,
+              seasonCalendar: state.openingCampaign.calendar,
+            };
+          }
+          if (after === 'opening-brief') {
+            return { phase: 'opening-brief', lastMatchResult: null };
+          }
+          if (after === 'club-offer') {
+            return { phase: 'club-offer', lastMatchResult: null };
+          }
+          return {
+            phase: after ?? (state.clubId ? 'hub' : 'menu'),
+            lastMatchResult: null,
+          };
+        }),
 
       recordMatchShot: (result) =>
         set((state) => {
@@ -1094,7 +1284,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 18,
+      version: 19,
       migrate: (persisted) => {
         const state = persisted as Partial<CareerState>;
         const sim = state.seasonSim;
@@ -1123,6 +1313,7 @@ export const useCareerStore = create<CareerStore>()(
         const totals = recountCareerTotals(seasonHistory, currentSeason);
         return {
           ...state,
+          openingCampaign: state.openingCampaign ?? null,
           nationality: state.nationality ?? null,
           nationalTeam: state.nationalTeam
             ? {

@@ -1,5 +1,6 @@
 import type { ShotResult } from '../shooting/types';
 import type { SeasonCalendar } from './calendar';
+import type { ClubTier } from './data/clubs';
 import type { ContinentalCupId, InternationalTournamentId } from './data/competitions';
 import type { NationalTeamState } from './international';
 import type { SeasonStandings } from './matchEngine';
@@ -115,10 +116,40 @@ export interface TrialState {
   offeredClubIds: string[];
 }
 
+export type OpeningKind = 'youth-tournament' | 'club-trial';
+
+export interface OpeningGroupRow {
+  id: string;
+  points: number;
+  gd: number;
+}
+
+export interface OpeningCampaign {
+  kind: OpeningKind;
+  calendar: SeasonCalendar;
+  fixtureIndex: number;
+  goals: number;
+  gamesPlayed: number;
+  youthName: string;
+  groupOpponents: string[];
+  groupOthers: OpeningGroupRow[];
+  playerGroup: OpeningGroupRow;
+  qualified: boolean | null;
+  eliminated: boolean;
+  reachedSemi: boolean;
+  usedOpponentIds: string[];
+  trialClubId: string | null;
+  trialTier: ClubTier | null;
+  rejectedClubIds: string[];
+  /** Goals scored at the U16 tournament. Kept after the club trial starts. */
+  youthGoals: number;
+}
+
 export type CareerPhase =
   | 'menu'
   | 'trial'
   | 'club-offer'
+  | 'opening-brief'
   | 'nationality-choice'
   | 'hub'
   | 'match'
@@ -138,6 +169,7 @@ export interface CareerState {
   /** Seasons spent at the current club (0 = this is the grace-period season). */
   seasonsAtCurrentClub: number;
   trial: TrialState | null;
+  openingCampaign: OpeningCampaign | null;
   availability: AvailabilityState;
   currentSeason: SeasonRecord | null;
   seasonHistory: SeasonRecord[];
@@ -145,8 +177,8 @@ export interface CareerState {
   careerGames: number;
   /** Set when a loan/sale/transfer decision needs the player to pick a club. */
   pendingTransfer: PendingTransfer | null;
-  /** Chosen international nationality - picked before the trial so home
-   * clubs can bid. Call-ups later use goal ratio + club level. */
+  /** Chosen international nationality — picked before the U16 tournament.
+   * Call-ups later use goal ratio + club level. */
   nationality: string | null;
   /** Caps, goals, and the same miss-streak drop rule as club football, scoped
    * to the national team. Null until a nationality is chosen. */
@@ -195,7 +227,7 @@ export interface LastMatchResult {
   isFinal: boolean;
   won: boolean;
   trophyName: string | null;
-  afterPhase: 'hub' | 'season-summary';
+  afterPhase: 'hub' | 'season-summary' | 'match' | 'opening-brief' | 'club-offer';
 }
 
 export interface IntlQualifyingCarry {

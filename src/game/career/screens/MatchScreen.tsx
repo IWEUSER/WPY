@@ -14,6 +14,7 @@ export default function MatchScreen() {
   const nationality = useCareerStore((s) => s.nationality);
   const seasonNumber = useCareerStore((s) => s.seasonNumber);
   const role = useCareerStore((s) => s.role);
+  const opening = useCareerStore((s) => s.openingCampaign);
   const season = useCareerStore((s) => s.currentSeason);
   const calendar = useCareerStore((s) => s.seasonCalendar);
   const liveMatch = useCareerStore((s) => s.liveMatch);
@@ -31,11 +32,17 @@ export default function MatchScreen() {
 
   const title = simulated && fixture
     ? fixture.kind === 'international'
-      ? fixtureTitle(fixture, { playerNationName: nation?.name })
+      ? opening
+        ? `${opening.youthName} — ${fixtureTitle(fixture, { playerNationName: nation?.name })}`
+        : fixtureTitle(fixture, { playerNationName: nation?.name })
       : `${club?.name ?? 'Match'} — ${fixtureTitle(fixture)}`
     : club ? `${club.name} — Matchday ${matchNumber}` : `Matchday ${matchNumber}`;
 
-  const competitionName = fixture?.continentalCup
+  const competitionName = opening
+    ? opening.kind === 'youth-tournament'
+      ? opening.youthName
+      : `${club?.name ?? 'Club'} trial`
+    : fixture?.continentalCup
     ? CONTINENTAL_CUPS[fixture.continentalCup].name
     : fixture?.kind === 'domestic-cup' && fixture.domesticCup
       ? DOMESTIC_CUPS[fixture.domesticCup].name
@@ -58,7 +65,14 @@ export default function MatchScreen() {
     ? `${weekLabel}${competitionName ? ` · ${competitionName}` : ''}${venueLabel ? ` · ${venueLabel}` : ''} · ${chances} chance${chances === 1 ? '' : 's'}`
     : weekLabel;
 
-  const stadium = resolveCareerStadium({ fixture, club, nation, seasonNumber, role });
+  const stadium = resolveCareerStadium({
+    fixture,
+    club,
+    nation,
+    seasonNumber,
+    role,
+    openingKind: opening?.kind,
+  });
 
   return (
     <ShootingGame

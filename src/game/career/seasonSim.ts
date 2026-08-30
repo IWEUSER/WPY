@@ -877,6 +877,7 @@ export function internationalRoundLabel(
   if (round === 'round-of-16') return 'Last 16';
   if (round === 'quarter-final') return 'Quarter-final';
   if (round === 'semi-final') return 'Semi-final';
+  if (round === 'third-place') return 'Third-place play-off';
   if (round === 'final') return 'Final';
   return 'International';
 }

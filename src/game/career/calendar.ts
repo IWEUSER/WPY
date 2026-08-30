@@ -69,6 +69,7 @@ export interface CalendarFixture {
     | 'round-of-16'
     | 'quarter-final'
     | 'semi-final'
+    | 'third-place'
     | 'final';
 }
 
@@ -157,6 +158,7 @@ export function fixtureIsNight(fixture: CalendarFixture): boolean {
       || round === 'round-of-16'
       || round === 'quarter-final'
       || round === 'semi-final'
+      || round === 'third-place'
       || round === 'final';
   }
   if (fixture.kind === 'league') {

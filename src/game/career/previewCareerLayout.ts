@@ -4,10 +4,11 @@ import { getClub } from './data/clubs';
 import { createNationalTeamState, recordInternationalAppearance } from './international';
 import { buildSeasonStandings } from './matchEngine';
 import { newContractYears, playerMarketValueFromSeasons, weeklyWageForClub } from './playerValue';
+import { assignOpeningTrialClub, beginClubTrial, createYouthCampaign } from './openingFlow';
 import { hydrateSeason } from './seasonSim';
 import { useCareerStore } from './store';
 import type { PendingTransfer } from './transfers';
-import type { SeasonRecord } from './types';
+import type { OpeningCampaign, SeasonRecord } from './types';
 
 function season(partial: SeasonRecord): SeasonRecord {
   return partial;
@@ -219,6 +220,17 @@ export function applyCareerLayoutPreview(): void {
   });
 
   const isTrialPreview = preview === 'trial';
+  const isYouthPreview = preview === 'youth';
+  const isClubTrialPreview = preview === 'club-trial';
+  const openingNationId = preview === 'mls' ? 'united-states' : preview === 'saudi' ? 'saudi-arabia' : 'spain';
+  let openingCampaign: OpeningCampaign | null = null;
+  if (isYouthPreview || isTrialPreview || isClubTrialPreview) {
+    const youth = createYouthCampaign(openingNationId, () => 0.31);
+    const scored = { ...youth, goals: 6, youthGoals: 6, gamesPlayed: 7, qualified: true };
+    if (isYouthPreview) openingCampaign = youth;
+    else if (isTrialPreview) openingCampaign = assignOpeningTrialClub(scored, openingNationId);
+    else openingCampaign = beginClubTrial(scored, openingNationId, 2);
+  }
   const isReservePreview = preview === 'reserve';
   const isMatchPreview = preview === 'match' || preview === 'match-away' || preview === 'match-local'
     || preview === 'match-night'
@@ -384,7 +396,9 @@ export function applyCareerLayoutPreview(): void {
   useCareerStore.setState({
     phase:
       isTrialPreview
-        ? 'trial'
+        ? 'opening-brief'
+        : isYouthPreview || isClubTrialPreview
+          ? 'match'
         : preview === 'record'
         ? 'career'
         :       preview === 'transfer' || preview === 'expired'
@@ -398,12 +412,13 @@ export function applyCareerLayoutPreview(): void {
                 : isMatchPreview || isReservePreview
                   ? 'match'
                   : 'hub',
-    age: isTrialPreview || isReservePreview ? 16 : preview === 'end' ? 36 : promoteSummary ? 22 : 19,
-    seasonNumber: isTrialPreview || isReservePreview ? 1 : preview === 'end' ? 21 : promoteSummary ? 6 : 4,
-    clubId: isTrialPreview ? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : promoteSummary ? 'leicester' : 'real-madrid',
-    parentClubId: isTrialPreview ? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : promoteSummary ? 'leicester' : 'real-madrid',
-    role: isReservePreview || isTrialPreview ? 'reserve' : 'first-team',
-    trial: isTrialPreview ? { shots: [], goals: 0, offeredClubIds: [] } : null,
+    age: isTrialPreview || isYouthPreview || isClubTrialPreview || isReservePreview ? 16 : preview === 'end' ? 36 : promoteSummary ? 22 : 19,
+    seasonNumber: isTrialPreview || isYouthPreview || isClubTrialPreview || isReservePreview ? 1 : preview === 'end' ? 21 : promoteSummary ? 6 : 4,
+    clubId: isYouthPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : promoteSummary ? 'leicester' : 'real-madrid',
+    parentClubId: isYouthPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : promoteSummary ? 'leicester' : 'real-madrid',
+    role: isReservePreview || isTrialPreview || isYouthPreview || isClubTrialPreview ? 'reserve' : 'first-team',
+    trial: null,
+    openingCampaign,
     seasonsAtCurrentClub: preview === 'end' ? 10 : promoteSummary ? 1 : 3,
     nationality: preview === 'mls' ? 'united-states' : preview === 'saudi' ? 'saudi-arabia' : 'spain',
     nationalTeam,
@@ -411,8 +426,19 @@ export function applyCareerLayoutPreview(): void {
     seasonHistory: history,
     careerGoals: preview === 'end' ? 312 : 58,
     careerGames: preview === 'end' ? 540 : 76,
-    seasonCalendar: isTrialPreview || isReservePreview ? null : calendar,
-    liveMatch: isMatchPreview
+    seasonCalendar: isTrialPreview || isReservePreview
+      ? openingCampaign?.calendar ?? null
+      : isYouthPreview || isClubTrialPreview
+        ? openingCampaign?.calendar ?? null
+        : calendar,
+    liveMatch: isYouthPreview || isClubTrialPreview
+      ? {
+          fixtureIndex: 0,
+          chancesTotal: openingCampaign?.calendar.fixtures[0]?.playerChances ?? (isClubTrialPreview ? 4 : 1),
+          chancesTaken: 0,
+          goals: 0,
+        }
+      : isMatchPreview
       ? { fixtureIndex: matchFixtureIndex, chancesTotal: 2, chancesTaken: 0, goals: 0 }
       : null,
     seasonSim: promoteSummary

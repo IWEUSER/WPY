@@ -1,31 +1,36 @@
 import { getClub, TIER_LABEL } from '../data/clubs';
-import { TRIAL_SHOTS } from '../trial';
+import { CLUB_TRIAL_GAMES } from '../trial';
 import { useCareerStore } from '../store';
 
 export default function ClubOfferScreen() {
   const trial = useCareerStore((s) => s.trial);
+  const opening = useCareerStore((s) => s.openingCampaign);
   const chooseClub = useCareerStore((s) => s.chooseClub);
 
   const goals = trial?.goals ?? 0;
   const offers = (trial?.offeredClubIds ?? []).map(getClub).filter((c) => c !== undefined);
+  const fromOpeningTrial = Boolean(opening?.kind === 'club-trial' || opening?.youthGoals);
+  const games = fromOpeningTrial ? CLUB_TRIAL_GAMES : null;
 
   return (
     <div className="flex h-full w-full flex-col items-center gap-6 overflow-y-auto px-6 py-[max(1.5rem,env(safe-area-inset-top))] text-center text-white">
       <div>
-        <p className="text-sm text-white/50">Trial complete</p>
+        <p className="text-sm text-white/50">{fromOpeningTrial ? 'Trial complete' : 'Offers'}</p>
         <h1 className="text-2xl font-extrabold tracking-wide">
-          {goals}/{TRIAL_SHOTS} scored
+          {games != null ? `${goals} goal${goals === 1 ? '' : 's'} in ${games} games` : `${goals} scored`}
         </h1>
         <p className="mt-2 text-sm text-white/60">
-          {goals >= 9
-            ? "Scouts from Europe's biggest clubs were watching. Pick your future."
-            : goals >= 7
-              ? 'Solid trial - a handful of ambitious clubs want to sign you.'
-              : goals >= 4
-                ? "You've done enough to earn a professional contract."
-                : goals >= 1
-                  ? 'It was scrappy, but someone will take a chance on you.'
-                  : "Nobody was impressed, but every career starts somewhere."}
+          {fromOpeningTrial
+            ? 'You hit the ratio they asked for. Sign the reserve contract and start your career.'
+            : goals >= 9
+              ? "Scouts from Europe's biggest clubs were watching. Pick your future."
+              : goals >= 7
+                ? 'Solid trial - a handful of ambitious clubs want to sign you.'
+                : goals >= 4
+                  ? "You've done enough to earn a professional contract."
+                  : goals >= 1
+                    ? 'It was scrappy, but someone will take a chance on you.'
+                    : "Nobody was impressed, but every career starts somewhere."}
         </p>
       </div>
 

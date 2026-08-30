@@ -117,7 +117,11 @@ export function resolveCareerStadium(args: {
   nation?: Nation;
   seasonNumber?: number;
   role?: 'reserve' | 'first-team' | 'loan';
+  openingKind?: 'youth-tournament' | 'club-trial' | null;
 }): StadiumAppearance {
+  if (args.openingKind === 'youth-tournament' || args.openingKind === 'club-trial') {
+    return resolveMatchStadium(args);
+  }
   if ((args.seasonNumber != null && args.seasonNumber < 2) || args.role === 'reserve') {
     return reserveStadium(args.club);
   }

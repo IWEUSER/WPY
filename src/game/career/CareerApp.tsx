@@ -11,6 +11,7 @@ import MatchScreen from './screens/MatchScreen';
 import SeasonSummaryScreen from './screens/SeasonSummaryScreen';
 import TransferChoiceScreen from './screens/TransferChoiceScreen';
 import MatchResultScreen from './screens/MatchResultScreen';
+import OpeningBriefScreen from './screens/OpeningBriefScreen';
 import { useCareerStore } from './store';
 import { applyCareerLayoutPreview } from './previewCareerLayout';
 
@@ -57,6 +58,8 @@ export default function CareerApp() {
   switch (phase) {
     case 'trial':
       return <TrialScreen />;
+    case 'opening-brief':
+      return <OpeningBriefScreen />;
     case 'club-offer':
       return <ClubOfferScreen />;
     case 'nationality-choice':

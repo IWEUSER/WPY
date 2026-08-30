@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { CONFEDERATION_ORDER, nationsGroupedByConfederation } from '../data/nations';
 import { CONTINENTAL_TOURNAMENT_FOR_CONFEDERATION, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
+import { YOUTH_TOURNAMENTS } from '../youthTournament';
 import { useCareerStore } from '../store';
 
 const CONFEDERATION_LABEL: Record<string, string> = {
@@ -37,7 +38,7 @@ export default function NationalityScreen() {
         <p className="mt-2 max-w-sm text-sm text-white/60">
           {clubId
             ? 'This is independent of your club. Selectors later look at your goal ratio and the level of club you play for.'
-            : 'Choose your nationality first. Then take the trial — if your country has a league in the game, two of your three club offers will come from home.'}
+            : 'Choose your nationality first. You then play that country’s Under-16 continental championship. Clubs offer a trial from how many goals you score there.'}
         </p>
       </div>
 
@@ -62,7 +63,9 @@ export default function NationalityScreen() {
 
       <div className="flex w-full max-w-sm flex-col gap-5 pb-8">
         {groups.map((group) => {
-          const tournament = INTERNATIONAL_TOURNAMENTS[CONTINENTAL_TOURNAMENT_FOR_CONFEDERATION[group.confederation]];
+          const tournament = clubId
+            ? INTERNATIONAL_TOURNAMENTS[CONTINENTAL_TOURNAMENT_FOR_CONFEDERATION[group.confederation]]
+            : YOUTH_TOURNAMENTS[group.confederation];
           return (
             <section key={group.confederation} className="text-left">
               <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-white/40">

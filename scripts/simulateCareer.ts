@@ -40,7 +40,26 @@ import { missedChanceWinFactor, simulateClubMatch, simulateLeagueSeason } from '
 import { aggregateContinental, aggregateDomesticSplit, recordClubAppearanceStats, seasonDomesticSplit } from '../src/game/career/seasonStats';
 import { leaguePhaseOpponents } from '../src/game/career/continentalDraw';
 import { canWinLeague, hydrateSeason, leagueFixtureIsHome, nextPlayableFixture, pickTitleRival, resolveFixture, shouldSkipFixture } from '../src/game/career/seasonSim';
-import { offerClubsForTrial } from '../src/game/career/trial';
+import {
+  applyTrialMatch,
+  applyYouthMatch,
+  assignOpeningTrialClub,
+  beginClubTrial,
+  clubTrialComplete,
+  createYouthCampaign,
+  rejectAndDropTrial,
+  resolveOpeningMatch,
+  youthTournamentComplete,
+} from '../src/game/career/openingFlow';
+import {
+  CLUB_TRIAL_CHANCE_SPLIT,
+  CLUB_TRIAL_GAMES,
+  nextTrialTier,
+  pickTrialClub,
+  tierForYouthGoals,
+  trialContractWon,
+} from '../src/game/career/trial';
+import { nextYouthKnockoutRound, youthMaxGames } from '../src/game/career/youthTournament';
 import { offerTierFromStanding, resolveSeasonTransition, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
 import {
@@ -796,22 +815,169 @@ if (goalRatioFromStrength(94) !== 0.75 || goalRatioFromStrength(52) !== 0.25) {
   process.exitCode = 1;
 }
 
-console.log('\n--- Trial offers: German nationality gets 2/3 German clubs ---');
+console.log('\n--- Club trial: German nationality prefers a German club ---');
 let germanTrials = 0;
 let germanTierOk = 0;
 for (let i = 0; i < 80; i++) {
-  const offers = offerClubsForTrial(5, 3, 'germany');
-  const home = offers.filter((c) => c.country === 'Germany');
-  if (home.length >= 2 && offers.length === 3) germanTrials += 1;
-  if (home.every((c) => Math.abs(c.tier - 3) <= 1)) germanTierOk += 1;
+  const club = pickTrialClub(3, 'germany');
+  if (club.country === 'Germany') germanTrials += 1;
+  if (Math.abs(club.tier - 3) <= 1) germanTierOk += 1;
 }
-console.log(`2-of-3 German: ${germanTrials}/80; home clubs within a band of earned tier: ${germanTierOk}/80`);
+console.log(`German trial club: ${germanTrials}/80 home; tier near 3: ${germanTierOk}/80`);
 if (germanTrials < 80) {
-  console.error('German trial offers must include 2 clubs from Germany');
+  console.error('German players should trial at a German club when that tier has one');
   process.exitCode = 1;
 }
 if (germanTierOk < 80) {
-  console.error('Home trial offers must stay near the tier the trial earned');
+  console.error('Home trial club must stay near the tier the U16 tournament earned');
+  process.exitCode = 1;
+}
+
+console.log('\n--- U16 opening: youth goals map to club tiers ---');
+if (
+  tierForYouthGoals(7) !== 1
+  || tierForYouthGoals(6) !== 2
+  || tierForYouthGoals(5) !== 3
+  || tierForYouthGoals(4) !== 4
+  || tierForYouthGoals(3) !== 5
+  || tierForYouthGoals(0) !== 5
+) {
+  console.error('tierForYouthGoals must be 7 elite / 6 strong / 5 mid / 4 lower / 0-3 smallest');
+  process.exitCode = 1;
+}
+const chanceSum = CLUB_TRIAL_CHANCE_SPLIT.reduce((sum, n) => sum + n, 0);
+console.log('club trial chance split', [...CLUB_TRIAL_CHANCE_SPLIT], 'sum', chanceSum);
+if (chanceSum !== 10 || CLUB_TRIAL_CHANCE_SPLIT.length !== CLUB_TRIAL_GAMES) {
+  console.error('club trial must be 3 games offering 10 chances in total');
+  process.exitCode = 1;
+}
+if (youthMaxGames() !== 7) {
+  console.error('U16 tournament is 7 games at most');
+  process.exitCode = 1;
+}
+if (
+  nextYouthKnockoutRound('group', true) !== 'round-of-16'
+  || nextYouthKnockoutRound('round-of-16', false) !== 'done'
+  || nextYouthKnockoutRound('semi-final', false) !== 'third-place'
+  || nextYouthKnockoutRound('semi-final', true) !== 'final'
+) {
+  console.error('U16 knockout path must include last 16, and a 3rd-place game after a semi-final loss');
+  process.exitCode = 1;
+}
+
+const fixedRng = (() => {
+  let i = 0;
+  const seq = [0.11, 0.42, 0.73, 0.28, 0.91, 0.05, 0.64, 0.37, 0.82, 0.19];
+  return () => seq[i++ % seq.length];
+})();
+const youth = createYouthCampaign('spain', fixedRng);
+console.log('U16 opener', youth.youthName, 'group', youth.groupOpponents, 'fixtures', youth.calendar.fixtures.length);
+if (youth.youthName !== 'UEFA Under-16 Championship' || youth.calendar.fixtures.length !== 3) {
+  console.error('Spain must open in the UEFA U16 group of three matches');
+  process.exitCode = 1;
+}
+if (youth.calendar.fixtures.some((f) => f.kind !== 'international' || f.internationalRound !== 'group')) {
+  console.error('the first three U16 matches must be group games');
+  process.exitCode = 1;
+}
+
+let campaign = youth;
+for (let i = 0; i < 3; i++) {
+  const fixture = campaign.calendar.fixtures[i];
+  const result = resolveOpeningMatch(fixture, 1, null, 'spain', () => 0.2);
+  campaign = applyYouthMatch(campaign, fixture, result, 1, 'spain', () => 0.2);
+}
+console.log('after group', campaign.qualified, 'games', campaign.gamesPlayed, 'next', campaign.calendar.fixtures[3]?.internationalRound);
+if (campaign.calendar.fixtures.length !== 3 && campaign.qualified !== true && campaign.qualified !== false) {
+  console.error('group stage must resolve qualification');
+  process.exitCode = 1;
+}
+if (campaign.qualified) {
+  if (campaign.calendar.fixtures[3]?.internationalRound !== 'round-of-16') {
+    console.error('qualifiers must play a last-16 tie next');
+    process.exitCode = 1;
+  }
+} else if (!youthTournamentComplete(campaign)) {
+  console.error('failing to qualify must end the U16 tournament');
+  process.exitCode = 1;
+}
+
+const alwaysWin = { outcome: 'win' as const, scoreFor: 2, scoreAgainst: 0 };
+let path = createYouthCampaign('germany', () => 0.4);
+for (let i = 0; i < 3; i++) {
+  path = applyYouthMatch(path, path.calendar.fixtures[path.fixtureIndex], alwaysWin, 1, 'germany', () => 0.4);
+}
+if (path.qualified) {
+  path = applyYouthMatch(path, path.calendar.fixtures[path.fixtureIndex], alwaysWin, 1, 'germany', () => 0.4);
+  path = applyYouthMatch(path, path.calendar.fixtures[path.fixtureIndex], alwaysWin, 1, 'germany', () => 0.4);
+  const beforeSemi = path.calendar.fixtures.length;
+  path = applyYouthMatch(path, path.calendar.fixtures[path.fixtureIndex], { outcome: 'loss', scoreFor: 0, scoreAgainst: 1 }, 0, 'germany', () => 0.4);
+  const afterSemi = path.calendar.fixtures[path.fixtureIndex];
+  console.log('semi-final loss next', afterSemi?.internationalRound, 'games so far', path.gamesPlayed);
+  if (afterSemi?.internationalRound !== 'third-place') {
+    console.error('a semi-final loss must schedule the third-place play-off');
+    process.exitCode = 1;
+  }
+  path = applyYouthMatch(path, path.calendar.fixtures[path.fixtureIndex], alwaysWin, 1, 'germany', () => 0.4);
+  if (!youthTournamentComplete(path) || path.gamesPlayed > 7 || path.calendar.fixtures.length > 7) {
+    console.error('U16 campaign cannot exceed 7 games');
+    process.exitCode = 1;
+  }
+  if (beforeSemi > 6) {
+    console.error('semi-final should be game 6 at most');
+    process.exitCode = 1;
+  }
+}
+
+const assigned = assignOpeningTrialClub({ ...path, goals: 7, youthGoals: 7 }, 'germany');
+if (!assigned.trialClubId || assigned.trialTier !== 1) {
+  console.error('7 U16 goals must earn an elite trial');
+  process.exitCode = 1;
+}
+const germanElite = pickTrialClub(1, 'germany');
+console.log('German elite trial', germanElite.id, germanElite.country, germanElite.tier);
+if (germanElite.country !== 'Germany' || germanElite.tier !== 1) {
+  console.error('a German player who earned elite should trial at a German elite club when one exists');
+  process.exitCode = 1;
+}
+
+const trialStart = beginClubTrial({ ...assigned, goals: 7, youthGoals: 7 }, 'germany', 1);
+console.log('club trial fixtures', trialStart.calendar.fixtures.map((f) => `${f.opponentLabel} ${f.isHome ? 'H' : 'A'} x${f.playerChances}`));
+if (
+  trialStart.calendar.fixtures.length !== 3
+  || trialStart.calendar.fixtures.some((f) => f.kind !== 'league')
+  || trialStart.calendar.fixtures.map((f) => f.playerChances).join() !== '4,3,3'
+  || trialStart.calendar.fixtures.filter((f) => f.isHome).length !== 2
+) {
+  console.error('club trial must be 3 league games, 4+3+3 chances, home/away/home');
+  process.exitCode = 1;
+}
+const trialClub = getClub(trialStart.trialClubId ?? '');
+if (!trialClub || trialStart.calendar.fixtures.some((f) => {
+  const opp = f.opponentId ? getClub(f.opponentId) : undefined;
+  return !opp || opp.league !== trialClub.league || opp.id === trialClub.id;
+})) {
+  console.error('trial opponents must be other clubs in the same league');
+  process.exitCode = 1;
+}
+
+let failed = trialStart;
+failed = applyTrialMatch(failed, 0);
+failed = applyTrialMatch(failed, 0);
+failed = applyTrialMatch(failed, 0);
+if (!clubTrialComplete(failed) || trialContractWon(trialClub, failed.goals, failed.gamesPlayed)) {
+  console.error('a blank trial must fail the club ratio');
+  process.exitCode = 1;
+}
+const dropped = rejectAndDropTrial(failed, 'germany');
+console.log('rejected drop', failed.trialClubId, '->', dropped.trialClubId, dropped.trialTier);
+if (dropped.trialTier !== nextTrialTier(trialStart.trialTier ?? 1) || dropped.trialClubId === trialStart.trialClubId) {
+  console.error('failing a trial must drop a tier and pick a different club');
+  process.exitCode = 1;
+}
+const passClub = trialClub;
+if (!trialContractWon(passClub, 3, 3)) {
+  console.error('3 goals in 3 trial games must beat every club ratio');
   process.exitCode = 1;
 }
 
@@ -2392,6 +2558,28 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
   }
 
   const trialLook = trialStadium(spain);
+  const youthLook = resolveCareerStadium({
+    fixture: {
+      week: 1,
+      kind: 'international',
+      isDecisive: false,
+      internationalRound: 'group',
+      opponentId: 'italy',
+      opponentLabel: 'Italy',
+    },
+    nation: spain,
+    seasonNumber: 1,
+    role: 'reserve',
+    openingKind: 'youth-tournament',
+  });
+  const clubTrialLook = resolveCareerStadium({
+    fixture: homeFx,
+    club: madridClub,
+    nation: spain,
+    seasonNumber: 1,
+    role: 'reserve',
+    openingKind: 'club-trial',
+  });
   const reserveLook = resolveCareerStadium({ club: madridClub, nation: spain, seasonNumber: 1, role: 'reserve' });
   const firstTeamLook = resolveCareerStadium({
     fixture: homeFx,
@@ -2401,15 +2589,23 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
     role: 'first-team',
   });
   console.log(
-    'trial/reserve/first-team venues',
-    trialLook.bowl,
+    'youth/club-trial/reserve/first-team venues',
+    youthLook.groundName,
+    youthLook.capacity,
+    clubTrialLook.groundName,
     reserveLook.groundName,
-    reserveLook.capacity,
     firstTeamLook.groundName,
-    firstTeamLook.capacity,
   );
+  if (youthLook.groundName !== INTERNATIONAL_TOURNAMENT_GROUND.name || youthLook.capacity !== INTERNATIONAL_TOURNAMENT_CAPACITY) {
+    console.error('the U16 tournament must use the neutral tournament stadium');
+    process.exitCode = 1;
+  }
+  if (clubTrialLook.groundName !== groundForClub('real-madrid').name) {
+    console.error('club trial games must use the league ground, not the reserve bowl');
+    process.exitCode = 1;
+  }
   if (trialLook.bowl !== false) {
-    console.error('the trial must use the original pitch with no stadium');
+    console.error('the unused open-pitch helper must stay an open pitch');
     process.exitCode = 1;
   }
   if (
