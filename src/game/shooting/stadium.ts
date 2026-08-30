@@ -180,8 +180,8 @@ function crowdLayer(w: number, h: number, view: StadiumView, stadium: StadiumApp
   const goalLine = view.goal.botY;
   const standBottom = Math.min(h * 0.22, goalLine + h * 0.012);
 
-  const farTl = { x: w * 0.06, y: h * 0.018 };
-  const farTr = { x: w * 0.94, y: h * 0.018 };
+  const farTl = { x: w * 0.06, y: h * 0.07 };
+  const farTr = { x: w * 0.94, y: h * 0.07 };
   const farBr = { x: w * 1.02, y: standBottom };
   const farBl = { x: w * -0.02, y: standBottom };
   paintSeats(ctx, farTl, farTr, farBr, farBl, rng, stadium, 16, 64);
@@ -203,20 +203,23 @@ function crowdLayer(w: number, h: number, view: StadiumView, stadium: StadiumApp
 }
 
 function drawRoof(ctx: CanvasRenderingContext2D, w: number, h: number, standBottom: number, night: boolean) {
-  ctx.fillStyle = night ? '#0b0f18' : '#6b7280';
-  ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.lineTo(w, 0);
-  ctx.lineTo(w, h * 0.04);
-  ctx.quadraticCurveTo(w * 0.5, h * 0.09, 0, h * 0.04);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.strokeStyle = night ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.18)';
+  if (night) {
+    ctx.fillStyle = '#0b0f18';
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(w, 0);
+    ctx.lineTo(w, h * 0.04);
+    ctx.quadraticCurveTo(w * 0.5, h * 0.09, 0, h * 0.04);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  } else {
+    ctx.strokeStyle = 'rgba(71,85,105,0.4)';
+  }
   ctx.lineWidth = Math.max(2, w * 0.006);
   ctx.beginPath();
-  ctx.moveTo(w * 0.04, h * 0.038);
-  ctx.quadraticCurveTo(w * 0.5, standBottom * 0.22, w * 0.96, h * 0.038);
+  ctx.moveTo(w * 0.04, h * 0.032);
+  ctx.quadraticCurveTo(w * 0.5, standBottom * 0.2, w * 0.96, h * 0.032);
   ctx.stroke();
 }
 
@@ -324,9 +327,9 @@ export function drawStadium(
     sky.addColorStop(0.45, '#152038');
     sky.addColorStop(1, '#243044');
   } else {
-    sky.addColorStop(0, '#5ba3d9');
-    sky.addColorStop(0.55, '#8ec8ea');
-    sky.addColorStop(1, '#f2d7a4');
+    sky.addColorStop(0, '#2f86d4');
+    sky.addColorStop(0.4, '#7ec4f0');
+    sky.addColorStop(1, '#f6d9a0');
   }
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, w, standBottom + h * 0.04);
@@ -352,9 +355,10 @@ export function drawStadium(
     ctx.fillStyle = wash;
     ctx.fillRect(0, 0, w, standBottom + h * 0.08);
   } else {
-    const sun = ctx.createRadialGradient(w * 0.82, h * 0.04, 0, w * 0.82, h * 0.04, w * 0.45);
-    sun.addColorStop(0, 'rgba(255,244,210,0.35)');
-    sun.addColorStop(1, 'rgba(255,244,210,0)');
+    const sun = ctx.createRadialGradient(w * 0.78, h * 0.05, 0, w * 0.78, h * 0.05, w * 0.42);
+    sun.addColorStop(0, 'rgba(255,252,220,0.85)');
+    sun.addColorStop(0.18, 'rgba(255,236,170,0.4)');
+    sun.addColorStop(1, 'rgba(255,236,170,0)');
     ctx.fillStyle = sun;
     ctx.fillRect(0, 0, w, standBottom + h * 0.1);
   }
