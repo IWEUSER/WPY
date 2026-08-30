@@ -1,5 +1,5 @@
 import type { CalendarFixture, DomesticCupStage, LeaguesCupStage, PlayoffRound, SeasonCalendar, SuperCupStage } from './calendar';
-import { buildSeasonCalendar } from './calendar';
+import { buildSeasonCalendar, fixtureIsHome } from './calendar';
 import { leaguePhaseOpponents } from './continentalDraw';
 import {
   chancesForKnockoutTie,
@@ -461,6 +461,16 @@ function assignOpponentsAndChances(
       }
       const nationStr = nationId ? nationStrength(nationId) : club.strength;
       f.playerChances = chancesForLeagueMatch({ strength: nationStr }).count;
+      f.isHome = idx % 2 === 0;
+    }
+  }
+
+  for (const f of fixtures) {
+    if (f.kind === 'rest') continue;
+    if (f.kind === 'continental-knockout' || f.kind === 'continental-semi-final') {
+      f.isHome = f.leg !== 2;
+    } else if (typeof f.isHome !== 'boolean') {
+      f.isHome = fixtureIsHome(f);
     }
   }
 
@@ -958,7 +968,7 @@ export function resolveFixture(
   playerGoals: number,
   rng: () => number = Math.random,
 ): { sim: SeasonSimState; result: ClubMatchResult; summary: string } {
-  const isHome = fixture.isHome ?? fixture.week % 2 === 1;
+  const isHome = fixtureIsHome(fixture);
   const scored = playerGoals > 0;
   const isInternational = fixture.kind === 'international';
   const clubOpp = !isInternational && fixture.opponentId ? getClub(fixture.opponentId) : undefined;

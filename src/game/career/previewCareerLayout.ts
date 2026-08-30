@@ -202,6 +202,34 @@ export function applyCareerLayoutPreview(): void {
           : { tournament: 'euro', points: 7, played: 3 },
   });
 
+  const isMatchPreview = preview === 'match' || preview === 'match-away' || preview === 'match-intl';
+  let matchFixtureIndex = Math.max(0, calendar.fixtures.findIndex((f) => f.kind !== 'rest'));
+  if (preview === 'match' || preview === 'match-away') {
+    const wantHome = preview === 'match';
+    const idx = calendar.fixtures.findIndex((f) => f.kind === 'league' && f.isHome === wantHome);
+    if (idx >= 0) matchFixtureIndex = idx;
+    const fx = calendar.fixtures[matchFixtureIndex];
+    if (fx) {
+      fx.kind = 'league';
+      fx.opponentId = 'barcelona';
+      fx.opponentLabel = 'Barcelona';
+      fx.isHome = wantHome;
+      fx.playerChances = 2;
+    }
+  } else if (preview === 'match-intl') {
+    const idx = calendar.fixtures.findIndex((f) => f.kind === 'international');
+    if (idx >= 0) matchFixtureIndex = idx;
+    const fx = calendar.fixtures[matchFixtureIndex];
+    if (fx) {
+      fx.kind = 'international';
+      fx.internationalRound = 'group';
+      fx.opponentId = 'italy';
+      fx.opponentLabel = 'Italy';
+      fx.isHome = true;
+      fx.playerChances = 2;
+    }
+  }
+
   const value = playerMarketValueFromSeasons({
     age: 19,
     careerGoals: 61,
@@ -296,7 +324,9 @@ export function applyCareerLayoutPreview(): void {
               ? 'career-end'
               : preview === 'summary'
                 ? 'season-summary'
-                : 'hub',
+                : isMatchPreview
+                  ? 'match'
+                  : 'hub',
     age: preview === 'end' ? 36 : promoteSummary ? 22 : 19,
     seasonNumber: preview === 'end' ? 21 : promoteSummary ? 6 : 4,
     clubId: preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : promoteSummary ? 'leicester' : 'real-madrid',
@@ -310,6 +340,9 @@ export function applyCareerLayoutPreview(): void {
     careerGoals: preview === 'end' ? 312 : 58,
     careerGames: preview === 'end' ? 540 : 76,
     seasonCalendar: calendar,
+    liveMatch: isMatchPreview
+      ? { fixtureIndex: matchFixtureIndex, chancesTotal: 2, chancesTaken: 0, goals: 0 }
+      : null,
     seasonSim: promoteSummary
       ? { ...sim, leagueTable: leicesterTable, honours: { ...sim.honours, leagueChampion: true } }
       : sim,

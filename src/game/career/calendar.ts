@@ -51,7 +51,9 @@ export interface CalendarFixture {
   opponentLabel?: string;
   /** How many scoring chances the player gets - filled in by seasonSim. */
   playerChances?: number;
-  /** League home/away. First meeting is home, the return is away. */
+  /** Home/away. League: first meeting is home, the return is away.
+   * Two-legged cups: first leg home. One-off finals still get a designated
+   * home side so the stadium crowd can be coloured. */
   isHome?: boolean;
   playoffRound?: PlayoffRound;
   leaguesCupStage?: LeaguesCupStage;
@@ -73,6 +75,29 @@ export interface SeasonCalendar {
   internationalTournament?: InternationalTournamentId | null;
   internationalPhase?: 'none' | 'qualifiers' | 'qualifiers-and-tournament';
   domesticCup?: DomesticCupId | null;
+}
+
+/** Player's side is at home. Prefers the stored flag, then two-legged legs, then week parity. */
+export function fixtureIsHome(fixture: CalendarFixture): boolean {
+  if (typeof fixture.isHome === 'boolean') return fixture.isHome;
+  if (fixture.leg === 2) return false;
+  if (fixture.leg === 1) return true;
+  return fixture.week % 2 === 1;
+}
+
+/**
+ * Share of seats given to the away support. One-off finals and tournament
+ * games sit closer to a split crowd than a league Saturday at home.
+ */
+export function fixtureCrowdAwayShare(fixture: CalendarFixture): number {
+  const tournament =
+    fixture.kind === 'continental-final'
+    || fixture.playoffRound === 'mls-cup'
+    || fixture.domesticCupStage === 'final'
+    || fixture.superCupStage === 'final'
+    || fixture.leaguesCupStage === 'final'
+    || (fixture.kind === 'international' && fixture.internationalRound !== 'qualifier');
+  return tournament ? 0.4 : 0.2;
 }
 
 export interface BuildCalendarParams {

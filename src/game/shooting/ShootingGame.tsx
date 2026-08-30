@@ -19,6 +19,8 @@ import {
   worldToScreen,
   type KeeperPose,
 } from './render';
+import { drawStadium, DEFAULT_STADIUM, defenderKitFromStadium, type StadiumAppearance } from './stadium';
+import { normalizeHex } from './kitPalette';
 import {
   ballHasReachedDefender,
   defenderBlocksBall,
@@ -137,6 +139,25 @@ function readDevAutoblock(): boolean {
   return raw === '1' || raw === 'true';
 }
 
+function readDevStadium(): StadiumAppearance | null {
+  if (!import.meta.env.DEV) return null;
+  const q = new URLSearchParams(window.location.search);
+  const homeParam = q.get('home');
+  const homeColorRaw = q.get('homeColor');
+  const awayColorRaw = q.get('awayColor');
+  if (homeParam == null && !homeColorRaw && !awayColorRaw) return null;
+  const isHome = homeParam !== '0' && homeParam !== 'away' && homeParam !== 'false';
+  const playerColor = normalizeHex(homeColorRaw, DEFAULT_STADIUM.homeColor);
+  const opponentColor = normalizeHex(awayColorRaw, DEFAULT_STADIUM.awayColor);
+  return {
+    isHome,
+    homeColor: isHome ? playerColor : opponentColor,
+    awayColor: isHome ? opponentColor : playerColor,
+    opponentColor,
+    awayShare: 0.2,
+  };
+}
+
 function nextChance(clubStrength?: number): ChanceSetup {
   const forcePenalty = readDevPenalty();
   const forceDistance = readDevDistance();
@@ -210,6 +231,8 @@ export interface ShootingGameProps {
   onComplete?: () => void;
   /** Club strength (≈52–94). Scales how often a chance is a penalty. */
   clubStrength?: number;
+  /** Stadium bowl, home/away crowd colours, and opposition defender kit. */
+  stadium?: StadiumAppearance;
 }
 
 export default function ShootingGame({
@@ -222,6 +245,7 @@ export default function ShootingGame({
   onShotResolved,
   onComplete,
   clubStrength,
+  stadium,
 }: ShootingGameProps = {}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -245,6 +269,8 @@ export default function ShootingGame({
   onCompleteRef.current = onComplete;
   const clubStrengthRef = useRef(clubStrength);
   clubStrengthRef.current = clubStrength;
+  const stadiumRef = useRef<StadiumAppearance>(stadium ?? readDevStadium() ?? DEFAULT_STADIUM);
+  stadiumRef.current = stadium ?? readDevStadium() ?? DEFAULT_STADIUM;
 
   const animRef = useRef<AnimState>({
     phase: 'idle',
@@ -434,6 +460,9 @@ export default function ShootingGame({
         ctx.setTransform(dpr, 0, 0, dpr, shakeX * dpr, shakeY * dpr);
         ctx.clearRect(-shakeX - 4, -shakeY - 4, w + 8, h + 8);
         const view = createPitchView(w, h, anim.shotDistanceM);
+        const look = stadiumRef.current;
+        const defenderKit = defenderKitFromStadium(look);
+        drawStadium(ctx, view, now, look);
         drawPitch(ctx, view, now);
         drawGoal(ctx, view);
 
@@ -444,7 +473,7 @@ export default function ShootingGame({
           const devPose = readDevKeeperPose();
           const devCell = readDevPoseCell();
           drawKeeper(ctx, view, devPose ?? anim.keeperPose);
-          if (anim.defender) drawDefender(ctx, view, anim.defender.worldX, anim.defender.z);
+          if (anim.defender) drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit);
           if (anim.phase === 'dragging' && anim.dragStart && anim.dragPoints.length > 1) {
             // Show the actual curved path being swiped, not just a straight
             // line - this is the live feedback for how much bend/curl the
@@ -519,7 +548,7 @@ export default function ShootingGame({
 
           drawTrail(ctx, anim.ballTrail);
           drawKeeper(ctx, view, anim.keeperPose);
-          if (anim.defender) drawDefender(ctx, view, anim.defender.worldX, anim.defender.z);
+          if (anim.defender) drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit);
           drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
 
           if (
@@ -554,7 +583,7 @@ export default function ShootingGame({
           }
         } else if (anim.phase === 'result' && anim.result) {
           drawKeeper(ctx, view, anim.keeperPose);
-          if (anim.defender) drawDefender(ctx, view, anim.defender.worldX, anim.defender.z);
+          if (anim.defender) drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit);
           drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
           if (now - anim.resultAtMs > RESULT_HOLD_MS) {
             const limit = maxShotsRef.current;

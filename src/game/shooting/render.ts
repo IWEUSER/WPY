@@ -1,4 +1,5 @@
 import { DIVE_LAYOUT_RAD } from './constants';
+import type { DefenderKit } from './kitPalette';
 import type { AimPoint } from './types';
 
 /** FIFA markings in metres. Boxes are drawn from these ratios to the goal
@@ -164,17 +165,32 @@ function drawBoxOutline(ctx: CanvasRenderingContext2D, w: number, box: BoxSpec) 
 
 export function drawPitch(ctx: CanvasRenderingContext2D, view: PitchView, time: number) {
   const { w, h } = view;
-  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  const { halfW, botY } = view.goal;
+  /** Playing surface starts at the goal line so the stadium stays visible behind it. */
+  const grassTop = botY;
+  const vanishY = grassTop;
+
+  ctx.save();
+  const halfTop = Math.min(
+    w * 0.49,
+    Math.max(w * 0.24, view.halfWidthPx(FIFA.eighteenYardWidth / 2, 0) * 1.1),
+  );
+  ctx.beginPath();
+  ctx.moveTo(0, h);
+  ctx.lineTo(w, h);
+  ctx.lineTo(w / 2 + halfTop, grassTop);
+  ctx.lineTo(w / 2 - halfTop, grassTop);
+  ctx.closePath();
+  ctx.clip();
+
+  const grad = ctx.createLinearGradient(0, grassTop, 0, h);
   grad.addColorStop(0, '#0f3d1f');
   grad.addColorStop(0.4, '#155a29');
   grad.addColorStop(1, '#1f7a37');
   ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, w, h);
-
-  const { halfW, botY } = view.goal;
+  ctx.fillRect(0, grassTop, w, Math.max(0, h - grassTop));
 
   const stripeCount = 9;
-  const vanishY = HORIZON_Y * h;
   for (let i = 0; i < stripeCount; i++) {
     const t0 = i / stripeCount;
     const t1 = (i + 1) / stripeCount;
@@ -235,11 +251,12 @@ export function drawPitch(ctx: CanvasRenderingContext2D, view: PitchView, time: 
   }
 
   const sweepX = ((time / 6000) % 1) * w;
-  const sweep = ctx.createRadialGradient(sweepX, h * 0.2, 0, sweepX, h * 0.2, w * 0.5);
+  const sweep = ctx.createRadialGradient(sweepX, grassTop + h * 0.12, 0, sweepX, grassTop + h * 0.12, w * 0.5);
   sweep.addColorStop(0, 'rgba(255,255,255,0.05)');
   sweep.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = sweep;
-  ctx.fillRect(0, 0, w, h);
+  ctx.fillRect(0, grassTop, w, Math.max(0, h - grassTop));
+  ctx.restore();
 }
 
 export function drawGoal(ctx: CanvasRenderingContext2D, view: PitchView) {
@@ -570,7 +587,13 @@ export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose:
 }
 
 /** Standing outfield defender in opposition kit, scaled by their world depth. */
-export function drawDefender(ctx: CanvasRenderingContext2D, view: PitchView, worldX: number, worldZ: number) {
+export function drawDefender(
+  ctx: CanvasRenderingContext2D,
+  view: PitchView,
+  worldX: number,
+  worldZ: number,
+  kit?: DefenderKit,
+) {
   const meterPx = view.halfWidthPx(1, worldZ);
   const feet = worldToScreen(view, worldX, worldZ);
   const heightM = 1.82;
@@ -584,9 +607,9 @@ export function drawDefender(ctx: CanvasRenderingContext2D, view: PitchView, wor
   ctx.fill();
   ctx.restore();
 
-  const kitLight = '#1d4ed8';
-  const kitDark = '#1e3a8a';
-  const shortsColor = '#f8fafc';
+  const kitLight = kit?.shirt ?? '#1d4ed8';
+  const kitDark = kit?.shirtDark ?? '#1e3a8a';
+  const shortsColor = kit?.shorts ?? '#f8fafc';
   const skinColor = '#dfa878';
   const bootColor = '#181818';
   const pose = { direction: 0, stretch: 0, layout: 0 };

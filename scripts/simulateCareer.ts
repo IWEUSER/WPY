@@ -4,7 +4,7 @@
  *
  * Run with: npm run simulate:career
  */
-import { buildSeasonCalendar, INTERNATIONAL_BREAK_WEEKS, isFinalFixture, tournamentWeekCount } from '../src/game/career/calendar';
+import { buildSeasonCalendar, fixtureIsHome, INTERNATIONAL_BREAK_WEEKS, isFinalFixture, tournamentWeekCount } from '../src/game/career/calendar';
 import { INJURY_CHANCE_PER_MATCH, injuryDuration } from '../src/game/career/injury';
 import {
   chancesForKnockoutTie,
@@ -14,6 +14,9 @@ import {
 import { assignClubTier, CLUBS, clubsForSeason, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, leagueMatchWeeks, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
 import { consecutivePoorFactor, contractValueFactor, formAdjustedRatio, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, playerMarketValue, playerMarketValueFromSeasons, RESERVE_CONTRACT_YEARS, seasonalSponsorship, tierForMarketValue, transferFeeFromValue, weeklyWageForClub, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
+import { nationKit } from '../src/game/career/data/nationColours';
+import { resolveMatchStadium } from '../src/game/career/matchVenue';
+import { crowdSwatch, kitFromColor, luminance } from '../src/game/shooting/kitPalette';
 import { clubContinentalCup, internationalCampaignForSeason, internationalTournamentForSeason } from '../src/game/career/data/competitions';
 import { cupFromLeaguePosition, continentalQualificationForNextSeason } from '../src/game/career/europeanQualification';
 import { fifaRank, tournamentOpponents, worldCupKnockoutRankCap } from '../src/game/career/data/fifaRankings';
@@ -2042,6 +2045,104 @@ console.log('\n--- World Cup and continental tournament awards ---');
   console.log('career intl line', line);
   if (!line || !line.qualifying?.includes('qualified') || !line.tournament?.includes('quarter-finals')) {
     console.error('career record must show each qualifying period and tournament outcome');
+    process.exitCode = 1;
+  }
+}
+
+console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
+{
+  const juve = kitFromColor('#000000');
+  const madrid = kitFromColor('#FEBE10');
+  const crowdBlack = crowdSwatch('#000000');
+  console.log('juve kit', juve, 'madrid kit', madrid, 'black crowd', crowdBlack);
+  if (luminance(juve.shorts) < 0.5) {
+    console.error('a black kit must wear light shorts');
+    process.exitCode = 1;
+  }
+  if (luminance(madrid.shorts) > 0.5) {
+    console.error('a gold/yellow kit must wear dark shorts');
+    process.exitCode = 1;
+  }
+  if (luminance(crowdBlack) <= luminance('#000000') + 0.05) {
+    console.error('a black kit must still produce a visible crowd colour');
+    process.exitCode = 1;
+  }
+
+  const madridClub = getClub('real-madrid')!;
+  const spain = getNation('spain')!;
+  const homeFx = {
+    week: 3,
+    kind: 'league' as const,
+    isDecisive: false,
+    opponentId: 'barcelona',
+    opponentLabel: 'Barcelona',
+    isHome: true,
+  };
+  const awayFx = { ...homeFx, isHome: false };
+  const homeLook = resolveMatchStadium({ fixture: homeFx, club: madridClub, nation: spain });
+  const awayLook = resolveMatchStadium({ fixture: awayFx, club: madridClub, nation: spain });
+  console.log('home stadium', homeLook.homeColor, 'away stadium', awayLook.homeColor, 'defender', homeLook.opponentColor, awayLook.opponentColor);
+  if (homeLook.homeColor !== madridClub.color || awayLook.homeColor !== getClub('barcelona')!.color) {
+    console.error('majority crowd must follow the side whose ground it is');
+    process.exitCode = 1;
+  }
+  if (homeLook.opponentColor !== getClub('barcelona')!.color || awayLook.opponentColor !== getClub('barcelona')!.color) {
+    console.error('the defender must wear the opponent kit at home and away');
+    process.exitCode = 1;
+  }
+  if (homeLook.isHome !== true || awayLook.isHome !== false) {
+    console.error('isHome must pass through to the stadium');
+    process.exitCode = 1;
+  }
+
+  const intlHome = {
+    week: 20,
+    kind: 'international' as const,
+    isDecisive: false,
+    opponentId: 'italy',
+    opponentLabel: 'Italy',
+    internationalRound: 'group' as const,
+    isHome: true,
+  };
+  const intlLook = resolveMatchStadium({ fixture: intlHome, club: madridClub, nation: spain });
+  const spainRed = nationKit('spain').primary;
+  const italyBlue = nationKit('italy').primary;
+  console.log('intl crowd', intlLook.homeColor, 'defender', intlLook.opponentColor);
+  if (intlLook.homeColor !== spainRed || intlLook.opponentColor !== italyBlue) {
+    console.error('international crowds and defenders must use nation kit colours');
+    process.exitCode = 1;
+  }
+  if (spainRed === italyBlue) {
+    console.error('Spain and Italy must not share a kit colour');
+    process.exitCode = 1;
+  }
+
+  for (const nation of NATIONS) {
+    const kit = nationKit(nation.id);
+    if (!kit.primary || !kit.primary.startsWith('#')) {
+      console.error(`nation ${nation.id} is missing a kit colour`);
+      process.exitCode = 1;
+      break;
+    }
+  }
+
+  const { calendar } = hydrateSeason({
+    seasonNumber: 2,
+    club: madridClub,
+    careerGoalRatio: 0.8,
+    nationId: 'spain',
+  });
+  const ko1 = calendar.fixtures.find((f) => f.kind === 'continental-knockout' && f.leg === 1);
+  const ko2 = calendar.fixtures.find((f) => f.kind === 'continental-knockout' && f.leg === 2);
+  const leagueHome = calendar.fixtures.filter((f) => f.kind === 'league' && f.isHome).length;
+  const leagueAway = calendar.fixtures.filter((f) => f.kind === 'league' && f.isHome === false).length;
+  console.log('ko home/away', ko1 && fixtureIsHome(ko1), ko2 && fixtureIsHome(ko2), 'league H/A', leagueHome, leagueAway);
+  if (!ko1 || !ko2 || !fixtureIsHome(ko1) || fixtureIsHome(ko2)) {
+    console.error('two-legged ties must be home then away');
+    process.exitCode = 1;
+  }
+  if (leagueHome < 8 || leagueAway < 8) {
+    console.error('league fixtures must include both home and away matches');
     process.exitCode = 1;
   }
 }

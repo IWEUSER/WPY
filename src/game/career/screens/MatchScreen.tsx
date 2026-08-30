@@ -1,10 +1,11 @@
 import { useRef } from 'react';
 import ShootingGame from '../../shooting/ShootingGame';
 import type { ShotResult } from '../../shooting/types';
-import { currentCalendarWeek } from '../calendar';
+import { currentCalendarWeek, fixtureIsHome } from '../calendar';
 import { getClub, leagueMatchWeeks } from '../data/clubs';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { getNation } from '../international';
+import { resolveMatchStadium } from '../matchVenue';
 import { fixtureTitle } from '../seasonSim';
 import { useCareerStore } from '../store';
 
@@ -50,9 +51,12 @@ export default function MatchScreen() {
   const weekLabel = simulated && calendar && liveMatch
     ? `Week ${currentCalendarWeek(calendar, liveMatch.fixtureIndex)} of ${calendar.totalWeeks}`
     : `Matchday ${matchNumber}/${club ? leagueMatchWeeks(club.league) : matchNumber}`;
+  const venueLabel = fixture ? (fixtureIsHome(fixture) ? 'Home' : 'Away') : null;
   const progressLabel = simulated && liveMatch
-    ? `${weekLabel}${competitionName ? ` · ${competitionName}` : ''} · ${chances} chance${chances === 1 ? '' : 's'}`
+    ? `${weekLabel}${competitionName ? ` · ${competitionName}` : ''}${venueLabel ? ` · ${venueLabel}` : ''} · ${chances} chance${chances === 1 ? '' : 's'}`
     : weekLabel;
+
+  const stadium = resolveMatchStadium({ fixture, club, nation });
 
   return (
     <ShootingGame
@@ -63,6 +67,7 @@ export default function MatchScreen() {
       hideStatsBar
       maxShots={chances}
       clubStrength={club?.strength}
+      stadium={stadium}
       onShotResolved={(result) => {
         lastResultRef.current = result;
         if (simulated) recordMatchChance(result);
