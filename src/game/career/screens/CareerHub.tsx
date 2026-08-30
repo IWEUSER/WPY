@@ -67,6 +67,8 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
     seasons: [...seasonHistory, season],
     fallbackClub: club,
     contractYearsRemaining,
+    seasonNumber,
+    calendarWeek: week,
   });
 
   return (

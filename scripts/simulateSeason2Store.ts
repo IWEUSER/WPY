@@ -7,6 +7,8 @@
  */
 import { useCareerStore } from '../src/game/career/store';
 import { getClub, leagueMatchWeeks } from '../src/game/career/data/clubs';
+import { currentCalendarWeek } from '../src/game/career/calendar';
+import { playerMarketValueFromSeasons, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import type { ShotResult } from '../src/game/shooting/types';
 
 function fakeShot(scored: boolean): ShotResult {
@@ -57,7 +59,26 @@ if (spanishOffers < 2) {
 }
 const clubId = offered[0];
 store.getState().chooseClub(clubId);
-console.log('S1 club', clubId, 'phase', store.getState().phase, 'calendar', store.getState().seasonCalendar);
+console.log(
+  'S1 club',
+  clubId,
+  'phase',
+  store.getState().phase,
+  'calendar',
+  store.getState().seasonCalendar,
+  'contract',
+  store.getState().contractYearsRemaining,
+  'sponsorship',
+  store.getState().seasonSponsorship,
+);
+if (store.getState().contractYearsRemaining !== 1) {
+  console.error('Reserve team contracts must be 1 year');
+  process.exitCode = 1;
+}
+if (store.getState().seasonSponsorship !== 0) {
+  console.error('Reserve team players must not receive sponsorship');
+  process.exitCode = 1;
+}
 if (store.getState().phase !== 'hub') {
   console.error('Signing a club after nationality must go to the hub, not nationality again');
   process.exitCode = 1;
@@ -235,6 +256,32 @@ if (after.careerGames !== 1) {
   console.error('Career games must start counting in season 2');
   process.exitCode = 1;
 }
+const afterClub = after.clubId ? getClub(after.clubId) : undefined;
+const afterWeek =
+  after.seasonCalendar && after.seasonSim
+    ? currentCalendarWeek(after.seasonCalendar, after.seasonSim.fixtureIndex)
+    : 1;
+const afterValue = afterClub && after.currentSeason
+  ? playerMarketValueFromSeasons({
+      age: after.age,
+      careerGoals: after.careerGoals,
+      careerGames: after.careerGames,
+      seasons: [...after.seasonHistory, after.currentSeason],
+      fallbackClub: afterClub,
+      contractYearsRemaining: after.contractYearsRemaining,
+      seasonNumber: after.seasonNumber,
+      calendarWeek: afterWeek,
+    })
+  : null;
+console.log('S1 market value after first match', afterValue, 'week', afterWeek);
+if (afterValue !== YOUTH_MARKET_VALUE) {
+  console.error('Season 1 market value must stay €100k until week 20');
+  process.exitCode = 1;
+}
+if (after.seasonSponsorship !== 0) {
+  console.error('Season 1 sponsorship must stay at zero until market value reaches €10m');
+  process.exitCode = 1;
+}
 
 const finalIndex = after.seasonCalendar?.fixtures.findIndex(
   (f) => f.kind === 'international' && f.internationalRound === 'final',
@@ -264,4 +311,62 @@ if (finalIndex == null || finalIndex < 0 || !after.seasonSim || !after.seasonCal
     process.exitCode = 1;
   }
   console.log('after acknowledge', store.getState().phase);
+}
+
+store.getState().resetCareer();
+store.getState().startCareer();
+store.getState().chooseNationality('spain');
+for (let i = 0; i < 10; i++) store.getState().recordTrialShot(fakeShot(true));
+store.getState().finishTrial();
+const loanParent = store.getState().trial!.offeredClubIds[0];
+store.getState().chooseClub(loanParent);
+const loanReserveWeeks = leagueMatchWeeks(getClub(loanParent)?.league ?? 'La Liga');
+for (let i = 0; i < loanReserveWeeks; i++) {
+  store.getState().advance();
+  store.getState().recordMatchShot(fakeShot(false));
+}
+store.getState().continueAfterSeason();
+console.log(
+  'failed reserve phase',
+  store.getState().phase,
+  'season',
+  store.getState().seasonNumber,
+  'offers',
+  store.getState().pendingTransfer?.kind,
+);
+if (store.getState().phase !== 'transfer-choice' || store.getState().pendingTransfer?.kind !== 'loan') {
+  console.error('Missing the reserve ratio must force a season-1 loan');
+  process.exitCode = 1;
+}
+const loanClubId = store.getState().pendingTransfer?.clubIds[0];
+if (!loanClubId) {
+  console.error('Season 1 loan offers must include a club');
+  process.exitCode = 1;
+} else {
+  store.getState().resolveTransferChoice(loanClubId);
+  const loaned = store.getState();
+  console.log(
+    'S1 loan',
+    loaned.clubId,
+    'role',
+    loaned.role,
+    'season',
+    loaned.seasonNumber,
+    'contract',
+    loaned.contractYearsRemaining,
+    'sponsorship',
+    loaned.seasonSponsorship,
+  );
+  if (loaned.role !== 'loan' || loaned.seasonNumber !== 2) {
+    console.error('The reserve miss must send the player on loan for public season 1');
+    process.exitCode = 1;
+  }
+  if (loaned.contractYearsRemaining !== 1) {
+    console.error('A season 1 loan must remain a 1-year contract');
+    process.exitCode = 1;
+  }
+  if (loaned.seasonSponsorship !== 0) {
+    console.error('A season 1 loan below €10m must not receive sponsorship');
+    process.exitCode = 1;
+  }
 }

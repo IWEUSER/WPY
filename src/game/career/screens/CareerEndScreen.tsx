@@ -1,11 +1,12 @@
 import { getClub } from '../data/clubs';
 import { INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
-import { awardLabels, seasonClubName, seasonRatio } from '../honoursDisplay';
+import { awardLabels, careerAwardCounts, careerTrophyCounts, formatGamesGoals, seasonClubName, seasonRatio } from '../honoursDisplay';
 import { formatEuros } from '../playerValue';
 import { countsTowardCareerRecord, displaySeasonLabel } from '../seasonDisplay';
 import { aggregateContinental, aggregateDomestic, continentalLabel } from '../seasonStats';
 import { useCareerStore } from '../store';
 import type { SeasonRecord } from '../types';
+import { HonoursPills } from './HonoursPills';
 
 export default function CareerEndScreen() {
   const history = useCareerStore((s) => s.seasonHistory);
@@ -33,7 +34,8 @@ export default function CareerEndScreen() {
   const totalGoals = careerGoals + intlGoals;
   const ratio = totalGames > 0 ? totalGoals / totalGames : 0;
   const sponsorship = seasons.reduce((sum, s) => sum + (s.sponsorship ?? 0), 0);
-  const trophies = [...new Set(seasons.flatMap((s) => s.trophies ?? []))];
+  const trophies = careerTrophyCounts(seasons);
+  const awards = careerAwardCounts(seasons);
   const lastClub = clubId ? getClub(clubId) : undefined;
   const lastSeason = seasons[seasons.length - 1];
 
@@ -87,9 +89,9 @@ export default function CareerEndScreen() {
             <p key={row.tournament} className="mt-1 text-xs text-white/50">
               {INTERNATIONAL_TOURNAMENTS[row.tournament]?.name ?? row.tournament}
               {': '}
-              Qualifying {row.qualifyingGoals} in {row.qualifyingGames}
+              Qualifying {formatGamesGoals(row.qualifyingGames, row.qualifyingGoals)}
               {' · '}
-              Tournament {row.finalsGoals} in {row.finalsGames}
+              Tournament {formatGamesGoals(row.finalsGames, row.finalsGoals)}
             </p>
           ))}
         </div>
@@ -102,18 +104,8 @@ export default function CareerEndScreen() {
         </p>
       </div>
 
-      {trophies.length > 0 && (
-        <div className="mt-3 rounded-2xl bg-emerald-400/10 p-4">
-          <p className="text-xs uppercase tracking-wide text-emerald-200/70">Trophies</p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {trophies.map((name) => (
-              <span key={name} className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
-                {name}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
+      <HonoursPills title="Trophies" items={trophies} empty="No trophies won" tone="trophy" />
+      <HonoursPills title="Awards" items={awards} empty="No awards won" tone="award" />
 
       <div className="mt-5 flex flex-col gap-3">
         {[...seasons].reverse().map((season) => (

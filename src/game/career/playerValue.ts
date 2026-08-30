@@ -42,6 +42,11 @@ export interface MarketValueParams {
 }
 
 export const DEFAULT_CONTRACT_YEARS = 5;
+export const RESERVE_CONTRACT_YEARS = 1;
+/** Public Season 1 (internal season 2) stays at the youth value until week 21. */
+export const SEASON_1_VALUE_LOCK_WEEKS = 20;
+export const YOUTH_MARKET_VALUE = 100_000;
+export const SPONSORSHIP_VALUE_FLOOR = 10_000_000;
 
 /** Longer deals for teenagers; the max shortens as the player ages. */
 export function maxContractYearsForAge(age: number): number {
@@ -70,9 +75,27 @@ export function nextContractYearsRemaining(yearsRemaining: number, age: number):
   return yearsRemaining <= 1 ? newContractYears(age) : yearsRemaining - 1;
 }
 
-/** Boot / shirt money for the season. Scales with market value. */
+/** Reserve year and the first public season on loan are always one-year deals. */
+export function loanContractYearsRemaining(
+  seasonNumber: number,
+  yearsRemaining: number,
+  age: number,
+): number {
+  if (seasonNumber <= 2) return RESERVE_CONTRACT_YEARS;
+  return nextContractYearsRemaining(yearsRemaining, age);
+}
+
+export function isSeason1ValueLocked(seasonNumber?: number, calendarWeek?: number): boolean {
+  if (seasonNumber == null) return false;
+  if (seasonNumber < 2) return true;
+  if (seasonNumber === 2) return (calendarWeek ?? 99) <= SEASON_1_VALUE_LOCK_WEEKS;
+  return false;
+}
+
+/** Boot / shirt money for the season. Only once market value reaches €10m. */
 export function seasonalSponsorship(marketValue: number): number {
-  const raw = Math.max(10_000, marketValue * 0.04);
+  if (marketValue < SPONSORSHIP_VALUE_FLOOR) return 0;
+  const raw = marketValue * 0.04;
   if (raw >= 1_000_000) return Math.round(raw / 100_000) * 100_000;
   if (raw >= 100_000) return Math.round(raw / 10_000) * 10_000;
   return Math.round(raw / 5_000) * 5_000;
@@ -147,7 +170,12 @@ export function playerMarketValueFromSeasons(params: {
   seasons: SeasonRecord[];
   fallbackClub: Club;
   contractYearsRemaining?: number;
+  seasonNumber?: number;
+  calendarWeek?: number;
 }): number {
+  if (isSeason1ValueLocked(params.seasonNumber, params.calendarWeek)) {
+    return YOUTH_MARKET_VALUE;
+  }
   const { age, careerGoals, careerGames, seasons, fallbackClub } = params;
   const yearsLeft = params.contractYearsRemaining ?? DEFAULT_CONTRACT_YEARS;
   const careerRatio = careerGames > 0 ? careerGoals / careerGames : 0;

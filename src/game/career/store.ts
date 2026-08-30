@@ -8,10 +8,12 @@ import { planSuperCup } from './continentalDraw';
 import { getClub, leagueMatchWeeks } from './data/clubs';
 import {
   DEFAULT_CONTRACT_YEARS,
+  loanContractYearsRemaining,
   newContractYears,
   nextContractYearsRemaining,
   playerMarketValue,
   playerMarketValueFromSeasons,
+  RESERVE_CONTRACT_YEARS,
   seasonalSponsorship,
   weeklyWageForClub,
 } from './playerValue';
@@ -149,18 +151,21 @@ function startSimulatedSeason(
   const league = extras?.league ?? club?.league ?? null;
   let season = freshSeason(seasonNumber, clubId, role, age);
   season = { ...season, league: league ?? undefined };
-  const sponsorship = club
-    ? seasonalSponsorship(
-        playerMarketValueFromSeasons({
-          age,
-          careerGoals,
-          careerGames,
-          seasons: history,
-          fallbackClub: club,
-          contractYearsRemaining: extras?.contractYearsRemaining ?? DEFAULT_CONTRACT_YEARS,
-        }),
-      )
-    : 0;
+  const sponsorship =
+    club && role !== 'reserve'
+      ? seasonalSponsorship(
+          playerMarketValueFromSeasons({
+            age,
+            careerGoals,
+            careerGames,
+            seasons: history,
+            fallbackClub: club,
+            contractYearsRemaining: extras?.contractYearsRemaining ?? DEFAULT_CONTRACT_YEARS,
+            seasonNumber,
+            calendarWeek: 0,
+          }),
+        )
+      : 0;
   season = { ...season, sponsorship, earnings: (season.earnings ?? 0) + sponsorship };
   const careerEarnings = (extras?.careerEarnings ?? 0) + sponsorship;
 
@@ -502,12 +507,12 @@ export const useCareerStore = create<CareerStore>()(
             seasonsAtCurrentClub: 0,
             availability: createAvailability(),
             weeklyWage,
-            contractYears: newContractYears(STARTING_AGE),
-            contractYearsRemaining: newContractYears(STARTING_AGE),
+            contractYears: RESERVE_CONTRACT_YEARS,
+            contractYearsRemaining: RESERVE_CONTRACT_YEARS,
             ...startSimulatedSeason(1, clubId, 'reserve', [], null, STARTING_AGE, 0, 0, null, undefined, {
               league: club?.league,
               careerEarnings: 0,
-              contractYearsRemaining: newContractYears(STARTING_AGE),
+              contractYearsRemaining: RESERVE_CONTRACT_YEARS,
             }),
             pendingTransfer: null,
             phase: 'hub' as const,
@@ -904,10 +909,10 @@ export const useCareerStore = create<CareerStore>()(
             seasonsAtCurrentClub: 0,
             weeklyWage: offer?.weeklyWage ?? state.weeklyWage,
             contractYears: takeLoan
-              ? nextContractYearsRemaining(state.contractYearsRemaining, state.age)
+              ? loanContractYearsRemaining(state.seasonNumber, state.contractYearsRemaining, state.age)
               : newContractYears(state.age),
             contractYearsRemaining: takeLoan
-              ? nextContractYearsRemaining(state.contractYearsRemaining, state.age)
+              ? loanContractYearsRemaining(state.seasonNumber, state.contractYearsRemaining, state.age)
               : newContractYears(state.age),
             availability: createAvailability(),
             phase: 'hub',
@@ -926,7 +931,7 @@ export const useCareerStore = create<CareerStore>()(
                 league: nextClub?.league,
                 careerEarnings: state.careerEarnings,
                 contractYearsRemaining: takeLoan
-                  ? nextContractYearsRemaining(state.contractYearsRemaining, state.age)
+                  ? loanContractYearsRemaining(state.seasonNumber, state.contractYearsRemaining, state.age)
                   : newContractYears(state.age),
               },
             ),
@@ -946,7 +951,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 13,
+      version: 14,
       migrate: (persisted) => {
         const state = persisted as Partial<CareerState>;
         const sim = state.seasonSim;
@@ -1021,8 +1026,14 @@ export const useCareerStore = create<CareerStore>()(
           lastMatchResult: state.lastMatchResult ?? null,
           weeklyWage: state.weeklyWage ?? 0,
           careerEarnings: state.careerEarnings ?? 0,
-          contractYears: state.contractYears ?? DEFAULT_CONTRACT_YEARS,
-          contractYearsRemaining: state.contractYearsRemaining ?? DEFAULT_CONTRACT_YEARS,
+          contractYears:
+            (state.seasonNumber ?? 1) === 1 || (state.role === 'loan' && (state.seasonNumber ?? 1) <= 2)
+              ? RESERVE_CONTRACT_YEARS
+              : (state.contractYears ?? DEFAULT_CONTRACT_YEARS),
+          contractYearsRemaining:
+            (state.seasonNumber ?? 1) === 1 || (state.role === 'loan' && (state.seasonNumber ?? 1) <= 2)
+              ? RESERVE_CONTRACT_YEARS
+              : (state.contractYearsRemaining ?? DEFAULT_CONTRACT_YEARS),
           clubLeague: state.clubLeague ?? (state.clubId ? getClub(state.clubId)?.league ?? null : null),
           seasonSponsorship: state.seasonSponsorship ?? 0,
           injuryGamesRemaining: state.injuryGamesRemaining ?? 0,

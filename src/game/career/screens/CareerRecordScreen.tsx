@@ -1,11 +1,13 @@
 import { getClub } from '../data/clubs';
 import { INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
-import { awardLabels, seasonClubName, seasonRatio } from '../honoursDisplay';
+import { currentCalendarWeek } from '../calendar';
+import { awardLabels, careerAwardCounts, careerTrophyCounts, formatGamesGoals, seasonClubName, seasonRatio } from '../honoursDisplay';
 import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons } from '../playerValue';
 import { countsTowardCareerRecord, displaySeasonLabel } from '../seasonDisplay';
 import { aggregateContinental, aggregateDomestic, continentalLabel } from '../seasonStats';
 import { useCareerStore } from '../store';
 import type { SeasonRecord } from '../types';
+import { HonoursPills } from './HonoursPills';
 
 const ROLE_LABEL: Record<string, string> = {
   reserve: 'Reserves',
@@ -24,6 +26,9 @@ export default function CareerRecordScreen() {
   const careerEarnings = useCareerStore((s) => s.careerEarnings);
   const weeklyWage = useCareerStore((s) => s.weeklyWage);
   const contractYearsRemaining = useCareerStore((s) => s.contractYearsRemaining);
+  const seasonNumber = useCareerStore((s) => s.seasonNumber);
+  const seasonCalendar = useCareerStore((s) => s.seasonCalendar);
+  const seasonSim = useCareerStore((s) => s.seasonSim);
   const returnToHub = useCareerStore((s) => s.returnToHub);
 
   const seasons: Array<SeasonRecord & { inProgress?: boolean }> = [
@@ -41,6 +46,11 @@ export default function CareerRecordScreen() {
   const totalGames = careerGames + intlGames;
   const totalGoals = careerGoals + intlGoals;
   const ratio = totalGames > 0 ? totalGoals / totalGames : 0;
+  const trophies = careerTrophyCounts(recordSeasons.filter((s) => countsTowardCareerRecord(s.seasonNumber)));
+  const awards = careerAwardCounts(recordSeasons.filter((s) => countsTowardCareerRecord(s.seasonNumber)));
+  const week = seasonCalendar && seasonSim
+    ? currentCalendarWeek(seasonCalendar, seasonSim.fixtureIndex)
+    : current?.gamesPlayed ?? 0;
 
   return (
     <div className="flex h-full w-full flex-col overflow-y-auto px-5 py-[max(1.25rem,env(safe-area-inset-top))] pb-10 text-white">
@@ -85,6 +95,8 @@ export default function CareerRecordScreen() {
                 seasons: [...history, ...(current ? [current] : [])],
                 fallbackClub: club,
                 contractYearsRemaining,
+                seasonNumber,
+                calendarWeek: week,
               })
             : null;
         if (value == null && careerEarnings <= 0 && weeklyWage <= 0) return null;
@@ -115,9 +127,9 @@ export default function CareerRecordScreen() {
                   <li key={row.tournament}>
                     <p className="font-semibold text-white/90">{name}</p>
                     <p className="text-xs text-white/50">
-                      Qualifying {row.qualifyingGoals} in {row.qualifyingGames}
+                      Qualifying {formatGamesGoals(row.qualifyingGames, row.qualifyingGoals)}
                       {' · '}
-                      Tournament {row.finalsGoals} in {row.finalsGames}
+                      Tournament {formatGamesGoals(row.finalsGames, row.finalsGoals)}
                     </p>
                   </li>
                 );
@@ -126,6 +138,9 @@ export default function CareerRecordScreen() {
           )}
         </section>
       )}
+
+      <HonoursPills title="Trophies" items={trophies} empty="No trophies yet" tone="trophy" />
+      <HonoursPills title="Awards" items={awards} empty="No awards yet" tone="award" />
 
       <section className="mt-5 rounded-2xl bg-amber-400/10 p-4">
         <p className="text-xs uppercase tracking-wide text-amber-200/70">World Player of the Year</p>
@@ -215,7 +230,7 @@ function SeasonCard({ season }: { season: SeasonRecord & { inProgress?: boolean 
         </div>
       </dl>
       <p className="mt-2 text-xs text-white/50">
-        Domestic {season.domesticGoals ?? 0} in {season.domesticGames ?? 0}
+        Domestic {formatGamesGoals(season.domesticGames ?? 0, season.domesticGoals ?? 0)}
         {(season.continentalStats ?? []).map((row) => (
           <span key={row.cup}>
             {' · '}

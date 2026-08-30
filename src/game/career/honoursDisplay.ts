@@ -28,6 +28,39 @@ export function awardLabels(season: SeasonRecord): string[] {
   return labels;
 }
 
+export interface CountedHonour {
+  name: string;
+  count: number;
+}
+
+function countNames(names: string[]): CountedHonour[] {
+  const map = new Map<string, number>();
+  for (const name of names) map.set(name, (map.get(name) ?? 0) + 1);
+  return [...map.entries()].map(([name, count]) => ({ name, count }));
+}
+
+export function careerTrophyCounts(seasons: SeasonRecord[]): CountedHonour[] {
+  return countNames(seasons.flatMap((season) => season.trophies ?? []));
+}
+
+export function careerAwardCounts(seasons: SeasonRecord[]): CountedHonour[] {
+  const names: string[] = [];
+  for (const season of seasons) {
+    if (season.topGoalscorer) names.push('Top goalscorer');
+    if (season.playerOfTheYear) names.push('Player of the Year');
+    if (season.wonWpy) names.push('World Player of the Year');
+  }
+  return countNames(names);
+}
+
+export function formatCountedHonour(item: CountedHonour): string {
+  return `${item.name} ×${item.count}`;
+}
+
+export function formatGamesGoals(games: number, goals: number): string {
+  return `${games} game${games === 1 ? '' : 's'} · ${goals} goal${goals === 1 ? '' : 's'}`;
+}
+
 export function seasonClubName(season: SeasonRecord): string {
   return getClub(season.clubId)?.name ?? season.clubId;
 }

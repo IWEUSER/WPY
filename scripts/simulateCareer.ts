@@ -16,7 +16,7 @@ import {
   meanChancesFromStrength,
 } from '../src/game/career/chanceEngine';
 import { assignClubTier, CLUBS, clubsForSeason, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, leagueMatchWeeks, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
-import { consecutivePoorFactor, contractValueFactor, formAdjustedRatio, maxContractYearsForAge, playerMarketValue, playerMarketValueFromSeasons, seasonalSponsorship, tierForMarketValue, weeklyWageForClub } from '../src/game/career/playerValue';
+import { consecutivePoorFactor, contractValueFactor, formAdjustedRatio, loanContractYearsRemaining, maxContractYearsForAge, playerMarketValue, playerMarketValueFromSeasons, RESERVE_CONTRACT_YEARS, seasonalSponsorship, tierForMarketValue, weeklyWageForClub, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { internationalCampaignForSeason, internationalTournamentForSeason } from '../src/game/career/data/competitions';
 import { fifaRank } from '../src/game/career/data/fifaRankings';
@@ -35,6 +35,7 @@ import {
   goldenBootWinChance,
   playerOfTheYearGoalTarget,
 } from '../src/game/career/domesticAwards';
+import { careerAwardCounts, careerTrophyCounts, formatGamesGoals } from '../src/game/career/honoursDisplay';
 import type { SeasonRecord } from '../src/game/career/types';
 
 const N = 50000;
@@ -1442,9 +1443,87 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
 
   const sponsorStar = seasonalSponsorship(200_000_000);
   const sponsorCheap = seasonalSponsorship(900_000);
-  console.log('sponsorship €200m', sponsorStar, '€900k', sponsorCheap);
-  if (sponsorStar < 5_000_000 || sponsorCheap > 80_000 || sponsorCheap >= sponsorStar) {
-    console.error('sponsorship must scale with market value');
+  const sponsorFloor = seasonalSponsorship(10_000_000);
+  const sponsorJustUnder = seasonalSponsorship(9_900_000);
+  console.log('sponsorship €200m', sponsorStar, '€900k', sponsorCheap, '€10m', sponsorFloor, '€9.9m', sponsorJustUnder);
+  if (sponsorStar < 5_000_000 || sponsorCheap !== 0 || sponsorJustUnder !== 0 || sponsorFloor <= 0 || sponsorCheap >= sponsorStar) {
+    console.error('sponsorship must be zero below €10m and scale with market value above that');
+    process.exitCode = 1;
+  }
+  if (RESERVE_CONTRACT_YEARS !== 1 || loanContractYearsRemaining(2, 5, 17) !== 1) {
+    console.error('reserve and season-1 loans must be 1-year deals');
+    process.exitCode = 1;
+  }
+  if (loanContractYearsRemaining(5, 5, 22) !== 4) {
+    console.error('later-career loans should still tick the remaining years down');
+    process.exitCode = 1;
+  }
+  const earlyS1 = playerMarketValueFromSeasons({
+    age: 17,
+    careerGoals: 2,
+    careerGames: 1,
+    seasons: [{
+      ...dummySeason,
+      seasonNumber: 2,
+      clubId: 'barcelona',
+      role: 'first-team',
+      goals: 2,
+      gamesPlayed: 1,
+    }],
+    fallbackClub: getClub('barcelona')!,
+    contractYearsRemaining: 5,
+    seasonNumber: 2,
+    calendarWeek: 1,
+  });
+  const lateS1 = playerMarketValueFromSeasons({
+    age: 17,
+    careerGoals: 20,
+    careerGames: 22,
+    seasons: [{
+      ...dummySeason,
+      seasonNumber: 2,
+      clubId: 'barcelona',
+      role: 'first-team',
+      goals: 20,
+      gamesPlayed: 22,
+    }],
+    fallbackClub: getClub('barcelona')!,
+    contractYearsRemaining: 5,
+    seasonNumber: 2,
+    calendarWeek: 21,
+  });
+  console.log('S1 value week 1', earlyS1, 'week 21', lateS1);
+  if (earlyS1 !== YOUTH_MARKET_VALUE) {
+    console.error('season 1 market value must stay at €100k until week 20');
+    process.exitCode = 1;
+  }
+  if (lateS1 <= YOUTH_MARKET_VALUE) {
+    console.error('season 1 market value must update after week 20');
+    process.exitCode = 1;
+  }
+  const trophyTally = careerTrophyCounts([
+    { ...dummySeason, trophies: ['La Liga', 'Copa del Rey'] },
+    { ...dummySeason, trophies: ['La Liga'] },
+  ]);
+  const awardTally = careerAwardCounts([
+    { ...dummySeason, topGoalscorer: true, playerOfTheYear: true, wonWpy: true },
+    { ...dummySeason, topGoalscorer: true, playerOfTheYear: false, wonWpy: false },
+  ]);
+  console.log('trophy counts', trophyTally, 'award counts', awardTally, formatGamesGoals(2, 0));
+  if (trophyTally.find((t) => t.name === 'La Liga')?.count !== 2 || trophyTally.find((t) => t.name === 'Copa del Rey')?.count !== 1) {
+    console.error('career trophies must count how many times each title was won');
+    process.exitCode = 1;
+  }
+  if (
+    awardTally.find((a) => a.name === 'Top goalscorer')?.count !== 2 ||
+    awardTally.find((a) => a.name === 'Player of the Year')?.count !== 1 ||
+    awardTally.find((a) => a.name === 'World Player of the Year')?.count !== 1
+  ) {
+    console.error('career awards must count top scorer, player of the year and WPY');
+    process.exitCode = 1;
+  }
+  if (formatGamesGoals(2, 0) !== '2 games · 0 goals') {
+    console.error('international lines must show games and goals, not “0 in 2”');
     process.exitCode = 1;
   }
 }
