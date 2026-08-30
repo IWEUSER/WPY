@@ -65,7 +65,7 @@ export function resolveMatchStadium(args: {
         : groundForClub(groundClub?.id);
 
   return appearanceFromGround(ground, {
-    isHome,
+    isHome: neutral ? true : isHome,
     night: fixture ? fixtureIsNight(fixture) : false,
     homeColor: home.primary,
     homeSecondary: home.secondary,

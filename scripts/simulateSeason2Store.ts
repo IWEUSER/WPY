@@ -43,22 +43,58 @@ if (store.getState().phase !== 'nationality-choice') {
   process.exitCode = 1;
 }
 store.getState().chooseNationality('spain');
-console.log('after nationality phase', store.getState().phase, 'nation', store.getState().nationality, '(expect trial / spain)');
-if (store.getState().phase !== 'trial' || store.getState().nationality !== 'spain') {
-  console.error('Choosing nationality with no club must start the trial');
+console.log(
+  'after nationality phase',
+  store.getState().phase,
+  'nation',
+  store.getState().nationality,
+  store.getState().openingCampaign?.youthName,
+);
+if (
+  store.getState().phase !== 'match'
+  || store.getState().nationality !== 'spain'
+  || store.getState().openingCampaign?.kind !== 'youth-tournament'
+) {
+  console.error('Choosing nationality with no club must start the U16 tournament');
   process.exitCode = 1;
 }
-for (let i = 0; i < 10; i++) store.getState().recordTrialShot(fakeShot(true));
-store.getState().finishTrial();
-const offered = store.getState().trial!.offeredClubIds;
-const spanishOffers = offered.filter((id) => getClub(id)?.country === 'Spain').length;
-console.log('S1 offers', offered, `spanish=${spanishOffers}`);
-if (spanishOffers < 2) {
-  console.error('Spanish nationality should produce 2 of 3 trial offers from Spain');
+
+function playOpeningMatch(goals: number) {
+  const live = store.getState().liveMatch;
+  if (!live) {
+    console.error('expected a live opening match');
+    process.exitCode = 1;
+    return;
+  }
+  for (let i = 0; i < live.chancesTotal; i++) {
+    store.getState().recordMatchChance(fakeShot(i < goals));
+  }
+  store.getState().finishLiveMatch();
+  store.getState().acknowledgeMatchResult();
+}
+
+function completeOpeningAndSign(): string | undefined {
+  while (store.getState().phase === 'match' && store.getState().openingCampaign?.kind === 'youth-tournament') {
+    playOpeningMatch(store.getState().liveMatch?.chancesTotal ?? 1);
+  }
+  if (store.getState().phase === 'match-result') store.getState().acknowledgeMatchResult();
+  if (store.getState().phase === 'opening-brief') store.getState().startOpeningTrial();
+  while (store.getState().phase === 'match' && store.getState().openingCampaign?.kind === 'club-trial') {
+    playOpeningMatch(store.getState().liveMatch?.chancesTotal ?? 1);
+  }
+  if (store.getState().phase === 'match-result') store.getState().acknowledgeMatchResult();
+  const clubId = store.getState().trial?.offeredClubIds[0];
+  if (clubId) store.getState().chooseClub(clubId);
+  return clubId;
+}
+
+const youthName = store.getState().openingCampaign?.youthName;
+const clubId = completeOpeningAndSign();
+console.log('after opening', store.getState().phase, youthName, 'signed', clubId);
+if (!clubId || store.getState().phase !== 'hub' || getClub(clubId)?.country !== 'Spain') {
+  console.error('a passed Spanish U16 trial must sign a Spanish club');
   process.exitCode = 1;
 }
-const clubId = offered[0];
-store.getState().chooseClub(clubId);
 console.log(
   'S1 club',
   clubId,
@@ -381,10 +417,11 @@ if (finalIndex == null || finalIndex < 0 || !after.seasonSim || !after.seasonCal
 store.getState().resetCareer();
 store.getState().startCareer();
 store.getState().chooseNationality('spain');
-for (let i = 0; i < 10; i++) store.getState().recordTrialShot(fakeShot(true));
-store.getState().finishTrial();
-const loanParent = store.getState().trial!.offeredClubIds[0];
-store.getState().chooseClub(loanParent);
+const loanParent = completeOpeningAndSign();
+if (!loanParent) {
+  console.error('opening flow must still produce a club before a failed reserve season');
+  process.exit(1);
+}
 const loanReserveWeeks = leagueMatchWeeks(getClub(loanParent)?.league ?? 'La Liga');
 for (let i = 0; i < loanReserveWeeks; i++) {
   store.getState().advance();
