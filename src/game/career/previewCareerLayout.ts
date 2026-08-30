@@ -196,6 +196,8 @@ export function applyCareerLayoutPreview(): void {
     nationId: preview === 'mls' ? 'united-states' : preview === 'saudi' ? 'saudi-arabia' : 'spain',
   });
 
+  const isTrialPreview = preview === 'trial';
+  const isReservePreview = preview === 'reserve';
   const isMatchPreview = preview === 'match' || preview === 'match-away' || preview === 'match-local'
     || preview === 'match-intl' || preview === 'match-ucl' || preview === 'match-intl-ko';
   let matchFixtureIndex = Math.max(0, calendar.fixtures.findIndex((f) => f.kind !== 'rest'));
@@ -334,7 +336,9 @@ export function applyCareerLayoutPreview(): void {
 
   useCareerStore.setState({
     phase:
-      preview === 'record'
+      isTrialPreview
+        ? 'trial'
+        : preview === 'record'
         ? 'career'
         :       preview === 'transfer' || preview === 'expired'
           ? 'transfer-choice'
@@ -344,14 +348,15 @@ export function applyCareerLayoutPreview(): void {
               ? 'career-end'
               : preview === 'summary'
                 ? 'season-summary'
-                : isMatchPreview
+                : isMatchPreview || isReservePreview
                   ? 'match'
                   : 'hub',
-    age: preview === 'end' ? 36 : promoteSummary ? 22 : 19,
-    seasonNumber: preview === 'end' ? 21 : promoteSummary ? 6 : 4,
-    clubId: preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : promoteSummary ? 'leicester' : 'real-madrid',
-    parentClubId: preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : promoteSummary ? 'leicester' : 'real-madrid',
-    role: 'first-team',
+    age: isTrialPreview || isReservePreview ? 16 : preview === 'end' ? 36 : promoteSummary ? 22 : 19,
+    seasonNumber: isTrialPreview || isReservePreview ? 1 : preview === 'end' ? 21 : promoteSummary ? 6 : 4,
+    clubId: isTrialPreview ? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : promoteSummary ? 'leicester' : 'real-madrid',
+    parentClubId: isTrialPreview ? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : promoteSummary ? 'leicester' : 'real-madrid',
+    role: isReservePreview || isTrialPreview ? 'reserve' : 'first-team',
+    trial: isTrialPreview ? { shots: [], goals: 0, offeredClubIds: [] } : null,
     seasonsAtCurrentClub: preview === 'end' ? 10 : promoteSummary ? 1 : 3,
     nationality: preview === 'mls' ? 'united-states' : preview === 'saudi' ? 'saudi-arabia' : 'spain',
     nationalTeam,
@@ -359,7 +364,7 @@ export function applyCareerLayoutPreview(): void {
     seasonHistory: history,
     careerGoals: preview === 'end' ? 312 : 58,
     careerGames: preview === 'end' ? 540 : 76,
-    seasonCalendar: calendar,
+    seasonCalendar: isTrialPreview || isReservePreview ? null : calendar,
     liveMatch: isMatchPreview
       ? { fixtureIndex: matchFixtureIndex, chancesTotal: 2, chancesTaken: 0, goals: 0 }
       : null,

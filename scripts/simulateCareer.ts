@@ -15,7 +15,7 @@ import { assignClubTier, CLUBS, clubsForSeason, clubsInLeague, earnedPromotion, 
 import { consecutivePoorFactor, contractValueFactor, formAdjustedRatio, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, playerMarketValue, playerMarketValueFromSeasons, RESERVE_CONTRACT_YEARS, seasonalSponsorship, tierForMarketValue, transferFeeFromValue, weeklyWageForClub, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { nationKit } from '../src/game/career/data/nationColours';
-import { resolveMatchStadium } from '../src/game/career/matchVenue';
+import { reserveStadium, resolveCareerStadium, resolveMatchStadium, trialStadium } from '../src/game/career/matchVenue';
 import { crowdSwatch, kitFromColor, kitFromScheme, luminance } from '../src/game/shooting/kitPalette';
 import { createPitchView, idleKeeperPose, MAX_SHOT_DISTANCE_M, MIN_SHOT_DISTANCE_M, PLAYER_SKIN_TONES, pickPlayerSkin, SHORTS_HALF_H, THIGH_SHARE } from '../src/game/shooting/render';
 import { standBottomY, crowdCellSize, stadiumLayout, stadiumRoofBand } from '../src/game/shooting/stadium';
@@ -24,6 +24,7 @@ import {
   CUP_FINAL_CAPACITY,
   CUP_FINAL_GROUND,
   LISTED_MIN_CAPACITY,
+  UNLISTED_GROUND,
   groundForClub,
   isListedGround,
 } from '../src/game/shooting/grounds';
@@ -2227,6 +2228,41 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
   }
   if (homeLook.isHome !== true || awayLook.isHome !== false) {
     console.error('isHome must pass through to the stadium');
+    process.exitCode = 1;
+  }
+
+  const trialLook = trialStadium(spain);
+  const reserveLook = resolveCareerStadium({ club: madridClub, nation: spain, seasonNumber: 1, role: 'reserve' });
+  const firstTeamLook = resolveCareerStadium({
+    fixture: homeFx,
+    club: madridClub,
+    nation: spain,
+    seasonNumber: 2,
+    role: 'first-team',
+  });
+  console.log(
+    'trial/reserve/first-team venues',
+    trialLook.bowl,
+    reserveLook.groundName,
+    reserveLook.capacity,
+    firstTeamLook.groundName,
+    firstTeamLook.capacity,
+  );
+  if (trialLook.bowl !== false) {
+    console.error('the trial must use the original pitch with no stadium');
+    process.exitCode = 1;
+  }
+  if (
+    reserveLook.groundName !== UNLISTED_GROUND.name
+    || reserveLook.standTiers !== UNLISTED_GROUND.tiers
+    || (reserveLook.capacity ?? 0) >= LISTED_MIN_CAPACITY
+    || reserveStadium(madridClub).groundName !== UNLISTED_GROUND.name
+  ) {
+    console.error('the reserve season must play in the generic municipal stadium');
+    process.exitCode = 1;
+  }
+  if (firstTeamLook.groundName !== groundForClub('real-madrid').name || firstTeamLook.capacity !== 83_186) {
+    console.error('first-team matches must still use the club ground');
     process.exitCode = 1;
   }
 

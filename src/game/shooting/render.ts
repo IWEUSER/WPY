@@ -163,29 +163,32 @@ function drawBoxOutline(ctx: CanvasRenderingContext2D, w: number, box: BoxSpec) 
   ctx.stroke();
 }
 
-export function drawPitch(ctx: CanvasRenderingContext2D, view: PitchView, time: number, opts?: { night?: boolean }) {
+export function drawPitch(ctx: CanvasRenderingContext2D, view: PitchView, time: number, opts?: { night?: boolean; plain?: boolean }) {
   const { w, h } = view;
   const { halfW, botY } = view.goal;
+  const plain = Boolean(opts?.plain);
   /** Playing surface starts at the goal line so the stadium stays visible behind it. */
-  const grassTop = botY;
-  const vanishY = grassTop;
+  const grassTop = plain ? 0 : botY;
+  const vanishY = plain ? HORIZON_Y * h : grassTop;
   const night = Boolean(opts?.night);
 
   ctx.save();
-  const halfTop = Math.min(
-    w * 0.49,
-    Math.max(w * 0.24, view.halfWidthPx(FIFA.eighteenYardWidth / 2, 0) * 1.1),
-  );
-  ctx.beginPath();
-  ctx.moveTo(0, h);
-  ctx.lineTo(w, h);
-  ctx.lineTo(w / 2 + halfTop, grassTop);
-  ctx.lineTo(w / 2 - halfTop, grassTop);
-  ctx.closePath();
-  ctx.clip();
+  if (!plain) {
+    const halfTop = Math.min(
+      w * 0.49,
+      Math.max(w * 0.24, view.halfWidthPx(FIFA.eighteenYardWidth / 2, 0) * 1.1),
+    );
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    ctx.lineTo(w, h);
+    ctx.lineTo(w / 2 + halfTop, grassTop);
+    ctx.lineTo(w / 2 - halfTop, grassTop);
+    ctx.closePath();
+    ctx.clip();
+  }
 
   const grad = ctx.createLinearGradient(0, grassTop, 0, h);
-  if (night) {
+  if (plain || night) {
     grad.addColorStop(0, '#0f3d1f');
     grad.addColorStop(0.4, '#155a29');
     grad.addColorStop(1, '#1f7a37');

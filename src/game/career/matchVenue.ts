@@ -6,7 +6,7 @@ import { fifaRank } from './data/fifaRankings';
 import type { Nation } from './data/nations';
 import type { KitScheme } from '../shooting/kitPalette';
 import { stadiumScaleFromCapacity, type StadiumAppearance } from '../shooting/stadium';
-import { groundForClub, groundForCupFinal, groundForNationRank, type ClubGround } from '../shooting/grounds';
+import { groundForClub, groundForCupFinal, groundForNationRank, UNLISTED_GROUND, type ClubGround } from '../shooting/grounds';
 
 const GENERIC_OPPONENT: KitScheme = { primary: '#1D4ED8', pattern: 'solid' };
 
@@ -76,9 +76,26 @@ export function resolveMatchStadium(args: {
   });
 }
 
+/** Scout trial: the original open pitch, no stadium bowl. */
 export function trialStadium(nation?: Nation): StadiumAppearance {
   const home = nationKitOrFallback(nation?.id);
-  return appearanceFromGround(groundForClub(undefined), {
+  return {
+    isHome: true,
+    night: false,
+    homeColor: home.primary,
+    homeSecondary: home.secondary,
+    awayColor: GENERIC_OPPONENT.primary,
+    opponentColor: GENERIC_OPPONENT.primary,
+    opponentPattern: 'solid',
+    awayShare: 0.22,
+    bowl: false,
+  };
+}
+
+/** Reserve-year matches use the generic municipal bowl, not a first-team ground. */
+export function reserveStadium(club?: Club): StadiumAppearance {
+  const home = clubKit(club);
+  return appearanceFromGround(UNLISTED_GROUND, {
     isHome: true,
     night: false,
     homeColor: home.primary,
@@ -88,4 +105,17 @@ export function trialStadium(nation?: Nation): StadiumAppearance {
     opponentPattern: 'solid',
     awayShare: 0.22,
   });
+}
+
+export function resolveCareerStadium(args: {
+  fixture?: CalendarFixture;
+  club?: Club;
+  nation?: Nation;
+  seasonNumber?: number;
+  role?: 'reserve' | 'first-team' | 'loan';
+}): StadiumAppearance {
+  if ((args.seasonNumber != null && args.seasonNumber < 2) || args.role === 'reserve') {
+    return reserveStadium(args.club);
+  }
+  return resolveMatchStadium(args);
 }

@@ -5,13 +5,15 @@ import { currentCalendarWeek, fixtureIsHome } from '../calendar';
 import { getClub, leagueMatchWeeks } from '../data/clubs';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { getNation } from '../international';
-import { resolveMatchStadium } from '../matchVenue';
+import { resolveCareerStadium } from '../matchVenue';
 import { fixtureTitle } from '../seasonSim';
 import { useCareerStore } from '../store';
 
 export default function MatchScreen() {
   const clubId = useCareerStore((s) => s.clubId);
   const nationality = useCareerStore((s) => s.nationality);
+  const seasonNumber = useCareerStore((s) => s.seasonNumber);
+  const role = useCareerStore((s) => s.role);
   const season = useCareerStore((s) => s.currentSeason);
   const calendar = useCareerStore((s) => s.seasonCalendar);
   const liveMatch = useCareerStore((s) => s.liveMatch);
@@ -56,7 +58,7 @@ export default function MatchScreen() {
     ? `${weekLabel}${competitionName ? ` · ${competitionName}` : ''}${venueLabel ? ` · ${venueLabel}` : ''} · ${chances} chance${chances === 1 ? '' : 's'}`
     : weekLabel;
 
-  const stadium = resolveMatchStadium({ fixture, club, nation });
+  const stadium = resolveCareerStadium({ fixture, club, nation, seasonNumber, role });
 
   return (
     <ShootingGame

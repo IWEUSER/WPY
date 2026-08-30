@@ -508,8 +508,9 @@ export default function ShootingGame({
         const view = createPitchView(w, h, anim.shotDistanceM);
         const look = stadiumRef.current;
         const defenderKit = defenderKitFromStadium(look);
-        drawStadium(ctx, view, now, look);
-        drawPitch(ctx, view, now, { night: look.night });
+        const plainPitch = look.bowl === false;
+        if (!plainPitch) drawStadium(ctx, view, now, look);
+        drawPitch(ctx, view, now, { night: look.night, plain: plainPitch });
         drawGoal(ctx, view);
 
         if (anim.phase === 'idle' || anim.phase === 'dragging') {

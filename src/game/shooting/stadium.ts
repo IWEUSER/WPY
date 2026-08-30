@@ -53,6 +53,8 @@ export interface StadiumAppearance {
   standTiers?: StandTiers;
   unique?: 'camp-nou';
   groundName?: string;
+  /** When false, skip the bowl and draw the original open pitch. */
+  bowl?: boolean;
 }
 
 export function stadiumScaleFromCapacity(capacity: number): StadiumScale {
@@ -631,6 +633,7 @@ export function drawStadium(
   time: number,
   stadium: StadiumAppearance = DEFAULT_STADIUM,
 ) {
+  if (stadium.bowl === false) return;
   const { w, h } = view;
   const layout = stadiumLayout(view, profileFromAppearance(stadium));
   const night = Boolean(stadium.night);
