@@ -1,4 +1,10 @@
+import {
+  formatInternationalSeason,
+  qualifyingOutcomeLabel,
+  tournamentOutcomeLabel,
+} from '../honoursDisplay';
 import type { DomesticSplit } from '../seasonStats';
+import type { InternationalSeasonRecord } from '../types';
 
 export interface StatsTableRow {
   label: string;
@@ -58,5 +64,32 @@ export function DomesticStatsTable({ split }: { split: DomesticSplit }) {
       ]}
       footer={{ label: 'Total', games: split.total.games, goals: split.total.goals }}
     />
+  );
+}
+
+export function InternationalSeasonBlock({
+  title,
+  record,
+}: {
+  title: string;
+  record: InternationalSeasonRecord | undefined | null;
+}) {
+  const line = formatInternationalSeason(record);
+  if (!line || !record) return null;
+  const qNote = qualifyingOutcomeLabel(record.qualifyingOutcome);
+  const tNote = tournamentOutcomeLabel(record.tournamentOutcome);
+  return (
+    <div>
+      <p className="font-semibold text-white/90">{title}</p>
+      <StatsTable
+        rows={[
+          { label: qNote ? `Qualifying · ${qNote}` : 'Qualifying', games: record.qualifyingGames, goals: record.qualifyingGoals },
+          { label: tNote ? `Tournament · ${tNote}` : 'Tournament', games: record.finalsGames, goals: record.finalsGoals },
+        ]}
+      />
+      {line.awards.length > 0 && (
+        <p className="mt-1 text-xs text-sky-200/80">{line.awards.join(' · ')}</p>
+      )}
+    </div>
   );
 }

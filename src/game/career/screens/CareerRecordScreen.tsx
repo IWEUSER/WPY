@@ -8,7 +8,7 @@ import { aggregateContinental, aggregateDomesticSplit, continentalLabel, seasonD
 import { useCareerStore } from '../store';
 import type { SeasonRecord } from '../types';
 import { HonoursPills } from './HonoursPills';
-import StatsTable, { DomesticStatsTable } from './StatsTable';
+import StatsTable, { DomesticStatsTable, InternationalSeasonBlock } from './StatsTable';
 
 const ROLE_LABEL: Record<string, string> = {
   reserve: 'Reserves',
@@ -158,14 +158,10 @@ export default function CareerRecordScreen() {
                   if (!line) return null;
                   return (
                     <li key={`intl-${s.seasonNumber}`}>
-                      <p className="font-semibold text-white/90">
-                        {displaySeasonLabel(s.seasonNumber)} · {line.name}
-                      </p>
-                      {line.qualifying && <p className="text-xs text-white/50">{line.qualifying}</p>}
-                      {line.tournament && <p className="text-xs text-white/50">{line.tournament}</p>}
-                      {line.awards.length > 0 && (
-                        <p className="text-xs text-sky-200/80">{line.awards.join(' · ')}</p>
-                      )}
+                      <InternationalSeasonBlock
+                        title={`${displaySeasonLabel(s.seasonNumber)} · ${line.name}`}
+                        record={s.international}
+                      />
                     </li>
                   );
                 })}
@@ -274,18 +270,14 @@ function SeasonCard({ season }: { season: SeasonRecord & { inProgress?: boolean 
           }))}
         />
       )}
-      {(() => {
-        const intl = formatInternationalSeason(season.international);
-        if (!intl) return null;
-        return (
-          <p className="mt-2 text-xs text-white/50">
-            {intl.name}
-            {intl.qualifying ? ` · ${intl.qualifying}` : ''}
-            {intl.tournament ? ` · ${intl.tournament}` : ''}
-            {intl.awards.length > 0 ? ` · ${intl.awards.join(' · ')}` : ''}
-          </p>
-        );
-      })()}
+      {season.international && (
+        <div className="mt-2">
+          <InternationalSeasonBlock
+            title={formatInternationalSeason(season.international)?.name ?? 'International'}
+            record={season.international}
+          />
+        </div>
+      )}
 
       <div className="mt-3">
         <p className="text-[10px] uppercase tracking-wide text-white/40">Tournaments won</p>
