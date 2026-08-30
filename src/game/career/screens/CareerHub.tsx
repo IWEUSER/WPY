@@ -356,7 +356,11 @@ function InternationalCard({
 
 function SeasonCompetitions({ calendar }: { calendar: SeasonCalendar | null }) {
   if (!calendar) return null;
-  const cupIds = new Set(calendar.fixtures.map((f) => f.continentalCup).filter((id) => id !== undefined));
+  const cupIds = new Set(
+    calendar.fixtures
+      .map((f) => f.continentalCup)
+      .filter((id): id is NonNullable<typeof id> => id !== undefined && id !== 'leagues-cup'),
+  );
   const international = calendarIncludesInternational(calendar);
   const domesticCup = calendarDomesticCup(calendar);
   if (cupIds.size === 0 && !international && !domesticCup) return null;
