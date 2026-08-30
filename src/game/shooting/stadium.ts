@@ -201,8 +201,8 @@ function deckBands(top: number, bottom: number, tiers: number): { top: number; b
   // One concourse between decks — never a lip inside the crowd, or a 3-deck
   // bowl reads as six uneven bands (City / Allianz / Emirates).
   const concourse = Math.max(
-    7,
-    Math.min(18, height * (0.1 / Math.max(2, tiers))),
+    10,
+    Math.min(22, height * (0.14 / Math.max(2, tiers))),
   );
   let gap = concourse;
   let usable = height - gap * (tiers - 1);
@@ -309,12 +309,14 @@ function paintPackedFans(
       const visiting = u > 1 - Math.min(0.42, Math.max(0.14, stadium.awayShare ?? 0.2));
       const paleSection = visiting ? paleAway : paleHome;
 
-      // Dark head-mass first so pale kits still speckle instead of flattening to a wall.
+      const jitterY = Math.round((rng() - 0.5) * rowH * 0.28);
+      const headH = Math.max(1, Math.round(rowH * 0.42));
+      const headW = Math.max(1, Math.round(colW * 0.78));
       ctx.fillStyle = HAIR_TONES[(rng() * HAIR_TONES.length) | 0];
-      ctx.fillRect(px, py, colW, rowH);
+      ctx.fillRect(px + Math.round((colW - headW) / 2), py + jitterY, headW, headH);
 
       const bodyH = Math.max(1, Math.round(rowH * 0.48));
-      const bodyY = py + rowH - bodyH;
+      const bodyY = py + rowH - bodyH + jitterY;
       const jacket = rng() < (paleSection ? 0.52 : 0.22);
       const civilian = !jacket && rng() < 0.18;
       ctx.fillStyle = jacket
@@ -335,7 +337,7 @@ function paintPackedFans(
       const faceW = Math.max(1, Math.round(colW * 0.45));
       const faceH = Math.max(1, Math.round(rowH * 0.22));
       ctx.fillStyle = SKIN_TONES[(rng() * SKIN_TONES.length) | 0];
-      ctx.fillRect(px + Math.round((colW - faceW) / 2), py + Math.round(rowH * 0.28), faceW, faceH);
+      ctx.fillRect(px + Math.round((colW - faceW) / 2), py + jitterY + Math.round(rowH * 0.22), faceW, faceH);
     }
   }
   ctx.restore();
@@ -380,8 +382,8 @@ function crowdLayer(w: number, h: number, view: StadiumView, stadium: StadiumApp
   const layout = stadiumLayout(view, profile);
   const night = Boolean(stadium.night);
   const terrace = mixHex(stadium.homeColor, night ? '#0f172a' : '#292524', 0.78);
-  const fasciaFill = night ? '#1c2433' : '#8b97a6';
-  const fasciaLip = night ? '#2a3548' : '#a8b3c0';
+  const fasciaFill = night ? '#141b26' : '#4b5563';
+  const fasciaLip = night ? '#d6d3d1' : '#e7e5e4';
 
   ctx.fillStyle = fasciaFill;
   ctx.fillRect(0, layout.top, w, Math.max(1, layout.bottom - layout.top));
@@ -407,8 +409,9 @@ function crowdLayer(w: number, h: number, view: StadiumView, stadium: StadiumApp
       const gapH = Math.max(1, next.top - deck.bottom);
       ctx.fillStyle = fasciaFill;
       ctx.fillRect(0, gapTop, w, gapH);
+      const rail = Math.max(2, Math.min(4, gapH * 0.35));
       ctx.fillStyle = fasciaLip;
-      ctx.fillRect(0, gapTop, w, Math.max(1, Math.min(2, gapH * 0.28)));
+      ctx.fillRect(0, next.top - rail, w, rail);
     }
   }
 
