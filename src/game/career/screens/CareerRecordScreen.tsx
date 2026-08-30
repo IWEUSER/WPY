@@ -102,14 +102,20 @@ export default function CareerRecordScreen() {
         const fee = value != null ? transferFeeFromValue(value, contractYearsRemaining) : null;
         if (value == null && careerEarnings <= 0 && weeklyWage <= 0) return null;
         return (
-          <p className="mt-3 text-center text-sm text-white/60">
-            {value != null ? `Market value ${formatEuros(value)}` : ''}
-            {fee != null ? ` · Transfer fee ${fee <= 0 ? 'Free' : formatEuros(fee)}` : ''}
-            {value != null && (careerEarnings > 0 || weeklyWage > 0) ? ' · ' : ''}
-            {careerEarnings > 0 || weeklyWage > 0
-              ? `Earnings ${formatEuros(careerEarnings)}${weeklyWage > 0 ? ` · ${formatWeeklyWage(weeklyWage)}` : ''}`
-              : ''}
-          </p>
+          <div className="mt-3 text-center text-sm text-white/60">
+            {value != null && (
+              <p>
+                Market value {formatEuros(value)}
+                {fee != null ? ` · Transfer fee ${fee <= 0 ? 'Free' : formatEuros(fee)}` : ''}
+              </p>
+            )}
+            {(careerEarnings > 0 || weeklyWage > 0) && (
+              <p className={value != null ? 'mt-1' : ''}>
+                Earnings {formatEuros(careerEarnings)}
+                {weeklyWage > 0 ? ` · ${formatWeeklyWage(weeklyWage)}` : ''}
+              </p>
+            )}
+          </div>
         );
       })()}
 
