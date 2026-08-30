@@ -180,7 +180,7 @@ console.log(
     wonWpy: s1record.wonWpy,
   },
 );
-if (!s1record || s1record.age !== 16 || s1record.gamesPlayed !== reserveGames) {
+if (!s1record || s1record.age !== 16 || s1record.matches.length !== reserveGames) {
   console.error('Season 1 career record must store age and a full league of reserve games');
   process.exitCode = 1;
 }
