@@ -16,6 +16,13 @@ export const DEFENDER_GAP_M = DEFENDER_GAP_YARDS * YARD_M;
 
 /** Don't plant a defender on the goal line itself. */
 const MIN_DEFENDER_Z_M = 2.2;
+/** Jog toward the ball — urgent, but a swipe still has time to land. */
+export const DEFENDER_CLOSE_SPEED_MPS = 3.15;
+/** Slower press when they already start next to a 6-yard kick. */
+export const DEFENDER_CLOSE_SPEED_NEAR_MPS = 1.65;
+/** Stop this far from the ball on an open-play close-down. */
+export const DEFENDER_CLOSE_STOP_GAP_M = 2.7;
+export const DEFENDER_CLOSE_STOP_GAP_NEAR_M = 1.4;
 /** How far off the ball→goal-centre line a close-range cover must stand. */
 const CLOSE_COVER_MIN_OFFSET_M = 1.65;
 const CLOSE_COVER_MAX_OFFSET_M = 2.85;
@@ -26,6 +33,8 @@ export interface DefenderPose {
   z: number;
   /** Which post they shade: −1 left, +1 right from the shooter's view. */
   coverSide: -1 | 1;
+  /** Walk-cycle phase, radians. */
+  stride?: number;
 }
 
 export type ChanceKind = 'open' | 'penalty';
@@ -110,13 +119,57 @@ export function placeDefender(
     const z = MIN_DEFENDER_Z_M + t * (maxZ - MIN_DEFENDER_Z_M);
     const offset = 0.7 + rng() * 0.95;
     const worldX = clamp(lineToGoalCentreX(ballWorldX, shotDistanceM, z) + coverSide * offset, -7.5, 7.5);
-    return { worldX, z, coverSide };
+    return { worldX, z, coverSide, stride: 0 };
   }
 
   const z = clamp(Math.min(shotDistanceM * 0.38, 3.2), 1.55, Math.max(1.55, shotDistanceM - 1.15));
   const offset = CLOSE_COVER_MIN_OFFSET_M + rng() * (CLOSE_COVER_MAX_OFFSET_M - CLOSE_COVER_MIN_OFFSET_M);
   const worldX = clamp(lineToGoalCentreX(ballWorldX, shotDistanceM, z) + coverSide * offset, -3.45, 3.45);
-  return { worldX, z, coverSide };
+  return { worldX, z, coverSide, stride: 0 };
+}
+
+/** Point they rush — on the shooting line, a few metres in front of the ball. */
+export function defenderCloseTarget(
+  shotDistanceM: number,
+  ballStartXRatio: number,
+  coverSide: -1 | 1,
+): { worldX: number; z: number } {
+  const ballWorldX = ballWorldXFromRatio(ballStartXRatio);
+  const near = !canKeepTenYardGap(shotDistanceM);
+  const stopGap = near ? DEFENDER_CLOSE_STOP_GAP_NEAR_M : DEFENDER_CLOSE_STOP_GAP_M;
+  const z = clamp(shotDistanceM - stopGap, 1.35, shotDistanceM - 0.9);
+  const lineX = lineToGoalCentreX(ballWorldX, shotDistanceM, z);
+  const offset = near ? 0.72 : 0.16;
+  return { worldX: clamp(lineX + coverSide * offset, -7.5, 7.5), z };
+}
+
+export function defenderCloseSpeedMps(shotDistanceM: number): number {
+  return canKeepTenYardGap(shotDistanceM) ? DEFENDER_CLOSE_SPEED_MPS : DEFENDER_CLOSE_SPEED_NEAR_MPS;
+}
+
+/** Step the defender toward the ball. dt is seconds; large frames are capped. */
+export function advanceDefender(
+  defender: DefenderPose,
+  shotDistanceM: number,
+  ballStartXRatio: number,
+  dtSeconds: number,
+): DefenderPose {
+  const target = defenderCloseTarget(shotDistanceM, ballStartXRatio, defender.coverSide);
+  const dx = target.worldX - defender.worldX;
+  const dz = target.z - defender.z;
+  const dist = Math.hypot(dx, dz);
+  if (dist < 0.025) {
+    return { ...defender, worldX: target.worldX, z: target.z };
+  }
+  const speed = defenderCloseSpeedMps(shotDistanceM);
+  const step = Math.min(dist, speed * clamp(dtSeconds, 0, 0.05));
+  const t = step / dist;
+  return {
+    ...defender,
+    worldX: defender.worldX + dx * t,
+    z: defender.z + dz * t,
+    stride: (defender.stride ?? 0) + step * 3.4,
+  };
 }
 
 export function defenderDistanceFromBallM(

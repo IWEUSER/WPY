@@ -600,6 +600,7 @@ export function drawDefender(
   worldX: number,
   worldZ: number,
   kit?: DefenderKit,
+  stride = 0,
 ) {
   const meterPx = view.halfWidthPx(1, worldZ);
   const feet = worldToScreen(view, worldX, worldZ);
@@ -631,12 +632,17 @@ export function drawDefender(
   const hipY = 0;
   const shoulderY = -scale * KEEPER_SHOULDER_FROM_HIP;
   const headPx = s(pts.head.x, pts.head.y);
-  const footL = s(pts.footL.x, pts.footL.y);
-  const footR = s(pts.footR.x, pts.footR.y);
+  const swing = Math.sin(stride) * scale * 0.42;
+  const rawFootL = s(pts.footL.x, pts.footL.y);
+  const rawFootR = s(pts.footR.x, pts.footR.y);
+  const rawGloveL = s(pts.gloveL.x, pts.gloveL.y);
+  const rawGloveR = s(pts.gloveR.x, pts.gloveR.y);
+  const footL = { x: rawFootL.x + swing, y: rawFootL.y };
+  const footR = { x: rawFootR.x - swing, y: rawFootR.y };
   const shoulderL = s(pts.shoulderL.x, pts.shoulderL.y);
   const shoulderR = s(pts.shoulderR.x, pts.shoulderR.y);
-  const gloveL = s(pts.gloveL.x, pts.gloveL.y);
-  const gloveR = s(pts.gloveR.x, pts.gloveR.y);
+  const gloveL = { x: rawGloveL.x - swing * 0.55, y: rawGloveL.y };
+  const gloveR = { x: rawGloveR.x + swing * 0.55, y: rawGloveR.y };
 
   const drawLeg = (foot: { x: number; y: number }, hipX: number) => {
     const kneeX = hipX * 0.45 + foot.x * 0.55;

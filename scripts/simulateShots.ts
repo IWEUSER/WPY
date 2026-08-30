@@ -21,10 +21,14 @@ import {
   type KeeperPose,
 } from '../src/game/shooting/render';
 import {
+  DEFENDER_CLOSE_SPEED_MPS,
+  DEFENDER_CLOSE_STOP_GAP_M,
   DEFENDER_GAP_M,
+  advanceDefender,
   ballWorldXFromRatio,
   canKeepTenYardGap,
   defenderBlocksBall,
+  defenderCloseTarget,
   defenderDistanceFromBallM,
   defenderOffsetFromShootingLineM,
   expectedChancesPerLeagueSeason,
@@ -635,6 +639,42 @@ if (pen.kind !== 'penalty' || pen.distanceM !== FIFA.penaltySpot || pen.ballStar
 const forcedOpen = rollChanceSetup({ forceDistanceM: 18, rng: () => 0 });
 if (forcedOpen.kind !== 'open' || forcedOpen.defender === null) {
   console.error('FAIL: a forced open-play distance must still spawn a defender');
+  process.exitCode = 1;
+}
+
+console.log('\n--- Defender closes toward the ball at a jog ---');
+const closeStart = placeDefender(18, 0.5, () => 0.2);
+const startGap = defenderDistanceFromBallM(closeStart, 18, 0.5);
+let walked = { ...closeStart };
+for (let i = 0; i < 25; i++) walked = advanceDefender(walked, 18, 0.5, 0.04);
+const afterOne = defenderDistanceFromBallM(walked, 18, 0.5);
+let settled = { ...closeStart };
+for (let i = 0; i < 400; i++) settled = advanceDefender(settled, 18, 0.5, 0.04);
+const settledGap = defenderDistanceFromBallM(settled, 18, 0.5);
+const target = defenderCloseTarget(18, 0.5, closeStart.coverSide);
+const settleErr = Math.hypot(settled.worldX - target.worldX, settled.z - target.z);
+const closeTimeS = (startGap - DEFENDER_CLOSE_STOP_GAP_M) / DEFENDER_CLOSE_SPEED_MPS;
+console.log(`18-yard close: startGap=${startGap.toFixed(2)} after1s=${afterOne.toFixed(2)} settled=${settledGap.toFixed(2)} time~${closeTimeS.toFixed(2)}s`);
+if (!(afterOne < startGap - 1.5)) {
+  console.error('FAIL: the defender must close toward the ball within a second');
+  process.exitCode = 1;
+}
+if (settledGap + 1e-6 < DEFENDER_CLOSE_STOP_GAP_M - 0.05 || settleErr > 0.08) {
+  console.error('FAIL: the defender must stop a few metres in front of the ball');
+  process.exitCode = 1;
+}
+if (closeTimeS < 1.6 || closeTimeS > 5.5) {
+  console.error('FAIL: the close-down should take a couple of seconds, not a sprint or a stroll');
+  process.exitCode = 1;
+}
+
+const nearStart = placeDefender(MIN_SHOT_DISTANCE_M, 0.5, () => 0.3);
+let nearNow = { ...nearStart };
+for (let i = 0; i < 80; i++) nearNow = advanceDefender(nearNow, MIN_SHOT_DISTANCE_M, 0.5, 0.04);
+const nearGap = defenderDistanceFromBallM(nearNow, MIN_SHOT_DISTANCE_M, 0.5);
+console.log(`6-yard close: start=${defenderDistanceFromBallM(nearStart, MIN_SHOT_DISTANCE_M, 0.5).toFixed(2)} settled=${nearGap.toFixed(2)}`);
+if (nearGap < 1.1) {
+  console.error('FAIL: a 6-yard closer must not walk onto the ball');
   process.exitCode = 1;
 }
 

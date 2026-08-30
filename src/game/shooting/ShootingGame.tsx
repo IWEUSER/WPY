@@ -22,6 +22,7 @@ import {
 import { drawStadium, DEFAULT_STADIUM, defenderKitFromStadium, type StadiumAppearance } from './stadium';
 import { normalizeHex } from './kitPalette';
 import {
+  advanceDefender,
   ballHasReachedDefender,
   defenderBlocksBall,
   defenderScreenBody,
@@ -62,6 +63,7 @@ interface AnimState {
   shotDistanceM: number;
   chanceKind: ChanceKind;
   defender: DefenderPose | null;
+  lastTickMs: number;
 }
 
 const RESULT_HOLD_MS = 1500;
@@ -295,6 +297,7 @@ export default function ShootingGame({
     shotDistanceM: initialChance.distanceM,
     chanceKind: initialChance.kind,
     defender: initialChance.defender,
+    lastTickMs: 0,
   });
 
   useEffect(() => {
@@ -347,6 +350,7 @@ export default function ShootingGame({
     anim.shotDistanceM = chance.distanceM;
     anim.chanceKind = chance.kind;
     anim.defender = chance.defender;
+    anim.lastTickMs = 0;
     anim.ballPixel = start;
     anim.ballRadius = ballRadiusNear(view);
     anim.ballRotation = 0;
@@ -472,13 +476,20 @@ export default function ShootingGame({
         drawGoal(ctx, view);
 
         if (anim.phase === 'idle' || anim.phase === 'dragging') {
+          const dt = anim.lastTickMs > 0 ? Math.min(0.05, (now - anim.lastTickMs) / 1000) : 0;
+          anim.lastTickMs = now;
+          if (anim.defender && dt > 0) {
+            anim.defender = advanceDefender(anim.defender, anim.shotDistanceM, anim.ballStartXRatio, dt);
+          }
           const start = ballStartPixel(view, anim.ballStartXRatio);
           anim.ballPixel = start;
           anim.ballRadius = ballRadiusNear(view);
           const devPose = readDevKeeperPose();
           const devCell = readDevPoseCell();
           drawKeeper(ctx, view, devPose ?? anim.keeperPose);
-          if (anim.defender) drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit);
+          if (anim.defender) {
+            drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit, anim.defender.stride);
+          }
           if (anim.phase === 'dragging' && anim.dragStart && anim.dragPoints.length > 1) {
             // Show the actual curved path being swiped, not just a straight
             // line - this is the live feedback for how much bend/curl the
@@ -553,7 +564,9 @@ export default function ShootingGame({
 
           drawTrail(ctx, anim.ballTrail);
           drawKeeper(ctx, view, anim.keeperPose);
-          if (anim.defender) drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit);
+          if (anim.defender) {
+            drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit, anim.defender.stride);
+          }
           drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
 
           if (
@@ -588,7 +601,9 @@ export default function ShootingGame({
           }
         } else if (anim.phase === 'result' && anim.result) {
           drawKeeper(ctx, view, anim.keeperPose);
-          if (anim.defender) drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit);
+          if (anim.defender) {
+            drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit, anim.defender.stride);
+          }
           drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
           if (now - anim.resultAtMs > RESULT_HOLD_MS) {
             const limit = maxShotsRef.current;
