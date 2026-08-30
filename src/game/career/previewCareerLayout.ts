@@ -251,6 +251,16 @@ export function applyCareerLayoutPreview(): void {
       fx.playerChances = 2;
       fx.continentalCup = 'ucl';
     }
+  } else if (preview === 'hub-intl') {
+    const idx = calendar.fixtures.findIndex((f) => f.kind === 'international' && f.internationalRound !== 'qualifier');
+    if (idx >= 0) {
+      const fx = calendar.fixtures[idx];
+      fx.kind = 'international';
+      fx.internationalRound = fx.internationalRound && fx.internationalRound !== 'qualifier' ? fx.internationalRound : 'group';
+      fx.opponentId = 'italy';
+      fx.opponentLabel = 'Italy';
+      sim.fixtureIndex = idx;
+    }
   } else if (preview === 'match-intl-ko') {
     const idx = calendar.fixtures.findIndex((f) => f.kind === 'international');
     if (idx >= 0) matchFixtureIndex = idx;

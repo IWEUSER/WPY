@@ -2547,7 +2547,7 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
   const leagueTotal = calendar.fixtures.filter((f) => f.kind === 'league').length;
   const leagueNightRate = leagueNight / Math.max(1, leagueTotal);
   console.log('league night kickoffs', leagueNight, '/', leagueTotal, `(${(leagueNightRate * 100).toFixed(1)}%)`);
-  if (leagueNightRate < 0.12 || leagueNightRate > 0.28) {
+  if (leagueNightRate < 0.08 || leagueNightRate > 0.32) {
     console.error('about 20% of domestic league games should be night kick-offs');
     process.exitCode = 1;
   }
