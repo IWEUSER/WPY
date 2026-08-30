@@ -160,6 +160,20 @@ if (reserveCal.fixtures.some((f) => f.playerChances == null)) {
 playSimSeason(true);
 console.log('S1 done phase', store.getState().phase, 'goals', store.getState().currentSeason?.goals);
 store.getState().continueAfterSeason();
+const afterReserveHit = store.getState();
+const reserveHitLoans = (afterReserveHit.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan');
+console.log(
+  'S1 ratio met phase',
+  afterReserveHit.phase,
+  'kind',
+  afterReserveHit.pendingTransfer?.kind,
+  'loans',
+  reserveHitLoans.length,
+);
+if (reserveHitLoans.length !== 0) {
+  console.error('hitting the reserve ratio must not show loan offers');
+  process.exitCode = 1;
+}
 if (store.getState().phase === 'transfer-choice') {
   store.getState().resolveTransferChoice(null);
 }

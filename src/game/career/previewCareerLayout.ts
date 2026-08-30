@@ -7,7 +7,7 @@ import { newContractYears, playerMarketValueFromSeasons, weeklyWageForClub } fro
 import { assignOpeningTrialClub, beginClubTrial, createYouthCampaign } from './openingFlow';
 import { hydrateSeason } from './seasonSim';
 import { useCareerStore } from './store';
-import type { PendingTransfer } from './transfers';
+import { resolveSeasonTransition, type PendingTransfer } from './transfers';
 import type { OpeningCampaign, SeasonRecord } from './types';
 
 function season(partial: SeasonRecord): SeasonRecord {
@@ -347,8 +347,40 @@ export function applyCareerLayoutPreview(): void {
     ],
     fallbackClub: club,
   });
+  const reservePromoSeason = season({
+    seasonNumber: 1,
+    clubId: 'real-madrid',
+    role: 'reserve',
+    matches: [],
+    goals: 30,
+    gamesPlayed: 38,
+    ratioMet: true,
+    age: 16,
+    leagueGoals: 30,
+    trophies: [],
+    topGoalscorer: false,
+    playerOfTheYear: false,
+    wonWpy: false,
+  });
+  const reservePromo = preview === 'reserve-promo'
+    ? resolveSeasonTransition({
+        season: reservePromoSeason,
+        role: 'reserve',
+        clubId: 'real-madrid',
+        parentClubId: 'real-madrid',
+        seasonsAtCurrentClub: 0,
+        age: 16,
+        careerGoals: 0,
+        careerGames: 0,
+        nationality: 'spain',
+        loansUsed: 0,
+        contractYearsRemaining: 1,
+      })
+    : null;
   const pendingTransfer: PendingTransfer | null =
-    preview === 'expired'
+    preview === 'reserve-promo'
+      ? reservePromo?.pendingTransfer ?? null
+      : preview === 'expired'
       ? {
           kind: 'end-of-season',
           detail: 'Out of contract: more clubs can bid because there is no fee. You can stay where you are.',
@@ -410,7 +442,7 @@ export function applyCareerLayoutPreview(): void {
           ? 'match'
         : preview === 'record'
         ? 'career'
-        :       preview === 'transfer' || preview === 'expired'
+        :       preview === 'transfer' || preview === 'expired' || preview === 'reserve-promo'
           ? 'transfer-choice'
           : preview === 'result'
             ? 'match-result'

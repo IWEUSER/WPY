@@ -1351,6 +1351,54 @@ if (barca && hilal && lafc) {
     console.error('the first season at a club must not offer loans when the ratio is met');
     process.exitCode = 1;
   }
+
+  const reservePromo = resolveSeasonTransition({
+    season: {
+      ...dummySeason,
+      seasonNumber: 1,
+      clubId: 'real-madrid',
+      role: 'reserve',
+      goals: 30,
+      gamesPlayed: 38,
+      leagueGoals: 30,
+      ratioMet: true,
+      age: 16,
+    },
+    role: 'reserve',
+    clubId: 'real-madrid',
+    parentClubId: 'real-madrid',
+    seasonsAtCurrentClub: 0,
+    age: 16,
+    careerGoals: 0,
+    careerGames: 0,
+    nationality: 'spain',
+    loansUsed: 0,
+    contractYearsRemaining: 1,
+  });
+  const reservePromoLoans = (reservePromo.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan');
+  const reservePromoPerm = (reservePromo.pendingTransfer?.offers ?? []).filter((o) => o.move === 'permanent');
+  console.log(
+    'reserve ratio met',
+    reservePromo.headline,
+    'loans',
+    reservePromoLoans.length,
+    'transfers',
+    reservePromoPerm.length,
+    'stay',
+    reservePromo.pendingTransfer?.stay?.role,
+  );
+  if (reservePromoLoans.length !== 0) {
+    console.error('hitting the reserve ratio must not table loan offers');
+    process.exitCode = 1;
+  }
+  if ((reservePromo.pendingTransfer?.stay?.role ?? reservePromo.immediate?.role) !== 'first-team') {
+    console.error('hitting the reserve ratio must promote to the first team');
+    process.exitCode = 1;
+  }
+  if (!reservePromo.pendingTransfer?.allowDecline || reservePromoPerm.length === 0) {
+    console.error('a reserve promotion can still offer permanent transfers and a stay');
+    process.exitCode = 1;
+  }
   if (firstYears.length === 0 || firstYears.some((y) => y == null || y < 1)) {
     console.error('transfer offers must list a contract length beside the wage');
     process.exitCode = 1;

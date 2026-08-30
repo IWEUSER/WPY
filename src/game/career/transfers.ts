@@ -351,7 +351,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
         nationality,
         [club.id],
         club.tier,
-        true,
+        false,
         age,
         false,
         loanYears,
