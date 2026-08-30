@@ -42,11 +42,9 @@ export default function MatchScreen() {
 
   const chances = liveMatch?.chancesTotal ?? 1;
   const subtitle = simulated
-    ? fixture?.isDecisive
-      ? 'This match is on you — score this chance or your team is out'
-      : chances === 1
-        ? 'One chance this game — make it count'
-        : `${chances} chances this game`
+    ? chances === 1
+      ? 'One chance this game — make it count'
+      : `${chances} chances this game`
     : 'Your one big chance this game - make it count';
 
   const weekLabel = simulated && calendar && liveMatch

@@ -6,6 +6,7 @@ import {
   DEFAULT_CONTRACT_YEARS,
   MEGA_CLUB_IDS,
   MEGA_TRANSFER_FEE,
+  loanContractYearsRemaining,
   newContractYears,
   nextContractYearsRemaining,
   playerMarketValueFromSeasons,
@@ -105,6 +106,7 @@ export interface ClubOfferTerms {
   move: 'loan' | 'permanent';
   fee: number;
   weeklyWage: number;
+  contractYears: number;
 }
 
 export interface PendingTransfer {
@@ -165,12 +167,16 @@ function offerTerms(
   move: ClubOfferTerms['move'],
   value: number,
   fee: number,
+  age: number,
+  contractYears?: number,
 ): ClubOfferTerms[] {
+  const years = contractYears ?? (move === 'loan' ? 1 : newContractYears(age));
   return clubs.map((club) => ({
     clubId: club.id,
     move,
     fee: move === 'loan' ? 0 : fee,
     weeklyWage: weeklyWageForClub(club, value),
+    contractYears: years,
   }));
 }
 
@@ -203,13 +209,18 @@ function parallelTransfers(
   includeLoans: boolean,
   age = 18,
   blockElite = false,
+  loanYears = 1,
 ): SeasonTransitionResult {
   const transfers = pickPermanentClubs(preferredTier, fee, excludeIds, nationality, blockElite);
   const loans = includeLoans
     ? pickLoanClubsByValue(value, nationality, 3, [...excludeIds, ...transfers.map((c) => c.id)])
     : [];
+  const permYears = newContractYears(age);
   const offers = withTwilightMlsOffers(
-    [...offerTerms(loans, 'loan', value, 0), ...offerTerms(transfers, 'permanent', value, fee)],
+    [
+      ...offerTerms(loans, 'loan', value, 0, age, loanYears),
+      ...offerTerms(transfers, 'permanent', value, fee, age, permYears),
+    ],
     age,
     value,
     fee,
@@ -285,6 +296,8 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
   };
   const withTwilight = (offers: ClubOfferTerms[]) =>
     withTwilightMlsOffers(offers, age, value, fee, [club.id, parentClubId]);
+  const permYears = newContractYears(age);
+  const loanYears = loanContractYearsRemaining(season.seasonNumber, yearsLeft, age);
 
   if (role === 'reserve') {
     const threshold = club.reserveGoalRatio;
@@ -300,6 +313,8 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
         club.tier,
         true,
         age,
+        false,
+        loanYears,
       );
     }
     const options = pickLoanClubsByValue(value, nationality, 3, [club.id]);
@@ -309,7 +324,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       pendingTransfer: pendingFromOffers(
         'loan',
         `${club.name} have lined up a loan move for you.`,
-        offerTerms(options, 'loan', value, 0),
+        offerTerms(options, 'loan', value, 0, age, loanYears),
         false,
       ),
     };
@@ -330,6 +345,8 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
         parentClub.tier,
         true,
         age,
+        false,
+        loanYears,
       );
     }
 
@@ -347,8 +364,8 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       ? pickLoanClubsByValue(value, nationality, 3, [...exclude, ...transfers.map((c) => c.id)])
       : [];
     const offers = withTwilight([
-      ...offerTerms(loans, 'loan', value, 0),
-      ...offerTerms(transfers, 'permanent', value, fee),
+      ...offerTerms(loans, 'loan', value, 0, age, loanYears),
+      ...offerTerms(transfers, 'permanent', value, fee, age, permYears),
     ]);
     if (canLoanAgain && loans.length > 0) {
       return {
@@ -372,7 +389,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
         fee <= 0
           ? 'Out of contract: these clubs can bid without a transfer fee.'
           : 'These clubs can pay the transfer fee.',
-        withTwilight(offerTerms(transfers, 'permanent', value, fee)),
+        withTwilight(offerTerms(transfers, 'permanent', value, fee, age, permYears)),
         false,
       ),
     };
@@ -401,6 +418,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       true,
       age,
       blockElite,
+      loanYears,
     );
   }
 
@@ -418,8 +436,8 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       ? pickLoanClubsByValue(value, nationality, 3, [club.id, ...transfers.map((c) => c.id)])
       : [];
     const offers = withTwilight([
-      ...offerTerms(loans, 'loan', value, 0),
-      ...offerTerms(transfers, 'permanent', value, fee),
+      ...offerTerms(loans, 'loan', value, 0, age, loanYears),
+      ...offerTerms(transfers, 'permanent', value, fee, age, permYears),
     ]);
     if (canLoan && loans.length > 0) {
       return {
@@ -443,7 +461,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
         fee <= 0
           ? 'Out of contract: these clubs can bid without a transfer fee.'
           : 'These clubs can pay the transfer fee.',
-        withTwilight(offerTerms(transfers, 'permanent', value, fee)),
+        withTwilight(offerTerms(transfers, 'permanent', value, fee, age, permYears)),
         false,
       ),
     };
@@ -461,7 +479,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       pendingTransfer: pendingFromOffers(
         'promotion-offer',
         'These clubs want to sign you - or stay put and keep building at your current club.',
-        withTwilight(offerTerms(offers, 'permanent', value, fee)),
+        withTwilight(offerTerms(offers, 'permanent', value, fee, age, permYears)),
         true,
         stayOn(),
       ),
@@ -484,9 +502,10 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       currentTier: club.tier,
       blockElite,
     }),
-    graceActive,
+    graceActive && !ratioMet,
     age,
     blockElite,
+    loanYears,
   );
 }
 
@@ -501,7 +520,7 @@ function withTwilightMlsOffers(
   const taken = new Set([...excludeIds, ...offers.map((o) => o.clubId)]);
   const mlsPool = CLUBS.filter((c) => c.league === 'MLS' && !taken.has(c.id));
   const mls = pickClubsBiasedToCountry(mlsPool, 3, 'United States', 3);
-  return [...offers, ...offerTerms(mls, 'permanent', value, fee)];
+  return [...offers, ...offerTerms(mls, 'permanent', value, fee, age, newContractYears(age))];
 }
 
 function pickLoanClubsByValue(

@@ -91,15 +91,14 @@ export function domesticCupForCountry(country: string): DomesticCupId | null {
 }
 
 /**
- * Which continental cup (if any) a club plays in a given season.
+ * Typical continental cup for a club when there is no finished league table
+ * (reserve year, a transfer to a new club). Live seasons use
+ * `continentalQualificationForNextSeason` from last season's position.
  *
- * There's no club-growth system yet (the pyramid is fixed for all 20
- * seasons, per the locked design), so qualification is derived straight from
- * the club's tier rather than an actual final league position - tier 1 clubs
- * are Champions League regulars, tier 2 fight it out in the Europa League,
- * tier 3 gets a Conference League run, and tiers 4-5 have no European
- * football. AFC clubs in the top two tiers play the Champions League Elite;
- * MLS sides play Leagues Cup instead of a year-long continental league.
+ * Tier 1: Champions League; tier 2: Europa League; tier 3: Conference
+ * League; tiers 4–5: none. AFC clubs in the top two tiers play the
+ * Champions League Elite; MLS sides play Leagues Cup instead of a year-long
+ * continental league.
  */
 /** Saudi top four plus the AFC guest sides that fill out the Elite draw. */
 export function clubContinentalCup(club: Club): ContinentalCupId | null {

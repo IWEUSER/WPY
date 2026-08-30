@@ -2,7 +2,7 @@ import { createAvailability } from './availabilityEngine';
 import { getClub } from './data/clubs';
 import { createNationalTeamState, recordInternationalAppearance } from './international';
 import { buildSeasonStandings } from './matchEngine';
-import { playerMarketValueFromSeasons, weeklyWageForClub } from './playerValue';
+import { newContractYears, playerMarketValueFromSeasons, weeklyWageForClub } from './playerValue';
 import { hydrateSeason } from './seasonSim';
 import { useCareerStore } from './store';
 import type { PendingTransfer } from './transfers';
@@ -218,6 +218,7 @@ export function applyCareerLayoutPreview(): void {
             move: 'permanent' as const,
             fee: 0,
             weeklyWage: weeklyWageForClub(getClub(clubId)!, value),
+            contractYears: newContractYears(19),
           })),
           allowDecline: true,
         }
@@ -227,12 +228,12 @@ export function applyCareerLayoutPreview(): void {
           detail: 'Loan wages follow your value. A €200m fee is only payable by PSG, Real Madrid or Manchester City.',
           clubIds: ['dortmund', 'real-sociedad', 'sevilla', 'psg', 'real-madrid', 'man-city'],
           offers: [
-            { clubId: 'dortmund', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('dortmund')!, value) },
-            { clubId: 'real-sociedad', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('real-sociedad')!, value) },
-            { clubId: 'sevilla', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('sevilla')!, value) },
-            { clubId: 'psg', move: 'permanent', fee: Math.max(value, 200_000_000), weeklyWage: weeklyWageForClub(getClub('psg')!, value) },
-            { clubId: 'real-madrid', move: 'permanent', fee: Math.max(value, 200_000_000), weeklyWage: weeklyWageForClub(getClub('real-madrid')!, value) },
-            { clubId: 'man-city', move: 'permanent', fee: Math.max(value, 200_000_000), weeklyWage: weeklyWageForClub(getClub('man-city')!, value) },
+            { clubId: 'dortmund', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('dortmund')!, value), contractYears: 1 },
+            { clubId: 'real-sociedad', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('real-sociedad')!, value), contractYears: 1 },
+            { clubId: 'sevilla', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('sevilla')!, value), contractYears: 1 },
+            { clubId: 'psg', move: 'permanent', fee: Math.max(value, 200_000_000), weeklyWage: weeklyWageForClub(getClub('psg')!, value), contractYears: newContractYears(19) },
+            { clubId: 'real-madrid', move: 'permanent', fee: Math.max(value, 200_000_000), weeklyWage: weeklyWageForClub(getClub('real-madrid')!, value), contractYears: newContractYears(19) },
+            { clubId: 'man-city', move: 'permanent', fee: Math.max(value, 200_000_000), weeklyWage: weeklyWageForClub(getClub('man-city')!, value), contractYears: newContractYears(19) },
           ],
           allowDecline: false,
         }

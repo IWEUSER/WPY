@@ -20,7 +20,7 @@ export default function TransferChoiceScreen() {
 
   const offers = (pending.offers?.length
     ? pending.offers
-    : pending.clubIds.map((id) => ({ clubId: id, move: 'permanent' as const, fee: 0, weeklyWage: 0 }))
+    : pending.clubIds.map((id) => ({ clubId: id, move: 'permanent' as const, fee: 0, weeklyWage: 0, contractYears: 0 }))
   );
 
   return (
@@ -52,6 +52,9 @@ export default function TransferChoiceScreen() {
                   {offer.move === 'loan' ? 'Loan' : offer.fee <= 0 ? 'Free' : `Fee ${formatEuros(offer.fee)}`}
                   {' · '}
                   {formatWeeklyWage(offer.weeklyWage)}
+                  {offer.contractYears > 0
+                    ? ` · ${offer.contractYears}-year ${offer.move === 'loan' ? 'loan' : 'contract'}`
+                    : ''}
                 </p>
               </div>
               <div className="flex flex-col items-end gap-1">

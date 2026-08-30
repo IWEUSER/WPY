@@ -13,9 +13,8 @@ import { qualifierCountFor, tournamentKnockoutRounds } from './data/fifaRankings
 
 /**
  * What kind of fixture a calendar week holds. Continental knockouts through
- * the semi-final are two-legged. The continental final, Super Cup, domestic
- * cup final, and international final are one-off decisive matches (see
- * chanceEngine.ts).
+ * the semi-final are two-legged. Finals are one-off ties that still use the
+ * regular chance distribution; missed chances cut the club's win odds.
  */
 export type FixtureKind =
   | 'league'
@@ -42,8 +41,7 @@ export interface CalendarFixture {
   continentalCup?: ContinentalCupId;
   domesticCup?: DomesticCupId;
   domesticCupStage?: DomesticCupStage;
-  /** Finals and the Super Cup are decided by one chance; two-legged ties
-   * and league matches use the regular chance distribution. */
+  /** Legacy flag. Finals no longer use a single decisive chance. */
   isDecisive: boolean;
   /** Leg number for two-legged continental knockout ties. */
   leg?: 1 | 2;
@@ -99,6 +97,8 @@ export interface BuildCalendarParams {
   /** Saudi four-team Super Cup (semi-final + final). */
   includeSaudiSuperCup?: boolean;
   league?: string;
+  /** Override the club-tier default so last season's table can place the club. */
+  continentalCup?: ContinentalCupId | null;
 }
 
 const GROUP_STAGE_MATCHDAYS = 8;
@@ -156,7 +156,10 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
     includeLeaguesCup = false,
     includeSaudiSuperCup = false,
   } = params;
-  const cup = continentalCupForClub(clubTier, confederation);
+  const cup =
+    params.continentalCup !== undefined
+      ? params.continentalCup
+      : continentalCupForClub(clubTier, confederation);
   const domesticCup = includeDomesticCup && country ? domesticCupForCountry(country) : null;
   const fixtures: CalendarFixture[] = [];
 
@@ -178,10 +181,10 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
   }
 
   if (includeSaudiSuperCup) {
-    fixtures.push({ week: 1, kind: 'super-cup', superCupStage: 'semi-final', isDecisive: true });
-    fixtures.push({ week: 2, kind: 'super-cup', superCupStage: 'final', isDecisive: true });
+    fixtures.push({ week: 1, kind: 'super-cup', superCupStage: 'semi-final', isDecisive: false });
+    fixtures.push({ week: 2, kind: 'super-cup', superCupStage: 'final', isDecisive: false });
   } else if (cup && includeSuperCup) {
-    fixtures.push({ week: 1, kind: 'super-cup', continentalCup: cup, superCupStage: 'final', isDecisive: true });
+    fixtures.push({ week: 1, kind: 'super-cup', continentalCup: cup, superCupStage: 'final', isDecisive: false });
   }
 
   if (includeLeaguesCup) {
@@ -269,7 +272,7 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
       kind: 'domestic-cup',
       domesticCup,
       domesticCupStage: 'final',
-      isDecisive: true,
+      isDecisive: false,
     });
   }
   if (includeLeaguesCup) {
@@ -278,11 +281,11 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
       kind: 'leagues-cup',
       continentalCup: 'leagues-cup',
       leaguesCupStage: 'final',
-      isDecisive: true,
+      isDecisive: false,
     });
   }
   if (cup) {
-    fixtures.push({ week: ++week, kind: 'continental-final', continentalCup: cup, isDecisive: true });
+    fixtures.push({ week: ++week, kind: 'continental-final', continentalCup: cup, isDecisive: false });
   }
   if (includePlayoffs) {
     const rounds: PlayoffRound[] = ['first-round', 'conference-semi', 'conference-final', 'mls-cup'];
@@ -291,7 +294,7 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
         week: ++week,
         kind: 'playoff',
         playoffRound,
-        isDecisive: playoffRound === 'mls-cup' || playoffRound === 'conference-final',
+        isDecisive: false,
       });
     }
   }
@@ -315,7 +318,7 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
       fixtures.push({
         week: packed.week,
         kind: 'international',
-        isDecisive: packed.round === 'semi-final' || packed.round === 'final',
+        isDecisive: false,
         internationalRound: packed.round,
       });
       week = Math.max(week, packed.week);

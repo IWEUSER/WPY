@@ -10,8 +10,8 @@ import {
  * (`Club.strength`) win more often, never deterministically. Tier is only a
  * fallback when a test passes no explicit strength. Regular league and group
  * fixtures use this independently of the player's chances; the player's
- * goals are then added as one extra input. Semi-finals and finals bypass
- * this entirely (see chanceEngine.resolveDecisiveMatch).
+ * goals are then added as one extra input. Missed chances scale P(win)
+ * down so finishing is linked to the result without a 1-chance lock.
  */
 
 export interface ClubMatchContext {
@@ -52,16 +52,33 @@ export function expectedScore(us: number, them: number): number {
   return 1 / (1 + 10 ** ((them - us) / 14));
 }
 
+/**
+ * Multiplier on P(win) from missed finishing chances. Four blanks hurt a
+ * lot; a single miss is a nudge. Scoring still adds to the scoreline.
+ */
+export function missedChanceWinFactor(misses: number): number {
+  if (misses <= 0) return 1;
+  if (misses === 1) return 0.88;
+  if (misses === 2) return 0.72;
+  if (misses === 3) return 0.55;
+  return 0.35;
+}
+
 export function simulateClubMatch(
   context: ClubMatchContext,
   rng: () => number = Math.random,
   playerGoals = 0,
+  playerChances?: number,
 ): ClubMatchResult {
   const us = resolveStrength(context.clubStrength, context.clubTier) + (context.isHome ? 3.5 : 0);
   const them = resolveStrength(context.opponentStrength, context.opponentTier);
   const diff = us - them;
   const expected = expectedScore(us, them);
-  const pWin = expected * 0.78;
+  const misses =
+    playerChances != null && playerChances > 0
+      ? Math.max(0, playerChances - Math.max(0, playerGoals))
+      : 0;
+  const pWin = expected * 0.78 * missedChanceWinFactor(misses);
   const pDraw = 0.24 * Math.exp(-((diff / 22) ** 2));
   const roll = rng();
   let outcome: ClubMatchResult['outcome'];
@@ -107,7 +124,7 @@ function outcomeOf(scoreFor: number, scoreAgainst: number): ClubMatchResult['out
   return 'draw';
 }
 
-/** Decisive semi/final scoreline: the player's one chance is the whole match. */
+/** @deprecated Finals use simulateClubMatch. Kept so older calls still compile. */
 export function decisiveScoreline(scored: boolean): ClubMatchResult {
   return scored
     ? { scoreFor: 1, scoreAgainst: 0, outcome: 'win' }

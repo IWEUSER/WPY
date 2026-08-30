@@ -2,9 +2,9 @@ import type { CalendarFixture } from './calendar';
 import { clampStrength, STRENGTH_CEILING, STRENGTH_FLOOR } from './data/clubs';
 
 /**
- * How many scoring chances the player gets in a given match, and whether
- * this fixture is a "decisive" one - a semi-final or final settled by a
- * single defining chance rather than a normal spread across the game.
+ * How many scoring chances the player gets in a given match. League, cup,
+ * and knockout ties (including finals) all use the club-strength spread.
+ * Missed chances then cut the club's win probability in matchEngine.
  */
 export interface MatchChances {
   count: number;
@@ -69,25 +69,15 @@ export function chancesForKnockoutTie(options: ChanceDrawOptions = {}): [MatchCh
   ];
 }
 
-/** Semis and finals are decided by a single defining chance: score it and
- * the club wins, miss it and the club goes out - no probability buffer. */
+/** @deprecated Finals use the regular chance distribution. Kept for older tests. */
 export function chancesForDecisiveMatch(): MatchChances {
-  return { count: 1, isDecisive: true };
+  return chancesForLeagueMatch();
 }
 
 /** Resolves how many chances a given calendar fixture grants the player. */
 export function chancesForFixture(
-  fixture: CalendarFixture,
+  _fixture: CalendarFixture,
   options: ChanceDrawOptions = {},
 ): MatchChances {
-  if (fixture.isDecisive) return chancesForDecisiveMatch();
   return chancesForLeagueMatch(options);
-}
-
-export type DecisiveOutcome = 'win' | 'lose';
-
-/** In a decisive match the club's fate is entirely the player's: score the
- * one chance and the club wins, miss it and the club is out. */
-export function resolveDecisiveMatch(scored: boolean): DecisiveOutcome {
-  return scored ? 'win' : 'lose';
 }

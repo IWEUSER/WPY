@@ -1,16 +1,12 @@
 /**
- * Dev-only balance tool for the season/career scaffolding: checks that the
- * chance-distribution engine really does average out to ~2 chances per
- * match (league and knockout alike), that decisive semi/final matches are
- * always exactly 1 chance, and that the WPY lottery clause fires at roughly
- * its stated 1-in-4 rate.
+ * Dev-only balance tool for the season/career scaffolding: chance
+ * distributions, league qualification, knockout pairing, and transfer terms.
  *
  * Run with: npm run simulate:career
  */
 import { buildSeasonCalendar, INTERNATIONAL_BREAK_WEEKS, isFinalFixture, tournamentWeekCount } from '../src/game/career/calendar';
 import { INJURY_CHANCE_PER_MATCH, injuryDuration } from '../src/game/career/injury';
 import {
-  chancesForDecisiveMatch,
   chancesForKnockoutTie,
   chancesForLeagueMatch,
   meanChancesFromStrength,
@@ -18,11 +14,12 @@ import {
 import { assignClubTier, CLUBS, clubsForSeason, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, leagueMatchWeeks, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
 import { consecutivePoorFactor, contractValueFactor, formAdjustedRatio, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, playerMarketValue, playerMarketValueFromSeasons, RESERVE_CONTRACT_YEARS, seasonalSponsorship, tierForMarketValue, transferFeeFromValue, weeklyWageForClub, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
-import { internationalCampaignForSeason, internationalTournamentForSeason } from '../src/game/career/data/competitions';
-import { fifaRank } from '../src/game/career/data/fifaRankings';
+import { clubContinentalCup, internationalCampaignForSeason, internationalTournamentForSeason } from '../src/game/career/data/competitions';
+import { cupFromLeaguePosition, continentalQualificationForNextSeason } from '../src/game/career/europeanQualification';
+import { fifaRank, tournamentOpponents } from '../src/game/career/data/fifaRankings';
 import { displaySeasonLabel, displaySeasonNumber } from '../src/game/career/seasonDisplay';
 import { isSelectedForNationalTeam, selectionRatioForNation } from '../src/game/career/international';
-import { simulateClubMatch, simulateLeagueSeason } from '../src/game/career/matchEngine';
+import { missedChanceWinFactor, simulateClubMatch, simulateLeagueSeason } from '../src/game/career/matchEngine';
 import { leaguePhaseOpponents } from '../src/game/career/continentalDraw';
 import { canWinLeague, hydrateSeason, nextPlayableFixture, pickTitleRival, resolveFixture, shouldSkipFixture } from '../src/game/career/seasonSim';
 import { offerClubsForTrial } from '../src/game/career/trial';
@@ -85,9 +82,13 @@ console.log(`tie average/leg    = ${((average(firstLegs) + average(secondLegs)) 
 const exampleTie = chancesForKnockoutTie();
 console.log(`example tie: leg 1 = ${exampleTie[0].count}, leg 2 = ${exampleTie[1].count}`);
 
-console.log('\n--- Decisive matches (semi-final / final): always exactly 1 chance ---');
-const decisiveCounts = new Set(Array.from({ length: 1000 }, () => chancesForDecisiveMatch().count));
-console.log(`distinct chance counts seen across 1000 draws: [${[...decisiveCounts].join(', ')}] (expect [1])`);
+console.log('\n--- Finals use the regular chance distribution, not a single chance ---');
+const finalChanceCounts = new Set(Array.from({ length: 200 }, () => chancesForLeagueMatch({ strength: 90 }).count));
+console.log(`elite final chance counts seen: [${[...finalChanceCounts].sort((a, b) => a - b).join(', ')}]`);
+if (finalChanceCounts.size < 2) {
+  console.error('finals must not be locked to a single chance');
+  process.exitCode = 1;
+}
 
 console.log('\n--- Season calendar shape (tier 1 UEFA club, season 2, Spain) ---');
 const calendar = buildSeasonCalendar({
@@ -345,13 +346,35 @@ if (madrid) {
   console.log('fixtures', calendar.fixtures.length, kinds);
   console.log('european stage', sim.europeanStanding);
   console.log('international selected', sim.internationalSelected, sim.internationalStage);
-  console.log('mean pre-assigned chances', chanceAvg.toFixed(2), `(elite club, target ~${meanChancesFromStrength(madrid.strength).toFixed(2)}; decisive matches pull it down)`);
+  console.log('mean pre-assigned chances', chanceAvg.toFixed(2), `(elite club, target ~${meanChancesFromStrength(madrid.strength).toFixed(2)})`);
   if (chanceAvg < 2.4) {
     console.error('Real Madrid should generate well above 2 chances a game on average');
     process.exitCode = 1;
   }
   const missingOpp = calendar.fixtures.filter((f) => f.kind !== 'rest' && !f.opponentLabel).length;
   console.log('fixtures missing an opponent', missingOpp, '(expect 0)');
+  if (missingOpp > 0) {
+    const orphans = calendar.fixtures.filter((f) => f.kind !== 'rest' && !f.opponentLabel).map((f) => `w${f.week} ${f.kind} leg${f.leg ?? '-'}`);
+    console.error('every playable fixture must have an opponent', orphans);
+    process.exitCode = 1;
+  }
+  const koSeconds = calendar.fixtures.filter(
+    (f) => (f.kind === 'continental-knockout' || f.kind === 'continental-semi-final') && f.leg === 2,
+  );
+  if (koSeconds.some((f) => !f.opponentLabel)) {
+    console.error('Knockout 2nd legs must list the same opponent as the 1st leg');
+    process.exitCode = 1;
+  }
+  const koFirsts = calendar.fixtures.filter(
+    (f) => (f.kind === 'continental-knockout' || f.kind === 'continental-semi-final') && f.leg === 1,
+  );
+  for (const first of koFirsts) {
+    const second = koSeconds.find((s) => s.kind === first.kind && s.week > first.week && s.opponentId === first.opponentId);
+    if (!second) {
+      console.error(`no paired 2nd leg for ${first.kind} vs ${first.opponentLabel} in week ${first.week}`);
+      process.exitCode = 1;
+    }
+  }
   console.log('domestic cup', sim.domesticCup, sim.domesticCupStage, '(expect copa-del-rey, round-of-16)');
   console.log('international tournament', sim.internationalTournament, sim.internationalPhase, '(expect world-cup + finals)');
   if (sim.domesticCup !== 'copa-del-rey') {
@@ -592,8 +615,19 @@ if (madrid) {
     console.error('qualifier opponents should not repeat');
     process.exitCode = 1;
   }
-  if (new Set(finals.map((f) => f.opponentId)).size < finals.length) {
-    console.error('World Cup opponents should not repeat');
+  const groupIds = finals.filter((f) => f.internationalRound === 'group').map((f) => f.opponentId);
+  const earlyKo = finals.filter(
+    (f) =>
+      f.internationalRound === 'round-of-32' ||
+      f.internationalRound === 'round-of-16' ||
+      f.internationalRound === 'quarter-final',
+  );
+  if (earlyKo.some((f) => groupIds.includes(f.opponentId))) {
+    console.error('group opponents must not reappear before the semi-final');
+    process.exitCode = 1;
+  }
+  if (new Set(groupIds).size < groupIds.length) {
+    console.error('World Cup group opponents should not repeat');
     process.exitCode = 1;
   }
   if (!ranks.some((r) => r > 20)) {
@@ -1010,23 +1044,47 @@ if (barca && hilal && lafc) {
   }
 
   const firstSeason = resolveSeasonTransition({
-    season: { ...dummySeason, clubId: 'barcelona', goals: 20, gamesPlayed: 38 },
+    season: { ...dummySeason, clubId: 'barcelona', goals: 32, gamesPlayed: 38 },
     role: 'first-team',
     clubId: 'barcelona',
     parentClubId: 'barcelona',
     seasonsAtCurrentClub: 0,
     age: 19,
-    careerGoals: 20,
+    careerGoals: 32,
     careerGames: 38,
     nationality: 'spain',
     loansUsed: 0,
     contractYearsRemaining: 5,
   });
   const firstLoans = (firstSeason.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan');
-  const firstLoanTiers = firstLoans.map((o) => getClub(o.clubId)?.tier ?? 5);
-  console.log('first-season loans', firstLoans.length, 'tiers', firstLoanTiers);
-  if (firstLoans.length !== 3 || firstLoanTiers.some((tier) => tier >= 5)) {
-    console.error('the first season at a club must still offer value-matching loans');
+  const firstYears = (firstSeason.pendingTransfer?.offers ?? []).map((o) => o.contractYears);
+  console.log('first-season (ratio met) loans', firstLoans.length, 'contract years', firstYears);
+  if (firstLoans.length !== 0) {
+    console.error('the first season at a club must not offer loans when the ratio is met');
+    process.exitCode = 1;
+  }
+  if (firstYears.length === 0 || firstYears.some((y) => y == null || y < 1)) {
+    console.error('transfer offers must list a contract length beside the wage');
+    process.exitCode = 1;
+  }
+
+  const firstMissed = resolveSeasonTransition({
+    season: { ...dummySeason, clubId: 'barcelona', goals: 8, gamesPlayed: 38 },
+    role: 'first-team',
+    clubId: 'barcelona',
+    parentClubId: 'barcelona',
+    seasonsAtCurrentClub: 0,
+    age: 19,
+    careerGoals: 8,
+    careerGames: 38,
+    nationality: 'spain',
+    loansUsed: 0,
+    contractYearsRemaining: 5,
+  });
+  const missedLoans = (firstMissed.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan');
+  console.log('first-season (ratio missed) loans', missedLoans.length);
+  if (missedLoans.length !== 3) {
+    console.error('the first season at a club must still offer loans when the ratio is missed');
     process.exitCode = 1;
   }
 
@@ -1659,6 +1717,144 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
   }
   if (formatGamesGoals(2, 0) !== '2 games · 0 goals') {
     console.error('international lines must show games and goals, not “0 in 2”');
+    process.exitCode = 1;
+  }
+}
+
+console.log('\n--- League position qualifies for Europe next season ---');
+{
+  const palace = getClub('crystal-palace')!;
+  if (cupFromLeaguePosition('Premier League', 4) !== 'ucl' || cupFromLeaguePosition('Premier League', 5) !== 'uel' || cupFromLeaguePosition('Premier League', 6) !== 'uecl') {
+    console.error('Premier League places must be 1–4 CL, 5 EL, 6 ECL');
+    process.exitCode = 1;
+  }
+  if (cupFromLeaguePosition('Premier League', 7) != null || cupFromLeaguePosition('Championship', 1) != null) {
+    console.error('mid-table PL and Championship sides must not get Europe from the table');
+    process.exitCode = 1;
+  }
+  if (cupFromLeaguePosition('Ligue 1', 3) !== 'ucl' || cupFromLeaguePosition('Ligue 1', 4) !== 'uel') {
+    console.error('Ligue 1 must give three CL places then EL');
+    process.exitCode = 1;
+  }
+  if (cupFromLeaguePosition('Saudi Pro League', 4) !== 'acle' || cupFromLeaguePosition('Saudi Pro League', 5) != null) {
+    console.error('Saudi top four must play the AFC Champions League Elite');
+    process.exitCode = 1;
+  }
+  const uelUpgrade = continentalQualificationForNextSeason({
+    club: palace,
+    league: 'Premier League',
+    position: 12,
+    defendingContinental: 'uel',
+  });
+  if (uelUpgrade !== 'ucl') {
+    console.error('Europa League winners must play the Champions League even from mid-table');
+    process.exitCode = 1;
+  }
+  const sixth = hydrateSeason({
+    seasonNumber: 3,
+    club: palace,
+    careerGoalRatio: 0.4,
+    nationId: 'england',
+    continentalCup: cupFromLeaguePosition('Premier League', 6),
+  });
+  const sixthCups = new Set(sixth.calendar.fixtures.map((f) => f.continentalCup).filter(Boolean));
+  console.log('Palace 6th next cup', [...sixthCups], 'stage', sixth.sim.europeanStanding);
+  if (!sixthCups.has('uecl') || sixth.sim.europeanStanding?.cup !== 'uecl') {
+    console.error('finishing 6th in the Premier League must schedule the Conference League');
+    process.exitCode = 1;
+  }
+  const tenth = hydrateSeason({
+    seasonNumber: 3,
+    club: getClub('real-madrid')!,
+    careerGoalRatio: 0.8,
+    nationId: 'spain',
+    continentalCup: cupFromLeaguePosition('La Liga', 10),
+  });
+  if (tenth.calendar.fixtures.some((f) => f.kind.startsWith('continental'))) {
+    console.error('a 10th-place La Liga finish must not schedule European football');
+    process.exitCode = 1;
+  }
+  const fallback = continentalQualificationForNextSeason({
+    club: getClub('real-madrid')!,
+    league: 'La Liga',
+    position: null,
+  });
+  if (fallback !== clubContinentalCup(getClub('real-madrid')!)) {
+    console.error('a missing table must fall back to the club’s typical European status');
+    process.exitCode = 1;
+  }
+}
+
+console.log('\n--- International group sides stay out of early knockouts ---');
+{
+  let groupReuse = 0;
+  for (let i = 0; i < 40; i++) {
+    const drawn = tournamentOpponents('spain', 'world-cup');
+    const group = drawn.slice(0, 3).map((n) => n.id);
+    const early = drawn.slice(3, 6).map((n) => n.id);
+    if (early.some((id) => group.includes(id))) groupReuse += 1;
+  }
+  console.log('WC group reused before SF across 40 draws', groupReuse);
+  if (groupReuse > 0) {
+    console.error('World Cup group opponents must not appear before the semi-final');
+    process.exitCode = 1;
+  }
+  const euro = tournamentOpponents('spain', 'euro');
+  const euroGroup = euro.slice(0, 3).map((n) => n.id);
+  const euroR16Qf = euro.slice(3, 5).map((n) => n.id);
+  if (euroR16Qf.some((id) => euroGroup.includes(id))) {
+    console.error('Euro last-16 and quarter-final must not reuse a group opponent');
+    process.exitCode = 1;
+  }
+}
+
+console.log('\n--- Missed chances cut win probability ---');
+{
+  if (
+    missedChanceWinFactor(0) !== 1 ||
+    missedChanceWinFactor(1) >= missedChanceWinFactor(0) ||
+    missedChanceWinFactor(2) >= missedChanceWinFactor(1) ||
+    missedChanceWinFactor(3) >= missedChanceWinFactor(2) ||
+    missedChanceWinFactor(4) >= missedChanceWinFactor(3)
+  ) {
+    console.error('more missed chances must reduce win odds in steps');
+    process.exitCode = 1;
+  }
+  const trials = 2500;
+  const rate = (goals: number, chances?: number) => {
+    let wins = 0;
+    for (let i = 0; i < trials; i++) {
+      const r = simulateClubMatch(
+        { clubStrength: 86, opponentStrength: 80, isHome: true },
+        Math.random,
+        goals,
+        chances,
+      );
+      if (r.outcome === 'win') wins += 1;
+    }
+    return wins / trials;
+  };
+  const baseline = rate(0);
+  const oneMiss = rate(0, 1);
+  const fourMiss = rate(0, 4);
+  console.log('win rate 0 goals: baseline', baseline.toFixed(3), '1 miss', oneMiss.toFixed(3), '4 misses', fourMiss.toFixed(3));
+  if (fourMiss >= baseline - 0.08) {
+    console.error('missing all four chances must cut the club’s win rate');
+    process.exitCode = 1;
+  }
+  if (oneMiss <= fourMiss || oneMiss > baseline + 0.03) {
+    console.error('missing one chance must sit between a normal result and four misses');
+    process.exitCode = 1;
+  }
+}
+
+if (madrid) {
+  const { calendar } = hydrateSeason({ seasonNumber: 2, club: madrid, careerGoalRatio: 0.8, nationId: 'spain' });
+  const cupFinal = calendar.fixtures.find((f) => f.kind === 'domestic-cup' && f.domesticCupStage === 'final');
+  const euroFinal = calendar.fixtures.find((f) => f.kind === 'continental-final');
+  const intlSf = calendar.fixtures.find((f) => f.kind === 'international' && f.internationalRound === 'semi-final');
+  if (cupFinal?.isDecisive || euroFinal?.isDecisive || intlSf?.isDecisive) {
+    console.error('domestic, European and international finals must not be one-chance matches');
     process.exitCode = 1;
   }
 }

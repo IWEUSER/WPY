@@ -144,6 +144,12 @@ export interface CareerState {
   previousContinentalChampion: ContinentalCupId | null;
   previousChampionClubId: string | null;
   /**
+   * Continental cup the current club earned for the season about to start.
+   * Null means no European/AFC campaign. Undefined in older saves falls back
+   * to the club's typical tier status.
+   */
+  qualifiedContinentalCup?: ContinentalCupId | null;
+  /**
    * First half of a split qualifying campaign (season 3 → season 4).
    * Null outside that window.
    */

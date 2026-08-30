@@ -308,12 +308,40 @@ export function qualifierOpponents(nationId: string, tournament: InternationalTo
   return pickMixedRankOpponents(nationId, n, pool);
 }
 
-/** Group then knockout opponents. World Cup mixes confederations; continental stays in-region. */
+const GROUP_REUSE_KNOCKOUT = new Set<InternationalKnockoutRound>(['semi-final', 'final']);
+
+function drawKnockoutOpponents(
+  nationId: string,
+  rounds: InternationalKnockoutRound[],
+  pool: { id: string; name: string; confederation: Confederation }[],
+  groupIds: Set<string>,
+): { id: string; name: string; confederation: Confederation }[] {
+  const used = new Set<string>();
+  const picks: { id: string; name: string; confederation: Confederation }[] = [];
+  for (const round of rounds) {
+    const allowGroup = GROUP_REUSE_KNOCKOUT.has(round);
+    const eligible = pool.filter((n) => {
+      if (used.has(n.id)) return false;
+      if (!allowGroup && groupIds.has(n.id)) return false;
+      return true;
+    });
+    const fallback = pool.filter((n) => !used.has(n.id));
+    const pick = pickMixedRankOpponents(nationId, 1, eligible.length > 0 ? eligible : fallback)[0];
+    if (pick) {
+      used.add(pick.id);
+      picks.push(pick);
+    }
+  }
+  return picks;
+}
+
+/** Group then knockout opponents. World Cup mixes confederations; continental stays in-region.
+ * Group sides cannot reappear until the semi-final. */
 export function tournamentOpponents(nationId: string, tournament: InternationalTournamentId) {
   const nation = getNation(nationId);
   if (!nation) return [];
   const groupCount = tournamentGroupGames();
-  const knockoutCount = tournamentKnockoutRounds(tournament).length;
+  const knockoutRounds = tournamentKnockoutRounds(tournament);
   const worldPool = NATIONS.filter((n) => n.id !== nationId);
   const regional = nationsInConfederation(nation.confederation).filter((n) => n.id !== nationId);
   if (tournament === 'world-cup') {
@@ -343,11 +371,10 @@ export function tournamentOpponents(nationId: string, tournament: InternationalT
         group.push(pick);
       }
     }
-    const remaining = worldPool.filter((n) => !used.has(n.id));
-    return [...group, ...pickMixedRankOpponents(nationId, knockoutCount, remaining)];
+    const groupIds = new Set(group.map((n) => n.id));
+    return [...group, ...drawKnockoutOpponents(nationId, knockoutRounds, worldPool, groupIds)];
   }
-  return [
-    ...pickMixedRankOpponents(nationId, groupCount, regional),
-    ...pickMixedRankOpponents(nationId, knockoutCount, regional),
-  ];
+  const group = pickMixedRankOpponents(nationId, groupCount, regional);
+  const groupIds = new Set(group.map((n) => n.id));
+  return [...group, ...drawKnockoutOpponents(nationId, knockoutRounds, regional, groupIds)];
 }
