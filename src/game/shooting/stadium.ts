@@ -14,6 +14,9 @@ export interface StadiumView {
   goal: { halfW: number; topY: number; botY: number };
 }
 
+/** Elite/Strong clubs get a cathedral bowl; everyone else a smaller terrace. */
+export type StadiumScale = 'elite' | 'strong' | 'local';
+
 export interface StadiumAppearance {
   /** True when the player's club/country is the home side. */
   isHome: boolean;
@@ -32,6 +35,17 @@ export interface StadiumAppearance {
   opponentPattern?: ShirtPattern;
   /** 0–1 share of seats given to away fans. */
   awayShare?: number;
+  /**
+   * Whose ground this is. Elite/Strong clubs get a cathedral bowl;
+   * everyone else a smaller uncovered terrace.
+   */
+  scale?: StadiumScale;
+}
+
+export function stadiumScaleFromTier(tier: number | undefined): StadiumScale {
+  if (tier === 1) return 'elite';
+  if (tier === 2) return 'strong';
+  return 'local';
 }
 
 export const DEFAULT_STADIUM: StadiumAppearance = {
@@ -41,6 +55,7 @@ export const DEFAULT_STADIUM: StadiumAppearance = {
   awayColor: '#034694',
   opponentColor: '#034694',
   awayShare: 0.2,
+  scale: 'elite',
 };
 
 export function defenderKitFromStadium(stadium: StadiumAppearance): DefenderKit {
@@ -110,6 +125,30 @@ export function standBottomY(view: StadiumView): number {
   return view.goal.botY - hoardingHeight(view);
 }
 
+export interface StadiumLayout {
+  top: number;
+  bottom: number;
+  aisleEvery: number;
+  occupancy: number;
+  roof: boolean;
+  scale: StadiumScale;
+}
+
+/** Terrace height, concourse count, and roof from the home club's scale. */
+export function stadiumLayout(view: StadiumView, scale: StadiumScale = 'elite'): StadiumLayout {
+  const bottom = standBottomY(view);
+  const topFrac = scale === 'elite' ? 0.04 : scale === 'strong' ? 0.22 : 0.5;
+  const top = Math.min(bottom - 20, Math.max(view.h * 0.016, bottom * topFrac));
+  return {
+    top,
+    bottom,
+    aisleEvery: scale === 'elite' ? 10 : scale === 'strong' ? 14 : 24,
+    occupancy: scale === 'elite' ? 0.99 : scale === 'strong' ? 0.94 : 0.8,
+    roof: scale !== 'local',
+    scale,
+  };
+}
+
 /** Head/torso cell size in CSS pixels so close-up crowds read as people, not a wall. */
 export function crowdCellSize(standHeightPx: number): { rowH: number; colW: number } {
   const rowH = Math.min(11, Math.max(3.2, standHeightPx / 42));
@@ -126,6 +165,7 @@ function paintPackedFans(
   rng: () => number,
   stadium: StadiumAppearance,
   viewW: number,
+  layout: StadiumLayout,
 ) {
   const minX = Math.min(tl.x, tr.x, br.x, bl.x);
   const maxX = Math.max(tl.x, tr.x, br.x, bl.x);
@@ -149,7 +189,7 @@ function paintPackedFans(
 
   let row = 0;
   for (let y = Math.floor(minY); y < maxY + rowH; y += rowH) {
-    const aisle = row % 8 === 7;
+    const aisle = layout.aisleEvery > 0 && row > 0 && row % layout.aisleEvery === layout.aisleEvery - 1;
     const stagger = (row & 1) ? Math.round(colW * 0.5) : 0;
     row += 1;
     if (aisle) {
@@ -158,7 +198,7 @@ function paintPackedFans(
       continue;
     }
     for (let x = Math.floor(minX) - colW; x < maxX + colW; x += colW) {
-      if (rng() > 0.992) continue;
+      if (rng() > layout.occupancy) continue;
       const px = x + stagger;
       const py = y;
       const u = Math.max(0, Math.min(1, (px + colW / 2) / Math.max(1, viewW)));
@@ -214,6 +254,7 @@ function crowdLayer(w: number, h: number, view: StadiumView, stadium: StadiumApp
     stadium.awaySecondary ?? '',
     (stadium.awayShare ?? 0.2).toFixed(2),
     stadium.night ? 'n' : 'd',
+    stadium.scale ?? 'elite',
     view.goal.botY.toFixed(1),
     view.goal.topY.toFixed(1),
   ].join('|');
@@ -229,32 +270,31 @@ function crowdLayer(w: number, h: number, view: StadiumView, stadium: StadiumApp
 
   ctx.clearRect(0, 0, w, h);
   const rng = mulberry32(hashKey(key));
-  const standBottom = standBottomY(view);
-  const standTop = Math.max(2, Math.round(h * 0.018));
+  const layout = stadiumLayout(view, stadium.scale ?? 'elite');
   const terrace = mixHex(stadium.homeColor, stadium.night ? '#0f172a' : '#292524', 0.78);
-  const tl = { x: 0, y: standTop };
-  const tr = { x: w, y: standTop };
-  const br = { x: w, y: standBottom };
-  const bl = { x: 0, y: standBottom };
+  const tl = { x: 0, y: layout.top };
+  const tr = { x: w, y: layout.top };
+  const br = { x: w, y: layout.bottom };
+  const bl = { x: 0, y: layout.bottom };
   ctx.fillStyle = terrace;
-  ctx.fillRect(0, standTop, w, Math.max(1, standBottom - standTop));
-  paintPackedFans(ctx, tl, tr, br, bl, rng, stadium, w);
+  ctx.fillRect(0, layout.top, w, Math.max(1, layout.bottom - layout.top));
+  paintPackedFans(ctx, tl, tr, br, bl, rng, stadium, w, layout);
 
   crowdCache = { key, canvas };
   return canvas;
 }
 
-function drawRoof(ctx: CanvasRenderingContext2D, w: number, h: number, night: boolean) {
-  // Keep the canopy as a thin lid at the top of the frame so a 6-yard camera
-  // does not paint a dark void over the terrace behind the net.
-  const lip = h * 0.038;
+function drawRoof(ctx: CanvasRenderingContext2D, w: number, h: number, night: boolean, standTop: number) {
+  // Keep the canopy as a thin lid above the terrace so a 6-yard camera
+  // does not paint a dark void over the crowd behind the net.
+  const lip = Math.min(h * 0.038, standTop * 0.85);
   if (night) {
     ctx.fillStyle = '#0b0f18';
     ctx.beginPath();
     ctx.moveTo(0, 0);
     ctx.lineTo(w, 0);
     ctx.lineTo(w, lip);
-    ctx.quadraticCurveTo(w * 0.5, h * 0.055, 0, lip);
+    ctx.quadraticCurveTo(w * 0.5, Math.min(h * 0.055, standTop), 0, lip);
     ctx.closePath();
     ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.08)';
@@ -263,8 +303,8 @@ function drawRoof(ctx: CanvasRenderingContext2D, w: number, h: number, night: bo
   }
   ctx.lineWidth = Math.max(2, w * 0.006);
   ctx.beginPath();
-  ctx.moveTo(w * 0.04, h * 0.028);
-  ctx.quadraticCurveTo(w * 0.5, h * 0.05, w * 0.96, h * 0.028);
+  ctx.moveTo(w * 0.04, Math.max(h * 0.02, lip * 0.7));
+  ctx.quadraticCurveTo(w * 0.5, Math.min(h * 0.05, standTop * 0.9), w * 0.96, Math.max(h * 0.02, lip * 0.7));
   ctx.stroke();
 }
 
@@ -319,8 +359,15 @@ function drawHoardings(
   }
 }
 
-function drawBowlStructure(ctx: CanvasRenderingContext2D, w: number, h: number, standBottom: number, night: boolean) {
-  const concrete = ctx.createLinearGradient(0, 0, 0, standBottom);
+function drawBowlStructure(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  standTop: number,
+  standBottom: number,
+  night: boolean,
+) {
+  const concrete = ctx.createLinearGradient(0, standTop, 0, standBottom);
   if (night) {
     concrete.addColorStop(0, '#1f2937');
     concrete.addColorStop(1, '#111827');
@@ -330,8 +377,8 @@ function drawBowlStructure(ctx: CanvasRenderingContext2D, w: number, h: number, 
   }
   ctx.fillStyle = concrete;
   ctx.beginPath();
-  ctx.moveTo(0, h * 0.02);
-  ctx.lineTo(w, h * 0.02);
+  ctx.moveTo(0, standTop);
+  ctx.lineTo(w, standTop);
   ctx.lineTo(w, standBottom);
   ctx.lineTo(0, standBottom);
   ctx.closePath();
@@ -339,15 +386,15 @@ function drawBowlStructure(ctx: CanvasRenderingContext2D, w: number, h: number, 
 
   ctx.fillStyle = night ? '#0f172a' : '#7b8796';
   ctx.beginPath();
-  ctx.moveTo(0, standBottom * 0.55);
+  ctx.moveTo(0, standTop + (standBottom - standTop) * 0.55);
   ctx.lineTo(w * 0.2, standBottom);
-  ctx.lineTo(0, h * 0.48);
+  ctx.lineTo(0, Math.min(h * 0.48, standBottom + h * 0.12));
   ctx.closePath();
   ctx.fill();
   ctx.beginPath();
-  ctx.moveTo(w, standBottom * 0.55);
+  ctx.moveTo(w, standTop + (standBottom - standTop) * 0.55);
   ctx.lineTo(w * 0.8, standBottom);
-  ctx.lineTo(w, h * 0.48);
+  ctx.lineTo(w, Math.min(h * 0.48, standBottom + h * 0.12));
   ctx.closePath();
   ctx.fill();
 }
@@ -363,10 +410,10 @@ export function drawStadium(
   stadium: StadiumAppearance = DEFAULT_STADIUM,
 ) {
   const { w, h } = view;
-  const standBottom = standBottomY(view);
+  const layout = stadiumLayout(view, stadium.scale ?? 'elite');
   const night = Boolean(stadium.night);
 
-  const sky = ctx.createLinearGradient(0, 0, 0, standBottom + h * 0.1);
+  const sky = ctx.createLinearGradient(0, 0, 0, layout.bottom + h * 0.1);
   if (night) {
     sky.addColorStop(0, '#070b16');
     sky.addColorStop(0.45, '#152038');
@@ -377,13 +424,15 @@ export function drawStadium(
     sky.addColorStop(1, '#f6d9a0');
   }
   ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, w, standBottom + h * 0.04);
+  ctx.fillRect(0, 0, w, layout.bottom + h * 0.04);
   ctx.fillStyle = night ? '#0b1220' : '#8a97a8';
-  ctx.fillRect(0, standBottom, w, Math.max(0, h - standBottom));
+  ctx.fillRect(0, layout.bottom, w, Math.max(0, h - layout.bottom));
 
-  drawBowlStructure(ctx, w, h, standBottom, night);
+  drawBowlStructure(ctx, w, h, layout.top, layout.bottom, night);
 
-  drawRoof(ctx, w, h, night);
+  if (layout.roof) {
+    drawRoof(ctx, w, h, night, layout.top);
+  }
 
   const crowd = crowdLayer(w, h, view, stadium);
   const prevSmooth = ctx.imageSmoothingEnabled;
@@ -392,7 +441,9 @@ export function drawStadium(
   ctx.imageSmoothingEnabled = prevSmooth;
 
   if (night) {
-    const lampY = Math.max(h * 0.055, view.goal.topY - h * 0.06);
+    const lampY = layout.roof
+      ? Math.max(h * 0.055, Math.min(layout.top + 8, view.goal.topY - h * 0.06))
+      : layout.top + 6;
     const lampScale = Math.max(8, view.goal.halfW * 0.12);
     drawFloodlight(ctx, w / 2 - view.goal.halfW * 1.42, lampY, time, lampScale);
     drawFloodlight(ctx, w / 2 + view.goal.halfW * 1.42, lampY, time, lampScale);
@@ -401,14 +452,14 @@ export function drawStadium(
     wash.addColorStop(0, 'rgba(255,244,210,0.07)');
     wash.addColorStop(1, 'rgba(255,244,210,0)');
     ctx.fillStyle = wash;
-    ctx.fillRect(0, 0, w, standBottom + h * 0.08);
+    ctx.fillRect(0, 0, w, layout.bottom + h * 0.08);
   } else {
     const sun = ctx.createRadialGradient(w * 0.78, h * 0.05, 0, w * 0.78, h * 0.05, w * 0.42);
     sun.addColorStop(0, 'rgba(255,252,220,0.55)');
     sun.addColorStop(0.18, 'rgba(255,236,170,0.22)');
     sun.addColorStop(1, 'rgba(255,236,170,0)');
     ctx.fillStyle = sun;
-    ctx.fillRect(0, 0, w, standBottom + h * 0.1);
+    ctx.fillRect(0, 0, w, layout.bottom + h * 0.1);
   }
 
   drawHoardings(ctx, view, stadium);

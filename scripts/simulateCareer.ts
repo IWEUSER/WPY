@@ -18,7 +18,7 @@ import { nationKit } from '../src/game/career/data/nationColours';
 import { resolveMatchStadium } from '../src/game/career/matchVenue';
 import { crowdSwatch, kitFromColor, kitFromScheme, luminance } from '../src/game/shooting/kitPalette';
 import { createPitchView, MAX_SHOT_DISTANCE_M, MIN_SHOT_DISTANCE_M } from '../src/game/shooting/render';
-import { standBottomY, crowdCellSize } from '../src/game/shooting/stadium';
+import { standBottomY, crowdCellSize, stadiumLayout, stadiumScaleFromTier } from '../src/game/shooting/stadium';
 import { clubKit } from '../src/game/career/data/clubKits';
 import { clubContinentalCup, internationalCampaignForSeason, internationalTournamentForSeason } from '../src/game/career/data/competitions';
 import { cupFromLeaguePosition, continentalQualificationForNextSeason } from '../src/game/career/europeanQualification';
@@ -27,7 +27,7 @@ import { displaySeasonLabel, displaySeasonNumber } from '../src/game/career/seas
 import { isSelectedForNationalTeam, selectionRatioForNation } from '../src/game/career/international';
 import { missedChanceWinFactor, simulateClubMatch, simulateLeagueSeason } from '../src/game/career/matchEngine';
 import { leaguePhaseOpponents } from '../src/game/career/continentalDraw';
-import { canWinLeague, hydrateSeason, nextPlayableFixture, pickTitleRival, resolveFixture, shouldSkipFixture } from '../src/game/career/seasonSim';
+import { canWinLeague, hydrateSeason, leagueFixtureIsHome, nextPlayableFixture, pickTitleRival, resolveFixture, shouldSkipFixture } from '../src/game/career/seasonSim';
 import { offerClubsForTrial } from '../src/game/career/trial';
 import { offerTierFromStanding, resolveSeasonTransition } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
@@ -2179,6 +2179,55 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
     console.error('league fixtures must include both home and away matches');
     process.exitCode = 1;
   }
+  const leagueFlags = calendar.fixtures.filter((f) => f.kind === 'league').map((f) => Boolean(f.isHome));
+  const firstTwelve = leagueFlags.slice(0, 12);
+  const firstTwelveHome = firstTwelve.filter(Boolean).length;
+  const firstTwelveAway = firstTwelve.length - firstTwelveHome;
+  let maxAwayRun = 0;
+  let run = 0;
+  for (const home of leagueFlags) {
+    if (!home) {
+      run += 1;
+      maxAwayRun = Math.max(maxAwayRun, run);
+    } else {
+      run = 0;
+    }
+  }
+  console.log('league first-12 H/A', firstTwelveHome, firstTwelveAway, 'max away run', maxAwayRun);
+  if (firstTwelveHome < 3 || firstTwelveAway < 3) {
+    console.error('league home and away must be interleaved, not a home block then an away block');
+    process.exitCode = 1;
+  }
+  if (maxAwayRun > 2) {
+    console.error('league away games must not run for more than two in a row');
+    process.exitCode = 1;
+  }
+  if (!leagueFixtureIsHome(0, 38) || leagueFixtureIsHome(1, 38) || !leagueFixtureIsHome(2, 38)) {
+    console.error('opening league games should be home, away, home');
+    process.exitCode = 1;
+  }
+
+  const madridHome = resolveMatchStadium({
+    fixture: { week: 1, kind: 'league', isDecisive: false, isHome: true, opponentId: 'getafe' },
+    club: madridClub,
+  });
+  const getafeHome = resolveMatchStadium({
+    fixture: { week: 2, kind: 'league', isDecisive: false, isHome: false, opponentId: 'getafe' },
+    club: madridClub,
+  });
+  const dortmundHome = resolveMatchStadium({
+    fixture: { week: 1, kind: 'league', isDecisive: false, isHome: true, opponentId: 'mainz' },
+    club: getClub('dortmund'),
+  });
+  console.log('stadium scale madrid/getafe-away/dortmund', madridHome.scale, getafeHome.scale, dortmundHome.scale);
+  if (madridHome.scale !== 'elite' || getafeHome.scale !== 'local' || dortmundHome.scale !== 'strong') {
+    console.error('elite and strong clubs need cathedral bowls; smaller clubs a local terrace');
+    process.exitCode = 1;
+  }
+  if (stadiumScaleFromTier(1) !== 'elite' || stadiumScaleFromTier(2) !== 'strong' || stadiumScaleFromTier(4) !== 'local') {
+    console.error('club tiers must map onto stadium scales');
+    process.exitCode = 1;
+  }
 
   const close = createPitchView(390, 844, MIN_SHOT_DISTANCE_M);
   const far = createPitchView(390, 844, MAX_SHOT_DISTANCE_M);
@@ -2206,6 +2255,21 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
   }
   if (closeCell.rowH <= farCell.rowH) {
     console.error('close-up fans must scale larger than the 30-yard terrace speckle');
+    process.exitCode = 1;
+  }
+  const eliteBowl = stadiumLayout(close, 'elite');
+  const localBowl = stadiumLayout(close, 'local');
+  console.log('bowl top elite/local', eliteBowl.top.toFixed(1), localBowl.top.toFixed(1), 'aisles', eliteBowl.aisleEvery, localBowl.aisleEvery);
+  if (localBowl.top <= eliteBowl.top + 80) {
+    console.error('a local ground must show more sky above the terrace than an elite bowl');
+    process.exitCode = 1;
+  }
+  if (localBowl.roof || !eliteBowl.roof) {
+    console.error('only elite and strong grounds should have a roof');
+    process.exitCode = 1;
+  }
+  if (eliteBowl.aisleEvery >= localBowl.aisleEvery) {
+    console.error('elite bowls should have more tiers than a local terrace');
     process.exitCode = 1;
   }
 }

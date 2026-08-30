@@ -202,18 +202,18 @@ export function applyCareerLayoutPreview(): void {
           : { tournament: 'euro', points: 7, played: 3 },
   });
 
-  const isMatchPreview = preview === 'match' || preview === 'match-away' || preview === 'match-intl'
-    || preview === 'match-ucl' || preview === 'match-intl-ko';
+  const isMatchPreview = preview === 'match' || preview === 'match-away' || preview === 'match-local'
+    || preview === 'match-intl' || preview === 'match-ucl' || preview === 'match-intl-ko';
   let matchFixtureIndex = Math.max(0, calendar.fixtures.findIndex((f) => f.kind !== 'rest'));
-  if (preview === 'match' || preview === 'match-away') {
+  if (preview === 'match' || preview === 'match-away' || preview === 'match-local') {
     const wantHome = preview === 'match';
     const idx = calendar.fixtures.findIndex((f) => f.kind === 'league' && f.isHome === wantHome);
     if (idx >= 0) matchFixtureIndex = idx;
     const fx = calendar.fixtures[matchFixtureIndex];
     if (fx) {
       fx.kind = 'league';
-      fx.opponentId = 'barcelona';
-      fx.opponentLabel = 'Barcelona';
+      fx.opponentId = preview === 'match-local' ? 'getafe' : 'barcelona';
+      fx.opponentLabel = preview === 'match-local' ? 'Getafe' : 'Barcelona';
       fx.isHome = wantHome;
       fx.playerChances = 2;
     }

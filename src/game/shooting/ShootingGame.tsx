@@ -145,11 +145,13 @@ function readDevStadium(): StadiumAppearance | null {
   const homeParam = q.get('home');
   const homeColorRaw = q.get('homeColor');
   const awayColorRaw = q.get('awayColor');
-  if (homeParam == null && !homeColorRaw && !awayColorRaw && q.get('night') == null) return null;
+  if (homeParam == null && !homeColorRaw && !awayColorRaw && q.get('night') == null && q.get('scale') == null) return null;
   const isHome = homeParam !== '0' && homeParam !== 'away' && homeParam !== 'false';
   const playerColor = normalizeHex(homeColorRaw, DEFAULT_STADIUM.homeColor);
   const opponentColor = normalizeHex(awayColorRaw, DEFAULT_STADIUM.awayColor);
   const night = q.get('night') === '1' || q.get('night') === 'true';
+  const scaleRaw = q.get('scale');
+  const scale = scaleRaw === 'local' || scaleRaw === 'strong' || scaleRaw === 'elite' ? scaleRaw : undefined;
   return {
     isHome,
     night,
@@ -157,6 +159,7 @@ function readDevStadium(): StadiumAppearance | null {
     awayColor: isHome ? opponentColor : playerColor,
     opponentColor,
     awayShare: 0.2,
+    scale,
   };
 }
 
