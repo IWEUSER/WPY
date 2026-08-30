@@ -362,8 +362,8 @@ export const PLAYER_SKIN_TONES = [
 ] as const;
 
 /** Hip→knee share of the hip-to-boot line. Shorts must stay shorter than this. */
-export const THIGH_SHARE = 0.34;
-export const SHORTS_HALF_H = 0.3;
+export const THIGH_SHARE = 0.46;
+export const SHORTS_HALF_H = 0.22;
 
 export function pickPlayerSkin(seed: number): string {
   const i = Math.abs(Math.floor(seed)) % PLAYER_SKIN_TONES.length;

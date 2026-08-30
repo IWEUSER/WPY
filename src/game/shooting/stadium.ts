@@ -254,7 +254,8 @@ export function stadiumLayout(
   const ground = isStadiumScale(spec) ? profileFromScale(spec) : spec;
   const bottom = standBottomY(view);
   const topFrac = standTopFrac(ground.capacity, ground.unique);
-  const top = Math.min(bottom - 24, Math.max(2, bottom * topFrac));
+  const rawTop = Math.min(bottom - 24, Math.max(2, bottom * topFrac));
+  const top = Math.min(bottom - 24, rawTop + stadiumRoofPad(view.h));
   const scale = stadiumScaleFromCapacity(ground.capacity);
   const t = clamp01((ground.capacity - 18_000) / (BERNABEU_CAPACITY - 18_000));
   return {
@@ -457,31 +458,35 @@ export interface RoofBand {
   soffitH: number;
 }
 
+/** Pixels reserved above every terrace so the canopy never swallows a deck. */
+export function stadiumRoofPad(h: number): number {
+  return Math.max(40, Math.min(52, h * 0.072));
+}
+
 /**
  * A real lid, not a hairline. Low municipals put the canopy in the sky;
- * tall bowls hang the same fascia and soffit over the top seats so the
- * roof still reads when there is almost no sky left.
+ * tall bowls fill the reserved pad above the first deck.
  */
 export function stadiumRoofBand(h: number, standTop: number, campNou = false): RoofBand {
-  const fasciaH = Math.max(20, Math.min(campNou ? 34 : 26, h * 0.04));
-  const wantRise = Math.max(34, Math.min(campNou ? 78 : 58, h * 0.1));
-  const soffitH = Math.max(20, Math.min(campNou ? 40 : 30, h * 0.046));
-  const skyRoom = standTop;
+  const fasciaH = Math.max(18, Math.min(campNou ? 28 : 22, h * 0.034));
+  const wantRise = Math.max(24, Math.min(campNou ? 44 : 56, h * 0.09));
+  const soffitH = Math.max(14, Math.min(20, h * 0.028));
+  const skyCanopy = standTop >= wantRise + fasciaH + 8;
   let fasciaTop: number;
   let rise: number;
-  if (skyRoom >= wantRise + fasciaH * 0.4 + 8) {
+  if (skyCanopy) {
     fasciaTop = standTop - fasciaH * 0.28;
-    rise = Math.min(wantRise, Math.max(28, fasciaTop - 3));
+    rise = Math.min(wantRise, Math.max(24, fasciaTop - 3));
   } else {
-    fasciaTop = Math.max(3, Math.min(standTop * 0.2, 10));
-    rise = Math.max(16, fasciaTop - 1);
+    fasciaTop = Math.max(3, standTop * 0.18);
+    rise = Math.max(12, fasciaTop - 1);
   }
   const fasciaBottom = fasciaTop + fasciaH;
   return {
     canopyTop: Math.max(1, fasciaTop - rise),
     fasciaTop,
     fasciaBottom,
-    soffitBottom: fasciaBottom + soffitH,
+    soffitBottom: fasciaBottom + (skyCanopy ? soffitH : Math.min(soffitH, 12)),
     fasciaH,
     rise,
     soffitH,
