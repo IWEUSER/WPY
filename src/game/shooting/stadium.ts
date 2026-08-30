@@ -254,8 +254,7 @@ export function stadiumLayout(
   const ground = isStadiumScale(spec) ? profileFromScale(spec) : spec;
   const bottom = standBottomY(view);
   const topFrac = standTopFrac(ground.capacity, ground.unique);
-  const rawTop = Math.min(bottom - 24, Math.max(2, bottom * topFrac));
-  const top = Math.min(bottom - 24, rawTop + stadiumRoofPad(view.h));
+  const top = Math.min(bottom - 24, Math.max(2, bottom * topFrac));
   const scale = stadiumScaleFromCapacity(ground.capacity);
   const t = clamp01((ground.capacity - 18_000) / (BERNABEU_CAPACITY - 18_000));
   return {
@@ -458,35 +457,21 @@ export interface RoofBand {
   soffitH: number;
 }
 
-/** Pixels reserved above every terrace so the canopy never swallows a deck. */
-export function stadiumRoofPad(h: number): number {
-  return Math.max(40, Math.min(52, h * 0.072));
-}
-
 /**
- * A real lid, not a hairline. Low municipals put the canopy in the sky;
- * tall bowls fill the reserved pad above the first deck.
+ * Compact lid that sits on the terrace. Sky stays above the canopy;
+ * there is no strip of sky between the roof and the top deck.
  */
 export function stadiumRoofBand(h: number, standTop: number, campNou = false): RoofBand {
-  const fasciaH = Math.max(18, Math.min(campNou ? 28 : 22, h * 0.034));
-  const wantRise = Math.max(24, Math.min(campNou ? 44 : 56, h * 0.09));
-  const soffitH = Math.max(14, Math.min(20, h * 0.028));
-  const skyCanopy = standTop >= wantRise + fasciaH + 8;
-  let fasciaTop: number;
-  let rise: number;
-  if (skyCanopy) {
-    fasciaTop = standTop - fasciaH * 0.28;
-    rise = Math.min(wantRise, Math.max(24, fasciaTop - 3));
-  } else {
-    fasciaTop = Math.max(3, standTop * 0.18);
-    rise = Math.max(12, fasciaTop - 1);
-  }
-  const fasciaBottom = fasciaTop + fasciaH;
+  const fasciaH = Math.max(8, Math.min(campNou ? 13 : 11, h * 0.016));
+  const rise = Math.max(6, Math.min(campNou ? 11 : 9, h * 0.014));
+  const soffitH = Math.max(4, Math.min(7, h * 0.009));
+  const fasciaBottom = standTop + Math.min(3, soffitH * 0.45);
+  const fasciaTop = fasciaBottom - fasciaH;
   return {
     canopyTop: Math.max(1, fasciaTop - rise),
     fasciaTop,
     fasciaBottom,
-    soffitBottom: fasciaBottom + (skyCanopy ? soffitH : Math.min(soffitH, 12)),
+    soffitBottom: fasciaBottom + soffitH,
     fasciaH,
     rise,
     soffitH,
@@ -496,8 +481,7 @@ export function stadiumRoofBand(h: number, standTop: number, campNou = false): R
 function drawRoof(ctx: CanvasRenderingContext2D, w: number, h: number, night: boolean, standTop: number, campNou: boolean) {
   const band = stadiumRoofBand(h, standTop, campNou);
   const { canopyTop, fasciaTop, fasciaBottom, soffitBottom, fasciaH } = band;
-  const sag = Math.min(band.rise * 0.38, h * 0.03);
-  const midY = canopyTop + sag;
+  const sag = Math.min(band.rise * 0.28, h * 0.012);
 
   ctx.save();
 
@@ -510,13 +494,7 @@ function drawRoof(ctx: CanvasRenderingContext2D, w: number, h: number, night: bo
     soffit.addColorStop(1, '#334155');
   }
   ctx.fillStyle = soffit;
-  ctx.beginPath();
-  ctx.moveTo(0, fasciaBottom);
-  ctx.lineTo(0, soffitBottom);
-  ctx.quadraticCurveTo(w * 0.5, soffitBottom + sag * 0.55, w, soffitBottom);
-  ctx.lineTo(w, fasciaBottom);
-  ctx.closePath();
-  ctx.fill();
+  ctx.fillRect(0, fasciaBottom, w, Math.max(1, soffitBottom - fasciaBottom));
 
   const deck = ctx.createLinearGradient(0, canopyTop, 0, fasciaTop);
   if (night) {
@@ -529,39 +507,34 @@ function drawRoof(ctx: CanvasRenderingContext2D, w: number, h: number, night: bo
   ctx.fillStyle = deck;
   ctx.beginPath();
   ctx.moveTo(0, fasciaTop);
-  ctx.lineTo(0, canopyTop + 3);
-  ctx.quadraticCurveTo(w * 0.5, midY - 4, w, canopyTop + 3);
+  ctx.lineTo(0, canopyTop + 2);
+  ctx.quadraticCurveTo(w * 0.5, canopyTop + sag, w, canopyTop + 2);
   ctx.lineTo(w, fasciaTop);
   ctx.closePath();
   ctx.fill();
 
-  ctx.strokeStyle = night ? 'rgba(226,232,240,0.22)' : 'rgba(15,23,42,0.28)';
-  ctx.lineWidth = Math.max(2, w * 0.0055);
-  const ribs = campNou ? 10 : 8;
+  ctx.strokeStyle = night ? 'rgba(226,232,240,0.2)' : 'rgba(15,23,42,0.22)';
+  ctx.lineWidth = Math.max(1.2, w * 0.003);
+  const ribs = campNou ? 8 : 6;
   for (let i = 1; i < ribs; i++) {
     const x = (w * i) / ribs;
     ctx.beginPath();
     ctx.moveTo(x, fasciaBottom);
-    ctx.quadraticCurveTo(x, (fasciaBottom + soffitBottom) / 2, x, soffitBottom - 2);
+    ctx.lineTo(x, soffitBottom);
     ctx.stroke();
   }
 
   ctx.fillStyle = night ? '#020617' : '#1e293b';
   ctx.fillRect(0, fasciaTop, w, fasciaH);
   ctx.fillStyle = night ? '#475569' : '#cbd5e1';
-  ctx.fillRect(0, fasciaTop, w, Math.max(3, Math.round(fasciaH * 0.28)));
-  ctx.fillStyle = night ? '#64748b' : '#f8fafc';
-  ctx.fillRect(0, fasciaTop, w, Math.max(2, Math.round(fasciaH * 0.12)));
+  ctx.fillRect(0, fasciaTop, w, Math.max(2, Math.round(fasciaH * 0.28)));
   ctx.fillStyle = night ? '#0f172a' : '#0f172a';
-  ctx.fillRect(0, fasciaBottom - 4, w, 4);
+  ctx.fillRect(0, fasciaBottom - 2, w, 2);
 
-  const pylonW = Math.max(10, w * 0.018);
+  const pylonW = Math.max(5, w * 0.01);
   ctx.fillStyle = night ? '#020617' : '#0f172a';
-  ctx.fillRect(w * 0.025, canopyTop, pylonW, soffitBottom - canopyTop + 6);
-  ctx.fillRect(w * 0.975 - pylonW, canopyTop, pylonW, soffitBottom - canopyTop + 6);
-  ctx.fillStyle = night ? '#334155' : '#64748b';
-  ctx.fillRect(w * 0.025, canopyTop, pylonW, Math.max(4, fasciaH * 0.35));
-  ctx.fillRect(w * 0.975 - pylonW, canopyTop, pylonW, Math.max(4, fasciaH * 0.35));
+  ctx.fillRect(w * 0.028, canopyTop, pylonW, soffitBottom - canopyTop + 2);
+  ctx.fillRect(w * 0.972 - pylonW, canopyTop, pylonW, soffitBottom - canopyTop + 2);
   ctx.restore();
 }
 

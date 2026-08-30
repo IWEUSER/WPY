@@ -17,7 +17,7 @@ import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { nationKit } from '../src/game/career/data/nationColours';
 import { resolveMatchStadium } from '../src/game/career/matchVenue';
 import { crowdSwatch, kitFromColor, kitFromScheme, luminance } from '../src/game/shooting/kitPalette';
-import { createPitchView, idleKeeperPose, MAX_SHOT_DISTANCE_M, MIN_SHOT_DISTANCE_M, PLAYER_SKIN_TONES, pickPlayerSkin, SHORTS_HALF_H, THIGH_SHARE } from '../src/game/shooting/render';
+import { createPitchView, idleKeeperPose, JERSEY_HEM, MAX_SHOT_DISTANCE_M, MIN_SHOT_DISTANCE_M, PLAYER_SKIN_TONES, pickPlayerSkin, SHORTS_HALF_H, THIGH_SHARE } from '../src/game/shooting/render';
 import { standBottomY, crowdCellSize, stadiumLayout, stadiumRoofBand } from '../src/game/shooting/stadium';
 import {
   CLUB_GROUNDS,
@@ -2114,8 +2114,12 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
     console.error('Tottenham must wear navy home socks');
     process.exitCode = 1;
   }
-  if (THIGH_SHARE * 3 < SHORTS_HALF_H + 0.4) {
+  if (SHORTS_HALF_H + 0.08 >= THIGH_SHARE * 3) {
     console.error('shorts must sit above the knee so bare thighs stay visible');
+    process.exitCode = 1;
+  }
+  if (SHORTS_HALF_H < 0.36 || JERSEY_HEM < 0.28) {
+    console.error('shorts should read as football shorts and the jersey should end above the hip');
     process.exitCode = 1;
   }
   const skins = new Set(PLAYER_SKIN_TONES.map((c) => c.toLowerCase()));
@@ -2366,12 +2370,22 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
     eliteRoof.fasciaH.toFixed(1),
     localRoof.fasciaH.toFixed(1),
   );
-  if (eliteRoof.soffitBottom - eliteRoof.canopyTop < 48 || localRoof.soffitBottom - localRoof.canopyTop < 70) {
-    console.error('the canopy must be a thick lid, not a hairline, on elite and municipal bowls');
+  const eliteRoofH = eliteRoof.soffitBottom - eliteRoof.canopyTop;
+  const localRoofH = localRoof.soffitBottom - localRoof.canopyTop;
+  if (eliteRoofH > 36 || localRoofH > 36 || eliteRoofH < 12 || localRoofH < 12) {
+    console.error('the canopy must be a compact lid on the terrace, not a sky-filling roof or a hairline');
     process.exitCode = 1;
   }
-  if (eliteRoof.fasciaH < 18 || localRoof.fasciaH < 18) {
-    console.error('the roof fascia must be a real beam');
+  if (eliteRoof.fasciaH < 7 || eliteRoof.fasciaH > 16 || localRoof.fasciaH < 7 || localRoof.fasciaH > 16) {
+    console.error('the roof fascia must be a modest beam on the top deck');
+    process.exitCode = 1;
+  }
+  if (eliteRoof.soffitBottom < eliteBowl.top - 2 || localRoof.soffitBottom < localBowl.top - 2) {
+    console.error('the roof must sit on the top deck with no sky gap under the fascia');
+    process.exitCode = 1;
+  }
+  if (localRoof.canopyTop >= localBowl.top - 4) {
+    console.error('a municipal roof must leave sky above the canopy');
     process.exitCode = 1;
   }
   if (eliteBowl.decks.length <= localBowl.decks.length) {
