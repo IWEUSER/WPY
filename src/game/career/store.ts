@@ -40,6 +40,7 @@ import {
   canWinLeague,
   hydrateSeason,
   remainingPlayableCount,
+  reassignLeagueHomeAway,
   resolveFixture,
   shouldSkipFixture,
   trophyNameForFixture,
@@ -1090,7 +1091,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 16,
+      version: 17,
       migrate: (persisted) => {
         const state = persisted as Partial<CareerState>;
         const sim = state.seasonSim;
@@ -1124,7 +1125,9 @@ export const useCareerStore = create<CareerStore>()(
                 recentQualifierOpponentIds: state.nationalTeam.recentQualifierOpponentIds ?? [],
               }
             : null,
-          seasonCalendar: state.seasonCalendar ?? null,
+          seasonCalendar: state.seasonCalendar
+            ? { ...state.seasonCalendar, fixtures: reassignLeagueHomeAway(state.seasonCalendar.fixtures) }
+            : null,
           seasonStandings: state.seasonStandings ?? null,
           seasonHistory,
           currentSeason,

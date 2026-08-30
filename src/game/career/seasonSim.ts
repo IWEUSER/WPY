@@ -340,13 +340,13 @@ function assignOpponentsAndChances(
   let tournamentI = 0;
 
   const fixtures = calendar.fixtures.map((f) => ({ ...f }));
+  const leagueCount = fixtures.filter((fx) => fx.kind === 'league').length;
 
   for (let i = 0; i < fixtures.length; i++) {
     const f = fixtures[i];
     if (f.kind === 'league') {
       const opp = leagueRivals[leagueI];
-      const uniqueRivals = Math.max(1, leagueRivals.length / 2);
-      f.isHome = leagueI < uniqueRivals;
+      f.isHome = leagueFixtureIsHome(leagueI, leagueCount);
       leagueI += 1;
       if (opp) {
         f.opponentId = opp.id;
@@ -400,6 +400,7 @@ function assignOpponentsAndChances(
         f.opponentLabel = opp.name;
       }
       f.playerChances = chancesForLeagueMatch({ strength: club.strength }).count;
+      f.isHome = (groupI - 1) % 2 === 0;
     } else if (f.kind === 'continental-knockout' && f.leg === 1) {
       const oppId = euroRivals[euroI % Math.max(1, euroRivals.length)];
       euroI += 1;
@@ -489,17 +490,35 @@ function findReturnLeg(fixtures: CalendarFixture[], firstIndex: number): Calenda
   return undefined;
 }
 
-/** Each league rival once, then once more — never a third meeting. */
+/** Each league rival once, then the return fixture — never a third meeting. */
 export function leagueOpponentQueue(club: Club, league?: string): Club[] {
   const seasonClubs = clubsForSeason(club, league ?? club.league);
   const conf = mlsConferenceOf(club.id);
   if ((league ?? club.league) === 'MLS' && conf) {
     const conference = shuffle(seasonClubs.filter((c) => c.id !== club.id && mlsConferenceOf(c.id) === conf));
     const inter = shuffle(seasonClubs.filter((c) => mlsConferenceOf(c.id) && mlsConferenceOf(c.id) !== conf));
-    return [...conference, ...shuffle(conference), ...inter.slice(0, 8)];
+    return [...conference, ...conference, ...inter.slice(0, 8)];
   }
   const rivals = shuffle(seasonClubs.filter((c) => c.id !== club.id));
-  return [...rivals, ...shuffle(rivals)];
+  return [...rivals, ...rivals];
+}
+
+/** Home and away are interleaved so the second half of the season is not an away-only run. */
+export function leagueFixtureIsHome(index: number, leagueGameCount: number): boolean {
+  const unique = Math.max(1, Math.floor(leagueGameCount / 2));
+  const firstHalf = index < unique;
+  const rival = index % unique;
+  return firstHalf ? rival % 2 === 0 : rival % 2 === 1;
+}
+
+export function reassignLeagueHomeAway<T extends { kind: string; isHome?: boolean }>(fixtures: T[]): T[] {
+  const copy = fixtures.map((f) => ({ ...f }));
+  const leagueIdx = copy.map((f, i) => (f.kind === 'league' ? i : -1)).filter((i) => i >= 0);
+  const n = leagueIdx.length;
+  leagueIdx.forEach((fi, i) => {
+    copy[fi].isHome = leagueFixtureIsHome(i, n);
+  });
+  return copy;
 }
 
 /** Skip cups/internationals the player is already out of, and 0-chance weeks. */

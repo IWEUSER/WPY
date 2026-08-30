@@ -1,4 +1,4 @@
-import { calendarDomesticCup, calendarIncludesInternational, currentCalendarWeek, type SeasonCalendar } from '../calendar';
+import { calendarDomesticCup, calendarIncludesInternational, currentCalendarWeek, fixtureIsHome, type SeasonCalendar } from '../calendar';
 import { getClub, leagueMatchWeeks } from '../data/clubs';
 import { conferenceLabel, leagueDisplayName, mlsConferenceOf } from '../data/leagueFormat';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
@@ -129,6 +129,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         {nextFixture && (
           <span className="mt-1 block text-xs font-medium text-black/70">
             {fixtureTitle(nextFixture, { playerNationName: nation?.name })}
+            {nextFixture.kind !== 'rest' ? ` · ${fixtureIsHome(nextFixture) ? 'Home' : 'Away'}` : ''}
             {nextFixture.kind === 'league' && nextFixture.opponentId === seasonSim?.titleRivalId
               ? ' · league rival'
               : ''}
