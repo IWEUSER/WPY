@@ -230,9 +230,9 @@ export function applyCareerLayoutPreview(): void {
             { clubId: 'dortmund', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('dortmund')!, value) },
             { clubId: 'real-sociedad', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('real-sociedad')!, value) },
             { clubId: 'sevilla', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('sevilla')!, value) },
-            { clubId: 'psg', move: 'permanent', fee: value, weeklyWage: weeklyWageForClub(getClub('psg')!, value) },
-            { clubId: 'real-madrid', move: 'permanent', fee: value, weeklyWage: weeklyWageForClub(getClub('real-madrid')!, value) },
-            { clubId: 'man-city', move: 'permanent', fee: value, weeklyWage: weeklyWageForClub(getClub('man-city')!, value) },
+            { clubId: 'psg', move: 'permanent', fee: Math.max(value, 200_000_000), weeklyWage: weeklyWageForClub(getClub('psg')!, value) },
+            { clubId: 'real-madrid', move: 'permanent', fee: Math.max(value, 200_000_000), weeklyWage: weeklyWageForClub(getClub('real-madrid')!, value) },
+            { clubId: 'man-city', move: 'permanent', fee: Math.max(value, 200_000_000), weeklyWage: weeklyWageForClub(getClub('man-city')!, value) },
           ],
           allowDecline: false,
         }
