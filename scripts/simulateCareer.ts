@@ -17,7 +17,7 @@ import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { nationKit } from '../src/game/career/data/nationColours';
 import { resolveMatchStadium } from '../src/game/career/matchVenue';
 import { crowdSwatch, kitFromColor, kitFromScheme, luminance } from '../src/game/shooting/kitPalette';
-import { createPitchView, idleKeeperPose, JERSEY_HEM, MAX_SHOT_DISTANCE_M, MIN_SHOT_DISTANCE_M, PLAYER_SKIN_TONES, pickPlayerSkin, SHORTS_HALF_H, THIGH_SHARE } from '../src/game/shooting/render';
+import { createPitchView, idleKeeperPose, JERSEY_HEM, JERSEY_SHOULDER_INSET, MAX_SHOT_DISTANCE_M, MIN_SHOT_DISTANCE_M, PLAYER_SKIN_TONES, pickPlayerSkin, SHORTS_HALF_H, THIGH_SHARE } from '../src/game/shooting/render';
 import { standBottomY, crowdCellSize, stadiumLayout, stadiumRoofBand } from '../src/game/shooting/stadium';
 import {
   CLUB_GROUNDS,
@@ -2118,8 +2118,8 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
     console.error('shorts must sit above the knee so bare thighs stay visible');
     process.exitCode = 1;
   }
-  if (SHORTS_HALF_H < 0.36 || JERSEY_HEM < 0.28) {
-    console.error('shorts should read as football shorts and the jersey should end above the hip');
+  if (SHORTS_HALF_H < 0.6) {
+    console.error('shorts should read as football shorts, not a thin belt under the jersey');
     process.exitCode = 1;
   }
   const skins = new Set(PLAYER_SKIN_TONES.map((c) => c.toLowerCase()));

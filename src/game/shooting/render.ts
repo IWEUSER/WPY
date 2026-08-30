@@ -362,11 +362,14 @@ export const PLAYER_SKIN_TONES = [
 ] as const;
 
 /** Hip→knee share of the hip-to-boot line. Shorts must stay shorter than this. */
-export const THIGH_SHARE = 0.38;
-/** Shorts drop below the hip — football shorts, not hotpants. */
-export const SHORTS_HALF_H = 0.42;
-/** Jersey hem sits this many scale-units above the hip so the shirt is not a tunic. */
-export const JERSEY_HEM = 0.4;
+export const THIGH_SHARE = 0.42;
+/** Shorts drop below the hip and overlap the jersey hem. */
+export const SHORTS_HALF_H = 0.7;
+/** Jersey is drawn to just above the hip; shorts then cover the lower third. */
+export const JERSEY_HEM = 0.12;
+export const JERSEY_SHOULDER_INSET = 0.12;
+/** Raise the shorts oval so it covers the lower jersey instead of sitting under it. */
+export const SHORTS_CENTER = -0.08;
 
 export function pickPlayerSkin(seed: number): string {
   const i = Math.abs(Math.floor(seed)) % PLAYER_SKIN_TONES.length;
@@ -592,29 +595,30 @@ export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose:
   drawThighAndSock(ctx, scale, -scale * 0.28, hipY, footL, skinColor, sockColor, bootColor);
   drawThighAndSock(ctx, scale, scale * 0.28, hipY, footR, skinColor, sockColor, bootColor);
 
+  const shirtTop = shoulderY + scale * JERSEY_SHOULDER_INSET;
   const hemY = hipY - scale * JERSEY_HEM;
-  const torsoGrad = ctx.createLinearGradient(0, shoulderY, 0, hemY);
+  const torsoGrad = ctx.createLinearGradient(0, shirtTop, 0, hemY);
   torsoGrad.addColorStop(0, kitLight);
   torsoGrad.addColorStop(1, kitDark);
   ctx.fillStyle = torsoGrad;
   ctx.beginPath();
   if (pts.diving) {
-    ctx.moveTo(-scale * 0.85, shoulderY);
-    ctx.quadraticCurveTo(-scale * 1.05, (shoulderY + hemY) / 2, -scale * 0.7, hemY);
+    ctx.moveTo(-scale * 0.85, shirtTop);
+    ctx.quadraticCurveTo(-scale * 1.05, (shirtTop + hemY) / 2, -scale * 0.7, hemY);
     ctx.lineTo(scale * 0.7, hemY);
-    ctx.quadraticCurveTo(scale * 1.05, (shoulderY + hemY) / 2, scale * 0.85, shoulderY);
+    ctx.quadraticCurveTo(scale * 1.05, (shirtTop + hemY) / 2, scale * 0.85, shirtTop);
   } else {
-    ctx.moveTo(-scale * 1.3, shoulderY);
-    ctx.quadraticCurveTo(-scale * 1.45, (shoulderY + hemY) / 2, -scale * 0.95, hemY);
-    ctx.lineTo(scale * 0.95, hemY);
-    ctx.quadraticCurveTo(scale * 1.45, (shoulderY + hemY) / 2, scale * 1.3, shoulderY);
+    ctx.moveTo(-scale * 1.25, shirtTop);
+    ctx.quadraticCurveTo(-scale * 1.35, (shirtTop + hemY) / 2, -scale * 1.0, hemY);
+    ctx.lineTo(scale * 1.0, hemY);
+    ctx.quadraticCurveTo(scale * 1.35, (shirtTop + hemY) / 2, scale * 1.25, shirtTop);
   }
   ctx.closePath();
   ctx.fill();
 
   ctx.fillStyle = shortsColor;
   ctx.beginPath();
-  ctx.ellipse(0, hipY + scale * 0.06, scale * (pts.diving ? 0.88 : 1.05), scale * (pts.diving ? 0.38 : SHORTS_HALF_H), 0, 0, Math.PI * 2);
+  ctx.ellipse(0, hipY + scale * SHORTS_CENTER, scale * (pts.diving ? 0.92 : 1.1), scale * (pts.diving ? 0.55 : SHORTS_HALF_H), 0, 0, Math.PI * 2);
   ctx.fill();
 
   const drawArm = (shoulder: { x: number; y: number }, glove: { x: number; y: number }) => {
@@ -707,16 +711,17 @@ export function drawDefender(
   drawThighAndSock(ctx, scale, -scale * 0.28, hipY, footL, skinColor, sockColor, bootColor);
   drawThighAndSock(ctx, scale, scale * 0.28, hipY, footR, skinColor, sockColor, bootColor);
 
+  const shirtTop = shoulderY + scale * JERSEY_SHOULDER_INSET;
   const hemY = hipY - scale * JERSEY_HEM;
-  const torsoGrad = ctx.createLinearGradient(0, shoulderY, 0, hemY);
+  const torsoGrad = ctx.createLinearGradient(0, shirtTop, 0, hemY);
   torsoGrad.addColorStop(0, kitLight);
   torsoGrad.addColorStop(1, kitDark);
   const traceTorso = () => {
     ctx.beginPath();
-    ctx.moveTo(-scale * 1.3, shoulderY);
-    ctx.quadraticCurveTo(-scale * 1.45, (shoulderY + hemY) / 2, -scale * 0.95, hemY);
-    ctx.lineTo(scale * 0.95, hemY);
-    ctx.quadraticCurveTo(scale * 1.45, (shoulderY + hemY) / 2, scale * 1.3, shoulderY);
+    ctx.moveTo(-scale * 1.25, shirtTop);
+    ctx.quadraticCurveTo(-scale * 1.35, (shirtTop + hemY) / 2, -scale * 1.0, hemY);
+    ctx.lineTo(scale * 1.0, hemY);
+    ctx.quadraticCurveTo(scale * 1.35, (shirtTop + hemY) / 2, scale * 1.25, shirtTop);
     ctx.closePath();
   };
   traceTorso();
@@ -725,7 +730,7 @@ export function drawDefender(
 
   ctx.fillStyle = shortsColor;
   ctx.beginPath();
-  ctx.ellipse(0, hipY + scale * 0.06, scale * 1.05, scale * SHORTS_HALF_H, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, hipY + scale * SHORTS_CENTER, scale * 1.1, scale * SHORTS_HALF_H, 0, 0, Math.PI * 2);
   ctx.fill();
 
   if (stripeColor && pattern !== 'solid') {
@@ -737,11 +742,11 @@ export function drawDefender(
       for (let x = -scale * 1.7, i = 0; x < scale * 1.7; x += stripeW, i++) {
         if (i % 2 === 0) continue;
         ctx.fillStyle = stripeColor;
-        ctx.fillRect(x, shoulderY - scale * 0.15, stripeW, (hipY - shoulderY) + scale * 0.45);
+        ctx.fillRect(x, shirtTop - scale * 0.15, stripeW, (hemY - shirtTop) + scale * 0.45);
       }
     } else if (pattern === 'hoops') {
       const hoopH = Math.max(2.4, scale * 0.32);
-      for (let y = shoulderY, i = 0; y < hipY + scale * 0.25; y += hoopH, i++) {
+      for (let y = shirtTop, i = 0; y < hemY + scale * 0.25; y += hoopH, i++) {
         if (i % 2 === 0) continue;
         ctx.fillStyle = stripeColor;
         ctx.fillRect(-scale * 1.7, y, scale * 3.4, hoopH);

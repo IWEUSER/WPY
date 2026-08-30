@@ -462,10 +462,10 @@ export interface RoofBand {
  * there is no strip of sky between the roof and the top deck.
  */
 export function stadiumRoofBand(h: number, standTop: number, campNou = false): RoofBand {
-  const fasciaH = Math.max(8, Math.min(campNou ? 13 : 11, h * 0.016));
-  const rise = Math.max(6, Math.min(campNou ? 11 : 9, h * 0.014));
-  const soffitH = Math.max(4, Math.min(7, h * 0.009));
-  const fasciaBottom = standTop + Math.min(3, soffitH * 0.45);
+  const fasciaH = Math.max(7, Math.min(campNou ? 11 : 9, h * 0.014));
+  const rise = Math.max(4, Math.min(campNou ? 8 : 6, h * 0.01));
+  const soffitH = Math.max(3, Math.min(5, h * 0.007));
+  const fasciaBottom = standTop + fasciaH * 0.55;
   const fasciaTop = fasciaBottom - fasciaH;
   return {
     canopyTop: Math.max(1, fasciaTop - rise),
@@ -485,15 +485,7 @@ function drawRoof(ctx: CanvasRenderingContext2D, w: number, h: number, night: bo
 
   ctx.save();
 
-  const soffit = ctx.createLinearGradient(0, fasciaBottom, 0, soffitBottom);
-  if (night) {
-    soffit.addColorStop(0, '#1e293b');
-    soffit.addColorStop(1, '#020617');
-  } else {
-    soffit.addColorStop(0, '#64748b');
-    soffit.addColorStop(1, '#334155');
-  }
-  ctx.fillStyle = soffit;
+  ctx.fillStyle = night ? '#020617' : '#1e293b';
   ctx.fillRect(0, fasciaBottom, w, Math.max(1, soffitBottom - fasciaBottom));
 
   const deck = ctx.createLinearGradient(0, canopyTop, 0, fasciaTop);
