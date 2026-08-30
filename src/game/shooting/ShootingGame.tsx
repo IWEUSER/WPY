@@ -16,6 +16,7 @@ import {
   drawTrail,
   goalToPixel,
   idleKeeperPose,
+  worldToScreen,
   type KeeperPose,
 } from './render';
 import {
@@ -128,6 +129,12 @@ function readDevDefenderOff(): boolean {
   if (!import.meta.env.DEV) return false;
   const raw = new URLSearchParams(window.location.search).get('defender');
   return raw === 'off' || raw === '0';
+}
+
+function readDevAutoblock(): boolean {
+  if (!import.meta.env.DEV) return false;
+  const raw = new URLSearchParams(window.location.search).get('autoblock');
+  return raw === '1' || raw === 'true';
 }
 
 function nextChance(clubStrength?: number): ChanceSetup {
@@ -268,6 +275,11 @@ export default function ShootingGame({
     setChanceKind(animRef.current.chanceKind);
   }, []);
 
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    (window as unknown as { __shootingAnim: () => AnimState }).__shootingAnim = () => animRef.current;
+  }, []);
+
   // Keep canvas sized to its container (handles rotation/resizing responsively).
   useEffect(() => {
     const container = containerRef.current;
@@ -329,6 +341,43 @@ export default function ShootingGame({
     setResultLabel(null);
     audio.playKick(result.power);
   }, []);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const shootThrough = () => {
+      const anim = animRef.current;
+      if (anim.phase !== 'idle' || !anim.defender) return false;
+      const { w, h } = sizeRef.current;
+      if (w < 10 || h < 10) return false;
+      const view = createPitchView(w, h, anim.shotDistanceM);
+      const start = ballStartPixel(view, anim.ballStartXRatio);
+      const feet = worldToScreen(view, anim.defender.worldX, anim.defender.z);
+      const endX = start.x + (feet.x - start.x) * 1.45;
+      const endY = start.y + (feet.y - start.y) * 1.45;
+      launchShot({
+        dx: endX - start.x,
+        dy: start.y - endY,
+        durationMs: 200,
+        curl: 0,
+        ballX: start.x,
+        ballY: start.y,
+        endX,
+        endY,
+        canvasW: w,
+        canvasH: h,
+        distanceM: anim.shotDistanceM,
+      });
+      return true;
+    };
+    (window as unknown as { __shootThroughDefender: () => boolean }).__shootThroughDefender = shootThrough;
+    if (!readDevAutoblock()) return;
+    let attempts = 0;
+    const id = window.setInterval(() => {
+      attempts += 1;
+      if (shootThrough() || attempts >= 8) window.clearInterval(id);
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [launchShot]);
 
   const finishShot = useCallback((result: ShotResult) => {
     shotsTakenRef.current += 1;

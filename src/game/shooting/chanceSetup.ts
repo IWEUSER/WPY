@@ -108,7 +108,7 @@ export function placeDefender(
   if (maxZ >= MIN_DEFENDER_Z_M) {
     const t = 0.12 + rng() * 0.5;
     const z = MIN_DEFENDER_Z_M + t * (maxZ - MIN_DEFENDER_Z_M);
-    const offset = 1.4 + rng() * 1.8;
+    const offset = 0.7 + rng() * 0.95;
     const worldX = clamp(lineToGoalCentreX(ballWorldX, shotDistanceM, z) + coverSide * offset, -7.5, 7.5);
     return { worldX, z, coverSide };
   }
@@ -155,7 +155,7 @@ export function defenderScreenBody(view: PitchView, defender: DefenderPose): Def
     headY: feet.y - 1.82 * meterPx,
     torsoX: feet.x,
     torsoY: feet.y - 0.95 * meterPx,
-    bodyR: 0.45 * meterPx,
+    bodyR: 0.5 * meterPx,
     hipsY: feet.y - 0.42 * meterPx,
     legsR: 0.28 * meterPx,
   };
@@ -190,7 +190,7 @@ export function shotLineHitsDefender(
   const x = ballX + (aimWorldX - ballX) * fromBall;
   const height = Math.max(0, aim.y) * FIFA.goalHeight * fromBall;
   if (height > 1.82 + FIFA.ballDiameter / 2) return false;
-  return Math.abs(x - defender.worldX) < 0.55;
+  return Math.abs(x - defender.worldX) < 0.72;
 }
 
 /**
@@ -205,6 +205,10 @@ export function defenderBlocksBall(
 ): boolean {
   const body = defenderScreenBody(view, defender);
   if (ballPx.y + ballRadiusPx < body.headY) return false;
+
+  const inColumn = Math.abs(ballPx.x - body.torsoX) < body.bodyR + ballRadiusPx;
+  const inHeight = ballPx.y - ballRadiusPx <= body.feet.y && ballPx.y + ballRadiusPx >= body.headY;
+  if (inColumn && inHeight) return true;
 
   if (Math.hypot(ballPx.x - body.torsoX, ballPx.y - body.torsoY) < body.bodyR + ballRadiusPx) return true;
   return Math.hypot(ballPx.x - body.torsoX, ballPx.y - body.hipsY) < body.legsR + ballRadiusPx;
