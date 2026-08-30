@@ -17,8 +17,8 @@ import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { nationKit } from '../src/game/career/data/nationColours';
 import { resolveMatchStadium } from '../src/game/career/matchVenue';
 import { crowdSwatch, kitFromColor, kitFromScheme, luminance } from '../src/game/shooting/kitPalette';
-import { createPitchView, idleKeeperPose, MAX_SHOT_DISTANCE_M, MIN_SHOT_DISTANCE_M, PLAYER_SKIN_TONES, pickPlayerSkin } from '../src/game/shooting/render';
-import { standBottomY, crowdCellSize, stadiumLayout } from '../src/game/shooting/stadium';
+import { createPitchView, idleKeeperPose, MAX_SHOT_DISTANCE_M, MIN_SHOT_DISTANCE_M, PLAYER_SKIN_TONES, pickPlayerSkin, SHORTS_HALF_H, THIGH_SHARE } from '../src/game/shooting/render';
+import { standBottomY, crowdCellSize, stadiumLayout, stadiumRoofBand } from '../src/game/shooting/stadium';
 import {
   CLUB_GROUNDS,
   LISTED_MIN_CAPACITY,
@@ -2103,9 +2103,30 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
     console.error('Real Madrid must wear white socks');
     process.exitCode = 1;
   }
+  const sevilla = kitFromScheme(clubKit(getClub('sevilla')));
+  const tottenham = kitFromScheme(clubKit(getClub('tottenham')));
+  const arsenal = kitFromScheme(clubKit(getClub('arsenal')));
+  if (luminance(sevilla.socks) < 0.8 || luminance(arsenal.socks) < 0.8) {
+    console.error('Sevilla and Arsenal wear white home socks');
+    process.exitCode = 1;
+  }
+  if (luminance(tottenham.socks) > 0.25) {
+    console.error('Tottenham must wear navy home socks');
+    process.exitCode = 1;
+  }
+  if (THIGH_SHARE * 3 < SHORTS_HALF_H + 0.4) {
+    console.error('shorts must sit above the knee so bare thighs stay visible');
+    process.exitCode = 1;
+  }
   const skins = new Set(PLAYER_SKIN_TONES.map((c) => c.toLowerCase()));
   if (skins.size < 4) {
     console.error('keepers and defenders need a range of skin tones');
+    process.exitCode = 1;
+  }
+  const lightSkin = Math.max(...PLAYER_SKIN_TONES.map((c) => luminance(c)));
+  const darkSkin = Math.min(...PLAYER_SKIN_TONES.map((c) => luminance(c)));
+  if (lightSkin < 0.7 || darkSkin > 0.28 || darkSkin < 0.12) {
+    console.error('skin tones must span fair through deep brown without reading as black legs');
     process.exitCode = 1;
   }
   if (pickPlayerSkin(0) === pickPlayerSkin(3)) {
@@ -2333,6 +2354,24 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
   }
   if (!localBowl.roof || !eliteBowl.roof) {
     console.error('every bowl, including municipal two-deck stands, needs a visible roof');
+    process.exitCode = 1;
+  }
+  const eliteRoof = stadiumRoofBand(close.h, eliteBowl.top, true);
+  const localRoof = stadiumRoofBand(close.h, localBowl.top, false);
+  console.log(
+    'roof band elite/local',
+    (eliteRoof.soffitBottom - eliteRoof.canopyTop).toFixed(1),
+    (localRoof.soffitBottom - localRoof.canopyTop).toFixed(1),
+    'fascia',
+    eliteRoof.fasciaH.toFixed(1),
+    localRoof.fasciaH.toFixed(1),
+  );
+  if (eliteRoof.soffitBottom - eliteRoof.canopyTop < 48 || localRoof.soffitBottom - localRoof.canopyTop < 70) {
+    console.error('the canopy must be a thick lid, not a hairline, on elite and municipal bowls');
+    process.exitCode = 1;
+  }
+  if (eliteRoof.fasciaH < 18 || localRoof.fasciaH < 18) {
+    console.error('the roof fascia must be a real beam');
     process.exitCode = 1;
   }
   if (eliteBowl.decks.length <= localBowl.decks.length) {

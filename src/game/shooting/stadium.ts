@@ -447,59 +447,116 @@ function crowdLayer(w: number, h: number, view: StadiumView, stadium: StadiumApp
   return canvas;
 }
 
+export interface RoofBand {
+  canopyTop: number;
+  fasciaTop: number;
+  fasciaBottom: number;
+  soffitBottom: number;
+  fasciaH: number;
+  rise: number;
+  soffitH: number;
+}
+
+/**
+ * A real lid, not a hairline. Low municipals put the canopy in the sky;
+ * tall bowls hang the same fascia and soffit over the top seats so the
+ * roof still reads when there is almost no sky left.
+ */
+export function stadiumRoofBand(h: number, standTop: number, campNou = false): RoofBand {
+  const fasciaH = Math.max(20, Math.min(campNou ? 34 : 26, h * 0.04));
+  const wantRise = Math.max(34, Math.min(campNou ? 78 : 58, h * 0.1));
+  const soffitH = Math.max(20, Math.min(campNou ? 40 : 30, h * 0.046));
+  const skyRoom = standTop;
+  let fasciaTop: number;
+  let rise: number;
+  if (skyRoom >= wantRise + fasciaH * 0.4 + 8) {
+    fasciaTop = standTop - fasciaH * 0.28;
+    rise = Math.min(wantRise, Math.max(28, fasciaTop - 3));
+  } else {
+    fasciaTop = Math.max(3, Math.min(standTop * 0.2, 10));
+    rise = Math.max(16, fasciaTop - 1);
+  }
+  const fasciaBottom = fasciaTop + fasciaH;
+  return {
+    canopyTop: Math.max(1, fasciaTop - rise),
+    fasciaTop,
+    fasciaBottom,
+    soffitBottom: fasciaBottom + soffitH,
+    fasciaH,
+    rise,
+    soffitH,
+  };
+}
+
 function drawRoof(ctx: CanvasRenderingContext2D, w: number, h: number, night: boolean, standTop: number, campNou: boolean) {
-  // Sit the canopy on the terrace lip so it reads as a lid, not a sky scribble.
-  // Overlap the top row only a few pixels so the upper deck still counts.
-  const overlap = Math.min(7, Math.max(3, standTop * 0.06));
-  const fasciaH = Math.max(11, Math.min(campNou ? 26 : 20, h * (campNou ? 0.034 : 0.026)));
-  const beamY = Math.max(fasciaH + 2, standTop - overlap);
-  const rise = Math.max(16, Math.min(beamY - 4, h * (campNou ? 0.11 : 0.08)));
-  const canopyTop = Math.max(2, beamY - rise);
-  const sag = Math.min(rise * 0.42, h * 0.028);
+  const band = stadiumRoofBand(h, standTop, campNou);
+  const { canopyTop, fasciaTop, fasciaBottom, soffitBottom, fasciaH } = band;
+  const sag = Math.min(band.rise * 0.38, h * 0.03);
   const midY = canopyTop + sag;
 
   ctx.save();
-  const underside = ctx.createLinearGradient(0, canopyTop, 0, beamY);
+
+  const soffit = ctx.createLinearGradient(0, fasciaBottom, 0, soffitBottom);
   if (night) {
-    underside.addColorStop(0, '#111827');
-    underside.addColorStop(0.55, '#1e293b');
-    underside.addColorStop(1, '#0f172a');
+    soffit.addColorStop(0, '#1e293b');
+    soffit.addColorStop(1, '#020617');
   } else {
-    underside.addColorStop(0, '#64748b');
-    underside.addColorStop(0.5, '#94a3b8');
-    underside.addColorStop(1, '#475569');
+    soffit.addColorStop(0, '#64748b');
+    soffit.addColorStop(1, '#334155');
   }
-  ctx.fillStyle = underside;
+  ctx.fillStyle = soffit;
   ctx.beginPath();
-  ctx.moveTo(0, beamY);
-  ctx.lineTo(0, canopyTop + 4);
-  ctx.quadraticCurveTo(w * 0.5, midY - 6, w, canopyTop + 4);
-  ctx.lineTo(w, beamY);
+  ctx.moveTo(0, fasciaBottom);
+  ctx.lineTo(0, soffitBottom);
+  ctx.quadraticCurveTo(w * 0.5, soffitBottom + sag * 0.55, w, soffitBottom);
+  ctx.lineTo(w, fasciaBottom);
   ctx.closePath();
   ctx.fill();
 
-  ctx.strokeStyle = night ? 'rgba(148,163,184,0.28)' : 'rgba(15,23,42,0.18)';
-  ctx.lineWidth = Math.max(1.5, w * 0.004);
-  const ribs = campNou ? 9 : 7;
+  const deck = ctx.createLinearGradient(0, canopyTop, 0, fasciaTop);
+  if (night) {
+    deck.addColorStop(0, '#334155');
+    deck.addColorStop(1, '#0f172a');
+  } else {
+    deck.addColorStop(0, '#e2e8f0');
+    deck.addColorStop(1, '#94a3b8');
+  }
+  ctx.fillStyle = deck;
+  ctx.beginPath();
+  ctx.moveTo(0, fasciaTop);
+  ctx.lineTo(0, canopyTop + 3);
+  ctx.quadraticCurveTo(w * 0.5, midY - 4, w, canopyTop + 3);
+  ctx.lineTo(w, fasciaTop);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = night ? 'rgba(226,232,240,0.22)' : 'rgba(15,23,42,0.28)';
+  ctx.lineWidth = Math.max(2, w * 0.0055);
+  const ribs = campNou ? 10 : 8;
   for (let i = 1; i < ribs; i++) {
     const x = (w * i) / ribs;
     ctx.beginPath();
-    ctx.moveTo(x, beamY);
-    ctx.lineTo(x, midY + 2);
+    ctx.moveTo(x, fasciaBottom);
+    ctx.quadraticCurveTo(x, (fasciaBottom + soffitBottom) / 2, x, soffitBottom - 2);
     ctx.stroke();
   }
 
-  ctx.fillStyle = night ? '#020617' : '#334155';
-  ctx.fillRect(0, beamY - fasciaH, w, fasciaH);
-  ctx.fillStyle = night ? '#334155' : '#cbd5e1';
-  ctx.fillRect(0, beamY - fasciaH, w, Math.max(2, Math.round(fasciaH * 0.22)));
-  ctx.fillStyle = night ? '#1e293b' : '#0f172a';
-  ctx.fillRect(0, beamY - 3, w, 3);
+  ctx.fillStyle = night ? '#020617' : '#1e293b';
+  ctx.fillRect(0, fasciaTop, w, fasciaH);
+  ctx.fillStyle = night ? '#475569' : '#cbd5e1';
+  ctx.fillRect(0, fasciaTop, w, Math.max(3, Math.round(fasciaH * 0.28)));
+  ctx.fillStyle = night ? '#64748b' : '#f8fafc';
+  ctx.fillRect(0, fasciaTop, w, Math.max(2, Math.round(fasciaH * 0.12)));
+  ctx.fillStyle = night ? '#0f172a' : '#0f172a';
+  ctx.fillRect(0, fasciaBottom - 4, w, 4);
 
-  const pylonW = Math.max(7, w * 0.014);
-  ctx.fillStyle = night ? '#0b1220' : '#1e293b';
-  ctx.fillRect(w * 0.03, canopyTop, pylonW, beamY - canopyTop + 4);
-  ctx.fillRect(w * 0.97 - pylonW, canopyTop, pylonW, beamY - canopyTop + 4);
+  const pylonW = Math.max(10, w * 0.018);
+  ctx.fillStyle = night ? '#020617' : '#0f172a';
+  ctx.fillRect(w * 0.025, canopyTop, pylonW, soffitBottom - canopyTop + 6);
+  ctx.fillRect(w * 0.975 - pylonW, canopyTop, pylonW, soffitBottom - canopyTop + 6);
+  ctx.fillStyle = night ? '#334155' : '#64748b';
+  ctx.fillRect(w * 0.025, canopyTop, pylonW, Math.max(4, fasciaH * 0.35));
+  ctx.fillRect(w * 0.975 - pylonW, canopyTop, pylonW, Math.max(4, fasciaH * 0.35));
   ctx.restore();
 }
 

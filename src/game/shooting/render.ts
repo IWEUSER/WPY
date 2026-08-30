@@ -1,5 +1,5 @@
 import { DIVE_LAYOUT_RAD } from './constants';
-import { luminance, shadeHex, type DefenderKit } from './kitPalette';
+import { luminance, mixHex, shadeHex, type DefenderKit } from './kitPalette';
 import type { AimPoint } from './types';
 
 /** FIFA markings in metres. Boxes are drawn from these ratios to the goal
@@ -354,12 +354,16 @@ function keeperScale(view: PitchView): number {
 
 /** Light through dark — keepers and defenders pick one per chance. */
 export const PLAYER_SKIN_TONES = [
-  '#f3d2b3',
+  '#f6dec0',
   '#e8b88a',
   '#c68642',
   '#8d5524',
-  '#5c3317',
+  '#6b3d1f',
 ] as const;
+
+/** Hip→knee share of the hip-to-boot line. Shorts must stay shorter than this. */
+export const THIGH_SHARE = 0.34;
+export const SHORTS_HALF_H = 0.3;
 
 export function pickPlayerSkin(seed: number): string {
   const i = Math.abs(Math.floor(seed)) % PLAYER_SKIN_TONES.length;
@@ -487,6 +491,25 @@ export function keeperSilhouetteX(pose: KeeperPose): { hip: number; glove: numbe
   return { hip, glove: (g1 + g2) / 2, foot: (f1 + f2) / 2 };
 }
 
+function strokeLimb(
+  ctx: CanvasRenderingContext2D,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  width: number,
+  color: string,
+) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  ctx.lineTo(x1, y1);
+  ctx.stroke();
+}
+
 /** Thigh (skin) to the knee, then a sock to the boot — no black stick-legs. */
 function drawThighAndSock(
   ctx: CanvasRenderingContext2D,
@@ -498,31 +521,20 @@ function drawThighAndSock(
   sockColor: string,
   bootColor: string,
 ) {
-  const kneeX = hipX * 0.38 + foot.x * 0.62;
-  const kneeY = hipY + (foot.y - hipY) * 0.4;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.strokeStyle = skinColor;
-  ctx.lineWidth = scale * 0.62;
-  ctx.beginPath();
-  ctx.moveTo(hipX, hipY);
-  ctx.lineTo(kneeX, kneeY);
-  ctx.stroke();
-  ctx.strokeStyle = sockColor;
-  ctx.lineWidth = scale * 0.66;
-  ctx.beginPath();
-  ctx.moveTo(kneeX, kneeY);
-  ctx.lineTo(foot.x, foot.y);
-  ctx.stroke();
-  ctx.strokeStyle = shadeHex(sockColor, luminance(sockColor) > 0.65 ? -0.18 : 0.18);
-  ctx.lineWidth = scale * 0.72;
-  ctx.beginPath();
-  ctx.moveTo(kneeX - scale * 0.08, kneeY);
-  ctx.lineTo(kneeX + scale * 0.08, kneeY);
-  ctx.stroke();
+  const kneeX = hipX * (1 - THIGH_SHARE) + foot.x * THIGH_SHARE;
+  const kneeY = hipY + (foot.y - hipY) * THIGH_SHARE;
+  const darkSocks = luminance(sockColor) < 0.22;
+  const thighHi = mixHex(skinColor, '#f6dec0', darkSocks ? 0.55 : 0.32);
+  strokeLimb(ctx, hipX, hipY, kneeX, kneeY, scale * 0.84, skinColor);
+  strokeLimb(ctx, hipX + scale * 0.08, hipY, kneeX + scale * 0.06, kneeY, scale * 0.34, thighHi);
+  strokeLimb(ctx, kneeX, kneeY, foot.x, foot.y, scale * 0.9, sockColor);
+  const cuff = darkSocks || luminance(sockColor) < 0.55
+    ? mixHex(sockColor, '#f8fafc', 0.55)
+    : shadeHex(sockColor, -0.28);
+  strokeLimb(ctx, kneeX - scale * 0.22, kneeY, kneeX + scale * 0.22, kneeY, scale * 0.2, cuff);
   ctx.fillStyle = bootColor;
   ctx.beginPath();
-  ctx.ellipse(foot.x, foot.y, scale * 0.4, scale * 0.22, 0, 0, Math.PI * 2);
+  ctx.ellipse(foot.x, foot.y, scale * 0.42, scale * 0.24, 0, 0, Math.PI * 2);
   ctx.fill();
 }
 
@@ -579,7 +591,7 @@ export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose:
 
   ctx.fillStyle = shortsColor;
   ctx.beginPath();
-  ctx.ellipse(0, hipY + scale * 0.08, scale * (pts.diving ? 0.82 : 1.0), scale * (pts.diving ? 0.42 : 0.48), 0, 0, Math.PI * 2);
+  ctx.ellipse(0, hipY + scale * 0.04, scale * (pts.diving ? 0.82 : 1.0), scale * (pts.diving ? 0.28 : SHORTS_HALF_H), 0, 0, Math.PI * 2);
   ctx.fill();
 
   const torsoGrad = ctx.createLinearGradient(0, shoulderY, 0, hipY);
@@ -693,7 +705,7 @@ export function drawDefender(
 
   ctx.fillStyle = shortsColor;
   ctx.beginPath();
-  ctx.ellipse(0, hipY + scale * 0.08, scale * 1.0, scale * 0.48, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, hipY + scale * 0.04, scale * 1.0, scale * SHORTS_HALF_H, 0, 0, Math.PI * 2);
   ctx.fill();
 
   const torsoGrad = ctx.createLinearGradient(0, shoulderY, 0, hipY);
