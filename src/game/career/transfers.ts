@@ -174,24 +174,32 @@ export function twilightStarWage(marketValue: number): number {
   return weeklyWageForClub(elite, marketValue, 'Premier League');
 }
 
-function twilightDestinationOffers(
+function applyTwilightDestinations(
+  offers: ClubOfferTerms[],
   clubIds: readonly string[],
   value: number,
   fee: number,
   age: number,
-  taken: Set<string>,
-): ClubOfferTerms[] {
+  excludeIds: Set<string>,
+): void {
   const years = newContractYears(age);
   const wage = twilightStarWage(value);
-  return clubIds
-    .filter((id) => !taken.has(id) && getClub(id))
-    .map((id) => ({
+  for (const id of clubIds) {
+    if (excludeIds.has(id) || !getClub(id)) continue;
+    const existing = offers.find((offer) => offer.clubId === id);
+    if (existing) {
+      existing.weeklyWage = Math.max(existing.weeklyWage, wage);
+      if (existing.move === 'permanent') existing.fee = fee;
+      continue;
+    }
+    offers.push({
       clubId: id,
-      move: 'permanent' as const,
+      move: 'permanent',
       fee,
       weeklyWage: wage,
       contractYears: years,
-    }));
+    });
+  }
 }
 
 function offerTerms(
@@ -548,16 +556,15 @@ function withTwilightMlsOffers(
   fee: number,
   excludeIds: string[],
 ): ClubOfferTerms[] {
-  const taken = new Set([...excludeIds, ...offers.map((o) => o.clubId)]);
-  const extra: ClubOfferTerms[] = [];
+  const next = offers.map((offer) => ({ ...offer }));
+  const blocked = new Set(excludeIds);
   if (age >= 32) {
-    extra.push(...twilightDestinationOffers(TWILIGHT_SAUDI_CLUB_IDS, value, fee, age, taken));
-    for (const offer of extra) taken.add(offer.clubId);
+    applyTwilightDestinations(next, TWILIGHT_SAUDI_CLUB_IDS, value, fee, age, blocked);
   }
   if (age >= 34 && age <= 36) {
-    extra.push(...twilightDestinationOffers(TWILIGHT_MLS_CLUB_IDS, value, fee, age, taken));
+    applyTwilightDestinations(next, TWILIGHT_MLS_CLUB_IDS, value, fee, age, blocked);
   }
-  return extra.length ? [...offers, ...extra] : offers;
+  return next;
 }
 
 function pickLoanClubsByValue(

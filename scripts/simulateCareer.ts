@@ -1749,7 +1749,11 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     console.error('from age 32 the four Saudi clubs must table similar star contracts');
     process.exitCode = 1;
   }
-  if (age32Saudi.some((o) => o.weeklyWage < 100_000 || o.weeklyWage <= ordinaryMlsWage)) {
+  if (
+    age32Saudi
+      .filter((o) => (TWILIGHT_SAUDI_CLUB_IDS as readonly string[]).includes(o.clubId))
+      .some((o) => o.weeklyWage < 100_000 || o.weeklyWage <= ordinaryMlsWage)
+  ) {
     console.error('age-32 Saudi offers must pay elite European wages');
     process.exitCode = 1;
   }
