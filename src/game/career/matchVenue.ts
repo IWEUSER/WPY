@@ -5,21 +5,29 @@ import { nationKitOrFallback } from './data/nationColours';
 import { fifaRank } from './data/fifaRankings';
 import type { Nation } from './data/nations';
 import type { KitScheme } from '../shooting/kitPalette';
-import { stadiumScaleFromTier, type StadiumAppearance, type StadiumScale } from '../shooting/stadium';
+import { stadiumScaleFromCapacity, type StadiumAppearance } from '../shooting/stadium';
+import { groundForClub, groundForNationRank, type ClubGround } from '../shooting/grounds';
 
 const GENERIC_OPPONENT: KitScheme = { primary: '#1D4ED8', pattern: 'solid' };
 
-function stadiumScaleForNation(nationId: string | undefined): StadiumScale {
-  if (!nationId) return 'local';
-  const rank = fifaRank(nationId);
-  if (rank <= 12) return 'elite';
-  if (rank <= 40) return 'strong';
-  return 'local';
+function appearanceFromGround(
+  ground: ClubGround,
+  base: Omit<StadiumAppearance, 'capacity' | 'standTiers' | 'unique' | 'groundName' | 'scale'>,
+): StadiumAppearance {
+  return {
+    ...base,
+    scale: stadiumScaleFromCapacity(ground.capacity),
+    capacity: ground.capacity,
+    standTiers: ground.tiers,
+    unique: ground.unique,
+    groundName: ground.name,
+  };
 }
 
 /**
  * Home/away stadium look for a live match: majority crowd is the side
  * whose ground it is; the defender always wears the opponent's kit.
+ * Stand height follows that club's real capacity; decks follow the table.
  */
 export function resolveMatchStadium(args: {
   fixture?: CalendarFixture;
@@ -43,11 +51,11 @@ export function resolveMatchStadium(args: {
   const groundNationId = isInternational
     ? (isHome ? nation?.id : fixture?.opponentId)
     : undefined;
-  const scale = isInternational
-    ? stadiumScaleForNation(groundNationId)
-    : stadiumScaleFromTier(groundClub?.tier);
+  const ground = isInternational
+    ? groundForNationRank(fifaRank(groundNationId ?? ''))
+    : groundForClub(groundClub?.id);
 
-  return {
+  return appearanceFromGround(ground, {
     isHome,
     night: fixture ? fixtureIsNight(fixture) : false,
     homeColor: home.primary,
@@ -59,13 +67,12 @@ export function resolveMatchStadium(args: {
     opponentShorts: opponent.shorts,
     opponentPattern: opponent.pattern,
     awayShare: fixture ? fixtureCrowdAwayShare(fixture) : 0.2,
-    scale,
-  };
+  });
 }
 
 export function trialStadium(nation?: Nation): StadiumAppearance {
   const home = nationKitOrFallback(nation?.id);
-  return {
+  return appearanceFromGround(groundForClub(undefined), {
     isHome: true,
     night: false,
     homeColor: home.primary,
@@ -74,6 +81,5 @@ export function trialStadium(nation?: Nation): StadiumAppearance {
     opponentColor: GENERIC_OPPONENT.primary,
     opponentPattern: 'solid',
     awayShare: 0.22,
-    scale: 'local',
-  };
+  });
 }

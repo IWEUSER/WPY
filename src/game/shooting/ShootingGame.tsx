@@ -19,7 +19,8 @@ import {
   worldToScreen,
   type KeeperPose,
 } from './render';
-import { drawStadium, DEFAULT_STADIUM, defenderKitFromStadium, type StadiumAppearance } from './stadium';
+import { drawStadium, DEFAULT_STADIUM, defenderKitFromStadium, profileFromScale, type StadiumAppearance } from './stadium';
+import { groundForClub } from './grounds';
 import { normalizeHex } from './kitPalette';
 import {
   advanceDefender,
@@ -147,13 +148,34 @@ function readDevStadium(): StadiumAppearance | null {
   const homeParam = q.get('home');
   const homeColorRaw = q.get('homeColor');
   const awayColorRaw = q.get('awayColor');
-  if (homeParam == null && !homeColorRaw && !awayColorRaw && q.get('night') == null && q.get('scale') == null) return null;
+  const clubId = q.get('club');
+  const scaleRaw = q.get('scale');
+  const capacityRaw = q.get('capacity');
+  const tiersRaw = q.get('tiers');
+  if (
+    homeParam == null
+    && !homeColorRaw
+    && !awayColorRaw
+    && q.get('night') == null
+    && scaleRaw == null
+    && clubId == null
+    && capacityRaw == null
+    && tiersRaw == null
+  ) return null;
   const isHome = homeParam !== '0' && homeParam !== 'away' && homeParam !== 'false';
   const playerColor = normalizeHex(homeColorRaw, DEFAULT_STADIUM.homeColor);
   const opponentColor = normalizeHex(awayColorRaw, DEFAULT_STADIUM.awayColor);
   const night = q.get('night') === '1' || q.get('night') === 'true';
-  const scaleRaw = q.get('scale');
   const scale = scaleRaw === 'local' || scaleRaw === 'strong' || scaleRaw === 'elite' ? scaleRaw : undefined;
+  const fromClub = clubId ? groundForClub(clubId) : null;
+  const fromScale = scale ? profileFromScale(scale) : null;
+  const ground = fromClub ?? fromScale;
+  const capacityN = capacityRaw ? Number(capacityRaw) : NaN;
+  const tiersN = tiersRaw ? Number(tiersRaw) : NaN;
+  const capacity = Number.isFinite(capacityN) ? capacityN : ground?.capacity;
+  const standTiers = (tiersN === 1 || tiersN === 2 || tiersN === 3 || tiersN === 5)
+    ? tiersN
+    : ground?.tiers;
   return {
     isHome,
     night,
@@ -162,6 +184,10 @@ function readDevStadium(): StadiumAppearance | null {
     opponentColor,
     awayShare: 0.2,
     scale,
+    capacity,
+    standTiers,
+    unique: ground?.unique,
+    groundName: ground?.name,
   };
 }
 

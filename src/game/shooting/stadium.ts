@@ -6,6 +6,11 @@ import {
   type DefenderKit,
   type ShirtPattern,
 } from './kitPalette';
+import {
+  BERNABEU_CAPACITY,
+  type ClubGround,
+  type StandTiers,
+} from './grounds';
 
 /** Minimal camera slice the bowl needs — compatible with `PitchView`. */
 export interface StadiumView {
@@ -14,7 +19,10 @@ export interface StadiumView {
   goal: { halfW: number; topY: number; botY: number };
 }
 
-/** Elite/Strong clubs get a cathedral bowl; everyone else a smaller terrace. */
+/**
+ * Coarse bowl size, derived from capacity. Prefer `capacity` + `standTiers`
+ * on the appearance; this remains for `?scale=` shortcuts and occupancy.
+ */
 export type StadiumScale = 'elite' | 'strong' | 'local';
 
 export interface StadiumAppearance {
@@ -35,17 +43,47 @@ export interface StadiumAppearance {
   opponentPattern?: ShirtPattern;
   /** 0–1 share of seats given to away fans. */
   awayShare?: number;
-  /**
-   * Whose ground this is. Elite/Strong clubs get a cathedral bowl;
-   * everyone else a smaller uncovered terrace.
-   */
+  /** Coarse shortcut when capacity/tiers are omitted (`?scale=`). */
   scale?: StadiumScale;
+  /** Seats — stand height is proportional to this. Camp Nou is the ceiling. */
+  capacity?: number;
+  /** How many decks are stacked behind the goal (1, 2, 3, or 5). */
+  standTiers?: StandTiers;
+  unique?: 'camp-nou';
+  groundName?: string;
 }
 
+export function stadiumScaleFromCapacity(capacity: number): StadiumScale {
+  if (capacity >= 70_000) return 'elite';
+  if (capacity >= 40_000) return 'strong';
+  return 'local';
+}
+
+/** @deprecated Use capacity/tiers. Kept for `?scale=` and older tests. */
 export function stadiumScaleFromTier(tier: number | undefined): StadiumScale {
   if (tier === 1) return 'elite';
   if (tier === 2) return 'strong';
   return 'local';
+}
+
+export function profileFromScale(scale: StadiumScale): ClubGround {
+  if (scale === 'elite') {
+    return { name: 'Camp Nou', capacity: 105_000, tiers: 5, unique: 'camp-nou' };
+  }
+  if (scale === 'strong') return { name: 'Allianz Arena', capacity: 75_000, tiers: 3 };
+  return { name: 'Municipal Stadium', capacity: 28_000, tiers: 2 };
+}
+
+export function profileFromAppearance(stadium: StadiumAppearance): ClubGround {
+  if (stadium.capacity != null && stadium.standTiers != null) {
+    return {
+      name: stadium.groundName ?? 'Stadium',
+      capacity: stadium.capacity,
+      tiers: stadium.standTiers,
+      unique: stadium.unique,
+    };
+  }
+  return profileFromScale(stadium.scale ?? 'elite');
 }
 
 export const DEFAULT_STADIUM: StadiumAppearance = {
@@ -56,6 +94,10 @@ export const DEFAULT_STADIUM: StadiumAppearance = {
   opponentColor: '#034694',
   awayShare: 0.2,
   scale: 'elite',
+  capacity: 105_000,
+  standTiers: 5,
+  unique: 'camp-nou',
+  groundName: 'Camp Nou',
 };
 
 export function defenderKitFromStadium(stadium: StadiumAppearance): DefenderKit {
@@ -132,20 +174,69 @@ export interface StadiumLayout {
   occupancy: number;
   roof: boolean;
   scale: StadiumScale;
+  tiers: StandTiers;
+  capacity: number;
+  unique?: 'camp-nou';
+  decks: { top: number; bottom: number }[];
 }
 
-/** Terrace height, concourse count, and roof from the home club's scale. */
-export function stadiumLayout(view: StadiumView, scale: StadiumScale = 'elite'): StadiumLayout {
+function clamp01(t: number): number {
+  return Math.min(1, Math.max(0, t));
+}
+
+/**
+ * Stand height from capacity. Bernabéu is the tallest ordinary bowl;
+ * Camp Nou is uniquely taller. Unlisted municipals stay below the table.
+ */
+export function standTopFrac(capacity: number, unique?: 'camp-nou'): number {
+  if (unique === 'camp-nou') return 0.012;
+  const minCap = 18_000;
+  const t = clamp01((capacity - minCap) / (BERNABEU_CAPACITY - minCap));
+  return lerp(0.48, 0.055, t ** 0.9);
+}
+
+function deckBands(top: number, bottom: number, tiers: number): { top: number; bottom: number }[] {
+  const height = Math.max(8, bottom - top);
+  if (tiers <= 1) return [{ top, bottom }];
+  const fascia = Math.max(3.2, Math.min(11, height * 0.026));
+  const usable = height - fascia * (tiers - 1);
+  const deckH = usable / tiers;
+  const decks: { top: number; bottom: number }[] = [];
+  let y = top;
+  for (let i = 0; i < tiers; i++) {
+    decks.push({ top: y, bottom: y + deckH });
+    y += deckH + fascia;
+  }
+  return decks;
+}
+
+function isStadiumScale(spec: StadiumScale | ClubGround): spec is StadiumScale {
+  return spec === 'elite' || spec === 'strong' || spec === 'local';
+}
+
+/** Terrace height, deck count, and roof from the home club's ground. */
+export function stadiumLayout(
+  view: StadiumView,
+  spec: StadiumScale | ClubGround = 'elite',
+): StadiumLayout {
+  const ground = isStadiumScale(spec) ? profileFromScale(spec) : spec;
   const bottom = standBottomY(view);
-  const topFrac = scale === 'elite' ? 0.04 : scale === 'strong' ? 0.22 : 0.5;
-  const top = Math.min(bottom - 20, Math.max(view.h * 0.016, bottom * topFrac));
+  const topFrac = standTopFrac(ground.capacity, ground.unique);
+  const top = Math.min(bottom - 24, Math.max(2, bottom * topFrac));
+  const scale = stadiumScaleFromCapacity(ground.capacity);
+  const roof = ground.unique === 'camp-nou' || ground.tiers >= 3 || ground.capacity >= 40_000;
+  const t = clamp01((ground.capacity - 18_000) / (BERNABEU_CAPACITY - 18_000));
   return {
     top,
     bottom,
-    aisleEvery: scale === 'elite' ? 10 : scale === 'strong' ? 14 : 24,
-    occupancy: scale === 'elite' ? 0.99 : scale === 'strong' ? 0.94 : 0.8,
-    roof: scale !== 'local',
+    aisleEvery: ground.tiers === 1 ? 16 : ground.tiers === 2 ? 12 : ground.tiers === 3 ? 9 : 7,
+    occupancy: lerp(0.8, 0.995, ground.unique === 'camp-nou' ? 1 : t),
+    roof,
     scale,
+    tiers: ground.tiers,
+    capacity: ground.capacity,
+    unique: ground.unique,
+    decks: deckBands(top, bottom, ground.tiers),
   };
 }
 
@@ -245,6 +336,7 @@ interface CrowdCache {
 let crowdCache: CrowdCache | null = null;
 
 function crowdLayer(w: number, h: number, view: StadiumView, stadium: StadiumAppearance): HTMLCanvasElement {
+  const profile = profileFromAppearance(stadium);
   const key = [
     w | 0,
     h | 0,
@@ -254,7 +346,9 @@ function crowdLayer(w: number, h: number, view: StadiumView, stadium: StadiumApp
     stadium.awaySecondary ?? '',
     (stadium.awayShare ?? 0.2).toFixed(2),
     stadium.night ? 'n' : 'd',
-    stadium.scale ?? 'elite',
+    String(profile.capacity),
+    String(profile.tiers),
+    profile.unique ?? '',
     view.goal.botY.toFixed(1),
     view.goal.topY.toFixed(1),
   ].join('|');
@@ -270,41 +364,66 @@ function crowdLayer(w: number, h: number, view: StadiumView, stadium: StadiumApp
 
   ctx.clearRect(0, 0, w, h);
   const rng = mulberry32(hashKey(key));
-  const layout = stadiumLayout(view, stadium.scale ?? 'elite');
-  const terrace = mixHex(stadium.homeColor, stadium.night ? '#0f172a' : '#292524', 0.78);
-  const tl = { x: 0, y: layout.top };
-  const tr = { x: w, y: layout.top };
-  const br = { x: w, y: layout.bottom };
-  const bl = { x: 0, y: layout.bottom };
-  ctx.fillStyle = terrace;
+  const layout = stadiumLayout(view, profile);
+  const night = Boolean(stadium.night);
+  const terrace = mixHex(stadium.homeColor, night ? '#0f172a' : '#292524', 0.78);
+  const fasciaFill = night ? '#1c2433' : '#8b97a6';
+  const fasciaLip = night ? '#2a3548' : '#a8b3c0';
+
+  ctx.fillStyle = fasciaFill;
   ctx.fillRect(0, layout.top, w, Math.max(1, layout.bottom - layout.top));
-  paintPackedFans(ctx, tl, tr, br, bl, rng, stadium, w, layout);
+
+  for (let i = 0; i < layout.decks.length; i++) {
+    const deck = layout.decks[i];
+    ctx.fillStyle = terrace;
+    ctx.fillRect(0, deck.top, w, Math.max(1, deck.bottom - deck.top));
+    paintPackedFans(
+      ctx,
+      { x: 0, y: deck.top },
+      { x: w, y: deck.top },
+      { x: w, y: deck.bottom },
+      { x: 0, y: deck.bottom },
+      rng,
+      stadium,
+      w,
+      layout,
+    );
+    // Lip at the front of each deck so stacked tiers read as separate rings.
+    const lipH = Math.max(2, Math.min(5, (deck.bottom - deck.top) * 0.06));
+    ctx.fillStyle = fasciaLip;
+    ctx.fillRect(0, deck.bottom - lipH, w, lipH);
+    if (i < layout.decks.length - 1) {
+      const next = layout.decks[i + 1];
+      ctx.fillStyle = fasciaFill;
+      ctx.fillRect(0, deck.bottom, w, Math.max(1, next.top - deck.bottom));
+    }
+  }
 
   crowdCache = { key, canvas };
   return canvas;
 }
 
-function drawRoof(ctx: CanvasRenderingContext2D, w: number, h: number, night: boolean, standTop: number) {
+function drawRoof(ctx: CanvasRenderingContext2D, w: number, h: number, night: boolean, standTop: number, campNou: boolean) {
   // Keep the canopy as a thin lid above the terrace so a 6-yard camera
   // does not paint a dark void over the crowd behind the net.
-  const lip = Math.min(h * 0.038, standTop * 0.85);
+  const lip = Math.min(h * (campNou ? 0.052 : 0.038), standTop * (campNou ? 1.05 : 0.85));
   if (night) {
     ctx.fillStyle = '#0b0f18';
     ctx.beginPath();
     ctx.moveTo(0, 0);
     ctx.lineTo(w, 0);
     ctx.lineTo(w, lip);
-    ctx.quadraticCurveTo(w * 0.5, Math.min(h * 0.055, standTop), 0, lip);
+    ctx.quadraticCurveTo(w * 0.5, Math.min(h * (campNou ? 0.07 : 0.055), standTop), 0, lip);
     ctx.closePath();
     ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.08)';
   } else {
     ctx.strokeStyle = 'rgba(71,85,105,0.4)';
   }
-  ctx.lineWidth = Math.max(2, w * 0.006);
+  ctx.lineWidth = Math.max(2, w * (campNou ? 0.008 : 0.006));
   ctx.beginPath();
   ctx.moveTo(w * 0.04, Math.max(h * 0.02, lip * 0.7));
-  ctx.quadraticCurveTo(w * 0.5, Math.min(h * 0.05, standTop * 0.9), w * 0.96, Math.max(h * 0.02, lip * 0.7));
+  ctx.quadraticCurveTo(w * 0.5, Math.min(h * (campNou ? 0.062 : 0.05), standTop * 0.9), w * 0.96, Math.max(h * 0.02, lip * 0.7));
   ctx.stroke();
 }
 
@@ -410,7 +529,7 @@ export function drawStadium(
   stadium: StadiumAppearance = DEFAULT_STADIUM,
 ) {
   const { w, h } = view;
-  const layout = stadiumLayout(view, stadium.scale ?? 'elite');
+  const layout = stadiumLayout(view, profileFromAppearance(stadium));
   const night = Boolean(stadium.night);
 
   const sky = ctx.createLinearGradient(0, 0, 0, layout.bottom + h * 0.1);
@@ -431,7 +550,7 @@ export function drawStadium(
   drawBowlStructure(ctx, w, h, layout.top, layout.bottom, night);
 
   if (layout.roof) {
-    drawRoof(ctx, w, h, night, layout.top);
+    drawRoof(ctx, w, h, night, layout.top, layout.unique === 'camp-nou');
   }
 
   const crowd = crowdLayer(w, h, view, stadium);

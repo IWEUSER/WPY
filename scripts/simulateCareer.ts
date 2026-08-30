@@ -18,7 +18,13 @@ import { nationKit } from '../src/game/career/data/nationColours';
 import { resolveMatchStadium } from '../src/game/career/matchVenue';
 import { crowdSwatch, kitFromColor, kitFromScheme, luminance } from '../src/game/shooting/kitPalette';
 import { createPitchView, MAX_SHOT_DISTANCE_M, MIN_SHOT_DISTANCE_M } from '../src/game/shooting/render';
-import { standBottomY, crowdCellSize, stadiumLayout, stadiumScaleFromTier } from '../src/game/shooting/stadium';
+import { standBottomY, crowdCellSize, stadiumLayout } from '../src/game/shooting/stadium';
+import {
+  CLUB_GROUNDS,
+  LISTED_MIN_CAPACITY,
+  groundForClub,
+  isListedGround,
+} from '../src/game/shooting/grounds';
 import { clubKit } from '../src/game/career/data/clubKits';
 import { clubContinentalCup, internationalCampaignForSeason, internationalTournamentForSeason } from '../src/game/career/data/competitions';
 import { cupFromLeaguePosition, continentalQualificationForNextSeason } from '../src/game/career/europeanQualification';
@@ -2219,13 +2225,35 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
     fixture: { week: 1, kind: 'league', isDecisive: false, isHome: true, opponentId: 'mainz' },
     club: getClub('dortmund'),
   });
-  console.log('stadium scale madrid/getafe-away/dortmund', madridHome.scale, getafeHome.scale, dortmundHome.scale);
-  if (madridHome.scale !== 'elite' || getafeHome.scale !== 'local' || dortmundHome.scale !== 'strong') {
-    console.error('elite and strong clubs need cathedral bowls; smaller clubs a local terrace');
+  const barcaAway = resolveMatchStadium({
+    fixture: { week: 3, kind: 'league', isDecisive: false, isHome: false, opponentId: 'barcelona' },
+    club: madridClub,
+  });
+  console.log(
+    'grounds madrid/barca/getafe/dortmund',
+    madridHome.capacity,
+    madridHome.standTiers,
+    barcaAway.capacity,
+    barcaAway.standTiers,
+    getafeHome.capacity,
+    getafeHome.standTiers,
+    dortmundHome.capacity,
+    dortmundHome.standTiers,
+  );
+  if (barcaAway.unique !== 'camp-nou' || barcaAway.standTiers !== 5 || madridHome.standTiers !== 5) {
+    console.error('Camp Nou and the Bernabéu must both be five-deck bowls, Camp Nou unique');
     process.exitCode = 1;
   }
-  if (stadiumScaleFromTier(1) !== 'elite' || stadiumScaleFromTier(2) !== 'strong' || stadiumScaleFromTier(4) !== 'local') {
-    console.error('club tiers must map onto stadium scales');
+  if ((barcaAway.capacity ?? 0) <= (madridHome.capacity ?? 0)) {
+    console.error('Camp Nou must be taller than the Bernabéu');
+    process.exitCode = 1;
+  }
+  if (dortmundHome.standTiers !== 1 || (dortmundHome.capacity ?? 0) < 80_000) {
+    console.error('Signal Iduna Park is a single tall terrace');
+    process.exitCode = 1;
+  }
+  if (getafeHome.standTiers !== 2 || (getafeHome.capacity ?? 99_000) >= LISTED_MIN_CAPACITY) {
+    console.error('unlisted clubs must be a two-deck municipal stand smaller than the listed table');
     process.exitCode = 1;
   }
 
@@ -2265,11 +2293,58 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
     process.exitCode = 1;
   }
   if (localBowl.roof || !eliteBowl.roof) {
-    console.error('only elite and strong grounds should have a roof');
+    console.error('Camp Nou-scale bowls need a roof; municipal two-deck stands do not');
     process.exitCode = 1;
   }
   if (eliteBowl.aisleEvery >= localBowl.aisleEvery) {
     console.error('elite bowls should have more tiers than a local terrace');
+    process.exitCode = 1;
+  }
+
+  const barcaL = stadiumLayout(close, groundForClub('barcelona'));
+  const madridL = stadiumLayout(close, groundForClub('real-madrid'));
+  const dortmundL = stadiumLayout(close, groundForClub('dortmund'));
+  const lazioL = stadiumLayout(close, groundForClub('lazio'));
+  const liverpoolL = stadiumLayout(close, groundForClub('liverpool'));
+  const milanL = stadiumLayout(close, groundForClub('ac-milan'));
+  const interL = stadiumLayout(close, groundForClub('inter'));
+  const sociedadL = stadiumLayout(close, groundForClub('real-sociedad'));
+  const getafeL = stadiumLayout(close, groundForClub('getafe'));
+  console.log(
+    'bowl tops barca/madrid/dortmund/lazio/liverpool/getafe',
+    barcaL.top.toFixed(1),
+    madridL.top.toFixed(1),
+    dortmundL.top.toFixed(1),
+    lazioL.top.toFixed(1),
+    liverpoolL.top.toFixed(1),
+    getafeL.top.toFixed(1),
+    'decks',
+    barcaL.decks.length,
+    madridL.decks.length,
+    dortmundL.decks.length,
+  );
+  if (!(barcaL.top + 8 < madridL.top && madridL.top < dortmundL.top)) {
+    console.error('Camp Nou must sit above the Bernabéu, which sits above Signal Iduna Park');
+    process.exitCode = 1;
+  }
+  if (barcaL.decks.length !== 5 || madridL.decks.length !== 5 || dortmundL.decks.length !== 1 || lazioL.decks.length !== 1) {
+    console.error('deck counts must follow the stadium table');
+    process.exitCode = 1;
+  }
+  if (!(dortmundL.top < lazioL.top && lazioL.top < liverpoolL.top)) {
+    console.error('single-deck stands must still scale height with capacity');
+    process.exitCode = 1;
+  }
+  if (milanL.top !== interL.top || milanL.decks.length !== 5) {
+    console.error('Milan and Inter share San Siro');
+    process.exitCode = 1;
+  }
+  if (!(sociedadL.top < getafeL.top) || getafeL.decks.length !== 2 || isListedGround('getafe')) {
+    console.error('Getafe must be a shorter two-deck municipal than Reale Arena');
+    process.exitCode = 1;
+  }
+  if (Object.keys(CLUB_GROUNDS).length < 36) {
+    console.error('the listed stadium table is missing clubs');
     process.exitCode = 1;
   }
 }
