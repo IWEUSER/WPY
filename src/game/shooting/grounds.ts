@@ -40,6 +40,18 @@ export function groundForCupFinal(): ClubGround {
   return CUP_FINAL_GROUND;
 }
 
+/** Neutral bowl for World Cup / continental / Nations League tournament games. */
+export const INTERNATIONAL_TOURNAMENT_CAPACITY = 75_000;
+export const INTERNATIONAL_TOURNAMENT_GROUND: ClubGround = {
+  name: 'Tournament Stadium',
+  capacity: INTERNATIONAL_TOURNAMENT_CAPACITY,
+  tiers: 3,
+};
+
+export function groundForInternationalTournament(): ClubGround {
+  return INTERNATIONAL_TOURNAMENT_GROUND;
+}
+
 /** Shared bowls used by more than one club. */
 const SAN_SIRO: ClubGround = { name: 'San Siro', capacity: 75_710, tiers: 5 };
 const OLIMPICO: ClubGround = { name: 'Stadio Olimpico', capacity: 70_634, tiers: 1 };

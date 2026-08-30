@@ -81,8 +81,14 @@ export interface SeasonCalendar {
   domesticCup?: DomesticCupId | null;
 }
 
-/** One-off domestic and European finals are not home or away. */
-export function fixtureIsNeutral(fixture: CalendarFixture): boolean {
+/** World Cup, continental championship, and Nations League ties — not qualifiers. */
+export function isInternationalTournamentFixture(fixture: CalendarFixture): boolean {
+  return fixture.kind === 'international' && fixture.internationalRound != null && fixture.internationalRound !== 'qualifier';
+}
+
+/** Domestic and European one-off finals at the large club-final stadium. */
+export function isClubFinalNeutral(fixture: CalendarFixture): boolean {
+  if (fixture.kind === 'international') return false;
   if (fixture.neutral) return true;
   return (
     fixture.kind === 'continental-final'
@@ -91,6 +97,16 @@ export function fixtureIsNeutral(fixture: CalendarFixture): boolean {
     || (fixture.kind === 'leagues-cup' && fixture.leaguesCupStage === 'final')
     || (fixture.kind === 'playoff' && fixture.playoffRound === 'mls-cup')
   );
+}
+
+/** Club finals and international tournament games are not home or away. */
+export function fixtureIsNeutral(fixture: CalendarFixture): boolean {
+  return isClubFinalNeutral(fixture) || isInternationalTournamentFixture(fixture);
+}
+
+export function fixtureVenueLabel(fixture: CalendarFixture): 'Neutral' | 'Home' | 'Away' {
+  if (fixtureIsNeutral(fixture)) return 'Neutral';
+  return fixtureIsHome(fixture) ? 'Home' : 'Away';
 }
 
 /** Player's side is at home. Prefers the stored flag, then two-legged legs, then week parity. */
@@ -103,25 +119,28 @@ export function fixtureIsHome(fixture: CalendarFixture): boolean {
 }
 
 /**
- * Share of seats given to the away support. Neutral finals are a true split;
- * other tournament games sit closer to a split crowd than a league Saturday.
+ * Share of seats given to the away support. Neutral ties (club finals and
+ * international tournament games) are a true 50/50 split by club or country.
  */
 export function fixtureCrowdAwayShare(fixture: CalendarFixture): number {
   if (fixtureIsNeutral(fixture)) return 0.5;
-  const tournament =
-    fixture.kind === 'continental-final'
-    || fixture.playoffRound === 'mls-cup'
-    || fixture.domesticCupStage === 'final'
-    || fixture.superCupStage === 'final'
-    || fixture.leaguesCupStage === 'final'
-    || (fixture.kind === 'international' && fixture.internationalRound !== 'qualifier');
-  return tournament ? 0.4 : 0.2;
+  return 0.2;
+}
+
+function fixtureKickoffSeed(fixture: CalendarFixture): number {
+  const key = `${fixture.week}|${fixture.kind}|${fixture.opponentId ?? ''}|${fixture.isHome === false ? 'A' : 'H'}`;
+  let h = 2166136261;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
 }
 
 /**
- * Night kick-offs: European club ties (group and knockout) and
- * international knockout rounds. League, domestic cups, qualifiers, and
- * tournament group games are played in daylight.
+ * Night kick-offs: every European club tie, international knockout rounds,
+ * and about one in five domestic league games (hashed so the same fixture
+ * is always the same kick-off).
  */
 export function fixtureIsNight(fixture: CalendarFixture): boolean {
   if (
@@ -139,6 +158,9 @@ export function fixtureIsNight(fixture: CalendarFixture): boolean {
       || round === 'quarter-final'
       || round === 'semi-final'
       || round === 'final';
+  }
+  if (fixture.kind === 'league') {
+    return fixtureKickoffSeed(fixture) % 5 === 0;
   }
   return false;
 }

@@ -1049,7 +1049,7 @@ export function resolveFixture(
   let next = { ...sim };
   if (fixture.kind === 'league' && fixture.opponentId) {
     let table = applyMatchToTable(next.leagueTable, playerClub.id, fixture.opponentId, result);
-    table = simulateRestOfLeagueRound(table, playerClub.id, fixture.opponentId, rng);
+    table = simulateRestOfLeagueRound(table, playerClub.id, fixture.opponentId, rng, `w${fixture.week}`);
     next.leagueTable = table;
     if (isTitleRival) {
       if (isHome) next.rivalHomeOutcome = result.outcome;

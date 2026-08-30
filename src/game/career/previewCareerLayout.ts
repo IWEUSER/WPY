@@ -1,4 +1,5 @@
 import { createAvailability } from './availabilityEngine';
+import { fixtureIsNight } from './calendar';
 import { getClub } from './data/clubs';
 import { createNationalTeamState, recordInternationalAppearance } from './international';
 import { buildSeasonStandings } from './matchEngine';
@@ -199,10 +200,11 @@ export function applyCareerLayoutPreview(): void {
   const isTrialPreview = preview === 'trial';
   const isReservePreview = preview === 'reserve';
   const isMatchPreview = preview === 'match' || preview === 'match-away' || preview === 'match-local'
+    || preview === 'match-night'
     || preview === 'match-intl' || preview === 'match-ucl' || preview === 'match-intl-ko';
   let matchFixtureIndex = Math.max(0, calendar.fixtures.findIndex((f) => f.kind !== 'rest'));
-  if (preview === 'match' || preview === 'match-away' || preview === 'match-local') {
-    const wantHome = preview === 'match';
+  if (preview === 'match' || preview === 'match-away' || preview === 'match-local' || preview === 'match-night') {
+    const wantHome = preview !== 'match-away';
     const idx = calendar.fixtures.findIndex((f) => f.kind === 'league' && f.isHome === wantHome);
     if (idx >= 0) matchFixtureIndex = idx;
     const fx = calendar.fixtures[matchFixtureIndex];
@@ -212,6 +214,17 @@ export function applyCareerLayoutPreview(): void {
       fx.opponentLabel = preview === 'match-local' ? 'Getafe' : 'Barcelona';
       fx.isHome = wantHome;
       fx.playerChances = 2;
+      if (preview === 'match-night') {
+        for (let week = 1; week <= 40; week++) {
+          fx.week = week;
+          if (fixtureIsNight(fx)) break;
+        }
+      } else {
+        for (let week = 1; week <= 40; week++) {
+          fx.week = week;
+          if (!fixtureIsNight(fx)) break;
+        }
+      }
     }
   } else if (preview === 'match-intl') {
     const idx = calendar.fixtures.findIndex((f) => f.kind === 'international');

@@ -78,8 +78,8 @@ export function simulateClubMatch(
     playerChances != null && playerChances > 0
       ? Math.max(0, playerChances - Math.max(0, playerGoals))
       : 0;
-  const pWin = expected * 0.78 * missedChanceWinFactor(misses);
-  const pDraw = 0.24 * Math.exp(-((diff / 22) ** 2));
+  const pWin = expected * 0.92 * missedChanceWinFactor(misses);
+  const pDraw = 0.16 * Math.exp(-((diff / 16) ** 2));
   const roll = rng();
   let outcome: ClubMatchResult['outcome'];
   if (roll < pWin) outcome = 'win';
@@ -245,6 +245,15 @@ export function clubsForContinentalCup(cup: ContinentalCupId): string[] {
   return CLUBS.filter((c) => clubContinentalCup(c) === cup).map((c) => c.id);
 }
 
+function pairingHash(key: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
 /** Pair leftover clubs for a matchweek (first of each pair is treated as home). */
 export function pairClubs(clubIds: string[]): [string, string][] {
   const ids = [...clubIds];
@@ -258,16 +267,25 @@ export function pairClubs(clubIds: string[]): [string, string][] {
 }
 
 /** Simulate every *other* league fixture this matchweek so the table moves
- * as a whole, not just the player's own result. */
+ * as a whole, not just the player's own result. Leftover clubs are paired
+ * from a week-seeded shuffle so 1st leftover does not always play 2nd. */
 export function simulateRestOfLeagueRound(
   table: LeagueStanding[],
   playerClubId: string,
   playerOpponentId: string,
   rng: () => number = Math.random,
+  pairingSeed = '',
 ): LeagueStanding[] {
   const others = table.map((r) => r.clubId).filter((id) => id !== playerClubId && id !== playerOpponentId);
+  const ordered = pairingSeed
+    ? [...others].sort((a, b) => {
+        const ha = pairingHash(`${pairingSeed}|${a}`);
+        const hb = pairingHash(`${pairingSeed}|${b}`);
+        return ha - hb || a.localeCompare(b);
+      })
+    : others;
   let next = table;
-  for (const [homeId, awayId] of pairClubs(others)) {
+  for (const [homeId, awayId] of pairClubs(ordered)) {
     const home = getClub(homeId);
     const away = getClub(awayId);
     if (!home || !away) continue;

@@ -1,4 +1,4 @@
-import { fixtureCrowdAwayShare, fixtureIsHome, fixtureIsNeutral, fixtureIsNight, type CalendarFixture } from './calendar';
+import { fixtureCrowdAwayShare, fixtureIsHome, fixtureIsNight, isClubFinalNeutral, isInternationalTournamentFixture, type CalendarFixture } from './calendar';
 import { getClub, type Club } from './data/clubs';
 import { clubKit } from './data/clubKits';
 import { nationKitOrFallback } from './data/nationColours';
@@ -6,7 +6,7 @@ import { fifaRank } from './data/fifaRankings';
 import type { Nation } from './data/nations';
 import type { KitScheme } from '../shooting/kitPalette';
 import { stadiumScaleFromCapacity, type StadiumAppearance } from '../shooting/stadium';
-import { groundForClub, groundForCupFinal, groundForNationRank, UNLISTED_GROUND, type ClubGround } from '../shooting/grounds';
+import { groundForClub, groundForCupFinal, groundForInternationalTournament, groundForNationRank, UNLISTED_GROUND, type ClubGround } from '../shooting/grounds';
 
 const GENERIC_OPPONENT: KitScheme = { primary: '#1D4ED8', pattern: 'solid' };
 
@@ -36,7 +36,9 @@ export function resolveMatchStadium(args: {
 }): StadiumAppearance {
   const { fixture, club, nation } = args;
   const isInternational = fixture?.kind === 'international';
-  const neutral = fixture ? fixtureIsNeutral(fixture) : false;
+  const clubFinal = fixture ? isClubFinalNeutral(fixture) : false;
+  const intlTournament = fixture ? isInternationalTournamentFixture(fixture) : false;
+  const neutral = clubFinal || intlTournament;
   const isHome = fixture ? fixtureIsHome(fixture) : true;
 
   const player: KitScheme = isInternational
@@ -54,11 +56,13 @@ export function resolveMatchStadium(args: {
   const groundNationId = isInternational
     ? (isHome ? nation?.id : fixture?.opponentId)
     : undefined;
-  const ground = neutral
+  const ground = clubFinal
     ? groundForCupFinal()
-    : isInternational
-      ? groundForNationRank(fifaRank(groundNationId ?? ''))
-      : groundForClub(groundClub?.id);
+    : intlTournament
+      ? groundForInternationalTournament()
+      : isInternational
+        ? groundForNationRank(fifaRank(groundNationId ?? ''))
+        : groundForClub(groundClub?.id);
 
   return appearanceFromGround(ground, {
     isHome,

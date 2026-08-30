@@ -162,6 +162,38 @@ export function countLoanSpells(history: SeasonRecord[], current?: SeasonRecord 
   return [...history, ...(current ? [current] : [])].filter((s) => s.role === 'loan').length;
 }
 
+/** Late-career "big move" destinations: Designated Player MLS sides. */
+export const TWILIGHT_MLS_CLUB_IDS = ['lafc', 'inter-miami', 'nycfc', 'la-galaxy'] as const;
+/** From age 32, the same money from the four Saudi giants. */
+export const TWILIGHT_SAUDI_CLUB_IDS = ['al-hilal', 'al-nassr', 'al-ittihad', 'al-ahli'] as const;
+
+/** Top-tier European weekly wage, used for twilight MLS and Saudi bids. */
+export function twilightStarWage(marketValue: number): number {
+  const elite = getClub('man-city') ?? getClub('real-madrid') ?? getClub('barcelona');
+  if (!elite) return 180_000;
+  return weeklyWageForClub(elite, marketValue, 'Premier League');
+}
+
+function twilightDestinationOffers(
+  clubIds: readonly string[],
+  value: number,
+  fee: number,
+  age: number,
+  taken: Set<string>,
+): ClubOfferTerms[] {
+  const years = newContractYears(age);
+  const wage = twilightStarWage(value);
+  return clubIds
+    .filter((id) => !taken.has(id) && getClub(id))
+    .map((id) => ({
+      clubId: id,
+      move: 'permanent' as const,
+      fee,
+      weeklyWage: wage,
+      contractYears: years,
+    }));
+}
+
 function offerTerms(
   clubs: Club[],
   move: ClubOfferTerms['move'],
@@ -516,11 +548,16 @@ function withTwilightMlsOffers(
   fee: number,
   excludeIds: string[],
 ): ClubOfferTerms[] {
-  if (age < 33 || age > 35) return offers;
   const taken = new Set([...excludeIds, ...offers.map((o) => o.clubId)]);
-  const mlsPool = CLUBS.filter((c) => c.league === 'MLS' && !taken.has(c.id));
-  const mls = pickClubsBiasedToCountry(mlsPool, 3, 'United States', 3);
-  return [...offers, ...offerTerms(mls, 'permanent', value, fee, age, newContractYears(age))];
+  const extra: ClubOfferTerms[] = [];
+  if (age >= 32) {
+    extra.push(...twilightDestinationOffers(TWILIGHT_SAUDI_CLUB_IDS, value, fee, age, taken));
+    for (const offer of extra) taken.add(offer.clubId);
+  }
+  if (age >= 34 && age <= 36) {
+    extra.push(...twilightDestinationOffers(TWILIGHT_MLS_CLUB_IDS, value, fee, age, taken));
+  }
+  return extra.length ? [...offers, ...extra] : offers;
 }
 
 function pickLoanClubsByValue(

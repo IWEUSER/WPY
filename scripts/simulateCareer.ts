@@ -4,7 +4,7 @@
  *
  * Run with: npm run simulate:career
  */
-import { buildSeasonCalendar, fixtureIsHome, fixtureIsNeutral, fixtureIsNight, INTERNATIONAL_BREAK_WEEKS, isFinalFixture, nationsLeagueKnockoutWeeks, tournamentWeekCount } from '../src/game/career/calendar';
+import { buildSeasonCalendar, fixtureCrowdAwayShare, fixtureIsHome, fixtureIsNeutral, fixtureIsNight, fixtureVenueLabel, INTERNATIONAL_BREAK_WEEKS, isFinalFixture, nationsLeagueKnockoutWeeks, tournamentWeekCount } from '../src/game/career/calendar';
 import { INJURY_CHANCE_PER_MATCH, injuryDuration } from '../src/game/career/injury';
 import {
   chancesForKnockoutTie,
@@ -23,6 +23,8 @@ import {
   CLUB_GROUNDS,
   CUP_FINAL_CAPACITY,
   CUP_FINAL_GROUND,
+  INTERNATIONAL_TOURNAMENT_CAPACITY,
+  INTERNATIONAL_TOURNAMENT_GROUND,
   LISTED_MIN_CAPACITY,
   UNLISTED_GROUND,
   groundForClub,
@@ -38,7 +40,7 @@ import { missedChanceWinFactor, simulateClubMatch, simulateLeagueSeason } from '
 import { leaguePhaseOpponents } from '../src/game/career/continentalDraw';
 import { canWinLeague, hydrateSeason, leagueFixtureIsHome, nextPlayableFixture, pickTitleRival, resolveFixture, shouldSkipFixture } from '../src/game/career/seasonSim';
 import { offerClubsForTrial } from '../src/game/career/trial';
-import { offerTierFromStanding, resolveSeasonTransition } from '../src/game/career/transfers';
+import { offerTierFromStanding, resolveSeasonTransition, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
 import {
   evaluatePlayerOfTheYear,
@@ -549,6 +551,44 @@ if (euroFinalsWeeks.length !== tournamentWeekCount('euro')) {
 if (euroFinalsRounds.includes('round-of-32')) {
   console.error('continental tournaments do not have a last 32');
   process.exitCode = 1;
+}
+
+{
+  const wcCalendar = buildSeasonCalendar({
+    seasonNumber: 2,
+    leagueMatchWeeks: 38,
+    clubTier: 1,
+    confederation: 'UEFA',
+    country: 'Spain',
+    nationConfederation: 'UEFA',
+  });
+  const wcIntl = wcCalendar.fixtures.filter((f) => f.kind === 'international');
+  const wcQuals = wcIntl.filter((f) => f.internationalRound === 'qualifier');
+  const wcTournament = wcIntl.filter((f) => f.internationalRound !== 'qualifier');
+  const nationsTournament = nationsCalendar.fixtures.filter((f) => f.kind === 'international');
+  const euroTournament = euroFinalsCalendar.fixtures.filter((f) => f.kind === 'international');
+  console.log(
+    'venues WC quals',
+    wcQuals.map((f) => fixtureVenueLabel(f)),
+    'WC finals',
+    wcTournament.map((f) => fixtureVenueLabel(f)),
+    'Nations',
+    nationsTournament.map((f) => fixtureVenueLabel(f)),
+    'Euro',
+    euroTournament.map((f) => fixtureVenueLabel(f)),
+  );
+  if (wcQuals.length === 0 || wcQuals.some((f) => fixtureIsNeutral(f) || fixtureCrowdAwayShare(f) !== 0.2)) {
+    console.error('World Cup qualifiers must stay home/away with a home crowd');
+    process.exitCode = 1;
+  }
+  if (
+    wcTournament.some((f) => fixtureVenueLabel(f) !== 'Neutral' || fixtureCrowdAwayShare(f) !== 0.5)
+    || nationsTournament.some((f) => fixtureVenueLabel(f) !== 'Neutral' || fixtureCrowdAwayShare(f) !== 0.5)
+    || euroTournament.some((f) => fixtureVenueLabel(f) !== 'Neutral' || fixtureCrowdAwayShare(f) !== 0.5)
+  ) {
+    console.error('World Cup, Nations League and Euro matches must be Neutral with a 50/50 country crowd');
+    process.exitCode = 1;
+  }
 }
 
 console.log('\n--- FIFA rankings decide who reaches the finals ---');
@@ -1470,6 +1510,28 @@ if (bayernRate < 0.45) {
   process.exitCode = 1;
 }
 
+console.log('\n--- Premier League table: second place needs a real points haul ---');
+{
+  const trials = 24;
+  const seconds: number[] = [];
+  const firsts: number[] = [];
+  for (let i = 0; i < trials; i++) {
+    const table = simulateLeagueSeason('Premier League');
+    firsts.push(table[0]?.points ?? 0);
+    seconds.push(table[1]?.points ?? 0);
+  }
+  const avgFirst = firsts.reduce((s, n) => s + n, 0) / trials;
+  const avgSecond = seconds.reduce((s, n) => s + n, 0) / trials;
+  const minSecond = Math.min(...seconds);
+  console.log(
+    `PL over ${trials} seasons: 1st avg ${avgFirst.toFixed(1)}, 2nd avg ${avgSecond.toFixed(1)} (min ${minSecond})`,
+  );
+  if (avgSecond < 72 || minSecond < 68 || avgFirst <= avgSecond) {
+    console.error('a 20-team league must need well above 63 points to finish second');
+    process.exitCode = 1;
+  }
+}
+
 console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship ---');
 {
   const leicester = getClub('leicester')!;
@@ -1633,9 +1695,62 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     contractYearsRemaining: 1,
   });
   const twilightMls = (twilight.pendingTransfer?.offers ?? []).filter((o) => getClub(o.clubId)?.league === 'MLS');
-  console.log('age-34 MLS offers', twilightMls.length, twilightMls.map((o) => o.clubId));
-  if (twilightMls.length < 3) {
-    console.error('ages 34–36 must receive three extra MLS transfer offers');
+  const twilightSaudi = (twilight.pendingTransfer?.offers ?? []).filter((o) => getClub(o.clubId)?.league === 'Saudi Pro League');
+  const ordinaryMlsWage = weeklyWageForClub(getClub('lafc')!, 80_000_000);
+  console.log(
+    'age-34 MLS offers',
+    twilightMls.map((o) => `${o.clubId} ${o.weeklyWage}`),
+    'Saudi',
+    twilightSaudi.map((o) => `${o.clubId} ${o.weeklyWage}`),
+    'ordinary LAFC',
+    ordinaryMlsWage,
+  );
+  const mlsIds = new Set(twilightMls.map((o) => o.clubId));
+  const saudiIds = new Set(twilightSaudi.map((o) => o.clubId));
+  if (TWILIGHT_MLS_CLUB_IDS.some((id) => !mlsIds.has(id))) {
+    console.error('age 34 must be offered LAFC, Inter Miami, NYCFC and LA Galaxy');
+    process.exitCode = 1;
+  }
+  if (TWILIGHT_SAUDI_CLUB_IDS.some((id) => !saudiIds.has(id))) {
+    console.error('age 34 must also see the four Saudi giant offers');
+    process.exitCode = 1;
+  }
+  const namedMlsWages = twilightMls.filter((o) => (TWILIGHT_MLS_CLUB_IDS as readonly string[]).includes(o.clubId));
+  const namedSaudiWages = twilightSaudi.filter((o) => (TWILIGHT_SAUDI_CLUB_IDS as readonly string[]).includes(o.clubId));
+  if (
+    namedMlsWages.some((o) => o.weeklyWage < 100_000 || o.weeklyWage <= ordinaryMlsWage)
+    || namedSaudiWages.some((o) => o.weeklyWage < 100_000 || o.weeklyWage <= ordinaryMlsWage)
+  ) {
+    console.error('twilight MLS and Saudi wages must sit at top-tier European level');
+    process.exitCode = 1;
+  }
+
+  const age32 = resolveSeasonTransition({
+    season: { ...dummySeason, clubId: 'barcelona', goals: 20, gamesPlayed: 38 },
+    role: 'first-team',
+    clubId: 'barcelona',
+    parentClubId: 'barcelona',
+    seasonsAtCurrentClub: 2,
+    age: 32,
+    careerGoals: 180,
+    careerGames: 360,
+    nationality: 'spain',
+    loansUsed: 2,
+    contractYearsRemaining: 1,
+  });
+  const age32Mls = (age32.pendingTransfer?.offers ?? []).filter((o) => getClub(o.clubId)?.league === 'MLS');
+  const age32Saudi = (age32.pendingTransfer?.offers ?? []).filter((o) => getClub(o.clubId)?.league === 'Saudi Pro League');
+  console.log('age-32 Saudi offers', age32Saudi.map((o) => o.clubId), 'MLS', age32Mls.length);
+  if (age32Mls.length > 0) {
+    console.error('MLS twilight offers start at 34, not 32');
+    process.exitCode = 1;
+  }
+  if (TWILIGHT_SAUDI_CLUB_IDS.some((id) => !age32Saudi.some((o) => o.clubId === id))) {
+    console.error('from age 32 the four Saudi clubs must table similar star contracts');
+    process.exitCode = 1;
+  }
+  if (age32Saudi.some((o) => o.weeklyWage < 100_000 || o.weeklyWage <= ordinaryMlsWage)) {
+    console.error('age-32 Saudi offers must pay elite European wages');
     process.exitCode = 1;
   }
 
@@ -2222,8 +2337,14 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
     console.error('the defender must wear the opponent striped kit');
     process.exitCode = 1;
   }
-  if (homeLook.night || awayLook.night) {
-    console.error('league games must be played in daylight');
+  const homeFxDay = { ...homeFx };
+  for (let week = 1; week <= 40; week++) {
+    homeFxDay.week = week;
+    if (!fixtureIsNight(homeFxDay)) break;
+  }
+  const homeLookDay = resolveMatchStadium({ fixture: homeFxDay, club: madridClub, nation: spain });
+  if (homeLookDay.night) {
+    console.error('daylight league fixtures must still exist');
     process.exitCode = 1;
   }
   if (homeLook.isHome !== true || awayLook.isHome !== false) {
@@ -2293,8 +2414,30 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
     console.error('only international knockouts and European club games are at night');
     process.exitCode = 1;
   }
-  if (fixtureIsNight(homeFx) || !fixtureIsNight(uclFx) || fixtureIsNight(groupFx) || !fixtureIsNight(koFx)) {
-    console.error('fixtureIsNight must match league-day / europe-night / group-day / knockout-night');
+  if (!fixtureIsNight(uclFx) || fixtureIsNight(groupFx) || !fixtureIsNight(koFx)) {
+    console.error('fixtureIsNight must match europe-night / group-day / knockout-night');
+    process.exitCode = 1;
+  }
+  if (groupLook.awayShare !== 0.5 || koLook.awayShare !== 0.5 || !fixtureIsNeutral(groupFx) || !fixtureIsNeutral(koFx)) {
+    console.error('international tournament games must be neutral with a 50/50 country crowd');
+    process.exitCode = 1;
+  }
+  if (
+    groupLook.groundName !== INTERNATIONAL_TOURNAMENT_GROUND.name
+    || groupLook.capacity !== INTERNATIONAL_TOURNAMENT_CAPACITY
+    || koLook.groundName !== INTERNATIONAL_TOURNAMENT_GROUND.name
+  ) {
+    console.error('international tournament games must use the tournament stadium, not the club-final bowl');
+    process.exitCode = 1;
+  }
+  const qualifierFx = { ...groupFx, internationalRound: 'qualifier' as const, isHome: true };
+  const qualifierLook = resolveMatchStadium({ fixture: qualifierFx, club: madridClub, nation: spain });
+  if (fixtureIsNeutral(qualifierFx) || fixtureVenueLabel(qualifierFx) !== 'Home' || qualifierLook.awayShare === 0.5) {
+    console.error('World Cup qualifiers must stay home or away, not neutral');
+    process.exitCode = 1;
+  }
+  if (fixtureVenueLabel(groupFx) !== 'Neutral' || fixtureVenueLabel(koFx) !== 'Neutral') {
+    console.error('tournament group and knockout games must be labelled Neutral');
     process.exitCode = 1;
   }
 
@@ -2394,6 +2537,20 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
   }
   if (!leagueFixtureIsHome(0, 38) || leagueFixtureIsHome(1, 38) || !leagueFixtureIsHome(2, 38)) {
     console.error('opening league games should be home, away, home');
+    process.exitCode = 1;
+  }
+  const leagueNight = calendar.fixtures.filter((f) => f.kind === 'league' && fixtureIsNight(f)).length;
+  const leagueTotal = calendar.fixtures.filter((f) => f.kind === 'league').length;
+  const leagueNightRate = leagueNight / Math.max(1, leagueTotal);
+  console.log('league night kickoffs', leagueNight, '/', leagueTotal, `(${(leagueNightRate * 100).toFixed(1)}%)`);
+  if (leagueNightRate < 0.12 || leagueNightRate > 0.28) {
+    console.error('about 20% of domestic league games should be night kick-offs');
+    process.exitCode = 1;
+  }
+  const nightA = { week: 7, kind: 'league' as const, isDecisive: false, opponentId: 'sevilla', isHome: true };
+  const nightB = { ...nightA };
+  if (fixtureIsNight(nightA) !== fixtureIsNight(nightB)) {
+    console.error('league night kick-offs must be deterministic');
     process.exitCode = 1;
   }
 
