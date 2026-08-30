@@ -1355,6 +1355,24 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     console.error('promotion stay terms must include a Premier League wage and contract length');
     process.exitCode = 1;
   }
+  const promotedLowRatio = resolveSeasonTransition({
+    season: { ...dummySeason, clubId: 'leicester', goals: 8, gamesPlayed: 38 },
+    role: 'first-team',
+    clubId: 'leicester',
+    parentClubId: 'leicester',
+    seasonsAtCurrentClub: 1,
+    age: 22,
+    careerGoals: 20,
+    careerGames: 70,
+    nationality: 'england',
+    loansUsed: 0,
+    leaguePosition: 1,
+    clubLeague: 'Championship',
+  });
+  if (promotedLowRatio.pendingTransfer?.stay?.clubLeague !== 'Premier League') {
+    console.error('winning promotion must still offer a stay in the Premier League');
+    process.exitCode = 1;
+  }
 
   const ages = [24, 25, 27, 30, 34];
   const maxes = ages.map(maxContractYearsForAge);

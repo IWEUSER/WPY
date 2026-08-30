@@ -331,6 +331,26 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
   const ratioMet = ratio >= threshold;
   const graceActive = seasonsAtCurrentClub === 0;
 
+  if (promoted) {
+    return parallelTransfers(
+      `${club.name} have been promoted to the ${nextLeague}!`,
+      `Finished ${params.leaguePosition}${params.leaguePosition === 1 ? 'st' : 'nd'} in ${currentLeague}. Stay and play in the ${nextLeague} next season.`,
+      stayOn(),
+      value,
+      fee,
+      nationality,
+      [club.id],
+      offerTierFromStanding({
+        careerRatio: careerGames > 0 ? careerGoals / careerGames : ratio,
+        marketValue: value,
+        currentTier: club.tier,
+        blockElite,
+      }),
+      true,
+      age,
+    );
+  }
+
   if (!ratioMet && !graceActive) {
     const careerRatio = careerGames > 0 ? careerGoals / careerGames : ratio;
     const saleTier = offerTierFromStanding({
@@ -370,26 +390,6 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
         false,
       ),
     };
-  }
-
-  if (promoted) {
-    return parallelTransfers(
-      `${club.name} have been promoted to the ${nextLeague}!`,
-      `Finished ${params.leaguePosition}${params.leaguePosition === 1 ? 'st' : 'nd'} in ${currentLeague}. Stay and play in the ${nextLeague} next season.`,
-      stayOn(),
-      value,
-      fee,
-      nationality,
-      [club.id],
-      offerTierFromStanding({
-        careerRatio: careerGames > 0 ? careerGoals / careerGames : ratio,
-        marketValue: value,
-        currentTier: club.tier,
-        blockElite,
-      }),
-      graceActive,
-      age,
-    );
   }
 
   const effectiveRatio = age < 28 ? (careerGames > 0 ? careerGoals / careerGames : 0) : ratio;
