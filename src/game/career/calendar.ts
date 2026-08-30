@@ -100,6 +100,31 @@ export function fixtureCrowdAwayShare(fixture: CalendarFixture): number {
   return tournament ? 0.4 : 0.2;
 }
 
+/**
+ * Night kick-offs: European club ties (group and knockout) and
+ * international knockout rounds. League, domestic cups, qualifiers, and
+ * tournament group games are played in daylight.
+ */
+export function fixtureIsNight(fixture: CalendarFixture): boolean {
+  if (
+    fixture.kind === 'continental-group'
+    || fixture.kind === 'continental-knockout'
+    || fixture.kind === 'continental-semi-final'
+    || fixture.kind === 'continental-final'
+  ) {
+    return true;
+  }
+  if (fixture.kind === 'international') {
+    const round = fixture.internationalRound;
+    return round === 'round-of-32'
+      || round === 'round-of-16'
+      || round === 'quarter-final'
+      || round === 'semi-final'
+      || round === 'final';
+  }
+  return false;
+}
+
 export interface BuildCalendarParams {
   seasonNumber: number;
   /** How many league match-weeks the season runs for (SEASON_LENGTH). */

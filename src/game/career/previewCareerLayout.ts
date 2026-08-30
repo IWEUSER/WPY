@@ -202,7 +202,8 @@ export function applyCareerLayoutPreview(): void {
           : { tournament: 'euro', points: 7, played: 3 },
   });
 
-  const isMatchPreview = preview === 'match' || preview === 'match-away' || preview === 'match-intl';
+  const isMatchPreview = preview === 'match' || preview === 'match-away' || preview === 'match-intl'
+    || preview === 'match-ucl' || preview === 'match-intl-ko';
   let matchFixtureIndex = Math.max(0, calendar.fixtures.findIndex((f) => f.kind !== 'rest'));
   if (preview === 'match' || preview === 'match-away') {
     const wantHome = preview === 'match';
@@ -225,6 +226,31 @@ export function applyCareerLayoutPreview(): void {
       fx.internationalRound = 'group';
       fx.opponentId = 'italy';
       fx.opponentLabel = 'Italy';
+      fx.isHome = true;
+      fx.playerChances = 2;
+    }
+  } else if (preview === 'match-ucl') {
+    const idx = calendar.fixtures.findIndex((f) => f.kind === 'continental-group' || f.kind === 'continental-knockout');
+    if (idx >= 0) matchFixtureIndex = idx;
+    const fx = calendar.fixtures[matchFixtureIndex];
+    if (fx) {
+      fx.kind = 'continental-knockout';
+      fx.leg = 1;
+      fx.opponentId = 'bayern';
+      fx.opponentLabel = 'Bayern Munich';
+      fx.isHome = true;
+      fx.playerChances = 2;
+      fx.continentalCup = 'ucl';
+    }
+  } else if (preview === 'match-intl-ko') {
+    const idx = calendar.fixtures.findIndex((f) => f.kind === 'international');
+    if (idx >= 0) matchFixtureIndex = idx;
+    const fx = calendar.fixtures[matchFixtureIndex];
+    if (fx) {
+      fx.kind = 'international';
+      fx.internationalRound = 'quarter-final';
+      fx.opponentId = 'france';
+      fx.opponentLabel = 'France';
       fx.isHome = true;
       fx.playerChances = 2;
     }

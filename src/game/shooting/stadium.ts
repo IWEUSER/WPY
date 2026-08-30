@@ -1,9 +1,10 @@
 import {
   crowdSwatch,
-  kitFromColor,
+  kitFromScheme,
   mixHex,
   shadeHex,
   type DefenderKit,
+  type ShirtPattern,
 } from './kitPalette';
 
 /** Minimal camera slice the bowl needs — compatible with `PitchView`. */
@@ -16,6 +17,8 @@ export interface StadiumView {
 export interface StadiumAppearance {
   /** True when the player's club/country is the home side. */
   isHome: boolean;
+  /** Floodlit evening kick-off. League and group games are daylight. */
+  night?: boolean;
   /** Majority crowd — the side whose ground this is. */
   homeColor: string;
   homeSecondary?: string;
@@ -25,12 +28,15 @@ export interface StadiumAppearance {
   /** Defender shirt — always the opponent, not the stadium majority. */
   opponentColor: string;
   opponentSecondary?: string;
+  opponentShorts?: string;
+  opponentPattern?: ShirtPattern;
   /** 0–1 share of seats given to away fans. */
   awayShare?: number;
 }
 
 export const DEFAULT_STADIUM: StadiumAppearance = {
   isHome: true,
+  night: false,
   homeColor: '#C8102E',
   awayColor: '#034694',
   opponentColor: '#034694',
@@ -38,7 +44,12 @@ export const DEFAULT_STADIUM: StadiumAppearance = {
 };
 
 export function defenderKitFromStadium(stadium: StadiumAppearance): DefenderKit {
-  return kitFromColor(stadium.opponentColor);
+  return kitFromScheme({
+    primary: stadium.opponentColor,
+    secondary: stadium.opponentSecondary,
+    shorts: stadium.opponentShorts,
+    pattern: stadium.opponentPattern,
+  });
 }
 
 function mulberry32(seed: number): () => number {
@@ -94,7 +105,7 @@ function seatColor(
   const visiting = u > awayStart;
   const primary = visiting ? away : home;
   const secondary = visiting ? awaySecondary : homeSecondary;
-  const useSecondary = Boolean(secondary) && rng() < 0.22;
+  const useSecondary = Boolean(secondary) && rng() < 0.42;
   const base = useSecondary && secondary ? secondary : primary;
   return crowdSwatch(shadeHex(base, (rng() - 0.5) * 0.38));
 }
@@ -191,8 +202,8 @@ function crowdLayer(w: number, h: number, view: StadiumView, stadium: StadiumApp
   return canvas;
 }
 
-function drawRoof(ctx: CanvasRenderingContext2D, w: number, h: number, standBottom: number) {
-  ctx.fillStyle = '#0b0f18';
+function drawRoof(ctx: CanvasRenderingContext2D, w: number, h: number, standBottom: number, night: boolean) {
+  ctx.fillStyle = night ? '#0b0f18' : '#6b7280';
   ctx.beginPath();
   ctx.moveTo(0, 0);
   ctx.lineTo(w, 0);
@@ -201,7 +212,7 @@ function drawRoof(ctx: CanvasRenderingContext2D, w: number, h: number, standBott
   ctx.closePath();
   ctx.fill();
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.strokeStyle = night ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.18)';
   ctx.lineWidth = Math.max(2, w * 0.006);
   ctx.beginPath();
   ctx.moveTo(w * 0.04, h * 0.038);
@@ -260,10 +271,15 @@ function drawHoardings(
   }
 }
 
-function drawBowlStructure(ctx: CanvasRenderingContext2D, w: number, h: number, standBottom: number) {
+function drawBowlStructure(ctx: CanvasRenderingContext2D, w: number, h: number, standBottom: number, night: boolean) {
   const concrete = ctx.createLinearGradient(0, 0, 0, standBottom);
-  concrete.addColorStop(0, '#1f2937');
-  concrete.addColorStop(1, '#111827');
+  if (night) {
+    concrete.addColorStop(0, '#1f2937');
+    concrete.addColorStop(1, '#111827');
+  } else {
+    concrete.addColorStop(0, '#9aa7b8');
+    concrete.addColorStop(1, '#6b7789');
+  }
   ctx.fillStyle = concrete;
   ctx.beginPath();
   ctx.moveTo(0, h * 0.02);
@@ -273,7 +289,7 @@ function drawBowlStructure(ctx: CanvasRenderingContext2D, w: number, h: number, 
   ctx.closePath();
   ctx.fill();
 
-  ctx.fillStyle = '#0f172a';
+  ctx.fillStyle = night ? '#0f172a' : '#7b8796';
   ctx.beginPath();
   ctx.moveTo(0, standBottom * 0.55);
   ctx.lineTo(w * 0.2, standBottom);
@@ -289,8 +305,8 @@ function drawBowlStructure(ctx: CanvasRenderingContext2D, w: number, h: number, 
 }
 
 /**
- * Night-time bowl behind the goal: sky, stands, kit-coloured crowd, roof,
- * floodlights. Drawn before the grass so the pitch sits in front.
+ * Stadium bowl behind the goal. League and group games are daylight;
+ * European club ties and international knockouts are floodlit nights.
  */
 export function drawStadium(
   ctx: CanvasRenderingContext2D,
@@ -300,33 +316,48 @@ export function drawStadium(
 ) {
   const { w, h } = view;
   const standBottom = Math.min(h * 0.22, view.goal.botY + h * 0.012);
+  const night = Boolean(stadium.night);
 
   const sky = ctx.createLinearGradient(0, 0, 0, standBottom + h * 0.1);
-  sky.addColorStop(0, '#070b16');
-  sky.addColorStop(0.45, '#152038');
-  sky.addColorStop(1, '#243044');
+  if (night) {
+    sky.addColorStop(0, '#070b16');
+    sky.addColorStop(0.45, '#152038');
+    sky.addColorStop(1, '#243044');
+  } else {
+    sky.addColorStop(0, '#5ba3d9');
+    sky.addColorStop(0.55, '#8ec8ea');
+    sky.addColorStop(1, '#f2d7a4');
+  }
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, w, standBottom + h * 0.04);
-  ctx.fillStyle = '#0b1220';
+  ctx.fillStyle = night ? '#0b1220' : '#8a97a8';
   ctx.fillRect(0, standBottom, w, Math.max(0, h - standBottom));
 
-  drawBowlStructure(ctx, w, h, standBottom);
+  drawBowlStructure(ctx, w, h, standBottom, night);
 
   const crowd = crowdLayer(w, h, view, stadium);
   ctx.drawImage(crowd, 0, 0, w, h);
 
-  drawRoof(ctx, w, h, standBottom);
+  drawRoof(ctx, w, h, standBottom, night);
 
-  const lampY = Math.max(h * 0.055, view.goal.topY - h * 0.06);
-  const lampScale = Math.max(8, view.goal.halfW * 0.12);
-  drawFloodlight(ctx, w / 2 - view.goal.halfW * 1.42, lampY, time, lampScale);
-  drawFloodlight(ctx, w / 2 + view.goal.halfW * 1.42, lampY, time, lampScale);
+  if (night) {
+    const lampY = Math.max(h * 0.055, view.goal.topY - h * 0.06);
+    const lampScale = Math.max(8, view.goal.halfW * 0.12);
+    drawFloodlight(ctx, w / 2 - view.goal.halfW * 1.42, lampY, time, lampScale);
+    drawFloodlight(ctx, w / 2 + view.goal.halfW * 1.42, lampY, time, lampScale);
 
-  const wash = ctx.createRadialGradient(w / 2, view.goal.botY, 0, w / 2, view.goal.botY, w * 0.55);
-  wash.addColorStop(0, 'rgba(255,244,210,0.07)');
-  wash.addColorStop(1, 'rgba(255,244,210,0)');
-  ctx.fillStyle = wash;
-  ctx.fillRect(0, 0, w, standBottom + h * 0.08);
+    const wash = ctx.createRadialGradient(w / 2, view.goal.botY, 0, w / 2, view.goal.botY, w * 0.55);
+    wash.addColorStop(0, 'rgba(255,244,210,0.07)');
+    wash.addColorStop(1, 'rgba(255,244,210,0)');
+    ctx.fillStyle = wash;
+    ctx.fillRect(0, 0, w, standBottom + h * 0.08);
+  } else {
+    const sun = ctx.createRadialGradient(w * 0.82, h * 0.04, 0, w * 0.82, h * 0.04, w * 0.45);
+    sun.addColorStop(0, 'rgba(255,244,210,0.35)');
+    sun.addColorStop(1, 'rgba(255,244,210,0)');
+    ctx.fillStyle = sun;
+    ctx.fillRect(0, 0, w, standBottom + h * 0.1);
+  }
 
   drawHoardings(ctx, view, stadium);
 }

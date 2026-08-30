@@ -1,4 +1,4 @@
-import type { KitScheme } from '../../shooting/kitPalette';
+import type { KitScheme, ShirtPattern } from '../../shooting/kitPalette';
 import { getNation } from './nations';
 
 /**
@@ -159,10 +159,33 @@ function hashId(id: string): number {
   return h >>> 0;
 }
 
+const PATTERN: Record<string, ShirtPattern> = {
+  argentina: 'hoops',
+  uruguay: 'hoops',
+  croatia: 'vertical',
+};
+
+const SHORTS: Record<string, string> = {
+  england: '#00147A',
+  germany: '#000000',
+  spain: '#0033A0',
+  brazil: '#009C3B',
+  italy: '#FFFFFF',
+  france: '#002395',
+  argentina: '#FFFFFF',
+};
+
 export function nationKit(id: string): KitScheme {
   const primary = PRIMARY[id] ?? FALLBACK[hashId(id) % FALLBACK.length];
   const secondary = SECONDARY[id];
-  return secondary ? { primary, secondary } : { primary };
+  const pattern = PATTERN[id];
+  const shorts = SHORTS[id];
+  return {
+    primary,
+    ...(secondary ? { secondary } : {}),
+    ...(pattern ? { pattern } : {}),
+    ...(shorts ? { shorts } : {}),
+  };
 }
 
 export function nationKitOrFallback(id: string | undefined | null): KitScheme {

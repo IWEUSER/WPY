@@ -139,7 +139,7 @@ const CLUB_SEED: Club[] = [
   { id: 'luton', name: 'Luton Town', country: 'England', league: 'Championship', tier: 5, strength: 52, color: '#F78F1E', reserveGoalRatio: 0.25, firstTeamGoalRatio: 0.22 },
 
   // Spain - La Liga
-  { id: 'real-madrid', name: 'Real Madrid', country: 'Spain', league: 'La Liga', tier: 1, strength: 94, color: '#FEBE10', reserveGoalRatio: 0.65, firstTeamGoalRatio: 0.5 },
+  { id: 'real-madrid', name: 'Real Madrid', country: 'Spain', league: 'La Liga', tier: 1, strength: 94, color: '#FFFFFF', reserveGoalRatio: 0.65, firstTeamGoalRatio: 0.5 },
   { id: 'barcelona', name: 'Barcelona', country: 'Spain', league: 'La Liga', tier: 1, strength: 91, color: '#A50044', reserveGoalRatio: 0.65, firstTeamGoalRatio: 0.5 },
   { id: 'atletico-madrid', name: 'Atl\u00e9tico Madrid', country: 'Spain', league: 'La Liga', tier: 2, strength: 86, color: '#CB3524', reserveGoalRatio: 0.55, firstTeamGoalRatio: 0.42 },
   { id: 'real-sociedad', name: 'Real Sociedad', country: 'Spain', league: 'La Liga', tier: 2, strength: 80, color: '#0A3F87', reserveGoalRatio: 0.55, firstTeamGoalRatio: 0.42 },

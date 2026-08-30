@@ -1,5 +1,5 @@
 import { DIVE_LAYOUT_RAD } from './constants';
-import type { DefenderKit } from './kitPalette';
+import { luminance, type DefenderKit } from './kitPalette';
 import type { AimPoint } from './types';
 
 /** FIFA markings in metres. Boxes are drawn from these ratios to the goal
@@ -163,12 +163,13 @@ function drawBoxOutline(ctx: CanvasRenderingContext2D, w: number, box: BoxSpec) 
   ctx.stroke();
 }
 
-export function drawPitch(ctx: CanvasRenderingContext2D, view: PitchView, time: number) {
+export function drawPitch(ctx: CanvasRenderingContext2D, view: PitchView, time: number, opts?: { night?: boolean }) {
   const { w, h } = view;
   const { halfW, botY } = view.goal;
   /** Playing surface starts at the goal line so the stadium stays visible behind it. */
   const grassTop = botY;
   const vanishY = grassTop;
+  const night = Boolean(opts?.night);
 
   ctx.save();
   const halfTop = Math.min(
@@ -184,9 +185,15 @@ export function drawPitch(ctx: CanvasRenderingContext2D, view: PitchView, time: 
   ctx.clip();
 
   const grad = ctx.createLinearGradient(0, grassTop, 0, h);
-  grad.addColorStop(0, '#0f3d1f');
-  grad.addColorStop(0.4, '#155a29');
-  grad.addColorStop(1, '#1f7a37');
+  if (night) {
+    grad.addColorStop(0, '#0f3d1f');
+    grad.addColorStop(0.4, '#155a29');
+    grad.addColorStop(1, '#1f7a37');
+  } else {
+    grad.addColorStop(0, '#1a7a32');
+    grad.addColorStop(0.4, '#23963c');
+    grad.addColorStop(1, '#2db34a');
+  }
   ctx.fillStyle = grad;
   ctx.fillRect(0, grassTop, w, Math.max(0, h - grassTop));
 
@@ -610,6 +617,8 @@ export function drawDefender(
   const kitLight = kit?.shirt ?? '#1d4ed8';
   const kitDark = kit?.shirtDark ?? '#1e3a8a';
   const shortsColor = kit?.shorts ?? '#f8fafc';
+  const stripeColor = kit?.stripe;
+  const pattern = kit?.pattern ?? 'solid';
   const skinColor = '#dfa878';
   const bootColor = '#181818';
   const pose = { direction: 0, stretch: 0, layout: 0 };
@@ -657,14 +666,46 @@ export function drawDefender(
   const torsoGrad = ctx.createLinearGradient(0, shoulderY, 0, hipY);
   torsoGrad.addColorStop(0, kitLight);
   torsoGrad.addColorStop(1, kitDark);
+  const traceTorso = () => {
+    ctx.beginPath();
+    ctx.moveTo(-scale * 1.3, shoulderY);
+    ctx.quadraticCurveTo(-scale * 1.5, (shoulderY + hipY) / 2, -scale * 0.9, hipY);
+    ctx.lineTo(scale * 0.9, hipY);
+    ctx.quadraticCurveTo(scale * 1.5, (shoulderY + hipY) / 2, scale * 1.3, shoulderY);
+    ctx.closePath();
+  };
+  traceTorso();
   ctx.fillStyle = torsoGrad;
-  ctx.beginPath();
-  ctx.moveTo(-scale * 1.3, shoulderY);
-  ctx.quadraticCurveTo(-scale * 1.5, (shoulderY + hipY) / 2, -scale * 0.9, hipY);
-  ctx.lineTo(scale * 0.9, hipY);
-  ctx.quadraticCurveTo(scale * 1.5, (shoulderY + hipY) / 2, scale * 1.3, shoulderY);
-  ctx.closePath();
   ctx.fill();
+
+  if (stripeColor && pattern !== 'solid') {
+    ctx.save();
+    traceTorso();
+    ctx.clip();
+    if (pattern === 'vertical') {
+      const stripeW = Math.max(2.2, scale * 0.34);
+      for (let x = -scale * 1.7, i = 0; x < scale * 1.7; x += stripeW, i++) {
+        if (i % 2 === 0) continue;
+        ctx.fillStyle = stripeColor;
+        ctx.fillRect(x, shoulderY - scale * 0.15, stripeW, (hipY - shoulderY) + scale * 0.45);
+      }
+    } else if (pattern === 'hoops') {
+      const hoopH = Math.max(2.4, scale * 0.32);
+      for (let y = shoulderY, i = 0; y < hipY + scale * 0.25; y += hoopH, i++) {
+        if (i % 2 === 0) continue;
+        ctx.fillStyle = stripeColor;
+        ctx.fillRect(-scale * 1.7, y, scale * 3.4, hoopH);
+      }
+    }
+    ctx.restore();
+  }
+
+  if (luminance(kitLight) > 0.78) {
+    traceTorso();
+    ctx.strokeStyle = 'rgba(15,23,42,0.22)';
+    ctx.lineWidth = Math.max(1, scale * 0.08);
+    ctx.stroke();
+  }
 
   const drawArm = (shoulder: { x: number; y: number }, hand: { x: number; y: number }) => {
     const mx = (shoulder.x + hand.x) / 2;

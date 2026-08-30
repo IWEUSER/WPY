@@ -145,12 +145,14 @@ function readDevStadium(): StadiumAppearance | null {
   const homeParam = q.get('home');
   const homeColorRaw = q.get('homeColor');
   const awayColorRaw = q.get('awayColor');
-  if (homeParam == null && !homeColorRaw && !awayColorRaw) return null;
+  if (homeParam == null && !homeColorRaw && !awayColorRaw && q.get('night') == null) return null;
   const isHome = homeParam !== '0' && homeParam !== 'away' && homeParam !== 'false';
   const playerColor = normalizeHex(homeColorRaw, DEFAULT_STADIUM.homeColor);
   const opponentColor = normalizeHex(awayColorRaw, DEFAULT_STADIUM.awayColor);
+  const night = q.get('night') === '1' || q.get('night') === 'true';
   return {
     isHome,
+    night,
     homeColor: isHome ? playerColor : opponentColor,
     awayColor: isHome ? opponentColor : playerColor,
     opponentColor,
@@ -463,7 +465,7 @@ export default function ShootingGame({
         const look = stadiumRef.current;
         const defenderKit = defenderKitFromStadium(look);
         drawStadium(ctx, view, now, look);
-        drawPitch(ctx, view, now);
+        drawPitch(ctx, view, now, { night: look.night });
         drawGoal(ctx, view);
 
         if (anim.phase === 'idle' || anim.phase === 'dragging') {

@@ -4,7 +4,7 @@
  *
  * Run with: npm run simulate:career
  */
-import { buildSeasonCalendar, fixtureIsHome, INTERNATIONAL_BREAK_WEEKS, isFinalFixture, tournamentWeekCount } from '../src/game/career/calendar';
+import { buildSeasonCalendar, fixtureIsHome, fixtureIsNight, INTERNATIONAL_BREAK_WEEKS, isFinalFixture, tournamentWeekCount } from '../src/game/career/calendar';
 import { INJURY_CHANCE_PER_MATCH, injuryDuration } from '../src/game/career/injury';
 import {
   chancesForKnockoutTie,
@@ -16,7 +16,8 @@ import { consecutivePoorFactor, contractValueFactor, formAdjustedRatio, loanCont
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { nationKit } from '../src/game/career/data/nationColours';
 import { resolveMatchStadium } from '../src/game/career/matchVenue';
-import { crowdSwatch, kitFromColor, luminance } from '../src/game/shooting/kitPalette';
+import { crowdSwatch, kitFromColor, kitFromScheme, luminance } from '../src/game/shooting/kitPalette';
+import { clubKit } from '../src/game/career/data/clubKits';
 import { clubContinentalCup, internationalCampaignForSeason, internationalTournamentForSeason } from '../src/game/career/data/competitions';
 import { cupFromLeaguePosition, continentalQualificationForNextSeason } from '../src/game/career/europeanQualification';
 import { fifaRank, tournamentOpponents, worldCupKnockoutRankCap } from '../src/game/career/data/fifaRankings';
@@ -2052,15 +2053,21 @@ console.log('\n--- World Cup and continental tournament awards ---');
 console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
 {
   const juve = kitFromColor('#000000');
-  const madrid = kitFromColor('#FEBE10');
+  const madridClub = getClub('real-madrid')!;
+  const madrid = kitFromScheme(clubKit(madridClub));
+  const barca = kitFromScheme(clubKit(getClub('barcelona')));
   const crowdBlack = crowdSwatch('#000000');
-  console.log('juve kit', juve, 'madrid kit', madrid, 'black crowd', crowdBlack);
+  console.log('juve kit', juve, 'madrid kit', madrid, 'barca kit', barca, 'black crowd', crowdBlack);
   if (luminance(juve.shorts) < 0.5) {
     console.error('a black kit must wear light shorts');
     process.exitCode = 1;
   }
-  if (luminance(madrid.shorts) > 0.5) {
-    console.error('a gold/yellow kit must wear dark shorts');
+  if (luminance(madrid.shirt) < 0.85 || luminance(madrid.shorts) < 0.85) {
+    console.error('Real Madrid must wear an all-white kit');
+    process.exitCode = 1;
+  }
+  if (barca.pattern !== 'vertical' || !barca.stripe) {
+    console.error('Barcelona must wear blaugrana stripes');
     process.exitCode = 1;
   }
   if (luminance(crowdBlack) <= luminance('#000000') + 0.05) {
@@ -2068,7 +2075,6 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
     process.exitCode = 1;
   }
 
-  const madridClub = getClub('real-madrid')!;
   const spain = getNation('spain')!;
   const homeFx = {
     week: 3,
@@ -2081,13 +2087,17 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
   const awayFx = { ...homeFx, isHome: false };
   const homeLook = resolveMatchStadium({ fixture: homeFx, club: madridClub, nation: spain });
   const awayLook = resolveMatchStadium({ fixture: awayFx, club: madridClub, nation: spain });
-  console.log('home stadium', homeLook.homeColor, 'away stadium', awayLook.homeColor, 'defender', homeLook.opponentColor, awayLook.opponentColor);
+  console.log('home stadium', homeLook.homeColor, 'away stadium', awayLook.homeColor, 'defender', homeLook.opponentColor, awayLook.opponentColor, 'night', homeLook.night);
   if (homeLook.homeColor !== madridClub.color || awayLook.homeColor !== getClub('barcelona')!.color) {
     console.error('majority crowd must follow the side whose ground it is');
     process.exitCode = 1;
   }
-  if (homeLook.opponentColor !== getClub('barcelona')!.color || awayLook.opponentColor !== getClub('barcelona')!.color) {
-    console.error('the defender must wear the opponent kit at home and away');
+  if (homeLook.opponentPattern !== 'vertical' || homeLook.opponentColor !== getClub('barcelona')!.color) {
+    console.error('the defender must wear the opponent striped kit');
+    process.exitCode = 1;
+  }
+  if (homeLook.night || awayLook.night) {
+    console.error('league games must be played in daylight');
     process.exitCode = 1;
   }
   if (homeLook.isHome !== true || awayLook.isHome !== false) {
@@ -2095,7 +2105,7 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
     process.exitCode = 1;
   }
 
-  const intlHome = {
+  const groupFx = {
     week: 20,
     kind: 'international' as const,
     isDecisive: false,
@@ -2104,11 +2114,33 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
     internationalRound: 'group' as const,
     isHome: true,
   };
-  const intlLook = resolveMatchStadium({ fixture: intlHome, club: madridClub, nation: spain });
+  const koFx = { ...groupFx, internationalRound: 'quarter-final' as const };
+  const uclFx = {
+    week: 12,
+    kind: 'continental-knockout' as const,
+    isDecisive: false,
+    opponentId: 'bayern',
+    opponentLabel: 'Bayern Munich',
+    isHome: true,
+    leg: 1 as const,
+  };
+  const groupLook = resolveMatchStadium({ fixture: groupFx, club: madridClub, nation: spain });
+  const koLook = resolveMatchStadium({ fixture: koFx, club: madridClub, nation: spain });
+  const uclLook = resolveMatchStadium({ fixture: uclFx, club: madridClub, nation: spain });
+  console.log('kickoffs group/ko/ucl night', groupLook.night, koLook.night, uclLook.night);
+  if (groupLook.night || !koLook.night || !uclLook.night) {
+    console.error('only international knockouts and European club games are at night');
+    process.exitCode = 1;
+  }
+  if (fixtureIsNight(homeFx) || !fixtureIsNight(uclFx) || fixtureIsNight(groupFx) || !fixtureIsNight(koFx)) {
+    console.error('fixtureIsNight must match league-day / europe-night / group-day / knockout-night');
+    process.exitCode = 1;
+  }
+
   const spainRed = nationKit('spain').primary;
   const italyBlue = nationKit('italy').primary;
-  console.log('intl crowd', intlLook.homeColor, 'defender', intlLook.opponentColor);
-  if (intlLook.homeColor !== spainRed || intlLook.opponentColor !== italyBlue) {
+  console.log('intl crowd', groupLook.homeColor, 'defender', groupLook.opponentColor);
+  if (groupLook.homeColor !== spainRed || groupLook.opponentColor !== italyBlue) {
     console.error('international crowds and defenders must use nation kit colours');
     process.exitCode = 1;
   }

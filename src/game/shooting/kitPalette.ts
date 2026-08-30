@@ -1,14 +1,21 @@
 /** Hex kit helpers shared by the stadium crowd and the defender shirt. */
 
+export type ShirtPattern = 'solid' | 'vertical' | 'hoops';
+
 export interface DefenderKit {
   shirt: string;
   shirtDark: string;
   shorts: string;
+  stripe?: string;
+  pattern: ShirtPattern;
 }
 
 export interface KitScheme {
   primary: string;
   secondary?: string;
+  /** If omitted, shorts are light on a dark shirt and dark on a light shirt. */
+  shorts?: string;
+  pattern?: ShirtPattern;
 }
 
 export function parseHex(hex: string): { r: number; g: number; b: number } {
@@ -66,13 +73,27 @@ export function crowdSwatch(hex: string): string {
   return hex;
 }
 
-export function kitFromColor(hex: string): DefenderKit {
-  const lum = luminance(hex);
-  const shirt = lum < 0.08 ? shadeHex(hex, 0.12) : hex;
+export function kitFromColor(hex: string, secondary?: string, extras?: Pick<KitScheme, 'shorts' | 'pattern'>): DefenderKit {
+  return kitFromScheme({
+    primary: hex,
+    secondary,
+    shorts: extras?.shorts,
+    pattern: extras?.pattern,
+  });
+}
+
+export function kitFromScheme(scheme: KitScheme): DefenderKit {
+  const lum = luminance(scheme.primary);
+  const shirt = lum < 0.08 ? shadeHex(scheme.primary, 0.12) : scheme.primary;
+  const pattern = scheme.pattern && scheme.secondary ? scheme.pattern : 'solid';
+  const shorts = scheme.shorts
+    ?? (lum < 0.45 ? '#f8fafc' : '#1e1e1e');
   return {
     shirt,
     shirtDark: shadeHex(shirt, -0.28),
-    shorts: lum < 0.45 ? '#f8fafc' : '#1e1e1e',
+    shorts,
+    stripe: pattern !== 'solid' ? scheme.secondary : undefined,
+    pattern,
   };
 }
 
