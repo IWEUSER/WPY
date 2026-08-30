@@ -110,6 +110,33 @@ function seatColor(
   return crowdSwatch(shadeHex(base, (rng() - 0.5) * 0.38));
 }
 
+function hoardingHeight(view: StadiumView): number {
+  return Math.max(4, view.h * 0.012);
+}
+
+/** Bottom of the packed stand — sits on the advertising boards at the goal line. */
+export function standBottomY(view: StadiumView): number {
+  return view.goal.botY - hoardingHeight(view);
+}
+
+function fillQuad(
+  ctx: CanvasRenderingContext2D,
+  tl: { x: number; y: number },
+  tr: { x: number; y: number },
+  br: { x: number; y: number },
+  bl: { x: number; y: number },
+  fill: string,
+) {
+  ctx.beginPath();
+  ctx.moveTo(tl.x, tl.y);
+  ctx.lineTo(tr.x, tr.y);
+  ctx.lineTo(br.x, br.y);
+  ctx.lineTo(bl.x, bl.y);
+  ctx.closePath();
+  ctx.fillStyle = fill;
+  ctx.fill();
+}
+
 function paintSeats(
   ctx: CanvasRenderingContext2D,
   tl: { x: number; y: number },
@@ -123,12 +150,13 @@ function paintSeats(
 ) {
   const awayShare = stadium.awayShare ?? 0.2;
   const height = Math.abs(bl.y - tl.y) + Math.abs(br.y - tr.y);
-  const seatH = Math.max(1.4, height / (rows * 2.1));
-  const seatW = Math.max(1.6, (Math.abs(tr.x - tl.x) + Math.abs(br.x - bl.x)) / (cols * 2.2));
+  const width = Math.abs(tr.x - tl.x) + Math.abs(br.x - bl.x);
+  const seatH = Math.max(1.8, height / (rows * 1.55));
+  const seatW = Math.max(2, width / (cols * 1.65));
 
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      if (rng() > 0.93) continue;
+      if (rng() > 0.97) continue;
       const u = (c + 0.15 + rng() * 0.7) / cols;
       const v = (r + 0.15 + rng() * 0.7) / rows;
       const p = quadPoint(tl, tr, br, bl, u, v);
@@ -177,26 +205,30 @@ function crowdLayer(w: number, h: number, view: StadiumView, stadium: StadiumApp
 
   ctx.clearRect(0, 0, w, h);
   const rng = mulberry32(hashKey(key));
-  const goalLine = view.goal.botY;
-  const standBottom = Math.min(h * 0.22, goalLine + h * 0.012);
+  const standBottom = standBottomY(view);
+  const standTop = Math.min(h * 0.055, standBottom * 0.18);
 
-  const farTl = { x: w * 0.06, y: h * 0.07 };
-  const farTr = { x: w * 0.94, y: h * 0.07 };
-  const farBr = { x: w * 1.02, y: standBottom };
-  const farBl = { x: w * -0.02, y: standBottom };
-  paintSeats(ctx, farTl, farTr, farBr, farBl, rng, stadium, 16, 64);
+  const farTl = { x: w * 0.02, y: standTop };
+  const farTr = { x: w * 0.98, y: standTop };
+  const farBr = { x: w * 1.04, y: standBottom };
+  const farBl = { x: w * -0.04, y: standBottom };
+  fillQuad(ctx, farTl, farTr, farBr, farBl, crowdSwatch(mixHex(stadium.homeColor, '#1f2937', 0.28)));
+  const farRows = Math.max(18, Math.round((standBottom - standTop) / 4.2));
+  paintSeats(ctx, farTl, farTr, farBr, farBl, rng, stadium, farRows, 72);
 
-  const leftTl = { x: -w * 0.02, y: standBottom * 0.72 };
-  const leftTr = { x: w * 0.18, y: standBottom };
-  const leftBr = { x: w * 0.06, y: h * 0.62 };
-  const leftBl = { x: -w * 0.04, y: h * 0.56 };
-  paintSeats(ctx, leftTl, leftTr, leftBr, leftBl, rng, stadium, 10, 12);
+  const leftTl = { x: -w * 0.04, y: standTop + (standBottom - standTop) * 0.35 };
+  const leftTr = { x: w * 0.2, y: standBottom };
+  const leftBr = { x: w * 0.08, y: Math.min(h * 0.62, standBottom + h * 0.18) };
+  const leftBl = { x: -w * 0.05, y: Math.min(h * 0.56, standBottom + h * 0.14) };
+  fillQuad(ctx, leftTl, leftTr, leftBr, leftBl, crowdSwatch(mixHex(stadium.homeColor, '#1f2937', 0.32)));
+  paintSeats(ctx, leftTl, leftTr, leftBr, leftBl, rng, stadium, 12, 14);
 
-  const rightTl = { x: w * 0.82, y: standBottom };
-  const rightTr = { x: w * 1.02, y: standBottom * 0.72 };
-  const rightBr = { x: w * 1.04, y: h * 0.56 };
-  const rightBl = { x: w * 0.94, y: h * 0.62 };
-  paintSeats(ctx, rightTl, rightTr, rightBr, rightBl, rng, stadium, 10, 12);
+  const rightTl = { x: w * 0.8, y: standBottom };
+  const rightTr = { x: w * 1.04, y: standTop + (standBottom - standTop) * 0.35 };
+  const rightBr = { x: w * 1.05, y: Math.min(h * 0.56, standBottom + h * 0.14) };
+  const rightBl = { x: w * 0.92, y: Math.min(h * 0.62, standBottom + h * 0.18) };
+  fillQuad(ctx, rightTl, rightTr, rightBr, rightBl, crowdSwatch(mixHex(stadium.awayColor, '#1f2937', 0.28)));
+  paintSeats(ctx, rightTl, rightTr, rightBr, rightBl, rng, stadium, 12, 14);
 
   crowdCache = { key, canvas };
   return canvas;
@@ -256,7 +288,7 @@ function drawHoardings(
 ) {
   const { w } = view;
   const y = view.goal.botY;
-  const thickness = Math.max(4, view.h * 0.012);
+  const thickness = hoardingHeight(view);
   const left = w * 0.04;
   const right = w * 0.96;
   ctx.fillStyle = '#111827';
@@ -318,7 +350,7 @@ export function drawStadium(
   stadium: StadiumAppearance = DEFAULT_STADIUM,
 ) {
   const { w, h } = view;
-  const standBottom = Math.min(h * 0.22, view.goal.botY + h * 0.012);
+  const standBottom = standBottomY(view);
   const night = Boolean(stadium.night);
 
   const sky = ctx.createLinearGradient(0, 0, 0, standBottom + h * 0.1);

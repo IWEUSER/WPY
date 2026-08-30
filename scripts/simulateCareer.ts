@@ -17,6 +17,8 @@ import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { nationKit } from '../src/game/career/data/nationColours';
 import { resolveMatchStadium } from '../src/game/career/matchVenue';
 import { crowdSwatch, kitFromColor, kitFromScheme, luminance } from '../src/game/shooting/kitPalette';
+import { createPitchView, MAX_SHOT_DISTANCE_M, MIN_SHOT_DISTANCE_M } from '../src/game/shooting/render';
+import { standBottomY } from '../src/game/shooting/stadium';
 import { clubKit } from '../src/game/career/data/clubKits';
 import { clubContinentalCup, internationalCampaignForSeason, internationalTournamentForSeason } from '../src/game/career/data/competitions';
 import { cupFromLeaguePosition, continentalQualificationForNextSeason } from '../src/game/career/europeanQualification';
@@ -2175,6 +2177,24 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
   }
   if (leagueHome < 8 || leagueAway < 8) {
     console.error('league fixtures must include both home and away matches');
+    process.exitCode = 1;
+  }
+
+  const close = createPitchView(390, 844, MIN_SHOT_DISTANCE_M);
+  const far = createPitchView(390, 844, MAX_SHOT_DISTANCE_M);
+  const closeStand = standBottomY(close);
+  const farStand = standBottomY(far);
+  console.log('stand close/far', closeStand.toFixed(1), farStand.toFixed(1), 'goal close/far', close.goal.botY.toFixed(1), far.goal.botY.toFixed(1));
+  if (closeStand > close.goal.botY || farStand > far.goal.botY) {
+    console.error('the crowd must sit on or above the goal line');
+    process.exitCode = 1;
+  }
+  if (close.goal.botY - closeStand > 16 || far.goal.botY - farStand > 16) {
+    console.error('close-up shots must not leave an empty band behind the net');
+    process.exitCode = 1;
+  }
+  if (closeStand <= close.h * 0.22) {
+    console.error('a 6-yard camera must extend the crowd below a 22% screen cap');
     process.exitCode = 1;
   }
 }
