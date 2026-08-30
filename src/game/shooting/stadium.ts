@@ -1,5 +1,4 @@
 import {
-  crowdSwatch,
   kitFromScheme,
   luminance,
   mixHex,
@@ -77,9 +76,10 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
-const SKIN_TONES = ['#f3d2b5', '#e0ac7b', '#c68642', '#8d5524', '#5c3317'];
-const HAIR_TONES = ['#1c1917', '#292524', '#44403c', '#0c0a09', '#78350f', '#a8a29e'];
-const JACKET_TONES = ['#1c1917', '#292524', '#44403c', '#0f172a', '#3f3f46'];
+const SKIN_TONES = ['#e8c4a0', '#c68642', '#8d5524', '#5c3317', '#d4a574'];
+const HAIR_TONES = ['#1c1917', '#0c0a09', '#292524', '#1a120c', '#44403c'];
+const JACKET_TONES = ['#1c1917', '#292524', '#111827', '#1e3a5f', '#3f3f46', '#0f172a'];
+const CIVILIAN_TONES = ['#1e3a5f', '#111827', '#365314', '#7f1d1d', '#374151', '#1f2937'];
 
 function shirtColor(
   rng: () => number,
@@ -117,24 +117,6 @@ export function crowdCellSize(standHeightPx: number): { rowH: number; colW: numb
   return { rowH, colW };
 }
 
-function fillQuad(
-  ctx: CanvasRenderingContext2D,
-  tl: { x: number; y: number },
-  tr: { x: number; y: number },
-  br: { x: number; y: number },
-  bl: { x: number; y: number },
-  fill: string,
-) {
-  ctx.beginPath();
-  ctx.moveTo(tl.x, tl.y);
-  ctx.lineTo(tr.x, tr.y);
-  ctx.lineTo(br.x, br.y);
-  ctx.lineTo(bl.x, bl.y);
-  ctx.closePath();
-  ctx.fillStyle = fill;
-  ctx.fill();
-}
-
 function paintPackedFans(
   ctx: CanvasRenderingContext2D,
   tl: { x: number; y: number },
@@ -145,13 +127,16 @@ function paintPackedFans(
   stadium: StadiumAppearance,
   viewW: number,
 ) {
-  const awayShare = stadium.awayShare ?? 0.2;
   const minX = Math.min(tl.x, tr.x, br.x, bl.x);
   const maxX = Math.max(tl.x, tr.x, br.x, bl.x);
   const minY = Math.min(tl.y, tr.y, br.y, bl.y);
   const maxY = Math.max(tl.y, tr.y, br.y, bl.y);
   const standH = Math.max(8, maxY - minY);
-  const { rowH, colW } = crowdCellSize(standH);
+  const { rowH: rawRow, colW: rawCol } = crowdCellSize(standH);
+  const rowH = Math.max(3, Math.round(rawRow));
+  const colW = Math.max(3, Math.round(rawCol));
+  const paleHome = luminance(stadium.homeColor) > 0.72;
+  const paleAway = luminance(stadium.awayColor) > 0.72;
 
   ctx.save();
   ctx.beginPath();
@@ -163,44 +148,50 @@ function paintPackedFans(
   ctx.clip();
 
   let row = 0;
-  for (let y = minY; y < maxY + rowH; y += rowH) {
-    const aisle = row % 9 === 8;
-    const stagger = (row & 1) ? colW * 0.48 : 0;
+  for (let y = Math.floor(minY); y < maxY + rowH; y += rowH) {
+    const aisle = row % 8 === 7;
+    const stagger = (row & 1) ? Math.round(colW * 0.5) : 0;
     row += 1;
     if (aisle) {
-      ctx.fillStyle = 'rgba(15,23,42,0.28)';
-      ctx.fillRect(minX, y + rowH * 0.15, maxX - minX, rowH * 0.7);
+      ctx.fillStyle = '#1c1917';
+      ctx.fillRect(Math.floor(minX), y, Math.ceil(maxX - minX), Math.max(2, Math.round(rowH * 0.55)));
       continue;
     }
-    for (let x = minX - colW; x < maxX + colW; x += colW) {
-      if (rng() > 0.985) continue;
-      const px = x + stagger + (rng() - 0.5) * colW * 0.28;
-      const py = y + (rng() - 0.5) * rowH * 0.18;
-      const u = Math.max(0, Math.min(1, px / Math.max(1, viewW)));
-      const torsoW = colW * (0.72 + rng() * 0.22);
-      const torsoH = rowH * 0.58;
-      ctx.fillStyle = shirtColor(
-        rng,
-        stadium.homeColor,
-        stadium.homeSecondary,
-        stadium.awayColor,
-        stadium.awaySecondary,
-        awayShare,
-        u,
-      );
-      ctx.fillRect(px, py + rowH * 0.38, torsoW, torsoH);
-      if (rng() < 0.2) {
-        ctx.fillStyle = JACKET_TONES[(rng() * JACKET_TONES.length) | 0];
-        ctx.fillRect(px, py + rowH * 0.42, torsoW, torsoH * 0.62);
-      }
-      const headW = colW * 0.42;
-      const headH = rowH * 0.4;
-      const hx = px + torsoW * 0.28;
-      const hy = py + rowH * 0.08;
+    for (let x = Math.floor(minX) - colW; x < maxX + colW; x += colW) {
+      if (rng() > 0.992) continue;
+      const px = x + stagger;
+      const py = y;
+      const u = Math.max(0, Math.min(1, (px + colW / 2) / Math.max(1, viewW)));
+      const visiting = u > 1 - Math.min(0.42, Math.max(0.14, stadium.awayShare ?? 0.2));
+      const paleSection = visiting ? paleAway : paleHome;
+
+      // Dark head-mass first so pale kits still speckle instead of flattening to a wall.
       ctx.fillStyle = HAIR_TONES[(rng() * HAIR_TONES.length) | 0];
-      ctx.fillRect(hx, hy, headW, headH);
+      ctx.fillRect(px, py, colW, rowH);
+
+      const bodyH = Math.max(1, Math.round(rowH * 0.48));
+      const bodyY = py + rowH - bodyH;
+      const jacket = rng() < (paleSection ? 0.52 : 0.22);
+      const civilian = !jacket && rng() < 0.18;
+      ctx.fillStyle = jacket
+        ? JACKET_TONES[(rng() * JACKET_TONES.length) | 0]
+        : civilian
+          ? CIVILIAN_TONES[(rng() * CIVILIAN_TONES.length) | 0]
+          : shirtColor(
+              rng,
+              stadium.homeColor,
+              stadium.homeSecondary,
+              stadium.awayColor,
+              stadium.awaySecondary,
+              stadium.awayShare ?? 0.2,
+              u,
+            );
+      ctx.fillRect(px, bodyY, colW - 1, bodyH);
+
+      const faceW = Math.max(1, Math.round(colW * 0.45));
+      const faceH = Math.max(1, Math.round(rowH * 0.22));
       ctx.fillStyle = SKIN_TONES[(rng() * SKIN_TONES.length) | 0];
-      ctx.fillRect(hx + headW * 0.12, hy + headH * 0.38, headW * 0.76, headH * 0.55);
+      ctx.fillRect(px + Math.round((colW - faceW) / 2), py + Math.round(rowH * 0.28), faceW, faceH);
     }
   }
   ctx.restore();
@@ -239,29 +230,15 @@ function crowdLayer(w: number, h: number, view: StadiumView, stadium: StadiumApp
   ctx.clearRect(0, 0, w, h);
   const rng = mulberry32(hashKey(key));
   const standBottom = standBottomY(view);
-  const standTop = Math.min(h * 0.028, standBottom * 0.12);
-
-  const terrace = crowdSwatch(mixHex(stadium.homeColor, stadium.night ? '#111827' : '#3f3f46', 0.62));
-  const farTl = { x: w * -0.02, y: standTop };
-  const farTr = { x: w * 1.02, y: standTop };
-  const farBr = { x: w * 1.06, y: standBottom };
-  const farBl = { x: w * -0.06, y: standBottom };
-  fillQuad(ctx, farTl, farTr, farBr, farBl, terrace);
-  paintPackedFans(ctx, farTl, farTr, farBr, farBl, rng, stadium, w);
-
-  const leftTl = { x: -w * 0.05, y: standTop };
-  const leftTr = { x: w * 0.22, y: standTop + (standBottom - standTop) * 0.42 };
-  const leftBr = { x: w * 0.14, y: Math.min(h * 0.58, standBottom + h * 0.14) };
-  const leftBl = { x: -w * 0.06, y: Math.min(h * 0.52, standBottom + h * 0.1) };
-  fillQuad(ctx, leftTl, leftTr, leftBr, leftBl, terrace);
-  paintPackedFans(ctx, leftTl, leftTr, leftBr, leftBl, rng, stadium, w);
-
-  const rightTl = { x: w * 0.78, y: standTop + (standBottom - standTop) * 0.42 };
-  const rightTr = { x: w * 1.05, y: standTop };
-  const rightBr = { x: w * 1.06, y: Math.min(h * 0.52, standBottom + h * 0.1) };
-  const rightBl = { x: w * 0.86, y: Math.min(h * 0.58, standBottom + h * 0.14) };
-  fillQuad(ctx, rightTl, rightTr, rightBr, rightBl, mixHex(terrace, crowdSwatch(stadium.awayColor), 0.35));
-  paintPackedFans(ctx, rightTl, rightTr, rightBr, rightBl, rng, stadium, w);
+  const standTop = Math.max(2, Math.round(h * 0.018));
+  const terrace = mixHex(stadium.homeColor, stadium.night ? '#0f172a' : '#292524', 0.78);
+  const tl = { x: 0, y: standTop };
+  const tr = { x: w, y: standTop };
+  const br = { x: w, y: standBottom };
+  const bl = { x: 0, y: standBottom };
+  ctx.fillStyle = terrace;
+  ctx.fillRect(0, standTop, w, Math.max(1, standBottom - standTop));
+  paintPackedFans(ctx, tl, tr, br, bl, rng, stadium, w);
 
   crowdCache = { key, canvas };
   return canvas;
@@ -409,7 +386,10 @@ export function drawStadium(
   drawRoof(ctx, w, h, night);
 
   const crowd = crowdLayer(w, h, view, stadium);
+  const prevSmooth = ctx.imageSmoothingEnabled;
+  ctx.imageSmoothingEnabled = false;
   ctx.drawImage(crowd, 0, 0, w, h);
+  ctx.imageSmoothingEnabled = prevSmooth;
 
   if (night) {
     const lampY = Math.max(h * 0.055, view.goal.topY - h * 0.06);
