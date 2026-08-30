@@ -31,15 +31,16 @@ export function recordClubAppearanceStats(
   played: boolean,
 ): SeasonRecord {
   if (!played) return season;
-  if (fixture.kind === 'league' || fixture.kind === 'domestic-cup') {
+  if (fixture.kind === 'league' || fixture.kind === 'domestic-cup' || fixture.kind === 'playoff') {
     return {
       ...season,
       domesticGames: (season.domesticGames ?? 0) + 1,
       domesticGoals: (season.domesticGoals ?? 0) + goals,
     };
   }
-  if (fixture.kind === 'super-cup') {
-    return { ...season, continentalStats: bumpContinentalStats(season.continentalStats, 'super-cup', goals) };
+  if (fixture.kind === 'super-cup' || fixture.kind === 'leagues-cup') {
+    const cup = fixture.kind === 'leagues-cup' ? 'leagues-cup' : 'super-cup';
+    return { ...season, continentalStats: bumpContinentalStats(season.continentalStats, cup, goals) };
   }
   if (fixture.kind.startsWith('continental') && fixture.continentalCup) {
     return {

@@ -1,5 +1,6 @@
 import { calendarDomesticCup, calendarIncludesInternational, currentCalendarWeek, type SeasonCalendar } from '../calendar';
 import { getClub, leagueMatchWeeks } from '../data/clubs';
+import { conferenceLabel, leagueDisplayName, mlsConferenceOf } from '../data/leagueFormat';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { describeAvailability, isAvailable } from '../availabilityEngine';
 import { describeInjury } from '../injury';
@@ -7,7 +8,7 @@ import { clubEligibleForNationalTeam, getNation, isSelectedForNationalTeam, seas
 import type { SeasonStandings } from '../matchEngine';
 import { displaySeasonLabel } from '../seasonDisplay';
 import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons } from '../playerValue';
-import { fixtureTitle, internationalRoundLabel, lostTitleToRival, nextPlayableFixture, remainingPlayableCount, type SeasonSimState } from '../seasonSim';
+import { conferenceTable, fixtureTitle, internationalRoundLabel, nextPlayableFixture, type SeasonSimState } from '../seasonSim';
 import { useCareerStore } from '../store';
 
 const ROLE_LABEL: Record<string, string> = {
@@ -54,9 +55,6 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const ratioProgress = Math.min(1, threshold > 0 ? ratio / threshold : 0);
   const injured = (injuryGamesRemaining ?? 0) > 0;
   const available = isAvailable(availability) && !injured;
-  const remainingFixtures = seasonCalendar && seasonSim
-    ? remainingPlayableCount(seasonCalendar, seasonSim)
-    : leagueMatchWeeks(club.league) - season.matches.length;
   const week = seasonCalendar && seasonSim
     ? currentCalendarWeek(seasonCalendar, seasonSim.fixtureIndex)
     : season.matches.length + 1;
@@ -92,7 +90,8 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         </p>
         <h1 className="text-2xl font-extrabold">{club.name}</h1>
         <p className="text-xs text-white/50">
-          {club.country} · {clubLeague ?? club.league}
+          {club.country} · {leagueDisplayName(clubLeague ?? club.league)}
+          {mlsConferenceOf(club.id) ? ` · ${conferenceLabel(mlsConferenceOf(club.id))}` : ''}
         </p>
         {nation && <p className="mt-1 text-xs text-white/50">International: {nation.name}</p>}
         {parentClub && <p className="mt-1 text-xs text-white/40">On loan from {parentClub.name}</p>}
@@ -124,6 +123,9 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         {nextFixture && (
           <span className="mt-1 block text-xs font-medium text-black/70">
             {fixtureTitle(nextFixture, { playerNationName: nation?.name })}
+            {nextFixture.kind === 'league' && nextFixture.opponentId === seasonSim?.titleRivalId
+              ? ' · league rival'
+              : ''}
           </span>
         )}
       </button>
@@ -185,10 +187,6 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
             Need {threshold.toFixed(2)} goals/game to {role === 'first-team' ? 'keep your place' : 'earn a promotion'} ·
             currently {ratio.toFixed(2)}
           </p>
-          <p className="mt-1 text-xs text-white/40">
-            {remainingFixtures} match{remainingFixtures === 1 ? '' : 'es'} left this season
-            {nextFixture ? ` · next: ${fixtureTitle(nextFixture, { playerNationName: nation?.name })}` : ''}
-          </p>
           {parentClub && (
             <p className="mt-2 text-xs text-emerald-300/80">
               Hit {parentClub.firstTeamGoalRatio.toFixed(2)} and {parentClub.name} will bring you straight back into
@@ -229,15 +227,9 @@ function StandingsCard({
   cupStage: string | null;
   sim: SeasonSimState | null;
 }) {
-  const us = standings.league.find((r) => r.clubId === clubId);
+  const conference = conferenceTable(standings.league, clubId);
+  const us = (conference.length > 0 && mlsConferenceOf(clubId) ? conference : standings.league).find((r) => r.clubId === clubId);
   const europe = standings.europeanStanding;
-  const rival = sim?.titleRivalId ? getClub(sim.titleRivalId) : undefined;
-  const rivalLine = (outcome: string | null | undefined) => {
-    if (!outcome) return '—';
-    if (outcome === 'win') return 'W';
-    if (outcome === 'draw') return 'D';
-    return 'L';
-  };
   const stageLabel: Record<string, string> = {
     group: 'Group stage',
     'round-of-16': 'Round of 16',
@@ -255,7 +247,9 @@ function StandingsCard({
       <div className="mt-2 grid grid-cols-2 gap-3">
         <div>
           <p className="text-2xl font-extrabold">{us && us.played > 0 ? `${us.position}` : '—'}</p>
-          <p className="text-[10px] uppercase tracking-wide text-white/40">League position</p>
+          <p className="text-[10px] uppercase tracking-wide text-white/40">
+            {mlsConferenceOf(clubId) ? conferenceLabel(mlsConferenceOf(clubId)) : 'League position'}
+          </p>
           {us && (
             <p className="mt-1 text-xs text-white/50">
               {us.points} pts · {us.played} played
@@ -264,26 +258,22 @@ function StandingsCard({
         </div>
         <div>
           <p className="text-lg font-bold leading-tight">
-            {europe ? stageLabel[europe.stage] : 'No Europe'}
+            {europe ? stageLabel[europe.stage] : sim?.leaguesCupStage && sim.leaguesCupStage !== 'not-entered'
+              ? stageLabel[sim.leaguesCupStage] ?? sim.leaguesCupStage
+              : '—'}
           </p>
           <p className="text-[10px] uppercase tracking-wide text-white/40">
-            {europe ? CONTINENTAL_CUPS[europe.cup].name : 'European standing'}
+            {europe
+              ? CONTINENTAL_CUPS[europe.cup].name
+              : sim?.leaguesCupStage && sim.leaguesCupStage !== 'not-entered'
+                ? 'Leagues Cup'
+                : 'Continental'}
           </p>
         </div>
       </div>
       {cupName && cupStage && cupStage !== 'not-entered' && (
         <p className="mt-3 text-xs text-white/50">
           {cupName}: {stageLabel[cupStage] ?? cupStage}
-        </p>
-      )}
-      {rival && (
-        <p className={`mt-3 text-xs ${lostTitleToRival(sim!) ? 'text-red-300' : 'text-white/50'}`}>
-          Title rival {rival.name}
-          {' · '}
-          H {rivalLine(sim?.rivalHomeOutcome)} · A {rivalLine(sim?.rivalAwayOutcome)}
-          {lostTitleToRival(sim!)
-            ? ' — lost both, cannot win the league'
-            : ' — score in both meetings to avoid defeat'}
         </p>
       )}
     </div>
@@ -360,9 +350,6 @@ function InternationalCard({
           {caps} cap{caps === 1 ? '' : 's'} · {intlGoals} international goal{intlGoals === 1 ? '' : 's'}
         </p>
       )}
-      <p className="mt-1 text-xs text-white/40">
-        When you play, you represent {nationName} — not your club.
-      </p>
     </div>
   );
 }
@@ -384,6 +371,21 @@ function SeasonCompetitions({ calendar }: { calendar: SeasonCalendar | null }) {
       {domesticCup && (
         <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/70">
           {DOMESTIC_CUPS[domesticCup].name}
+        </span>
+      )}
+      {calendar.fixtures.some((f) => f.kind === 'leagues-cup') && (
+        <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/70">
+          Leagues Cup
+        </span>
+      )}
+      {calendar.fixtures.some((f) => f.kind === 'playoff') && (
+        <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/70">
+          MLS Cup Playoffs
+        </span>
+      )}
+      {calendar.fixtures.some((f) => f.kind === 'super-cup') && (
+        <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/70">
+          Super Cup
         </span>
       )}
       {[...cupIds].map((id) => (

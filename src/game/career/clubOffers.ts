@@ -14,7 +14,7 @@ export function pickClubsBiasedToCountry(
   minFromCountry: number,
   extraHome: Club[] = [],
 ): Club[] {
-  const homeCountry = country && CLUBS.some((c) => c.country === country) ? country : null;
+  const homeCountry = country && CLUBS.some((c) => c.country === country && c.playable !== false) ? country : null;
   const hintTier = preferred[0]?.tier ?? 3;
   if (!homeCountry || minFromCountry <= 0) {
     const pool = preferred.length >= count ? preferred : [...preferred, ...nearbyTierClubs(hintTier)];
@@ -29,7 +29,7 @@ export function pickClubsBiasedToCountry(
   const remaining = count - homePicks.length;
 
   const awayPool = preferred.filter((c) => c.country !== homeCountry && !taken.has(c.id));
-  const awayFallback = CLUBS.filter((c) => c.country !== homeCountry && !taken.has(c.id));
+  const awayFallback = CLUBS.filter((c) => c.playable !== false && c.country !== homeCountry && !taken.has(c.id));
   const awayPicks = uniqueById([...shuffle(awayPool), ...shuffle(awayFallback)]).slice(0, remaining);
   awayPicks.forEach((c) => taken.add(c.id));
 
@@ -51,8 +51,8 @@ export function clubsForNationality(nationId: string | null | undefined): Club[]
 }
 
 export function nearbyTierClubs(tier: ClubTier, excludeIds: string[] = []): Club[] {
-  const nearby = CLUBS.filter((c) => !excludeIds.includes(c.id) && Math.abs(c.tier - tier) <= 1);
-  return nearby.length > 0 ? nearby : CLUBS.filter((c) => !excludeIds.includes(c.id));
+  const nearby = CLUBS.filter((c) => c.playable !== false && !excludeIds.includes(c.id) && Math.abs(c.tier - tier) <= 1);
+  return nearby.length > 0 ? nearby : CLUBS.filter((c) => c.playable !== false && !excludeIds.includes(c.id));
 }
 
 function uniqueById(clubs: Club[]): Club[] {

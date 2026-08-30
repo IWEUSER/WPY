@@ -11,7 +11,9 @@ export function trophyLabels(
 ): string[] {
   if (!honours || !club) return [];
   const labels: string[] = [];
-  if (honours.leagueChampion) labels.push(league ?? club.league);
+  if (honours.leagueChampion) {
+    labels.push(league === 'MLS' || club.league === 'MLS' ? 'MLS Cup' : (league ?? club.league));
+  }
   if (honours.domesticCup) labels.push(DOMESTIC_CUPS[honours.domesticCup].name);
   if (honours.superCup) labels.push('Super Cup');
   if (honours.continentalChampion) labels.push(CONTINENTAL_CUPS[honours.continentalChampion].name);

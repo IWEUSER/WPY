@@ -121,17 +121,23 @@ export function applyCareerLayoutPreview(): void {
     }),
   ];
 
-  const club = getClub('real-madrid');
+  const preview = new URLSearchParams(window.location.search).get('preview-career');
+  const previewClubId = preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : 'real-madrid';
+  const club = getClub(previewClubId);
   if (!club) return;
   const { calendar, sim } = hydrateSeason({
     seasonNumber: 4,
     club,
     careerGoalRatio: 0.78,
-    nationId: 'spain',
-    qualifierCarry: { tournament: 'euro', points: 7, played: 3 },
+    nationId: preview === 'mls' ? 'united-states' : preview === 'saudi' ? 'saudi-arabia' : 'spain',
+    qualifierCarry:
+      preview === 'mls'
+        ? { tournament: 'gold-cup', points: 7, played: 3 }
+        : preview === 'saudi'
+          ? { tournament: 'asian-cup', points: 7, played: 3 }
+          : { tournament: 'euro', points: 7, played: 3 },
   });
 
-  const preview = new URLSearchParams(window.location.search).get('preview-career');
   const value = playerMarketValueFromSeasons({
     age: 19,
     careerGoals: 61,
@@ -199,11 +205,11 @@ export function applyCareerLayoutPreview(): void {
                 : 'hub',
     age: preview === 'end' ? 36 : 19,
     seasonNumber: preview === 'end' ? 21 : 4,
-    clubId: preview === 'end' ? 'inter-miami' : 'real-madrid',
-    parentClubId: preview === 'end' ? 'inter-miami' : 'real-madrid',
+    clubId: preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : 'real-madrid',
+    parentClubId: preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : 'real-madrid',
     role: 'first-team',
     seasonsAtCurrentClub: preview === 'end' ? 10 : 3,
-    nationality: 'spain',
+    nationality: preview === 'mls' ? 'united-states' : preview === 'saudi' ? 'saudi-arabia' : 'spain',
     nationalTeam,
     availability: createAvailability(),
     seasonHistory: history,
@@ -217,7 +223,7 @@ export function applyCareerLayoutPreview(): void {
         ? history[history.length - 1]
         : season({
             seasonNumber: 4,
-            clubId: 'real-madrid',
+            clubId: preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : 'real-madrid',
             role: 'first-team',
             matches: [
               { matchNumber: 1, played: true, scored: true },
@@ -237,7 +243,7 @@ export function applyCareerLayoutPreview(): void {
             wonWpy: false,
             sponsorship: 9_300_000,
             earnings: 9_580_000,
-            league: 'La Liga',
+            league: preview === 'mls' ? 'MLS' : preview === 'saudi' ? 'Saudi Pro League' : 'La Liga',
           }),
     lastMatchSummary: 'Spain won 1–0 vs Italy · 1 goal from 1 chance',
     lastMatchResult: {
@@ -251,7 +257,7 @@ export function applyCareerLayoutPreview(): void {
     careerEarnings: preview === 'end' ? 86_400_000 : 14_560_000,
     contractYears: preview === 'end' ? 1 : 5,
     contractYearsRemaining: preview === 'end' ? 1 : 5,
-    clubLeague: preview === 'end' ? 'MLS' : 'La Liga',
+    clubLeague: preview === 'end' || preview === 'mls' ? 'MLS' : preview === 'saudi' ? 'Saudi Pro League' : 'La Liga',
     seasonSponsorship: preview === 'end' ? 280_000 : 9_300_000,
     injuryGamesRemaining: 0,
     intlQualifying: { tournament: 'euro', points: 7, played: 3 },

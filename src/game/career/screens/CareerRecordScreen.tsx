@@ -52,8 +52,8 @@ export default function CareerRecordScreen() {
       </div>
 
       <div className="grid grid-cols-3 gap-2">
-        <StatTile value={String(totalGoals)} label="All goals" />
         <StatTile value={String(totalGames)} label="All games" />
+        <StatTile value={String(totalGoals)} label="All goals" />
         <StatTile value={ratio.toFixed(2)} label="All ratio" />
       </div>
       <p className="mt-2 text-center text-[11px] text-white/40">Club and country combined</p>

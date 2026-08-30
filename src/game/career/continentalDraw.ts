@@ -8,12 +8,15 @@ import { shuffle } from './util';
 
 const UEFA_CUPS: ContinentalCupId[] = ['ucl', 'uel', 'uecl'];
 
-function uefaClubs(): Club[] {
-  return CLUBS.filter((c) => confederationForCountry(c.country) === 'UEFA');
-}
-
 function clubsInCup(cup: ContinentalCupId): Club[] {
-  return uefaClubs().filter((c) => continentalCupForClub(c.tier, 'UEFA') === cup);
+  return CLUBS.filter((c) => {
+    const conf = confederationForCountry(c.country);
+    if (cup === 'acle') {
+      return (c.league === 'Saudi Pro League' && c.strength >= 76) || (conf === 'AFC' && c.playable === false);
+    }
+    if (conf !== 'UEFA') return false;
+    return continentalCupForClub(c.tier, 'UEFA') === cup;
+  });
 }
 
 /**
@@ -23,9 +26,13 @@ function clubsInCup(cup: ContinentalCupId): Club[] {
 export function leaguePhaseOpponents(club: Club, cup: ContinentalCupId, count = 8): Club[] {
   let pool = clubsInCup(cup).filter((c) => c.id !== club.id);
   if (pool.length < count) {
-    const extra = uefaClubs()
-      .filter((c) => c.id !== club.id && !pool.some((p) => p.id === c.id))
-      .sort((a, b) => b.strength - a.strength);
+    const conf = confederationForCountry(club.country);
+    const extra = CLUBS.filter(
+      (c) =>
+        c.id !== club.id &&
+        !pool.some((p) => p.id === c.id) &&
+        confederationForCountry(c.country) === conf,
+    ).sort((a, b) => b.strength - a.strength);
     pool = [...pool, ...extra];
   }
   pool = [...pool].sort((a, b) => b.strength - a.strength);

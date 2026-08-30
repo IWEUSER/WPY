@@ -1337,20 +1337,88 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
   }
 
   const lafc = getClub('lafc')!;
-  const mlsCal = buildSeasonCalendar({
+  const { calendar: mlsCal } = hydrateSeason({
     seasonNumber: 2,
-    leagueMatchWeeks: leagueMatchWeeks('MLS', lafc),
-    clubTier: lafc.tier,
-    confederation: 'CONCACAF',
-    country: 'United States',
-    nationConfederation: 'CONCACAF',
+    club: lafc,
+    careerGoalRatio: 0.6,
+    nationId: 'united-states',
   });
-  const mlsClubs = clubsForSeason(lafc, 'MLS').length;
-  console.log('MLS clubs this season', mlsClubs, 'league weeks', leagueMatchWeeks('MLS', lafc), 'total weeks', mlsCal.totalWeeks);
-  if (mlsCal.totalWeeks > 48 || leagueMatchWeeks('MLS', lafc) > 38) {
-    console.error('an MLS season must not run past 48 weeks');
+  const mlsClubs = clubsForSeason(lafc, 'MLS');
+  const east = mlsClubs.filter((c) => c.conference === 'east' || c.id === 'inter-miami' || c.id === 'columbus').length;
+  const west = mlsClubs.filter((c) => c.conference === 'west' || c.id === 'lafc').length;
+  const mlsKinds = mlsCal.fixtures.reduce<Record<string, number>>((acc, f) => {
+    acc[f.kind] = (acc[f.kind] ?? 0) + 1;
+    return acc;
+  }, {});
+  const leaguesMx = mlsCal.fixtures.filter((f) => f.kind === 'leagues-cup' && getClub(f.opponentId ?? '')?.league === 'Liga MX');
+  console.log(
+    'MLS clubs',
+    mlsClubs.length,
+    'league weeks',
+    leagueMatchWeeks('MLS', lafc),
+    'total weeks',
+    mlsCal.totalWeeks,
+    'kinds',
+    mlsKinds,
+    'Liga MX in Leagues Cup',
+    leaguesMx.length,
+  );
+  if (mlsCal.totalWeeks > 48 || leagueMatchWeeks('MLS', lafc) > 26) {
+    console.error('an MLS season must not run past 48 weeks or 26 league weeks');
     process.exitCode = 1;
   }
+  if ((mlsKinds.playoff ?? 0) < 4 || (mlsKinds['leagues-cup'] ?? 0) < 4) {
+    console.error('MLS must schedule playoffs and Leagues Cup');
+    process.exitCode = 1;
+  }
+  if (leaguesMx.length < 1) {
+    console.error('Leagues Cup must include Mexican clubs');
+    process.exitCode = 1;
+  }
+  const mlsEastCount = mlsClubs.filter((c) => c.conference === 'east').length;
+  const mlsWestCount = mlsClubs.filter((c) => c.conference === 'west').length;
+  if (mlsEastCount !== 10 || mlsWestCount !== 10) {
+    console.error(`MLS season must be 10 East / 10 West, got ${mlsEastCount}/${mlsWestCount}`);
+    process.exitCode = 1;
+  }
+  void east;
+  void west;
+
+  const hilal = getClub('al-hilal')!;
+  const { calendar: saudiCal } = hydrateSeason({
+    seasonNumber: 2,
+    club: hilal,
+    careerGoalRatio: 0.6,
+    nationId: 'saudi-arabia',
+  });
+  const saudiKinds = saudiCal.fixtures.reduce<Record<string, number>>((acc, f) => {
+    acc[f.kind] = (acc[f.kind] ?? 0) + 1;
+    return acc;
+  }, {});
+  const saudiCups = saudiCal.fixtures.filter((f) => f.continentalCup === 'acle' || f.domesticCup === 'kings-cup' || f.kind === 'super-cup');
+  const acleOpp = saudiCal.fixtures.find((f) => f.kind === 'continental-group' && f.opponentId && getClub(f.opponentId)?.country !== 'Saudi Arabia');
+  console.log('Saudi weeks', saudiCal.totalWeeks, 'kinds', saudiKinds, 'ACLE away', acleOpp?.opponentLabel);
+  if (saudiCal.totalWeeks > 48) {
+    console.error('a Saudi season must not run past 48 weeks');
+    process.exitCode = 1;
+  }
+  if (!saudiCal.fixtures.some((f) => f.domesticCup === 'kings-cup')) {
+    console.error('Saudi season must include the King Cup');
+    process.exitCode = 1;
+  }
+  if ((saudiKinds['super-cup'] ?? 0) < 2) {
+    console.error('Saudi Super Cup must be a four-team (semi + final) tie');
+    process.exitCode = 1;
+  }
+  if (!saudiCal.fixtures.some((f) => f.continentalCup === 'acle')) {
+    console.error('top Saudi clubs must play the AFC Champions League Elite');
+    process.exitCode = 1;
+  }
+  if (!acleOpp) {
+    console.error('ACLE must draw clubs from outside Saudi Arabia');
+    process.exitCode = 1;
+  }
+  void saudiCups;
 
   const twilight = resolveSeasonTransition({
     season: { ...dummySeason, clubId: 'barcelona', goals: 20, gamesPlayed: 38 },

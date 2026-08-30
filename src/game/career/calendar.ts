@@ -25,8 +25,14 @@ export type FixtureKind =
   | 'continental-semi-final'
   | 'continental-final'
   | 'super-cup'
+  | 'leagues-cup'
+  | 'playoff'
   | 'international'
   | 'rest';
+
+export type PlayoffRound = 'first-round' | 'conference-semi' | 'conference-final' | 'mls-cup';
+export type LeaguesCupStage = 'group' | 'quarter-final' | 'semi-final' | 'final';
+export type SuperCupStage = 'semi-final' | 'final';
 
 export type DomesticCupStage = 'round-of-16' | 'quarter-final' | 'semi-final' | 'final';
 
@@ -49,6 +55,9 @@ export interface CalendarFixture {
   playerChances?: number;
   /** League home/away. First meeting is home, the return is away. */
   isHome?: boolean;
+  playoffRound?: PlayoffRound;
+  leaguesCupStage?: LeaguesCupStage;
+  superCupStage?: SuperCupStage;
   internationalRound?:
     | 'qualifier'
     | 'group'
@@ -83,6 +92,13 @@ export interface BuildCalendarParams {
   includeDomesticCup?: boolean;
   /** UEFA Super Cup — only the previous CL/EL winner (or a newly joined club that won it). */
   includeSuperCup?: boolean;
+  /** MLS playoffs + MLS Cup after the regular season. */
+  includePlayoffs?: boolean;
+  /** MLS + Liga MX summer cup. */
+  includeLeaguesCup?: boolean;
+  /** Saudi four-team Super Cup (semi-final + final). */
+  includeSaudiSuperCup?: boolean;
+  league?: string;
 }
 
 const GROUP_STAGE_MATCHDAYS = 8;
@@ -99,12 +115,14 @@ const KIND_ORDER: Record<FixtureKind, number> = {
   international: 0,
   'domestic-cup': 1,
   'super-cup': 2,
-  'continental-group': 3,
-  'continental-knockout': 4,
-  'continental-semi-final': 5,
-  'continental-final': 6,
-  league: 7,
-  rest: 8,
+  'leagues-cup': 3,
+  'continental-group': 4,
+  'continental-knockout': 5,
+  'continental-semi-final': 6,
+  'continental-final': 7,
+  playoff: 8,
+  league: 9,
+  rest: 10,
 };
 
 /** Empty weeks between the last club match and the national tournament. */
@@ -134,6 +152,9 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
     includeInternational = true,
     includeDomesticCup = true,
     includeSuperCup = false,
+    includePlayoffs = false,
+    includeLeaguesCup = false,
+    includeSaudiSuperCup = false,
   } = params;
   const cup = continentalCupForClub(clubTier, confederation);
   const domesticCup = includeDomesticCup && country ? domesticCupForCountry(country) : null;
@@ -156,10 +177,35 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
     }
   }
 
-  if (cup) {
-    if (includeSuperCup) {
-      fixtures.push({ week: 1, kind: 'super-cup', continentalCup: cup, isDecisive: true });
+  if (includeSaudiSuperCup) {
+    fixtures.push({ week: 1, kind: 'super-cup', superCupStage: 'semi-final', isDecisive: true });
+    fixtures.push({ week: 2, kind: 'super-cup', superCupStage: 'final', isDecisive: true });
+  } else if (cup && includeSuperCup) {
+    fixtures.push({ week: 1, kind: 'super-cup', continentalCup: cup, superCupStage: 'final', isDecisive: true });
+  }
+
+  if (includeLeaguesCup) {
+    const groupWeeks = [0.28, 0.48].map((f) => Math.max(1, Math.min(leagueMatchWeeks, Math.round(f * leagueMatchWeeks))));
+    for (const week of groupWeeks) {
+      fixtures.push({ week, kind: 'leagues-cup', continentalCup: 'leagues-cup', leaguesCupStage: 'group', isDecisive: false });
     }
+    fixtures.push({
+      week: Math.max(1, Math.min(leagueMatchWeeks, Math.round(0.66 * leagueMatchWeeks))),
+      kind: 'leagues-cup',
+      continentalCup: 'leagues-cup',
+      leaguesCupStage: 'quarter-final',
+      isDecisive: false,
+    });
+    fixtures.push({
+      week: Math.max(1, Math.min(leagueMatchWeeks, Math.round(0.82 * leagueMatchWeeks))),
+      kind: 'leagues-cup',
+      continentalCup: 'leagues-cup',
+      leaguesCupStage: 'semi-final',
+      isDecisive: false,
+    });
+  }
+
+  if (cup) {
 
     const groupInterval = Math.max(1, Math.floor(leagueMatchWeeks / GROUP_STAGE_MATCHDAYS));
     for (let i = 0; i < GROUP_STAGE_MATCHDAYS; i++) {
@@ -226,8 +272,28 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
       isDecisive: true,
     });
   }
+  if (includeLeaguesCup) {
+    fixtures.push({
+      week: ++week,
+      kind: 'leagues-cup',
+      continentalCup: 'leagues-cup',
+      leaguesCupStage: 'final',
+      isDecisive: true,
+    });
+  }
   if (cup) {
     fixtures.push({ week: ++week, kind: 'continental-final', continentalCup: cup, isDecisive: true });
+  }
+  if (includePlayoffs) {
+    const rounds: PlayoffRound[] = ['first-round', 'conference-semi', 'conference-final', 'mls-cup'];
+    for (const playoffRound of rounds) {
+      fixtures.push({
+        week: ++week,
+        kind: 'playoff',
+        playoffRound,
+        isDecisive: playoffRound === 'mls-cup' || playoffRound === 'conference-final',
+      });
+    }
   }
 
   if (
@@ -311,8 +377,11 @@ export function calendarDomesticCup(calendar: SeasonCalendar): DomesticCupId | n
 
 /** Club continental final, Super Cup, domestic-cup final, or international final. */
 export function isFinalFixture(fixture: CalendarFixture): boolean {
-  if (fixture.kind === 'continental-final' || fixture.kind === 'super-cup') return true;
+  if (fixture.kind === 'continental-final') return true;
+  if (fixture.kind === 'super-cup' && (fixture.superCupStage === 'final' || !fixture.superCupStage)) return true;
   if (fixture.kind === 'domestic-cup' && fixture.domesticCupStage === 'final') return true;
+  if (fixture.kind === 'leagues-cup' && fixture.leaguesCupStage === 'final') return true;
+  if (fixture.kind === 'playoff' && fixture.playoffRound === 'mls-cup') return true;
   return fixture.kind === 'international' && fixture.internationalRound === 'final';
 }
 

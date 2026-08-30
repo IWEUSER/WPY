@@ -1,8 +1,7 @@
 import type { ClubTier } from './data/clubs';
 import { CLUBS, clubsInLeague, getClub } from './data/clubs';
 import {
-  confederationForCountry,
-  continentalCupForClub,
+  clubContinentalCup,
   type ContinentalCupId,
 } from './data/competitions';
 
@@ -215,7 +214,7 @@ export function buildSeasonStandings(
 }
 
 export function clubsForContinentalCup(cup: ContinentalCupId): string[] {
-  return CLUBS.filter((c) => continentalCupForClub(c.tier, confederationForCountry(c.country)) === cup).map((c) => c.id);
+  return CLUBS.filter((c) => clubContinentalCup(c) === cup).map((c) => c.id);
 }
 
 /** Pair leftover clubs for a matchweek (first of each pair is treated as home). */

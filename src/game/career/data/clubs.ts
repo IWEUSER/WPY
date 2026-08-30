@@ -1,3 +1,5 @@
+import { MLS_CONFERENCE_SIZE, MLS_REGULAR_SEASON_WEEKS, mlsConferenceOf } from './leagueFormat';
+
 /**
  * The football pyramid this career mode plays out across: major European
  * leagues plus Saudi Arabia and MLS, each at its real division size.
@@ -79,6 +81,10 @@ export interface Club {
   name: string;
   country: string;
   league: string;
+  /** MLS Eastern or Western Conference. */
+  conference?: 'east' | 'west';
+  /** False for cup-only guests (Liga MX, AFC) that are not career destinations. */
+  playable?: boolean;
   tier: ClubTier;
   /**
    * Overall squad quality used by the match engine. Independent of `tier`
@@ -401,12 +407,40 @@ const CLUB_SEED: Club[] = [
   { id: 'charlotte', name: 'Charlotte FC', country: 'United States', league: 'MLS', tier: 4, strength: 63, color: '#1A85C8', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
   { id: 'st-louis', name: 'St. Louis City', country: 'United States', league: 'MLS', tier: 4, strength: 64, color: '#E30613', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
   { id: 'dc-united', name: 'D.C. United', country: 'United States', league: 'MLS', tier: 4, strength: 61, color: '#000000', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+
+  // Mexico - Liga MX (Leagues Cup opponents)
+  { id: 'club-america', name: 'Club América', country: 'Mexico', league: 'Liga MX', tier: 2, strength: 80, color: '#FFD100', reserveGoalRatio: 0.5, firstTeamGoalRatio: 0.4, playable: false },
+  { id: 'monterrey', name: 'Monterrey', country: 'Mexico', league: 'Liga MX', tier: 2, strength: 79, color: '#003DA5', reserveGoalRatio: 0.5, firstTeamGoalRatio: 0.4, playable: false },
+  { id: 'tigres', name: 'Tigres UANL', country: 'Mexico', league: 'Liga MX', tier: 2, strength: 78, color: '#F5A12D', reserveGoalRatio: 0.5, firstTeamGoalRatio: 0.4, playable: false },
+  { id: 'chivas', name: 'Chivas', country: 'Mexico', league: 'Liga MX', tier: 2, strength: 77, color: '#E30613', reserveGoalRatio: 0.48, firstTeamGoalRatio: 0.38, playable: false },
+  { id: 'cruz-azul', name: 'Cruz Azul', country: 'Mexico', league: 'Liga MX', tier: 2, strength: 76, color: '#003DA5', reserveGoalRatio: 0.48, firstTeamGoalRatio: 0.38, playable: false },
+  { id: 'pumas', name: 'Pumas UNAM', country: 'Mexico', league: 'Liga MX', tier: 3, strength: 73, color: '#002D62', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32, playable: false },
+  { id: 'toluca', name: 'Toluca', country: 'Mexico', league: 'Liga MX', tier: 3, strength: 74, color: '#E30613', reserveGoalRatio: 0.42, firstTeamGoalRatio: 0.34, playable: false },
+  { id: 'leon', name: 'León', country: 'Mexico', league: 'Liga MX', tier: 3, strength: 72, color: '#007A33', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32, playable: false },
+  { id: 'santos-laguna', name: 'Santos Laguna', country: 'Mexico', league: 'Liga MX', tier: 3, strength: 71, color: '#007A33', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32, playable: false },
+  { id: 'pachuca', name: 'Pachuca', country: 'Mexico', league: 'Liga MX', tier: 3, strength: 73, color: '#003DA5', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32, playable: false },
+
+  // AFC Champions League Elite opponents
+  { id: 'urawa', name: 'Urawa Red Diamonds', country: 'Japan', league: 'J1 League', tier: 2, strength: 76, color: '#E30613', reserveGoalRatio: 0.45, firstTeamGoalRatio: 0.36, playable: false },
+  { id: 'kawasaki', name: 'Kawasaki Frontale', country: 'Japan', league: 'J1 League', tier: 2, strength: 75, color: '#87CEEB', reserveGoalRatio: 0.45, firstTeamGoalRatio: 0.36, playable: false },
+  { id: 'yokohama-fm', name: 'Yokohama F. Marinos', country: 'Japan', league: 'J1 League', tier: 2, strength: 74, color: '#003DA5', reserveGoalRatio: 0.42, firstTeamGoalRatio: 0.34, playable: false },
+  { id: 'ulsan', name: 'Ulsan HD', country: 'South Korea', league: 'K League 1', tier: 2, strength: 76, color: '#003DA5', reserveGoalRatio: 0.45, firstTeamGoalRatio: 0.36, playable: false },
+  { id: 'jeonbuk', name: 'Jeonbuk Hyundai', country: 'South Korea', league: 'K League 1', tier: 2, strength: 74, color: '#007A33', reserveGoalRatio: 0.42, firstTeamGoalRatio: 0.34, playable: false },
+  { id: 'al-ain', name: 'Al Ain', country: 'United Arab Emirates', league: 'UAE Pro League', tier: 2, strength: 75, color: '#8B1E21', reserveGoalRatio: 0.45, firstTeamGoalRatio: 0.36, playable: false },
+  { id: 'al-wasl', name: 'Al Wasl', country: 'United Arab Emirates', league: 'UAE Pro League', tier: 3, strength: 70, color: '#FFD100', reserveGoalRatio: 0.38, firstTeamGoalRatio: 0.3, playable: false },
+  { id: 'al-sadd', name: 'Al Sadd', country: 'Qatar', league: 'Qatar Stars League', tier: 2, strength: 76, color: '#000000', reserveGoalRatio: 0.45, firstTeamGoalRatio: 0.36, playable: false },
+  { id: 'al-duhail', name: 'Al-Duhail', country: 'Qatar', league: 'Qatar Stars League', tier: 2, strength: 74, color: '#E30613', reserveGoalRatio: 0.42, firstTeamGoalRatio: 0.34, playable: false },
+  { id: 'persepolis', name: 'Persepolis', country: 'Iran', league: 'Persian Gulf Pro League', tier: 2, strength: 73, color: '#E30613', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32, playable: false },
+  { id: 'esteghlal', name: 'Esteghlal', country: 'Iran', league: 'Persian Gulf Pro League', tier: 2, strength: 72, color: '#003DA5', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32, playable: false },
+  { id: 'shanghai-port', name: 'Shanghai Port', country: 'China PR', league: 'Chinese Super League', tier: 2, strength: 73, color: '#E30613', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32, playable: false },
 ];
 
 export const CLUBS: Club[] = CLUB_SEED.map((club) => {
   const ratio = goalRatioFromStrength(club.strength);
   return {
     ...club,
+    conference: club.conference ?? mlsConferenceOf(club.id) ?? undefined,
+    playable: club.playable !== false,
     tier: assignClubTier(club.country, club.league, club.strength),
     firstTeamGoalRatio: ratio,
     reserveGoalRatio: ratio,
@@ -418,7 +452,7 @@ export function getClub(id: string): Club | undefined {
 }
 
 export function clubsByTier(tier: ClubTier): Club[] {
-  return CLUBS.filter((c) => c.tier === tier);
+  return CLUBS.filter((c) => c.tier === tier && c.playable !== false);
 }
 
 export function clubsInLeague(league: string): Club[] {
@@ -432,18 +466,29 @@ export function clubsInLeague(league: string): Club[] {
  * run past 48 weeks.
  */
 export function clubsForSeason(playerClub: Club, league: string): Club[] {
+  if (league === 'MLS') return mlsSeasonClubs(playerClub);
   let pool = clubsInLeague(league);
   if (!pool.some((c) => c.id === playerClub.id)) {
     const weakest = [...pool].sort((a, b) => a.strength - b.strength || a.id.localeCompare(b.id))[0];
     pool = [playerClub, ...pool.filter((c) => c.id !== weakest?.id)];
   }
-  if (league === 'MLS' && pool.length > MLS_SEASON_CLUBS) {
-    const others = pool
-      .filter((c) => c.id !== playerClub.id)
-      .sort((a, b) => b.strength - a.strength || a.id.localeCompare(b.id));
-    pool = [playerClub, ...others.slice(0, MLS_SEASON_CLUBS - 1)];
-  }
   return pool;
+}
+
+/** 10 Eastern + 10 Western, always including the player. */
+export function mlsSeasonClubs(playerClub: Club): Club[] {
+  const playerConf = mlsConferenceOf(playerClub.id) ?? 'west';
+  const otherConf = playerConf === 'east' ? 'west' : 'east';
+  const take = (conference: 'east' | 'west', include?: Club): Club[] => {
+    const pool = CLUBS.filter(
+      (c) => c.league === 'MLS' && mlsConferenceOf(c.id) === conference && c.id !== include?.id,
+    ).sort((a, b) => b.strength - a.strength || a.id.localeCompare(b.id));
+    if (include && mlsConferenceOf(include.id) === conference) {
+      return [include, ...pool.slice(0, MLS_CONFERENCE_SIZE - 1)];
+    }
+    return pool.slice(0, MLS_CONFERENCE_SIZE);
+  };
+  return [...take(playerConf, playerClub), ...take(otherConf)];
 }
 
 /** Real division sizes. A season is home and away against every other club. */
@@ -463,11 +508,8 @@ export const TARGET_LEAGUE_SIZE: Record<string, number> = {
 };
 
 export function leagueMatchWeeks(league: string, playerClub?: Club): number {
-  const n = playerClub
-    ? clubsForSeason(playerClub, league).length
-    : league === 'MLS'
-      ? MLS_SEASON_CLUBS
-      : clubsInLeague(league).length;
+  if (league === 'MLS') return MLS_REGULAR_SEASON_WEEKS;
+  const n = playerClub ? clubsForSeason(playerClub, league).length : clubsInLeague(league).length;
   return Math.max(2, (n - 1) * 2);
 }
 
@@ -476,6 +518,17 @@ export function clubsInCountry(country: string): Club[] {
 }
 
 /** Clubs strictly weaker than the given club - candidates for a loan spell. */
+export function qualifiesForSaudiSuperCup(club: Club): boolean {
+  return CLUBS.filter((c) => c.league === 'Saudi Pro League')
+    .sort((a, b) => b.strength - a.strength || a.id.localeCompare(b.id))
+    .slice(0, 4)
+    .some((c) => c.id === club.id);
+}
+
+export function ligaMxClubs(): Club[] {
+  return CLUBS.filter((c) => c.league === 'Liga MX');
+}
+
 export function loanCandidates(club: Club): Club[] {
   const targetTier = Math.min(5, club.tier + 1) as ClubTier;
   return CLUBS.filter((c) => c.tier === targetTier && c.id !== club.id);

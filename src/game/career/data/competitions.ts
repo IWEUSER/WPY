@@ -35,12 +35,24 @@ export function domesticLeagueCompetition(club: Club): Competition {
   return { id: `league:${slug(club.league)}`, name: club.league, kind: 'domestic-league' };
 }
 
-export type ContinentalCupId = 'ucl' | 'uel' | 'uecl';
+export type ContinentalCupId = 'ucl' | 'uel' | 'uecl' | 'acle' | 'leagues-cup';
 
 export const CONTINENTAL_CUPS: Record<ContinentalCupId, Competition> = {
   ucl: { id: 'ucl', name: 'Champions League', kind: 'continental-cup', confederation: 'UEFA' },
   uel: { id: 'uel', name: 'Europa League', kind: 'continental-cup', confederation: 'UEFA' },
   uecl: { id: 'uecl', name: 'Conference League', kind: 'continental-cup', confederation: 'UEFA' },
+  acle: {
+    id: 'acle',
+    name: 'AFC Champions League Elite',
+    kind: 'continental-cup',
+    confederation: 'AFC',
+  },
+  'leagues-cup': {
+    id: 'leagues-cup',
+    name: 'Leagues Cup',
+    kind: 'continental-cup',
+    confederation: 'CONCACAF',
+  },
 };
 
 export const SUPER_CUP: Competition = { id: 'super-cup', name: 'Super Cup', kind: 'super-cup', confederation: 'UEFA' };
@@ -60,7 +72,7 @@ export const DOMESTIC_CUPS: Record<DomesticCupId, Competition> = {
   'coppa-italia': { id: 'coppa-italia', name: 'Coppa Italia', kind: 'domestic-cup', country: 'Italy' },
   'dfb-pokal': { id: 'dfb-pokal', name: 'DFB-Pokal', kind: 'domestic-cup', country: 'Germany' },
   'coupe-de-france': { id: 'coupe-de-france', name: 'Coupe de France', kind: 'domestic-cup', country: 'France' },
-  'kings-cup': { id: 'kings-cup', name: "King's Cup", kind: 'domestic-cup', country: 'Saudi Arabia' },
+  'kings-cup': { id: 'kings-cup', name: 'King Cup', kind: 'domestic-cup', country: 'Saudi Arabia' },
   'us-open-cup': { id: 'us-open-cup', name: 'US Open Cup', kind: 'domestic-cup', country: 'United States' },
 };
 
@@ -86,11 +98,27 @@ export function domesticCupForCountry(country: string): DomesticCupId | null {
  * the club's tier rather than an actual final league position - tier 1 clubs
  * are Champions League regulars, tier 2 fight it out in the Europa League,
  * tier 3 gets a Conference League run, and tiers 4-5 have no European
- * football. Only UEFA clubs have a continental cup modelled for now; AFC
- * Champions League / Concacaf Champions Cup can slot in behind this same
- * function later without touching any calendar/chance-engine code.
+ * football. AFC clubs in the top two tiers play the Champions League Elite;
+ * MLS sides play Leagues Cup instead of a year-long continental league.
  */
+/** Saudi top four plus the AFC guest sides that fill out the Elite draw. */
+export function clubContinentalCup(club: Club): ContinentalCupId | null {
+  if (club.league === 'Saudi Pro League') {
+    return club.strength >= 76 ? 'acle' : null;
+  }
+  const conf = confederationForCountry(club.country);
+  if (conf === 'AFC' && club.playable === false) return 'acle';
+  return continentalCupForClub(club.tier, conf);
+}
+
 export function continentalCupForClub(tier: ClubTier, confederation: Confederation): ContinentalCupId | null {
+  if (confederation === 'AFC') {
+    if (tier <= 2) return 'acle';
+    return null;
+  }
+  if (confederation === 'CONCACAF') {
+    return null;
+  }
   if (confederation !== 'UEFA') return null;
   if (tier === 1) return 'ucl';
   if (tier === 2) return 'uel';

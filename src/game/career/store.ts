@@ -946,7 +946,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 12,
+      version: 13,
       migrate: (persisted) => {
         const state = persisted as Partial<CareerState>;
         const sim = state.seasonSim;
@@ -1007,6 +1007,11 @@ export const useCareerStore = create<CareerStore>()(
                 titleRivalId: sim.titleRivalId ?? null,
                 rivalHomeOutcome: sim.rivalHomeOutcome ?? null,
                 rivalAwayOutcome: sim.rivalAwayOutcome ?? null,
+                playoffStage: sim.playoffStage ?? null,
+                leaguesCupStage: sim.leaguesCupStage ?? 'not-entered',
+                leaguesCupGroupPlayed: sim.leaguesCupGroupPlayed ?? 0,
+                leaguesCupGroupPoints: sim.leaguesCupGroupPoints ?? 0,
+                superCupStage: sim.superCupStage ?? 'not-entered',
               }
             : null,
           liveMatch: state.liveMatch ?? null,

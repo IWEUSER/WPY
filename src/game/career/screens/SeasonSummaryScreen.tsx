@@ -1,5 +1,6 @@
 import { RETIREMENT_AGE } from '../constants';
 import { getClub } from '../data/clubs';
+import { leagueDisplayName } from '../data/leagueFormat';
 import { formatEuros } from '../playerValue';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { displaySeasonLabel, displaySeasonNumber } from '../seasonDisplay';
@@ -56,7 +57,11 @@ export default function SeasonSummaryScreen() {
   });
 
   const honours: string[] = [];
-  if (seasonSim?.honours.leagueChampion) honours.push(`Won ${clubLeague ?? club.league}`);
+  if (seasonSim?.honours.leagueChampion) {
+    honours.push(
+      `Won ${clubLeague === 'MLS' || club.league === 'MLS' ? 'MLS Cup' : leagueDisplayName(clubLeague ?? club.league)}`,
+    );
+  }
   if (seasonSim?.honours.continentalChampion) {
     honours.push(`Won the ${CONTINENTAL_CUPS[seasonSim.honours.continentalChampion].name}`);
   }
