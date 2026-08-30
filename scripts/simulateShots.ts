@@ -32,6 +32,7 @@ import {
   penaltyChanceProbability,
   placeDefender,
   rollChanceSetup,
+  shotLineHitsDefender,
 } from '../src/game/shooting/chanceSetup';
 import {
   aimToSaveCell,
@@ -609,6 +610,18 @@ const lob = defenderBlocksBall(view18, cover, lobBall, radius);
 console.log(`collision: into-body=${hit} wide=${miss} over-head=${lob} (expect true / false / false)`);
 if (!hit || miss || lob) {
   console.error('FAIL: defender collision did not distinguish a body hit from a miss or a lob');
+  process.exitCode = 1;
+}
+
+const lineDef = placeDefender(18, 0.5, () => 0.25);
+const fromBall = (18 - lineDef.z) / 18;
+const throughAimX = (lineDef.worldX / fromBall) / (FIFA.goalWidth / 2);
+const through = shotLineHitsDefender(18, 0.5, { x: throughAimX, y: 0.22 }, lineDef);
+const otherSide = shotLineHitsDefender(18, 0.5, { x: -Math.sign(throughAimX) * 0.85, y: 0.22 }, lineDef);
+const lofted = shotLineHitsDefender(18, 0.5, { x: throughAimX, y: 1.15 }, lineDef);
+console.log(`shot-line: through=${through} far-post=${otherSide} lofted=${lofted} (expect true / false / false)`);
+if (!through || otherSide || lofted) {
+  console.error('FAIL: the ball-to-aim line must hit a defender you shoot through, and miss around or over them');
   process.exitCode = 1;
 }
 

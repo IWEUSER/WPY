@@ -8,6 +8,7 @@ import {
   worldToScreen,
   type PitchView,
 } from './render';
+import type { AimPoint } from './types';
 
 /** Minimum gap from the ball to an open-play defender, when the pitch allows it. */
 export const DEFENDER_GAP_YARDS = 10;
@@ -136,9 +137,65 @@ export function defenderOffsetFromShootingLineM(
   return Math.abs(defender.worldX - lineToGoalCentreX(ballWorldX, shotDistanceM, defender.z));
 }
 
+export interface DefenderScreenBody {
+  feet: { x: number; y: number };
+  headY: number;
+  torsoX: number;
+  torsoY: number;
+  bodyR: number;
+  hipsY: number;
+  legsR: number;
+}
+
+export function defenderScreenBody(view: PitchView, defender: DefenderPose): DefenderScreenBody {
+  const meterPx = view.halfWidthPx(1, defender.z);
+  const feet = worldToScreen(view, defender.worldX, defender.z);
+  return {
+    feet,
+    headY: feet.y - 1.82 * meterPx,
+    torsoX: feet.x,
+    torsoY: feet.y - 0.95 * meterPx,
+    bodyR: 0.45 * meterPx,
+    hipsY: feet.y - 0.42 * meterPx,
+    legsR: 0.28 * meterPx,
+  };
+}
+
+/** True once the flying ball has visually reached the defender's grass line. */
+export function ballHasReachedDefender(
+  view: PitchView,
+  defender: DefenderPose,
+  ballPx: { x: number; y: number },
+  ballRadiusPx: number,
+): boolean {
+  const body = defenderScreenBody(view, defender);
+  return ballPx.y <= body.feet.y + ballRadiusPx;
+}
+
 /**
- * Screen-space body check. The ball has to have reached the defender's
- * depth (caller) and not be lofted over their head.
+ * World-space line from the ball to the aimed point on the goal. Used so a
+ * driven shot at the defender still blocks even when the flight bezier arcs
+ * over their sprite.
+ */
+export function shotLineHitsDefender(
+  shotDistanceM: number,
+  ballStartXRatio: number,
+  aim: AimPoint,
+  defender: DefenderPose,
+): boolean {
+  if (shotDistanceM <= 1e-6) return false;
+  const fromBall = clamp((shotDistanceM - defender.z) / shotDistanceM, 0, 1);
+  const ballX = ballWorldXFromRatio(ballStartXRatio);
+  const aimWorldX = aim.x * (FIFA.goalWidth / 2);
+  const x = ballX + (aimWorldX - ballX) * fromBall;
+  const height = Math.max(0, aim.y) * FIFA.goalHeight * fromBall;
+  if (height > 1.82 + FIFA.ballDiameter / 2) return false;
+  return Math.abs(x - defender.worldX) < 0.55;
+}
+
+/**
+ * Screen-space body check. A lob over the head (ball above the skull) is not
+ * a block; a strike through the torso or legs is.
  */
 export function defenderBlocksBall(
   view: PitchView,
@@ -146,20 +203,11 @@ export function defenderBlocksBall(
   ballPx: { x: number; y: number },
   ballRadiusPx: number,
 ): boolean {
-  const meterPx = view.halfWidthPx(1, defender.z);
-  const feet = worldToScreen(view, defender.worldX, defender.z);
-  const heightM = 1.82;
-  const headY = feet.y - heightM * meterPx;
-  if (ballPx.y + ballRadiusPx < headY) return false;
+  const body = defenderScreenBody(view, defender);
+  if (ballPx.y + ballRadiusPx < body.headY) return false;
 
-  const torsoX = feet.x;
-  const torsoY = feet.y - 0.95 * meterPx;
-  const bodyR = 0.34 * meterPx;
-  if (Math.hypot(ballPx.x - torsoX, ballPx.y - torsoY) < bodyR + ballRadiusPx) return true;
-
-  const hipsY = feet.y - 0.42 * meterPx;
-  const legsR = 0.22 * meterPx;
-  return Math.hypot(ballPx.x - torsoX, ballPx.y - hipsY) < legsR + ballRadiusPx;
+  if (Math.hypot(ballPx.x - body.torsoX, ballPx.y - body.torsoY) < body.bodyR + ballRadiusPx) return true;
+  return Math.hypot(ballPx.x - body.torsoX, ballPx.y - body.hipsY) < body.legsR + ballRadiusPx;
 }
 
 export interface RollChanceOptions {

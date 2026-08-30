@@ -19,7 +19,10 @@ import {
   type KeeperPose,
 } from './render';
 import {
+  ballHasReachedDefender,
   defenderBlocksBall,
+  defenderScreenBody,
+  shotLineHitsDefender,
   rollChanceSetup,
   type ChanceKind,
   type ChanceSetup,
@@ -470,12 +473,17 @@ export default function ShootingGame({
           if (anim.defender) drawDefender(ctx, view, anim.defender.worldX, anim.defender.z);
           drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
 
-          const ballZ = anim.shotDistanceM * (1 - eased);
           if (
             anim.defender
-            && ballZ <= anim.defender.z + 0.45
-            && defenderBlocksBall(view, anim.defender, anim.ballPixel, anim.ballRadius)
+            && eased > 0.06
+            && ballHasReachedDefender(view, anim.defender, anim.ballPixel, anim.ballRadius)
+            && (
+              shotLineHitsDefender(anim.shotDistanceM, anim.ballStartXRatio, result.aim, anim.defender)
+              || defenderBlocksBall(view, anim.defender, anim.ballPixel, anim.ballRadius)
+            )
           ) {
+            const body = defenderScreenBody(view, anim.defender);
+            anim.ballPixel = { x: body.torsoX, y: body.torsoY };
             const blocked: ShotResult = { ...result, outcome: 'blocked' };
             anim.result = blocked;
             anim.phase = 'result';
