@@ -43,6 +43,19 @@ export interface MarketValueParams {
 
 export const DEFAULT_CONTRACT_YEARS = 5;
 
+/** Longer deals for teenagers; the max shortens as the player ages. */
+export function maxContractYearsForAge(age: number): number {
+  if (age >= 34) return 1;
+  if (age >= 30) return 2;
+  if (age >= 27) return 3;
+  if (age >= 25) return 4;
+  return DEFAULT_CONTRACT_YEARS;
+}
+
+export function newContractYears(age: number): number {
+  return maxContractYearsForAge(age);
+}
+
 /** Full fee on a 5-year deal; one year left is a fire sale; expired is free. */
 export function contractValueFactor(yearsRemaining: number): number {
   if (yearsRemaining >= 5) return 1;
@@ -53,8 +66,16 @@ export function contractValueFactor(yearsRemaining: number): number {
   return 0;
 }
 
-export function nextContractYearsRemaining(yearsRemaining: number): number {
-  return yearsRemaining <= 1 ? DEFAULT_CONTRACT_YEARS : yearsRemaining - 1;
+export function nextContractYearsRemaining(yearsRemaining: number, age: number): number {
+  return yearsRemaining <= 1 ? newContractYears(age) : yearsRemaining - 1;
+}
+
+/** Boot / shirt money for the season. Scales with market value. */
+export function seasonalSponsorship(marketValue: number): number {
+  const raw = Math.max(10_000, marketValue * 0.04);
+  if (raw >= 1_000_000) return Math.round(raw / 100_000) * 100_000;
+  if (raw >= 100_000) return Math.round(raw / 10_000) * 10_000;
+  return Math.round(raw / 5_000) * 5_000;
 }
 
 /** Trailing first-team/loan seasons below a goals-per-game bar. */

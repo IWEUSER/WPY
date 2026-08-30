@@ -36,6 +36,8 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const careerEarnings = useCareerStore((s) => s.careerEarnings);
   const weeklyWage = useCareerStore((s) => s.weeklyWage);
   const contractYearsRemaining = useCareerStore((s) => s.contractYearsRemaining);
+  const clubLeague = useCareerStore((s) => s.clubLeague);
+  const seasonSponsorship = useCareerStore((s) => s.seasonSponsorship);
   const injuryGamesRemaining = useCareerStore((s) => s.injuryGamesRemaining);
   const advance = useCareerStore((s) => s.advance);
   const openCareerRecord = useCareerStore((s) => s.openCareerRecord);
@@ -90,7 +92,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         </p>
         <h1 className="text-2xl font-extrabold">{club.name}</h1>
         <p className="text-xs text-white/50">
-          {club.country} · {club.league}
+          {club.country} · {clubLeague ?? club.league}
         </p>
         {nation && <p className="mt-1 text-xs text-white/50">International: {nation.name}</p>}
         {parentClub && <p className="mt-1 text-xs text-white/40">On loan from {parentClub.name}</p>}
@@ -102,6 +104,9 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
             Earnings {formatEuros(careerEarnings)}
             {weeklyWage > 0 ? ` · ${formatWeeklyWage(weeklyWage)}` : ''}
           </p>
+        )}
+        {seasonSponsorship > 0 && (
+          <p className="mt-1 text-xs text-white/50">Sponsorship {formatEuros(seasonSponsorship)} this season</p>
         )}
         <p className="mt-1 text-xs text-white/50">
           Contract {contractYearsRemaining} year{contractYearsRemaining === 1 ? '' : 's'} left

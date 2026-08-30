@@ -1,3 +1,4 @@
+import { RETIREMENT_AGE } from '../constants';
 import { getClub } from '../data/clubs';
 import { formatEuros } from '../playerValue';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
@@ -24,8 +25,9 @@ export default function SeasonSummaryScreen() {
   const nationality = useCareerStore((s) => s.nationality);
   const seasonHistory = useCareerStore((s) => s.seasonHistory);
   const continueAfterSeason = useCareerStore((s) => s.continueAfterSeason);
-  const lastMatchSummary = useCareerStore((s) => s.lastMatchSummary);
   const contractYearsRemaining = useCareerStore((s) => s.contractYearsRemaining);
+  const clubLeague = useCareerStore((s) => s.clubLeague);
+  const seasonSponsorship = useCareerStore((s) => s.seasonSponsorship);
 
   const club = clubId ? getClub(clubId) : undefined;
   if (!club || !season || !clubId || !parentClubId) return null;
@@ -49,10 +51,12 @@ export default function SeasonSummaryScreen() {
     loansUsed: countLoanSpells(seasonHistory, season),
     seasonHistory,
     contractYearsRemaining,
+    leaguePosition: us?.position ?? null,
+    clubLeague,
   });
 
   const honours: string[] = [];
-  if (seasonSim?.honours.leagueChampion) honours.push(`Won ${club.league}`);
+  if (seasonSim?.honours.leagueChampion) honours.push(`Won ${clubLeague ?? club.league}`);
   if (seasonSim?.honours.continentalChampion) {
     honours.push(`Won the ${CONTINENTAL_CUPS[seasonSim.honours.continentalChampion].name}`);
   }
@@ -100,7 +104,12 @@ export default function SeasonSummaryScreen() {
           Ratio: {ratio.toFixed(2)} / {threshold.toFixed(2)} required
         </p>
         {(season.earnings ?? 0) > 0 && (
-          <p className="mt-1 text-xs text-white/50">Earned {formatEuros(season.earnings ?? 0)} this season</p>
+          <p className="mt-1 text-xs text-white/50">
+            Earned {formatEuros(season.earnings ?? 0)} this season
+            {(season.sponsorship ?? seasonSponsorship) > 0
+              ? ` · ${formatEuros(season.sponsorship ?? seasonSponsorship)} sponsorship`
+              : ''}
+          </p>
         )}
         {us && (
           <p className="mt-2 text-xs text-white/50">
@@ -141,18 +150,16 @@ export default function SeasonSummaryScreen() {
         </div>
       )}
 
-      {lastMatchSummary && (
-        <div className="w-full max-w-sm rounded-2xl bg-white/5 px-4 py-3 text-sm text-white/80">{lastMatchSummary}</div>
-      )}
-
-      <p className="max-w-sm text-sm text-white/60">{preview.detail}</p>
+      <p className="max-w-sm text-sm text-white/60">{age >= RETIREMENT_AGE ? 'This was your final season.' : preview.detail}</p>
 
       <button
         type="button"
         onClick={continueAfterSeason}
         className="rounded-2xl bg-emerald-500 px-6 py-4 text-lg font-bold text-black shadow-lg shadow-emerald-500/20 transition active:scale-[0.98]"
       >
-        Continue to {displaySeasonNumber(seasonNumber + 1) === null ? 'the first team' : `Season ${displaySeasonNumber(seasonNumber + 1)}`}
+        {age >= RETIREMENT_AGE
+          ? 'View career'
+          : `Continue to ${displaySeasonNumber(seasonNumber + 1) === null ? 'the first team' : `Season ${displaySeasonNumber(seasonNumber + 1)}`}`}
       </button>
     </div>
   );

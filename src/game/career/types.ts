@@ -69,6 +69,10 @@ export interface SeasonRecord {
   wpyReason?: string | null;
   /** Weekly wage × 52 for this season. */
   earnings?: number;
+  /** One-off seasonal boot / shirt deal. */
+  sponsorship?: number;
+  /** League this season was played in (may differ after promotion). */
+  league?: string;
 }
 
 export interface TrialState {
@@ -87,6 +91,7 @@ export type CareerPhase =
   | 'season-summary'
   | 'transfer-choice'
   | 'career'
+  | 'career-end'
   | 'match-result';
 
 export interface CareerState {
@@ -130,6 +135,10 @@ export interface CareerState {
   careerEarnings: number;
   contractYears: number;
   contractYearsRemaining: number;
+  /** League the current club is competing in (top flight after a promotion). */
+  clubLeague: string | null;
+  /** Sponsorship paid at the start of the current season. */
+  seasonSponsorship: number;
   /** Upcoming club/country fixtures the player will sit out through injury. */
   injuryGamesRemaining: number;
   previousContinentalChampion: ContinentalCupId | null;

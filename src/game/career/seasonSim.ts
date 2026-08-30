@@ -6,7 +6,7 @@ import {
   chancesForKnockoutTie,
   chancesForLeagueMatch,
 } from './chanceEngine';
-import { clubsInCountry, clubsInLeague, getClub, leagueMatchWeeks, type Club } from './data/clubs';
+import { clubsForSeason, clubsInCountry, getClub, leagueMatchWeeks, type Club } from './data/clubs';
 import {
   confederationForCountry,
   continentalCupForClub,
@@ -113,6 +113,8 @@ export interface HydrateSeasonParams {
   qualifierCarry?: { tournament: InternationalTournamentId; points: number; played: number } | null;
   includeSuperCup?: boolean;
   superCupOpponentId?: string;
+  /** League the club is actually playing in (top flight after promotion). */
+  league?: string;
 }
 
 const GROUP_GAMES = 8;
@@ -134,6 +136,7 @@ const INTERNATIONAL_GROUP_ADVANCE_POINTS = 4;
 
 export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCalendar; sim: SeasonSimState } {
   const { seasonNumber, club, careerGoalRatio, nationId, qualifierCarry, includeSuperCup, superCupOpponentId } = params;
+  const league = params.league ?? club.league;
   const clubConfederation = confederationForCountry(club.country);
   const nation = nationId ? getNation(nationId) : undefined;
   const cup = continentalCupForClub(club.tier, clubConfederation);
@@ -155,7 +158,7 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
 
   let calendar = buildSeasonCalendar({
     seasonNumber,
-    leagueMatchWeeks: leagueMatchWeeks(club.league),
+    leagueMatchWeeks: leagueMatchWeeks(league, club),
     clubTier: club.tier,
     confederation: clubConfederation,
     country: club.country,
@@ -171,13 +174,14 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
     tournament,
     campaign.qualifierGames,
     superCupOpponentId,
+    league,
   );
 
-  const leagueClubs = clubsInLeague(club.league);
+  const leagueClubs = clubsForSeason(club, league);
   const leagueTable = leagueClubs.map((c) => emptyStanding(c.id));
   const europeanStanding: EuropeanStanding | null = cup ? { cup, stage: 'group' } : null;
   const domesticCup = calendar.domesticCup ?? null;
-  const titleRival = pickTitleRival(club);
+  const titleRival = pickTitleRival(club, league);
 
   return {
     calendar,
@@ -213,8 +217,8 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
 }
 
 /** The club the player must beat (or at least not lose to twice) to stay in the title race. */
-export function pickTitleRival(club: Club): Club | undefined {
-  const others = clubsInLeague(club.league).filter((c) => c.id !== club.id);
+export function pickTitleRival(club: Club, league?: string): Club | undefined {
+  const others = clubsForSeason(club, league ?? club.league).filter((c) => c.id !== club.id);
   others.sort((a, b) => b.strength - a.strength || a.id.localeCompare(b.id));
   return others[0];
 }
@@ -236,8 +240,9 @@ function assignOpponentsAndChances(
   tournament: InternationalTournamentId | null,
   qualifierGames: number,
   superCupOpponentId?: string,
+  league?: string,
 ): SeasonCalendar {
-  const leagueRivals = leagueOpponentQueue(club);
+  const leagueRivals = leagueOpponentQueue(club, league);
   const leaguePhase = cup ? leaguePhaseOpponents(club, cup, 8) : [];
   const euroRivals = cup
     ? shuffle(clubsForContinentalCup(cup).filter((id) => id !== club.id))
@@ -259,7 +264,7 @@ function assignOpponentsAndChances(
     const f = fixtures[i];
     if (f.kind === 'league') {
       const opp = leagueRivals[leagueI];
-      const uniqueRivals = Math.max(1, clubsInLeague(club.league).length - 1);
+      const uniqueRivals = Math.max(1, leagueRivals.length / 2);
       f.isHome = leagueI < uniqueRivals;
       leagueI += 1;
       if (opp) {
@@ -363,8 +368,8 @@ function assignOpponentsAndChances(
 }
 
 /** Each league rival once, then once more — never a third meeting. */
-export function leagueOpponentQueue(club: Club): Club[] {
-  const rivals = shuffle(clubsInLeague(club.league).filter((c) => c.id !== club.id));
+export function leagueOpponentQueue(club: Club, league?: string): Club[] {
+  const rivals = shuffle(clubsForSeason(club, league ?? club.league).filter((c) => c.id !== club.id));
   return [...rivals, ...shuffle(rivals)];
 }
 

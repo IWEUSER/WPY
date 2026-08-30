@@ -23,13 +23,33 @@ export const TIER_LABEL: Record<ClubTier, string> = {
   5: 'Smallest club in the game',
 };
 
-const SECOND_DIVISIONS = new Set([
+export const SECOND_DIVISIONS = new Set([
   'Championship',
   'La Liga 2',
   'Serie B',
   '2. Bundesliga',
   'Ligue 2',
 ]);
+
+/** Second-tier league → the top flight it promotes into. */
+export const PROMOTION_TARGET: Record<string, string> = {
+  Championship: 'Premier League',
+  'La Liga 2': 'La Liga',
+  'Serie B': 'Serie A',
+  '2. Bundesliga': 'Bundesliga',
+  'Ligue 2': 'Ligue 1',
+};
+
+export function promotionTarget(league: string): string | null {
+  return PROMOTION_TARGET[league] ?? null;
+}
+
+export function earnedPromotion(league: string, position: number | null | undefined): boolean {
+  return Boolean(promotionTarget(league) && position != null && position <= 2);
+}
+
+/** MLS is a 28-club pool; a season uses 20 so the calendar stays ≤ 48 weeks. */
+export const MLS_SEASON_CLUBS = 20;
 
 /** Floor on the numeric tier (1 is best). MLS never 1–2; Saudi never 1. */
 export function leagueTierFloor(country: string, league: string): ClubTier {
@@ -405,6 +425,27 @@ export function clubsInLeague(league: string): Club[] {
   return CLUBS.filter((c) => c.league === league);
 }
 
+/**
+ * Clubs that share a table with the player this season. A promoted
+ * Championship side is inserted into the Premier League (the weakest
+ * top-flight club drops out). MLS is capped at 20 so the year cannot
+ * run past 48 weeks.
+ */
+export function clubsForSeason(playerClub: Club, league: string): Club[] {
+  let pool = clubsInLeague(league);
+  if (!pool.some((c) => c.id === playerClub.id)) {
+    const weakest = [...pool].sort((a, b) => a.strength - b.strength || a.id.localeCompare(b.id))[0];
+    pool = [playerClub, ...pool.filter((c) => c.id !== weakest?.id)];
+  }
+  if (league === 'MLS' && pool.length > MLS_SEASON_CLUBS) {
+    const others = pool
+      .filter((c) => c.id !== playerClub.id)
+      .sort((a, b) => b.strength - a.strength || a.id.localeCompare(b.id));
+    pool = [playerClub, ...others.slice(0, MLS_SEASON_CLUBS - 1)];
+  }
+  return pool;
+}
+
 /** Real division sizes. A season is home and away against every other club. */
 export const TARGET_LEAGUE_SIZE: Record<string, number> = {
   'Premier League': 20,
@@ -421,8 +462,12 @@ export const TARGET_LEAGUE_SIZE: Record<string, number> = {
   MLS: 28,
 };
 
-export function leagueMatchWeeks(league: string): number {
-  const n = clubsInLeague(league).length;
+export function leagueMatchWeeks(league: string, playerClub?: Club): number {
+  const n = playerClub
+    ? clubsForSeason(playerClub, league).length
+    : league === 'MLS'
+      ? MLS_SEASON_CLUBS
+      : clubsInLeague(league).length;
   return Math.max(2, (n - 1) * 2);
 }
 

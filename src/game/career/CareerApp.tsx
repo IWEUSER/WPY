@@ -6,6 +6,7 @@ import ClubOfferScreen from './screens/ClubOfferScreen';
 import NationalityScreen from './screens/NationalityScreen';
 import CareerHub from './screens/CareerHub';
 import CareerRecordScreen from './screens/CareerRecordScreen';
+import CareerEndScreen from './screens/CareerEndScreen';
 import MatchScreen from './screens/MatchScreen';
 import SeasonSummaryScreen from './screens/SeasonSummaryScreen';
 import TransferChoiceScreen from './screens/TransferChoiceScreen';
@@ -72,6 +73,8 @@ export default function CareerApp() {
       return <CareerHub onOpenMenu={returnToMenu} />;
     case 'career':
       return <CareerRecordScreen />;
+    case 'career-end':
+      return <CareerEndScreen />;
     default:
       return <HomeScreen onPractice={() => setPracticing(true)} />;
   }

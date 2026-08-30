@@ -15,8 +15,8 @@ import {
   chancesForLeagueMatch,
   meanChancesFromStrength,
 } from '../src/game/career/chanceEngine';
-import { assignClubTier, CLUBS, clubsInLeague, getClub, goalRatioFromStrength, leagueMatchWeeks, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
-import { consecutivePoorFactor, contractValueFactor, formAdjustedRatio, playerMarketValue, playerMarketValueFromSeasons, tierForMarketValue, weeklyWageForClub } from '../src/game/career/playerValue';
+import { assignClubTier, CLUBS, clubsForSeason, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, leagueMatchWeeks, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
+import { consecutivePoorFactor, contractValueFactor, formAdjustedRatio, maxContractYearsForAge, playerMarketValue, playerMarketValueFromSeasons, seasonalSponsorship, tierForMarketValue, weeklyWageForClub } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { internationalCampaignForSeason, internationalTournamentForSeason } from '../src/game/career/data/competitions';
 import { fifaRank } from '../src/game/career/data/fifaRankings';
@@ -1294,4 +1294,89 @@ if (mainzRate > 0.02) {
 if (bayernRate < 0.45) {
   console.error('Bayern should be clear favourites in this pyramid');
   process.exitCode = 1;
+}
+
+console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship ---');
+{
+  const leicester = getClub('leicester')!;
+  console.log('promotion 1st', earnedPromotion(leicester.league, 1), '3rd', earnedPromotion(leicester.league, 3));
+  if (!earnedPromotion(leicester.league, 1) || !earnedPromotion(leicester.league, 2) || earnedPromotion(leicester.league, 3)) {
+    console.error('1st or 2nd in a second division must promote; 3rd must not');
+    process.exitCode = 1;
+  }
+  const promoted = resolveSeasonTransition({
+    season: { ...dummySeason, clubId: 'leicester', goals: 20, gamesPlayed: 38 },
+    role: 'first-team',
+    clubId: 'leicester',
+    parentClubId: 'leicester',
+    seasonsAtCurrentClub: 1,
+    age: 22,
+    careerGoals: 40,
+    careerGames: 70,
+    nationality: 'england',
+    loansUsed: 0,
+    leaguePosition: 1,
+    clubLeague: 'Championship',
+  });
+  console.log('promotion stay league', promoted.pendingTransfer?.stay?.clubLeague, promoted.headline);
+  if (promoted.pendingTransfer?.stay?.clubLeague !== 'Premier League' || !promoted.headline.includes('promoted')) {
+    console.error('staying after a Championship title must move the club into the Premier League');
+    process.exitCode = 1;
+  }
+
+  const ages = [24, 25, 27, 30, 34];
+  const maxes = ages.map(maxContractYearsForAge);
+  console.log('contract max by age', Object.fromEntries(ages.map((a, i) => [a, maxes[i]])));
+  if (maxContractYearsForAge(24) !== 5 || maxContractYearsForAge(25) !== 4 || maxContractYearsForAge(26) !== 4) {
+    console.error('max contract should drop to 4 years from 25');
+    process.exitCode = 1;
+  }
+  if (maxContractYearsForAge(27) !== 3 || maxContractYearsForAge(30) !== 2 || maxContractYearsForAge(34) !== 1) {
+    console.error('contract max must shorten at 27, 30 and 34');
+    process.exitCode = 1;
+  }
+
+  const lafc = getClub('lafc')!;
+  const mlsCal = buildSeasonCalendar({
+    seasonNumber: 2,
+    leagueMatchWeeks: leagueMatchWeeks('MLS', lafc),
+    clubTier: lafc.tier,
+    confederation: 'CONCACAF',
+    country: 'United States',
+    nationConfederation: 'CONCACAF',
+  });
+  const mlsClubs = clubsForSeason(lafc, 'MLS').length;
+  console.log('MLS clubs this season', mlsClubs, 'league weeks', leagueMatchWeeks('MLS', lafc), 'total weeks', mlsCal.totalWeeks);
+  if (mlsCal.totalWeeks > 48 || leagueMatchWeeks('MLS', lafc) > 38) {
+    console.error('an MLS season must not run past 48 weeks');
+    process.exitCode = 1;
+  }
+
+  const twilight = resolveSeasonTransition({
+    season: { ...dummySeason, clubId: 'barcelona', goals: 20, gamesPlayed: 38 },
+    role: 'first-team',
+    clubId: 'barcelona',
+    parentClubId: 'barcelona',
+    seasonsAtCurrentClub: 2,
+    age: 34,
+    careerGoals: 200,
+    careerGames: 400,
+    nationality: 'spain',
+    loansUsed: 2,
+    contractYearsRemaining: 1,
+  });
+  const twilightMls = (twilight.pendingTransfer?.offers ?? []).filter((o) => getClub(o.clubId)?.league === 'MLS');
+  console.log('age-34 MLS offers', twilightMls.length, twilightMls.map((o) => o.clubId));
+  if (twilightMls.length < 3) {
+    console.error('ages 34–36 must receive three extra MLS transfer offers');
+    process.exitCode = 1;
+  }
+
+  const sponsorStar = seasonalSponsorship(200_000_000);
+  const sponsorCheap = seasonalSponsorship(900_000);
+  console.log('sponsorship €200m', sponsorStar, '€900k', sponsorCheap);
+  if (sponsorStar < 5_000_000 || sponsorCheap > 80_000 || sponsorCheap >= sponsorStar) {
+    console.error('sponsorship must scale with market value');
+    process.exitCode = 1;
+  }
 }

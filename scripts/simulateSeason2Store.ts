@@ -191,13 +191,31 @@ console.log('after first S2 match:', after.lastMatchSummary);
 console.log('league pos', after.seasonStandings?.league.find((r) => r.clubId === after.clubId)?.position, 'pts', after.seasonStandings?.league.find((r) => r.clubId === after.clubId)?.points);
 console.log('phase', after.phase, 'career games', after.careerGames, '(expect 1 after first first-team match)');
 const reserveEarnings = store.getState().seasonHistory[0]?.earnings ?? 0;
-console.log('earnings after S1', reserveEarnings, 'after first S2 match', after.careerEarnings, 'wage', after.weeklyWage);
-if (reserveEarnings <= 0 || reserveEarnings !== after.weeklyWage * reserveGames) {
-  console.error('reserve-year earnings must rise by the weekly wage after every match');
+const reserveSponsorship = store.getState().seasonHistory[0]?.sponsorship ?? 0;
+const s1Wages = after.weeklyWage * reserveGames;
+console.log(
+  'earnings after S1',
+  reserveEarnings,
+  'sponsorship',
+  reserveSponsorship,
+  'after first S2 match',
+  after.careerEarnings,
+  'wage',
+  after.weeklyWage,
+  'S2 sponsorship',
+  after.seasonSponsorship,
+);
+if (reserveEarnings <= 0 || reserveEarnings !== s1Wages + reserveSponsorship) {
+  console.error(
+    `reserve-year earnings ${reserveEarnings} should be wages ${s1Wages} + sponsorship ${reserveSponsorship}`,
+  );
   process.exitCode = 1;
 }
-if (after.careerEarnings !== reserveEarnings + after.weeklyWage) {
-  console.error('career earnings must move by one weekly wage after each first-team match');
+const expectedCareer = reserveEarnings + after.weeklyWage + after.seasonSponsorship;
+if (after.careerEarnings !== expectedCareer) {
+  console.error(
+    `career earnings ${after.careerEarnings} should be reserve ${reserveEarnings} + one week ${after.weeklyWage} + S2 sponsorship ${after.seasonSponsorship}`,
+  );
   process.exitCode = 1;
 }
 const afterRatio =
