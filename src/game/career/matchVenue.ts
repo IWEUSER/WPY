@@ -6,7 +6,7 @@ import { fifaRank } from './data/fifaRankings';
 import type { Nation } from './data/nations';
 import type { KitScheme } from '../shooting/kitPalette';
 import { stadiumScaleFromCapacity, type StadiumAppearance } from '../shooting/stadium';
-import { groundForClub, groundForCupFinal, groundForInternationalTournament, groundForNationRank, UNLISTED_GROUND, type ClubGround } from '../shooting/grounds';
+import { groundForClub, groundForClubTrial, groundForCupFinal, groundForInternationalTournament, groundForNationRank, groundForYouthTournament, UNLISTED_GROUND, type ClubGround } from '../shooting/grounds';
 
 const GENERIC_OPPONENT: KitScheme = { primary: '#1D4ED8', pattern: 'solid' };
 
@@ -33,8 +33,9 @@ export function resolveMatchStadium(args: {
   fixture?: CalendarFixture;
   club?: Club;
   nation?: Nation;
+  openingKind?: 'youth-tournament' | 'club-trial' | null;
 }): StadiumAppearance {
-  const { fixture, club, nation } = args;
+  const { fixture, club, nation, openingKind } = args;
   const isInternational = fixture?.kind === 'international';
   const clubFinal = fixture ? isClubFinalNeutral(fixture) : false;
   const intlTournament = fixture ? isInternationalTournamentFixture(fixture) : false;
@@ -56,13 +57,17 @@ export function resolveMatchStadium(args: {
   const groundNationId = isInternational
     ? (isHome ? nation?.id : fixture?.opponentId)
     : undefined;
-  const ground = clubFinal
-    ? groundForCupFinal()
-    : intlTournament
-      ? groundForInternationalTournament()
-      : isInternational
-        ? groundForNationRank(fifaRank(groundNationId ?? ''))
-        : groundForClub(groundClub?.id);
+  const ground = openingKind === 'youth-tournament'
+    ? groundForYouthTournament()
+    : openingKind === 'club-trial'
+      ? groundForClubTrial()
+    : clubFinal
+      ? groundForCupFinal()
+      : intlTournament
+        ? groundForInternationalTournament()
+        : isInternational
+          ? groundForNationRank(fifaRank(groundNationId ?? ''))
+          : groundForClub(groundClub?.id);
 
   return appearanceFromGround(ground, {
     isHome: neutral ? true : isHome,
@@ -120,7 +125,7 @@ export function resolveCareerStadium(args: {
   openingKind?: 'youth-tournament' | 'club-trial' | null;
 }): StadiumAppearance {
   if (args.openingKind === 'youth-tournament' || args.openingKind === 'club-trial') {
-    return resolveMatchStadium(args);
+    return resolveMatchStadium({ ...args, openingKind: args.openingKind });
   }
   if ((args.seasonNumber != null && args.seasonNumber < 2) || args.role === 'reserve') {
     return reserveStadium(args.club);

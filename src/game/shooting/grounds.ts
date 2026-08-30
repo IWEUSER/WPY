@@ -52,6 +52,30 @@ export function groundForInternationalTournament(): ClubGround {
   return INTERNATIONAL_TOURNAMENT_GROUND;
 }
 
+/** One-deck bowl for the opening Under-16 continental tournament. */
+export const YOUTH_TOURNAMENT_CAPACITY = 12_000;
+export const YOUTH_TOURNAMENT_GROUND: ClubGround = {
+  name: 'Youth Stadium',
+  capacity: YOUTH_TOURNAMENT_CAPACITY,
+  tiers: 1,
+};
+
+export function groundForYouthTournament(): ClubGround {
+  return YOUTH_TOURNAMENT_GROUND;
+}
+
+/** One-deck academy bowl for the three-game club trial. */
+export const CLUB_TRIAL_CAPACITY = 12_000;
+export const CLUB_TRIAL_GROUND: ClubGround = {
+  name: 'Academy Ground',
+  capacity: CLUB_TRIAL_CAPACITY,
+  tiers: 1,
+};
+
+export function groundForClubTrial(): ClubGround {
+  return CLUB_TRIAL_GROUND;
+}
+
 /** Shared bowls used by more than one club. */
 const SAN_SIRO: ClubGround = { name: 'San Siro', capacity: 75_710, tiers: 5 };
 const OLIMPICO: ClubGround = { name: 'Stadio Olimpico', capacity: 70_634, tiers: 1 };

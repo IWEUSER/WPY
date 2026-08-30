@@ -25,6 +25,10 @@ import {
   CUP_FINAL_GROUND,
   INTERNATIONAL_TOURNAMENT_CAPACITY,
   INTERNATIONAL_TOURNAMENT_GROUND,
+  YOUTH_TOURNAMENT_CAPACITY,
+  YOUTH_TOURNAMENT_GROUND,
+  CLUB_TRIAL_CAPACITY,
+  CLUB_TRIAL_GROUND,
   LISTED_MIN_CAPACITY,
   UNLISTED_GROUND,
   groundForClub,
@@ -2596,12 +2600,24 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
     reserveLook.groundName,
     firstTeamLook.groundName,
   );
-  if (youthLook.groundName !== INTERNATIONAL_TOURNAMENT_GROUND.name || youthLook.capacity !== INTERNATIONAL_TOURNAMENT_CAPACITY) {
-    console.error('the U16 tournament must use the neutral tournament stadium');
+  if (
+    youthLook.groundName !== YOUTH_TOURNAMENT_GROUND.name
+    || youthLook.capacity !== YOUTH_TOURNAMENT_CAPACITY
+    || youthLook.standTiers !== 1
+  ) {
+    console.error('the U16 tournament must use the one-tier youth stadium');
     process.exitCode = 1;
   }
-  if (clubTrialLook.groundName !== groundForClub('real-madrid').name) {
-    console.error('club trial games must use the league ground, not the reserve bowl');
+  if (
+    clubTrialLook.groundName !== CLUB_TRIAL_GROUND.name
+    || clubTrialLook.capacity !== CLUB_TRIAL_CAPACITY
+    || clubTrialLook.standTiers !== 1
+  ) {
+    console.error('club trial games must use the one-tier academy ground');
+    process.exitCode = 1;
+  }
+  if (clubTrialLook.homeColor !== madridClub.color) {
+    console.error('club trial still uses the trial club kit on the academy ground');
     process.exitCode = 1;
   }
   if (trialLook.bowl !== false) {
