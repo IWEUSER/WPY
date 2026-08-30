@@ -16,12 +16,15 @@ import {
   drawTrail,
   goalToPixel,
   idleKeeperPose,
+  pickPlayerSkin,
   worldToScreen,
   type KeeperPose,
 } from './render';
 import { drawStadium, DEFAULT_STADIUM, defenderKitFromStadium, profileFromScale, type StadiumAppearance } from './stadium';
 import { groundForClub } from './grounds';
 import { normalizeHex } from './kitPalette';
+import { getClub } from '../career/data/clubs';
+import { clubKit } from '../career/data/clubKits';
 import {
   advanceDefender,
   ballHasReachedDefender,
@@ -149,6 +152,7 @@ function readDevStadium(): StadiumAppearance | null {
   const homeColorRaw = q.get('homeColor');
   const awayColorRaw = q.get('awayColor');
   const clubId = q.get('club');
+  const opponentId = q.get('opponent');
   const scaleRaw = q.get('scale');
   const capacityRaw = q.get('capacity');
   const tiersRaw = q.get('tiers');
@@ -159,6 +163,7 @@ function readDevStadium(): StadiumAppearance | null {
     && q.get('night') == null
     && scaleRaw == null
     && clubId == null
+    && opponentId == null
     && capacityRaw == null
     && tiersRaw == null
   ) return null;
@@ -176,12 +181,17 @@ function readDevStadium(): StadiumAppearance | null {
   const standTiers = (tiersN === 1 || tiersN === 2 || tiersN === 3 || tiersN === 4 || tiersN === 5)
     ? tiersN
     : ground?.tiers;
+  const opponentKit = opponentId ? clubKit(getClub(opponentId)) : null;
   return {
     isHome,
     night,
     homeColor: isHome ? playerColor : opponentColor,
     awayColor: isHome ? opponentColor : playerColor,
-    opponentColor,
+    opponentColor: opponentKit?.primary ?? opponentColor,
+    opponentSecondary: opponentKit?.secondary,
+    opponentShorts: opponentKit?.shorts,
+    opponentSocks: opponentKit?.socks,
+    opponentPattern: opponentKit?.pattern,
     awayShare: 0.2,
     scale,
     capacity,
@@ -227,6 +237,7 @@ function readDevKeeperPose(): KeeperPose | null {
     elevation: dive.elevation,
     hand: dive.hand,
     beaten: !saved,
+    skinTone: pickPlayerSkin(col * 17 + row * 5),
   };
 }
 
@@ -514,7 +525,7 @@ export default function ShootingGame({
           const devCell = readDevPoseCell();
           drawKeeper(ctx, view, devPose ?? anim.keeperPose);
           if (anim.defender) {
-            drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit, anim.defender.stride);
+            drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit, anim.defender.stride, anim.defender.skinTone);
           }
           if (anim.phase === 'dragging' && anim.dragStart && anim.dragPoints.length > 1) {
             // Show the actual curved path being swiped, not just a straight
@@ -586,12 +597,13 @@ export default function ShootingGame({
               y: idleY + (dive.hand.y - idleY) * diveEased,
             },
             beaten: false,
+            skinTone: anim.keeperPose.skinTone,
           };
 
           drawTrail(ctx, anim.ballTrail);
           drawKeeper(ctx, view, anim.keeperPose);
           if (anim.defender) {
-            drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit, anim.defender.stride);
+            drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit, anim.defender.stride, anim.defender.skinTone);
           }
           drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
 
@@ -622,13 +634,14 @@ export default function ShootingGame({
               elevation: dive.elevation,
               hand: dive.hand,
               beaten: !saved,
+              skinTone: anim.keeperPose.skinTone,
             };
             finishShot(result);
           }
         } else if (anim.phase === 'result' && anim.result) {
           drawKeeper(ctx, view, anim.keeperPose);
           if (anim.defender) {
-            drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit, anim.defender.stride);
+            drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit, anim.defender.stride, anim.defender.skinTone);
           }
           drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
           if (now - anim.resultAtMs > RESULT_HOLD_MS) {

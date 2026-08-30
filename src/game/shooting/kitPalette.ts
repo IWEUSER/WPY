@@ -6,6 +6,7 @@ export interface DefenderKit {
   shirt: string;
   shirtDark: string;
   shorts: string;
+  socks: string;
   stripe?: string;
   pattern: ShirtPattern;
 }
@@ -15,6 +16,8 @@ export interface KitScheme {
   secondary?: string;
   /** If omitted, shorts are light on a dark shirt and dark on a light shirt. */
   shorts?: string;
+  /** Knee-high sock colour. Falls back to shorts, then the shirt. */
+  socks?: string;
   pattern?: ShirtPattern;
 }
 
@@ -73,11 +76,19 @@ export function crowdSwatch(hex: string): string {
   return hex;
 }
 
-export function kitFromColor(hex: string, secondary?: string, extras?: Pick<KitScheme, 'shorts' | 'pattern'>): DefenderKit {
+export function defaultSocksForShirt(primary: string, shorts?: string): string {
+  if (shorts) return shorts;
+  const lum = luminance(primary);
+  if (lum > 0.72) return '#111827';
+  return primary;
+}
+
+export function kitFromColor(hex: string, secondary?: string, extras?: Pick<KitScheme, 'shorts' | 'socks' | 'pattern'>): DefenderKit {
   return kitFromScheme({
     primary: hex,
     secondary,
     shorts: extras?.shorts,
+    socks: extras?.socks,
     pattern: extras?.pattern,
   });
 }
@@ -88,10 +99,12 @@ export function kitFromScheme(scheme: KitScheme): DefenderKit {
   const pattern = scheme.pattern && scheme.secondary ? scheme.pattern : 'solid';
   const shorts = scheme.shorts
     ?? (lum < 0.45 ? '#f8fafc' : '#1e1e1e');
+  const socks = scheme.socks ?? defaultSocksForShirt(scheme.primary, scheme.shorts);
   return {
     shirt,
     shirtDark: shadeHex(shirt, -0.28),
     shorts,
+    socks,
     stripe: pattern !== 'solid' ? scheme.secondary : undefined,
     pattern,
   };

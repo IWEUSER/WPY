@@ -18,6 +18,7 @@ import {
   randomBallStartXRatio,
   randomShotDistanceM,
   worldToScreen,
+  PLAYER_SKIN_TONES,
   type KeeperPose,
 } from '../src/game/shooting/render';
 import {
@@ -363,6 +364,7 @@ function poseFromDive(d: ReturnType<typeof computeKeeperDive>, beaten = false): 
     elevation: d.elevation,
     hand: d.hand,
     beaten,
+    skinTone: PLAYER_SKIN_TONES[1],
   };
 }
 

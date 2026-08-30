@@ -40,6 +40,8 @@ export interface StadiumAppearance {
   opponentColor: string;
   opponentSecondary?: string;
   opponentShorts?: string;
+  /** Opposition knee-high socks. */
+  opponentSocks?: string;
   opponentPattern?: ShirtPattern;
   /** 0–1 share of seats given to away fans. */
   awayShare?: number;
@@ -105,6 +107,7 @@ export function defenderKitFromStadium(stadium: StadiumAppearance): DefenderKit 
     primary: stadium.opponentColor,
     secondary: stadium.opponentSecondary,
     shorts: stadium.opponentShorts,
+    socks: stadium.opponentSocks,
     pattern: stadium.opponentPattern,
   });
 }
@@ -253,14 +256,13 @@ export function stadiumLayout(
   const topFrac = standTopFrac(ground.capacity, ground.unique);
   const top = Math.min(bottom - 24, Math.max(2, bottom * topFrac));
   const scale = stadiumScaleFromCapacity(ground.capacity);
-  const roof = ground.unique === 'camp-nou' || ground.tiers >= 3 || ground.capacity >= 40_000;
   const t = clamp01((ground.capacity - 18_000) / (BERNABEU_CAPACITY - 18_000));
   return {
     top,
     bottom,
     aisleEvery: ground.tiers === 1 ? 22 : 0,
     occupancy: lerp(0.8, 0.995, ground.unique === 'camp-nou' ? 1 : t),
-    roof,
+    roof: true,
     scale,
     tiers: ground.tiers,
     capacity: ground.capacity,
@@ -446,27 +448,59 @@ function crowdLayer(w: number, h: number, view: StadiumView, stadium: StadiumApp
 }
 
 function drawRoof(ctx: CanvasRenderingContext2D, w: number, h: number, night: boolean, standTop: number, campNou: boolean) {
-  // Keep the canopy as a thin lid above the terrace so a 6-yard camera
-  // does not paint a dark void over the crowd behind the net.
-  const lip = Math.min(h * (campNou ? 0.052 : 0.038), standTop * (campNou ? 1.05 : 0.85));
+  // Sit the canopy on the terrace lip so it reads as a lid, not a sky scribble.
+  // Overlap the top row only a few pixels so the upper deck still counts.
+  const overlap = Math.min(7, Math.max(3, standTop * 0.06));
+  const fasciaH = Math.max(11, Math.min(campNou ? 26 : 20, h * (campNou ? 0.034 : 0.026)));
+  const beamY = Math.max(fasciaH + 2, standTop - overlap);
+  const rise = Math.max(16, Math.min(beamY - 4, h * (campNou ? 0.11 : 0.08)));
+  const canopyTop = Math.max(2, beamY - rise);
+  const sag = Math.min(rise * 0.42, h * 0.028);
+  const midY = canopyTop + sag;
+
+  ctx.save();
+  const underside = ctx.createLinearGradient(0, canopyTop, 0, beamY);
   if (night) {
-    ctx.fillStyle = '#0b0f18';
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(w, 0);
-    ctx.lineTo(w, lip);
-    ctx.quadraticCurveTo(w * 0.5, Math.min(h * (campNou ? 0.07 : 0.055), standTop), 0, lip);
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    underside.addColorStop(0, '#111827');
+    underside.addColorStop(0.55, '#1e293b');
+    underside.addColorStop(1, '#0f172a');
   } else {
-    ctx.strokeStyle = 'rgba(71,85,105,0.4)';
+    underside.addColorStop(0, '#64748b');
+    underside.addColorStop(0.5, '#94a3b8');
+    underside.addColorStop(1, '#475569');
   }
-  ctx.lineWidth = Math.max(2, w * (campNou ? 0.008 : 0.006));
+  ctx.fillStyle = underside;
   ctx.beginPath();
-  ctx.moveTo(w * 0.04, Math.max(h * 0.02, lip * 0.7));
-  ctx.quadraticCurveTo(w * 0.5, Math.min(h * (campNou ? 0.062 : 0.05), standTop * 0.9), w * 0.96, Math.max(h * 0.02, lip * 0.7));
-  ctx.stroke();
+  ctx.moveTo(0, beamY);
+  ctx.lineTo(0, canopyTop + 4);
+  ctx.quadraticCurveTo(w * 0.5, midY - 6, w, canopyTop + 4);
+  ctx.lineTo(w, beamY);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = night ? 'rgba(148,163,184,0.28)' : 'rgba(15,23,42,0.18)';
+  ctx.lineWidth = Math.max(1.5, w * 0.004);
+  const ribs = campNou ? 9 : 7;
+  for (let i = 1; i < ribs; i++) {
+    const x = (w * i) / ribs;
+    ctx.beginPath();
+    ctx.moveTo(x, beamY);
+    ctx.lineTo(x, midY + 2);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = night ? '#020617' : '#334155';
+  ctx.fillRect(0, beamY - fasciaH, w, fasciaH);
+  ctx.fillStyle = night ? '#334155' : '#cbd5e1';
+  ctx.fillRect(0, beamY - fasciaH, w, Math.max(2, Math.round(fasciaH * 0.22)));
+  ctx.fillStyle = night ? '#1e293b' : '#0f172a';
+  ctx.fillRect(0, beamY - 3, w, 3);
+
+  const pylonW = Math.max(7, w * 0.014);
+  ctx.fillStyle = night ? '#0b1220' : '#1e293b';
+  ctx.fillRect(w * 0.03, canopyTop, pylonW, beamY - canopyTop + 4);
+  ctx.fillRect(w * 0.97 - pylonW, canopyTop, pylonW, beamY - canopyTop + 4);
+  ctx.restore();
 }
 
 function drawFloodlight(
@@ -591,15 +625,15 @@ export function drawStadium(
 
   drawBowlStructure(ctx, w, h, layout.top, layout.bottom, night);
 
-  if (layout.roof) {
-    drawRoof(ctx, w, h, night, layout.top, layout.unique === 'camp-nou');
-  }
-
   const crowd = crowdLayer(w, h, view, stadium);
   const prevSmooth = ctx.imageSmoothingEnabled;
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(crowd, 0, 0, w, h);
   ctx.imageSmoothingEnabled = prevSmooth;
+
+  if (layout.roof) {
+    drawRoof(ctx, w, h, night, layout.top, layout.unique === 'camp-nou');
+  }
 
   if (night) {
     const lampY = layout.roof

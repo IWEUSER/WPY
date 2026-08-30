@@ -17,7 +17,7 @@ import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { nationKit } from '../src/game/career/data/nationColours';
 import { resolveMatchStadium } from '../src/game/career/matchVenue';
 import { crowdSwatch, kitFromColor, kitFromScheme, luminance } from '../src/game/shooting/kitPalette';
-import { createPitchView, MAX_SHOT_DISTANCE_M, MIN_SHOT_DISTANCE_M } from '../src/game/shooting/render';
+import { createPitchView, idleKeeperPose, MAX_SHOT_DISTANCE_M, MIN_SHOT_DISTANCE_M, PLAYER_SKIN_TONES, pickPlayerSkin } from '../src/game/shooting/render';
 import { standBottomY, crowdCellSize, stadiumLayout } from '../src/game/shooting/stadium';
 import {
   CLUB_GROUNDS,
@@ -2078,6 +2078,45 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
     console.error('Barcelona must wear blaugrana stripes');
     process.exitCode = 1;
   }
+  const city = kitFromScheme(clubKit(getClub('man-city')));
+  const chelsea = kitFromScheme(clubKit(getClub('chelsea')));
+  const liverpool = kitFromScheme(clubKit(getClub('liverpool')));
+  const united = kitFromScheme(clubKit(getClub('man-united')));
+  console.log('socks city/chelsea/liverpool/united/barca', city.socks, chelsea.socks, liverpool.socks, united.socks, barca.socks);
+  if (luminance(city.socks) < 0.8 || luminance(chelsea.socks) < 0.8) {
+    console.error('City and Chelsea wear white home socks');
+    process.exitCode = 1;
+  }
+  if (luminance(liverpool.socks) > 0.4) {
+    console.error('Liverpool must wear red socks');
+    process.exitCode = 1;
+  }
+  if (luminance(united.socks) > 0.25) {
+    console.error('Manchester United must wear black socks');
+    process.exitCode = 1;
+  }
+  if (barca.socks.toLowerCase() !== '#004d98') {
+    console.error('Barcelona must wear blue socks');
+    process.exitCode = 1;
+  }
+  if (luminance(madrid.socks) < 0.85) {
+    console.error('Real Madrid must wear white socks');
+    process.exitCode = 1;
+  }
+  const skins = new Set(PLAYER_SKIN_TONES.map((c) => c.toLowerCase()));
+  if (skins.size < 4) {
+    console.error('keepers and defenders need a range of skin tones');
+    process.exitCode = 1;
+  }
+  if (pickPlayerSkin(0) === pickPlayerSkin(3)) {
+    console.error('skin tone must change with the seed');
+    process.exitCode = 1;
+  }
+  const idleSkin = idleKeeperPose(() => 0.8).skinTone;
+  if (!skins.has(idleSkin.toLowerCase())) {
+    console.error('the idle keeper must pick a listed skin tone');
+    process.exitCode = 1;
+  }
   if (luminance(crowdBlack) <= luminance('#000000') + 0.05) {
     console.error('a black kit must still produce a visible crowd colour');
     process.exitCode = 1;
@@ -2292,8 +2331,8 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
     console.error('a local ground must show more sky above the terrace than an elite bowl');
     process.exitCode = 1;
   }
-  if (localBowl.roof || !eliteBowl.roof) {
-    console.error('Camp Nou-scale bowls need a roof; municipal two-deck stands do not');
+  if (!localBowl.roof || !eliteBowl.roof) {
+    console.error('every bowl, including municipal two-deck stands, needs a visible roof');
     process.exitCode = 1;
   }
   if (eliteBowl.decks.length <= localBowl.decks.length) {

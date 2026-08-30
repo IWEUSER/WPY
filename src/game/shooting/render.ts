@@ -1,5 +1,5 @@
 import { DIVE_LAYOUT_RAD } from './constants';
-import { luminance, type DefenderKit } from './kitPalette';
+import { luminance, shadeHex, type DefenderKit } from './kitPalette';
 import type { AimPoint } from './types';
 
 /** FIFA markings in metres. Boxes are drawn from these ratios to the goal
@@ -338,6 +338,8 @@ export interface KeeperPose {
   elevation: number;
   /** Glove aim-space marker: on the dive side of the hips, short of the square on a miss. */
   hand: AimPoint;
+  /** Stable skin tone for this chance — not the same beige every time. */
+  skinTone: string;
 }
 
 /** Figure height is ~7.95×scale (feet at 0, top of head at 6.9+1.05). */
@@ -350,7 +352,21 @@ function keeperScale(view: PitchView): number {
   return (FIFA.keeperHeight / FIFA.goalHeight) * view.goal.heightPx / KEEPER_FIGURE_HEIGHT;
 }
 
-export function idleKeeperPose(): KeeperPose {
+/** Light through dark — keepers and defenders pick one per chance. */
+export const PLAYER_SKIN_TONES = [
+  '#f3d2b3',
+  '#e8b88a',
+  '#c68642',
+  '#8d5524',
+  '#5c3317',
+] as const;
+
+export function pickPlayerSkin(seed: number): string {
+  const i = Math.abs(Math.floor(seed)) % PLAYER_SKIN_TONES.length;
+  return PLAYER_SKIN_TONES[i];
+}
+
+export function idleKeeperPose(rng: () => number = Math.random): KeeperPose {
   return {
     pos: { x: 0, y: 0.28 },
     stretch: 0,
@@ -359,6 +375,7 @@ export function idleKeeperPose(): KeeperPose {
     layout: 0,
     elevation: 0,
     hand: { x: 0, y: 0.34 },
+    skinTone: pickPlayerSkin(Math.floor(rng() * 1_000_000)),
   };
 }
 
@@ -470,6 +487,45 @@ export function keeperSilhouetteX(pose: KeeperPose): { hip: number; glove: numbe
   return { hip, glove: (g1 + g2) / 2, foot: (f1 + f2) / 2 };
 }
 
+/** Thigh (skin) to the knee, then a sock to the boot — no black stick-legs. */
+function drawThighAndSock(
+  ctx: CanvasRenderingContext2D,
+  scale: number,
+  hipX: number,
+  hipY: number,
+  foot: { x: number; y: number },
+  skinColor: string,
+  sockColor: string,
+  bootColor: string,
+) {
+  const kneeX = hipX * 0.38 + foot.x * 0.62;
+  const kneeY = hipY + (foot.y - hipY) * 0.4;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = skinColor;
+  ctx.lineWidth = scale * 0.62;
+  ctx.beginPath();
+  ctx.moveTo(hipX, hipY);
+  ctx.lineTo(kneeX, kneeY);
+  ctx.stroke();
+  ctx.strokeStyle = sockColor;
+  ctx.lineWidth = scale * 0.66;
+  ctx.beginPath();
+  ctx.moveTo(kneeX, kneeY);
+  ctx.lineTo(foot.x, foot.y);
+  ctx.stroke();
+  ctx.strokeStyle = shadeHex(sockColor, luminance(sockColor) > 0.65 ? -0.18 : 0.18);
+  ctx.lineWidth = scale * 0.72;
+  ctx.beginPath();
+  ctx.moveTo(kneeX - scale * 0.08, kneeY);
+  ctx.lineTo(kneeX + scale * 0.08, kneeY);
+  ctx.stroke();
+  ctx.fillStyle = bootColor;
+  ctx.beginPath();
+  ctx.ellipse(foot.x, foot.y, scale * 0.4, scale * 0.22, 0, 0, Math.PI * 2);
+  ctx.fill();
+}
+
 export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose: KeeperPose) {
   const scale = keeperScale(view);
   const hips = goalToPixel(pose.pos, view);
@@ -491,7 +547,8 @@ export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose:
   const kitLight = pose.beaten ? '#9ca3af' : '#fde047';
   const kitDark = pose.beaten ? '#4b5563' : '#ca8a04';
   const shortsColor = pose.beaten ? '#1f2937' : '#14532d';
-  const skinColor = '#dfa878';
+  const sockColor = pose.beaten ? '#374151' : '#166534';
+  const skinColor = pose.skinTone || PLAYER_SKIN_TONES[1];
   const gloveColor = pose.beaten ? '#4b5563' : '#22c55e';
   const bootColor = '#181818';
 
@@ -517,29 +574,12 @@ export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose:
   const gloveL = { x: localHx - scale * 0.38, y: localHy };
   const gloveR = { x: localHx + scale * 0.42, y: localHy + scale * 0.22 };
 
-  const drawLeg = (foot: { x: number; y: number }, hipX: number) => {
-    const kneeX = hipX * 0.45 + foot.x * 0.55;
-    const kneeY = hipY + (foot.y - hipY) * 0.48;
-    ctx.strokeStyle = bootColor;
-    ctx.lineWidth = scale * 0.58;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(hipX, hipY);
-    ctx.lineTo(kneeX, kneeY);
-    ctx.lineTo(foot.x, foot.y);
-    ctx.stroke();
-    ctx.fillStyle = bootColor;
-    ctx.beginPath();
-    ctx.ellipse(foot.x, foot.y, scale * 0.38, scale * 0.24, 0, 0, Math.PI * 2);
-    ctx.fill();
-  };
-
-  drawLeg(footL, -scale * 0.28);
-  drawLeg(footR, scale * 0.28);
+  drawThighAndSock(ctx, scale, -scale * 0.28, hipY, footL, skinColor, sockColor, bootColor);
+  drawThighAndSock(ctx, scale, scale * 0.28, hipY, footR, skinColor, sockColor, bootColor);
 
   ctx.fillStyle = shortsColor;
   ctx.beginPath();
-  ctx.ellipse(0, hipY + scale * 0.2, scale * (pts.diving ? 0.85 : 1.05), scale * (pts.diving ? 0.7 : 0.85), 0, 0, Math.PI * 2);
+  ctx.ellipse(0, hipY + scale * 0.08, scale * (pts.diving ? 0.82 : 1.0), scale * (pts.diving ? 0.42 : 0.48), 0, 0, Math.PI * 2);
   ctx.fill();
 
   const torsoGrad = ctx.createLinearGradient(0, shoulderY, 0, hipY);
@@ -603,6 +643,7 @@ export function drawDefender(
   worldZ: number,
   kit?: DefenderKit,
   stride = 0,
+  skinTone?: string,
 ) {
   const meterPx = view.halfWidthPx(1, worldZ);
   const feet = worldToScreen(view, worldX, worldZ);
@@ -620,9 +661,10 @@ export function drawDefender(
   const kitLight = kit?.shirt ?? '#1d4ed8';
   const kitDark = kit?.shirtDark ?? '#1e3a8a';
   const shortsColor = kit?.shorts ?? '#f8fafc';
+  const sockColor = kit?.socks ?? kit?.shorts ?? '#1e1e1e';
   const stripeColor = kit?.stripe;
   const pattern = kit?.pattern ?? 'solid';
-  const skinColor = '#dfa878';
+  const skinColor = skinTone ?? PLAYER_SKIN_TONES[2];
   const bootColor = '#181818';
   const pose = { direction: 0, stretch: 0, layout: 0 };
   const pts = keeperLocalPoints(pose);
@@ -646,29 +688,12 @@ export function drawDefender(
   const gloveL = { x: rawGloveL.x - swing * 0.55, y: rawGloveL.y };
   const gloveR = { x: rawGloveR.x + swing * 0.55, y: rawGloveR.y };
 
-  const drawLeg = (foot: { x: number; y: number }, hipX: number) => {
-    const kneeX = hipX * 0.45 + foot.x * 0.55;
-    const kneeY = hipY + (foot.y - hipY) * 0.48;
-    ctx.strokeStyle = bootColor;
-    ctx.lineWidth = scale * 0.58;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(hipX, hipY);
-    ctx.lineTo(kneeX, kneeY);
-    ctx.lineTo(foot.x, foot.y);
-    ctx.stroke();
-    ctx.fillStyle = bootColor;
-    ctx.beginPath();
-    ctx.ellipse(foot.x, foot.y, scale * 0.38, scale * 0.24, 0, 0, Math.PI * 2);
-    ctx.fill();
-  };
-
-  drawLeg(footL, -scale * 0.28);
-  drawLeg(footR, scale * 0.28);
+  drawThighAndSock(ctx, scale, -scale * 0.28, hipY, footL, skinColor, sockColor, bootColor);
+  drawThighAndSock(ctx, scale, scale * 0.28, hipY, footR, skinColor, sockColor, bootColor);
 
   ctx.fillStyle = shortsColor;
   ctx.beginPath();
-  ctx.ellipse(0, hipY + scale * 0.2, scale * 1.05, scale * 0.85, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, hipY + scale * 0.08, scale * 1.0, scale * 0.48, 0, 0, Math.PI * 2);
   ctx.fill();
 
   const torsoGrad = ctx.createLinearGradient(0, shoulderY, 0, hipY);

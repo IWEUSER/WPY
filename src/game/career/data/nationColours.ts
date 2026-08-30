@@ -175,16 +175,36 @@ const SHORTS: Record<string, string> = {
   argentina: '#FFFFFF',
 };
 
+const SOCKS: Record<string, string> = {
+  england: '#FFFFFF',
+  germany: '#FFFFFF',
+  spain: '#0033A0',
+  brazil: '#FFFFFF',
+  italy: '#0066B3',
+  france: '#ED2939',
+  argentina: '#FFFFFF',
+  netherlands: '#F36C21',
+  portugal: '#006600',
+  belgium: '#C8102E',
+  croatia: '#FF0000',
+  scotland: '#006EB6',
+  wales: '#C8102E',
+  mexico: '#006847',
+  uruguay: '#7BADE3',
+};
+
 export function nationKit(id: string): KitScheme {
   const primary = PRIMARY[id] ?? FALLBACK[hashId(id) % FALLBACK.length];
   const secondary = SECONDARY[id];
   const pattern = PATTERN[id];
   const shorts = SHORTS[id];
+  const socks = SOCKS[id];
   return {
     primary,
     ...(secondary ? { secondary } : {}),
     ...(pattern ? { pattern } : {}),
     ...(shorts ? { shorts } : {}),
+    ...(socks ? { socks } : {}),
   };
 }
 

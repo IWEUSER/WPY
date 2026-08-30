@@ -65,6 +65,7 @@ export function resolveMatchStadium(args: {
     opponentColor: opponent.primary,
     opponentSecondary: opponent.secondary,
     opponentShorts: opponent.shorts,
+    opponentSocks: opponent.socks,
     opponentPattern: opponent.pattern,
     awayShare: fixture ? fixtureCrowdAwayShare(fixture) : 0.2,
   });
