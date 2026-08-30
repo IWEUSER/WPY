@@ -16,6 +16,7 @@ import {
 } from './data/clubs';
 import { mlsConferenceOf } from './data/leagueFormat';
 import {
+  campaignSchedulesInternational,
   clubContinentalCup,
   confederationForCountry,
   CONTINENTAL_CUPS,
@@ -31,6 +32,7 @@ import {
   doesNationQualify,
   nationStrength,
   qualifierOpponents,
+  tournamentGroupAdvancePoints,
   tournamentGroupGames,
   tournamentKnockoutRounds,
   tournamentOpponents,
@@ -152,8 +154,6 @@ export function emptyHonours(): SeasonHonours {
   };
 }
 
-const INTERNATIONAL_GROUP_ADVANCE_POINTS = 4;
-
 export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCalendar; sim: SeasonSimState } {
   const { seasonNumber, club, careerGoalRatio, nationId, qualifierCarry, includeSuperCup, superCupOpponentId } = params;
   const league = params.league ?? club.league;
@@ -165,7 +165,9 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
   const campaign = internationalCampaignForSeason(seasonNumber, nation?.confederation ?? clubConfederation);
   const tournament = campaign.tournament ?? null;
   const clubOk = clubEligibleForNationalTeam(club.tier);
-  const campaignActive = Boolean(nationId && campaign.tournament && campaign.phase !== 'none' && clubOk);
+  const campaignActive = Boolean(
+    nationId && campaign.tournament && campaignSchedulesInternational(campaign.phase) && clubOk,
+  );
   const internationalSelected = Boolean(
     campaignActive &&
       isSelectedForNationalTeam({
@@ -174,6 +176,8 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
         nationId,
       }),
   );
+  const startsAtTournament =
+    campaign.phase === 'nations-league' || campaign.phase === 'tournament-only';
   const carryMatches = Boolean(
     qualifierCarry && tournament && qualifierCarry.tournament === tournament,
   );
@@ -222,7 +226,9 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
       europeanGroupPlayed: 0,
       knockoutAggFor: 0,
       knockoutAggAgainst: 0,
-      internationalStage: internationalSelected ? 'qualifying' : 'not-selected',
+      internationalStage: internationalSelected
+        ? (startsAtTournament ? 'group' : 'qualifying')
+        : 'not-selected',
       internationalSelected,
       internationalTournament: campaignActive ? tournament : null,
       internationalPhase: campaignActive ? campaign.phase : 'none',
@@ -234,7 +240,7 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
       qualifierCarryPlayed: carryMatches && qualifierCarry ? qualifierCarry.played : 0,
       groupPoints: 0,
       groupPlayed: 0,
-      nationQualified: false,
+      nationQualified: Boolean(internationalSelected && startsAtTournament),
       domesticCup,
       domesticCupStage: domesticCup ? 'round-of-16' : 'not-entered',
       honours: emptyHonours(),
@@ -824,8 +830,8 @@ export function applyInternationalResult(
     next.groupPlayed += 1;
     if (outcome === 'win') next.groupPoints += 3;
     else if (outcome === 'draw') next.groupPoints += 1;
-    if (next.groupPlayed >= tournamentGroupGames()) {
-      const advanced = next.groupPoints >= INTERNATIONAL_GROUP_ADVANCE_POINTS;
+    if (next.groupPlayed >= tournamentGroupGames(next.internationalTournament)) {
+      const advanced = next.groupPoints >= tournamentGroupAdvancePoints(next.internationalTournament);
       next.internationalReached = 'group';
       next.internationalStage = advanced
         ? firstKnockoutStage(next.internationalTournament)

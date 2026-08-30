@@ -269,6 +269,42 @@ export function saveChanceForAim(aim: AimPoint, power = 1, curl = 0): number {
   return clamp(base * powerFactor * curlFactor, 0.06, 0.96);
 }
 
+/** Which third of the goal the shot is heading for. */
+export function shotSideForAim(aim: AimPoint): -1 | 0 | 1 {
+  if (Math.abs(aim.x) < 0.2) return 0;
+  return aim.x < 0 ? -1 : 1;
+}
+
+/** Real keepers guess before the kick: dive left, stay, or dive right. */
+export function samplePenaltyKeeperCommit(rng: RandomSource = defaultRandom): -1 | 0 | 1 {
+  const roll = rng();
+  if (roll < 0.41) return -1;
+  if (roll < 0.82) return 1;
+  return 0;
+}
+
+/**
+ * Penalty save chance after the keeper has already committed. A wrong-way
+ * dive or a standing keeper facing a corner is almost always beaten; a
+ * centre shot is usually a goal because keepers dive a side more often
+ * than they stay.
+ */
+export function penaltySaveChanceForAim(
+  aim: AimPoint,
+  commit: -1 | 0 | 1,
+  power = 1,
+  curl = 0,
+): number {
+  const side = shotSideForAim(aim);
+  const guessed = commit === side;
+  if (commit === 0) {
+    if (side === 0) return clamp(saveChanceForAim(aim, power, curl), 0.82, 0.96);
+    return 0.1;
+  }
+  if (side === 0 || !guessed) return 0.1;
+  return saveChanceForAim(aim, power, curl);
+}
+
 /** True only for the three geometric-centre columns (1-based squares 7, 8, 9). */
 export function isPlantedSaveCol(col: number): boolean {
   return col >= PLANTED_SAVE_COL_MIN && col <= PLANTED_SAVE_COL_MAX;
@@ -305,14 +341,27 @@ export function computeKeeperDive(
   saved: boolean,
   difficulty: ShotDifficulty,
   travelTimeMs?: number,
-  shot?: { power?: number; distanceM?: number },
+  shot?: { power?: number; distanceM?: number; commitDirection?: -1 | 0 | 1 },
 ): KeeperDive {
-  const cell = saveCell ?? aimToSaveCell(actualAim);
+  const ballCell = saveCell ?? aimToSaveCell(actualAim);
+  const commit = shot?.commitDirection;
+  const guessedWrong = commit != null && commit !== 0 && shotSideForAim(actualAim) !== 0 && commit !== shotSideForAim(actualAim);
+  const stayed = commit === 0;
+  const poseCell: SaveCell = !saved && guessedWrong
+    ? { col: commit === -1 ? 2 : 13, row: ballCell.row }
+    : !saved && stayed
+      ? { col: 7, row: ballCell.row }
+      : ballCell;
+  const cell = poseCell;
   const square = cellCenter(cell);
-  const planted = isPlantedSaveCol(cell.col);
+  const planted = isPlantedSaveCol(cell.col) || (stayed && !saved);
   const closeRocket = !saved && isCloseThunderbolt(shot?.power ?? 0, shot?.distanceM ?? Number.POSITIVE_INFINITY);
   const lateral = diveIntensityForCell(cell);
-  const direction: -1 | 0 | 1 = planted || closeRocket ? 0 : square.x < 0 ? -1 : 1;
+  const direction: -1 | 0 | 1 = stayed && !saved
+    ? 0
+    : guessedWrong && !saved
+      ? (commit === -1 ? -1 : 1)
+      : planted || closeRocket ? 0 : square.x < 0 ? -1 : 1;
   const heightT = (cell.row + 0.5) / SAVE_GRID_ROWS;
   const lowT = 1 - heightT;
 
@@ -364,6 +413,8 @@ export function computeKeeperDive(
 export interface ResolveShotOptions {
   difficulty?: ShotDifficulty;
   rng?: RandomSource;
+  /** When true the keeper commits left / stay / right before the kick. */
+  penalty?: boolean;
 }
 
 export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions = {}): ShotResult {
@@ -380,7 +431,8 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
 
   const distanceM = gesture.distanceM ?? 16.5;
   const travelTimeMs = computeTravelTimeMs(power, distanceM);
-  const shotCtx = { power, distanceM };
+  const penaltyCommit = options.penalty ? samplePenaltyKeeperCommit(rng) : undefined;
+  const shotCtx = { power, distanceM, commitDirection: penaltyCommit };
 
   if (hitsWoodwork(actualAim)) {
     return {
@@ -392,6 +444,7 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
       travelTimeMs,
       keeperDive: computeKeeperDive(actualAim, aimToSaveCell(actualAim), false, difficulty, travelTimeMs, shotCtx),
       saveMargin: 0,
+      penaltyCommit,
     };
   }
 
@@ -405,11 +458,15 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
       travelTimeMs,
       keeperDive: computeKeeperDive(actualAim, aimToSaveCell(actualAim), false, difficulty, travelTimeMs, shotCtx),
       saveMargin: 0,
+      penaltyCommit,
     };
   }
 
   const saveCell = aimToSaveCell(actualAim);
-  const saved = rng() < saveChanceForAim(actualAim, power, curl);
+  const saveRoll = penaltyCommit != null
+    ? penaltySaveChanceForAim(actualAim, penaltyCommit, power, curl)
+    : saveChanceForAim(actualAim, power, curl);
+  const saved = rng() < saveRoll;
   const keeperDive = computeKeeperDive(actualAim, saveCell, saved, difficulty, travelTimeMs, shotCtx);
   const saveMargin = saved ? 1 - keeperDive.layout * 0.2 : 0;
 
@@ -423,5 +480,6 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
     keeperDive,
     saveMargin,
     saveCell,
+    penaltyCommit,
   };
 }

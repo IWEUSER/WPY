@@ -194,12 +194,6 @@ export function applyCareerLayoutPreview(): void {
     club,
     careerGoalRatio: 0.78,
     nationId: preview === 'mls' ? 'united-states' : preview === 'saudi' ? 'saudi-arabia' : 'spain',
-    qualifierCarry:
-      preview === 'mls'
-        ? { tournament: 'gold-cup', points: 7, played: 3 }
-        : preview === 'saudi'
-          ? { tournament: 'asian-cup', points: 7, played: 3 }
-          : { tournament: 'euro', points: 7, played: 3 },
   });
 
   const isMatchPreview = preview === 'match' || preview === 'match-away' || preview === 'match-local'

@@ -28,6 +28,18 @@ export const UNLISTED_GROUND: ClubGround = {
   tiers: UNLISTED_TIERS,
 };
 
+/** Neutral venue for domestic and European finals. */
+export const CUP_FINAL_CAPACITY = 90_000;
+export const CUP_FINAL_GROUND: ClubGround = {
+  name: 'National Stadium',
+  capacity: CUP_FINAL_CAPACITY,
+  tiers: 4,
+};
+
+export function groundForCupFinal(): ClubGround {
+  return CUP_FINAL_GROUND;
+}
+
 /** Shared bowls used by more than one club. */
 const SAN_SIRO: ClubGround = { name: 'San Siro', capacity: 75_710, tiers: 5 };
 const OLIMPICO: ClubGround = { name: 'Stadio Olimpico', capacity: 70_634, tiers: 1 };

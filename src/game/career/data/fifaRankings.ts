@@ -218,16 +218,24 @@ export type InternationalKnockoutRound =
   | 'semi-final'
   | 'final';
 
-/** World Cup: last 32 through the final. Continental: last 16 through the final. */
+/** World Cup: last 32 through the final. Nations League: QF through the final. Continental: last 16 through the final. */
 export function tournamentKnockoutRounds(tournament: InternationalTournamentId): InternationalKnockoutRound[] {
   if (tournament === 'world-cup') {
     return ['round-of-32', 'round-of-16', 'quarter-final', 'semi-final', 'final'];
   }
+  if (tournament === 'nations-league') {
+    return ['quarter-final', 'semi-final', 'final'];
+  }
   return ['round-of-16', 'quarter-final', 'semi-final', 'final'];
 }
 
-export function tournamentGroupGames(): number {
-  return 3;
+export function tournamentGroupGames(tournament?: InternationalTournamentId | null): number {
+  return tournament === 'nations-league' ? 6 : 3;
+}
+
+/** Six-game Nations League groups need more points than a three-game World Cup group. */
+export function tournamentGroupAdvancePoints(tournament?: InternationalTournamentId | null): number {
+  return tournamentGroupGames(tournament) >= 6 ? 8 : 4;
 }
 
 /**
@@ -334,11 +342,19 @@ export function qualifierOpponents(
 
 const GROUP_REUSE_KNOCKOUT = new Set<InternationalKnockoutRound>(['semi-final', 'final']);
 
-/** World Cup quarter-finals are FIFA top 16; semi-final and final are top 8. */
-export function worldCupKnockoutRankCap(round: InternationalKnockoutRound): number | undefined {
-  if (round === 'quarter-final') return 16;
-  if (round === 'semi-final' || round === 'final') return 8;
+/**
+ * Knockout rank caps for every international tournament: last 16 is FIFA top 16;
+ * quarter-final, semi-final and final are top 8.
+ */
+export function knockoutRankCap(round: InternationalKnockoutRound): number | undefined {
+  if (round === 'round-of-16') return 16;
+  if (round === 'quarter-final' || round === 'semi-final' || round === 'final') return 8;
   return undefined;
+}
+
+/** @deprecated Use knockoutRankCap — kept so older tests still compile. */
+export function worldCupKnockoutRankCap(round: InternationalKnockoutRound): number | undefined {
+  return knockoutRankCap(round);
 }
 
 function drawKnockoutOpponents(
@@ -372,8 +388,9 @@ function drawKnockoutOpponents(
   return picks;
 }
 
-/** Group then knockout opponents. World Cup mixes confederations; continental stays in-region.
- * Group sides cannot reappear until the semi-final. World Cup QF is top 16 only; SF/final top 8. */
+/** Group then knockout opponents. World Cup and Nations League mix confederations;
+ * continental stays in-region. Group sides cannot reappear until the semi-final.
+ * Last 16 is FIFA top 16; quarter-final, semi-final and final are top 8. */
 export function tournamentOpponents(
   nationId: string,
   tournament: InternationalTournamentId,
@@ -381,15 +398,15 @@ export function tournamentOpponents(
 ) {
   const nation = getNation(nationId);
   if (!nation) return [];
-  const groupCount = tournamentGroupGames();
+  const groupCount = tournamentGroupGames(tournament);
   const knockoutRounds = tournamentKnockoutRounds(tournament);
   const worldPool = NATIONS.filter((n) => n.id !== nationId);
   const regional = nationsInConfederation(nation.confederation).filter((n) => n.id !== nationId);
   const knockoutOpts = {
     rng,
-    rankCapForRound: tournament === 'world-cup' ? worldCupKnockoutRankCap : undefined,
+    rankCapForRound: knockoutRankCap,
   };
-  if (tournament === 'world-cup') {
+  if (tournament === 'world-cup' || tournament === 'nations-league') {
     const confeds: Confederation[] = ['UEFA', 'CONMEBOL', 'CONCACAF', 'CAF', 'AFC', 'OFC'];
     const byConfed = confeds
       .filter((c) => c !== nation.confederation)
@@ -422,5 +439,5 @@ export function tournamentOpponents(
   }
   const group = pickMixedRankOpponents(nationId, groupCount, regional, { rng });
   const groupIds = new Set(group.map((n) => n.id));
-  return [...group, ...drawKnockoutOpponents(nationId, knockoutRounds, regional, groupIds, { rng })];
+  return [...group, ...drawKnockoutOpponents(nationId, knockoutRounds, regional, groupIds, knockoutOpts)];
 }

@@ -49,8 +49,12 @@ import {
   diveIntensityForCell,
   isCloseThunderbolt,
   isPlantedSaveCol,
+  penaltySaveChanceForAim,
   resolveShot,
+  samplePenaltyKeeperCommit,
+  saveChanceForAim,
   saveChanceForCell,
+  shotSideForAim,
 } from '../src/game/shooting/shotEngine';
 import type { SwipeGesture } from '../src/game/shooting/types';
 
@@ -500,8 +504,82 @@ for (let i = 0; i < DIVE_N; i++) {
 }
 console.log(`random on-goal dives: wrong-way=${wrongWay}/${DIVE_N} hips-past-post=${pastPost}/${DIVE_N} glove-past-post=${handPastPost}/${DIVE_N}`);
 if (wrongWay > 0) {
-  console.error('FAIL: keeper dived the wrong way on at least one shot');
+  console.error('FAIL: open-play keeper dived the wrong way on at least one shot');
   process.exitCode = 1;
+}
+
+console.log('\n--- Penalty keeper can dive the wrong way or stay central ---');
+{
+  const PEN_N = 4000;
+  let stay = 0;
+  let wrong = 0;
+  let right = 0;
+  let centerGoals = 0;
+  let centerOnTarget = 0;
+  let openCenterGoals = 0;
+  let openCenterOnTarget = 0;
+  let cornerGoals = 0;
+  let cornerOnTarget = 0;
+  const commits = { left: 0, stay: 0, right: 0 };
+  for (let i = 0; i < PEN_N; i++) {
+    const commit = samplePenaltyKeeperCommit();
+    if (commit === -1) commits.left += 1;
+    else if (commit === 1) commits.right += 1;
+    else commits.stay += 1;
+  }
+  console.log(`penalty commits L/stay/R ${commits.left}/${commits.stay}/${commits.right} (expect ~1640/720/1640)`);
+  if (commits.stay < 500 || commits.stay > 1000 || commits.left < 1400 || commits.right < 1400) {
+    console.error('FAIL: penalty keeper commit weights drifted from ~41/18/41');
+    process.exitCode = 1;
+  }
+
+  for (let i = 0; i < PEN_N; i++) {
+    const g = gestureFor((Math.random() * 2 - 1) * 0.95, 0.15 + Math.random() * 0.8, 0.6 + Math.random() * 0.8);
+    const pen = resolveShot(g, { penalty: true });
+    const open = resolveShot(g);
+    const side = shotSideForAim(pen.aim);
+    if (pen.penaltyCommit === 0) stay += 1;
+    else if (side !== 0 && pen.penaltyCommit !== side) wrong += 1;
+    else right += 1;
+    if (Math.abs(pen.aim.x) < 0.18 && (pen.outcome === 'goal' || pen.outcome === 'saved')) {
+      centerOnTarget += 1;
+      if (pen.outcome === 'goal') centerGoals += 1;
+    }
+    if (Math.abs(open.aim.x) < 0.18 && (open.outcome === 'goal' || open.outcome === 'saved')) {
+      openCenterOnTarget += 1;
+      if (open.outcome === 'goal') openCenterGoals += 1;
+    }
+    if (Math.abs(pen.aim.x) > 0.55 && (pen.outcome === 'goal' || pen.outcome === 'saved')) {
+      cornerOnTarget += 1;
+      if (pen.outcome === 'goal') cornerGoals += 1;
+    }
+  }
+  const centerRate = centerOnTarget > 0 ? centerGoals / centerOnTarget : 0;
+  const openCenterRate = openCenterOnTarget > 0 ? openCenterGoals / openCenterOnTarget : 0;
+  const cornerRate = cornerOnTarget > 0 ? cornerGoals / cornerOnTarget : 0;
+  console.log(`penalty dives stay=${stay} wrong-way=${wrong} with-ball=${right}`);
+  console.log(`on-target conversion center pen=${centerRate.toFixed(3)} open=${openCenterRate.toFixed(3)} corner pen=${cornerRate.toFixed(3)}`);
+  if (stay < 400 || wrong < 400) {
+    console.error('FAIL: penalties must sometimes stand in the middle or dive the wrong way');
+    process.exitCode = 1;
+  }
+  if (centerRate < 0.55 || centerRate <= openCenterRate + 0.15) {
+    console.error('FAIL: centre penalties must convert much more often than open-play centre shots');
+    process.exitCode = 1;
+  }
+  const stayVsCorner = penaltySaveChanceForAim({ x: 0.85, y: 0.85 }, 0);
+  const wrongVsCorner = penaltySaveChanceForAim({ x: 0.85, y: 0.85 }, -1);
+  const rightVsCenter = penaltySaveChanceForAim({ x: 0, y: 0.45 }, 1);
+  const stayVsCenter = penaltySaveChanceForAim({ x: 0, y: 0.45 }, 0);
+  console.log(`save chance stay-corner=${stayVsCorner} wrong-corner=${wrongVsCorner} dive-center=${rightVsCenter} stay-center=${stayVsCenter.toFixed(2)}`);
+  if (stayVsCorner > 0.15 || wrongVsCorner > 0.15 || rightVsCenter > 0.15 || stayVsCenter < 0.8) {
+    console.error('FAIL: penalty save chances must punish a wrong guess and reward staying for a centre shot');
+    process.exitCode = 1;
+  }
+  if (saveChanceForAim({ x: 0, y: 0.45 }) < 0.7) {
+    console.error('FAIL: open-play centre save chance should stay high');
+    process.exitCode = 1;
+  }
 }
 if (pastPost > 0 || handPastPost > 0) {
   console.error('FAIL: keeper dive went past the post');

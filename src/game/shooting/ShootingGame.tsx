@@ -403,7 +403,7 @@ export default function ShootingGame({
 
   const launchShot = useCallback((gesture: SwipeGesture) => {
     const anim = animRef.current;
-    const result = resolveShot(gesture);
+    const result = resolveShot(gesture, { penalty: anim.chanceKind === 'penalty' });
     anim.result = result;
     anim.phase = 'shooting';
     anim.shotStartMs = performance.now();

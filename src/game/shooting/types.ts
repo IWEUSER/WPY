@@ -49,7 +49,7 @@ export interface KeeperDive {
   diveDurationMs: number;
   /** Effective reach radius once fully stretched, in normalized units. */
   reach: number;
-  /** -1 = left, 0 = standing (centre square), 1 = right. Always the shot's side. */
+  /** -1 = left, 0 = standing (centre), 1 = right. Open play always matches the shot; penalties may guess wrong or stay. */
   direction: -1 | 0 | 1;
   /** 0 = upright, 1 = fully stretched toward the ball. */
   stretch: number;
@@ -78,6 +78,8 @@ export interface ShotResult {
   keeperDive: KeeperDive;
   /** 0-1, how close the keeper's reach came to the ball; for UI/feedback. */
   saveMargin: number;
+  /** Penalty only: the side the keeper committed to before the kick. */
+  penaltyCommit?: -1 | 0 | 1;
   /** The 16×5 goalmouth cell the shot arrived in, when the shot was on target. */
   saveCell?: SaveCell;
 }
