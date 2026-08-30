@@ -90,7 +90,7 @@ function seatColor(
   awayShare: number,
   u: number,
 ): string {
-  const awayStart = 1 - Math.max(0.12, awayShare * 1.35);
+  const awayStart = 1 - Math.min(0.42, Math.max(0.14, awayShare));
   const visiting = u > awayStart;
   const primary = visiting ? away : home;
   const secondary = visiting ? awaySecondary : homeSecondary;
