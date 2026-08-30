@@ -1,10 +1,9 @@
 import { RETIREMENT_AGE } from '../constants';
 import { getClub } from '../data/clubs';
 import { leagueDisplayName } from '../data/leagueFormat';
-import { formatEuros } from '../playerValue';
+import { formatEuros, formatWeeklyWage } from '../playerValue';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { displaySeasonLabel, displaySeasonNumber } from '../seasonDisplay';
-import { lostTitleToRival } from '../seasonSim';
 import { countLoanSpells, resolveSeasonTransition } from '../transfers';
 import { leagueMatchWeeks } from '../data/clubs';
 import { useCareerStore } from '../store';
@@ -124,11 +123,6 @@ export default function SeasonSummaryScreen() {
               : ''}
           </p>
         )}
-        {seasonSim && lostTitleToRival(seasonSim) && (
-          <p className="mt-2 text-xs text-red-300">
-            Lost home and away to the title rival — cannot win the league.
-          </p>
-        )}
       </div>
 
       {honours.length > 0 && (
@@ -154,6 +148,24 @@ export default function SeasonSummaryScreen() {
           <p className="mt-1 text-xs">{wpyResult.reason}</p>
         </div>
       )}
+
+      {(() => {
+        const stay = preview.pendingTransfer?.stay ?? preview.immediate;
+        const nextLeague = stay?.clubLeague;
+        const promoted = Boolean(nextLeague && nextLeague !== (clubLeague ?? club.league));
+        if (!promoted || !stay || age >= RETIREMENT_AGE) return null;
+        const years = stay.contractYearsRemaining;
+        return (
+          <div className="w-full max-w-sm rounded-2xl bg-white/5 px-4 py-3 text-sm text-white/80">
+            <p className="text-xs uppercase tracking-wide text-white/40">If you stay</p>
+            <p className="mt-1 font-semibold">
+              {leagueDisplayName(nextLeague)}
+              {stay.weeklyWage != null ? ` · ${formatWeeklyWage(stay.weeklyWage)}` : ''}
+              {` · ${years} year${years === 1 ? '' : 's'} left`}
+            </p>
+          </div>
+        );
+      })()}
 
       <p className="max-w-sm text-sm text-white/60">{age >= RETIREMENT_AGE ? 'This was your final season.' : preview.detail}</p>
 

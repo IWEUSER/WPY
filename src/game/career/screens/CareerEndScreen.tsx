@@ -1,6 +1,6 @@
 import { getClub } from '../data/clubs';
 import { INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
-import { awardLabels, careerAwardCounts, careerTrophyCounts, formatGamesGoals, seasonClubName, seasonRatio } from '../honoursDisplay';
+import { awardLabels, careerAwardCounts, careerTrophyCounts, formatGamesGoals, seasonClubName, seasonLeagueLabel, seasonRatio } from '../honoursDisplay';
 import { formatEuros } from '../playerValue';
 import { countsTowardCareerRecord, displaySeasonLabel } from '../seasonDisplay';
 import { aggregateContinental, aggregateDomestic, continentalLabel } from '../seasonStats';
@@ -145,7 +145,7 @@ function SeasonCard({ season }: { season: SeasonRecord }) {
         {displaySeasonLabel(season.seasonNumber)} · Age {season.age}
       </p>
       <h2 className="text-lg font-extrabold">{seasonClubName(season)}</h2>
-      <p className="text-xs text-white/50">{season.league ?? club?.league ?? ''}</p>
+      <p className="text-xs text-white/50">{seasonLeagueLabel(season)}</p>
       <p className="mt-2 text-sm text-white/80">
         {season.goals} goals in {season.gamesPlayed} · {seasonRatio(season).toFixed(2)}
       </p>

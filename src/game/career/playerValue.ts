@@ -47,6 +47,9 @@ export const RESERVE_CONTRACT_YEARS = 1;
 export const SEASON_1_VALUE_LOCK_WEEKS = 20;
 export const YOUTH_MARKET_VALUE = 100_000;
 export const SPONSORSHIP_VALUE_FLOOR = 10_000_000;
+/** Ignore the live season until it has a real sample, or value swings week to week. */
+export const VALUE_FORM_MIN_GAMES = 15;
+export const PREMIER_LEAGUE_WAGE_FLOOR = 32_000;
 
 /** Longer deals for teenagers; the max shortens as the player ages. */
 export function maxContractYearsForAge(age: number): number {
@@ -106,6 +109,7 @@ export function consecutiveSeasonsBelow(seasons: SeasonRecord[], threshold: numb
   let n = 0;
   for (let i = seasons.length - 1; i >= 0; i--) {
     const season = seasons[i];
+    if (!seasonCountsTowardForm(season) && season.ratioMet == null) continue;
     if (!countsTowardCareerRecord(season.seasonNumber)) continue;
     if (season.gamesPlayed <= 0) continue;
     if (season.goals / season.gamesPlayed < threshold) n += 1;
@@ -129,8 +133,8 @@ export function consecutivePoorFactor(failedSeasons: number): number {
   return 0.02;
 }
 
-export function clubLeagueScale(club: Club): number {
-  return (club.strength / ANCHOR_STRENGTH) * leagueValueWeight(club.league);
+export function clubLeagueScale(club: Club, league?: string | null): number {
+  return (club.strength / ANCHOR_STRENGTH) * leagueValueWeight(league ?? club.league);
 }
 
 export function playerMarketValue(params: MarketValueParams): number {
@@ -142,11 +146,17 @@ export function playerMarketValue(params: MarketValueParams): number {
  * Same formula, but the club/league multiplier is a goal-weighted average of
  * every first-team season so a spell at Barcelona still counts after a move.
  */
+export function seasonCountsTowardForm(season: SeasonRecord): boolean {
+  if (!countsTowardCareerRecord(season.seasonNumber)) return false;
+  if (season.gamesPlayed <= 0) return false;
+  if (season.ratioMet != null) return true;
+  return season.gamesPlayed >= VALUE_FORM_MIN_GAMES;
+}
+
 export function lastSeasonRatio(seasons: SeasonRecord[]): number | null {
   for (let i = seasons.length - 1; i >= 0; i--) {
     const season = seasons[i];
-    if (!countsTowardCareerRecord(season.seasonNumber)) continue;
-    if (season.gamesPlayed <= 0) continue;
+    if (!seasonCountsTowardForm(season)) continue;
     return season.goals / season.gamesPlayed;
   }
   return null;
@@ -176,8 +186,17 @@ export function playerMarketValueFromSeasons(params: {
   if (isSeason1ValueLocked(params.seasonNumber, params.calendarWeek)) {
     return YOUTH_MARKET_VALUE;
   }
-  const { age, careerGoals, careerGames, seasons, fallbackClub } = params;
+  const { age, fallbackClub } = params;
   const yearsLeft = params.contractYearsRemaining ?? DEFAULT_CONTRACT_YEARS;
+  let careerGoals = params.careerGoals;
+  let careerGames = params.careerGames;
+  const seasons = params.seasons.filter((season) => {
+    if (season.ratioMet != null || season.gamesPlayed >= VALUE_FORM_MIN_GAMES) return true;
+    if (!countsTowardCareerRecord(season.seasonNumber)) return true;
+    careerGoals -= season.goals;
+    careerGames -= season.gamesPlayed;
+    return false;
+  });
   const careerRatio = careerGames > 0 ? careerGoals / careerGames : 0;
   const ratio = formAdjustedRatio(careerRatio, lastSeasonRatio(seasons));
   let weighted = 0;
@@ -186,7 +205,7 @@ export function playerMarketValueFromSeasons(params: {
     if (!countsTowardCareerRecord(season.seasonNumber)) continue;
     const club = getClub(season.clubId);
     if (!club || season.goals <= 0) continue;
-    weighted += clubLeagueScale(club) * season.goals;
+    weighted += clubLeagueScale(club, season.league) * season.goals;
     weight += season.goals;
   }
   const scale = weight > 0 ? weighted / weight : clubLeagueScale(fallbackClub);
@@ -214,10 +233,24 @@ function valueFromScale(age: number, ratio: number, careerGoals: number, scale: 
 }
 
 /**
- * Weekly wage. Higher-ranked clubs pay more. Saudi clubs pay like a top
- * European side; MLS stays well below that band.
+ * Weekly wage. Premier League clubs pay a high English band no matter the
+ * club's size. Saudi clubs pay like a top European side; MLS stays below that.
  */
-export function weeklyWageForClub(club: Club, marketValue: number): number {
+export function weeklyWageForClub(club: Club, marketValue: number, playingLeague?: string | null): number {
+  const league = playingLeague ?? club.league;
+  const t = (clampStrength(club.strength) - 52) / 42;
+  if (league === 'Premier League') {
+    const plBase: Record<ClubTier, number> = {
+      1: 130_000,
+      2: 85_000,
+      3: 58_000,
+      4: 42_000,
+      5: 36_000,
+    };
+    let wage = plBase[club.tier] * (0.85 + 0.35 * t);
+    wage += marketValue * 0.0001;
+    return Math.max(PREMIER_LEAGUE_WAGE_FLOOR, Math.round(wage / 500) * 500);
+  }
   const tierBase: Record<ClubTier, number> = {
     1: 95_000,
     2: 22_000,
@@ -225,10 +258,9 @@ export function weeklyWageForClub(club: Club, marketValue: number): number {
     4: 2_200,
     5: 800,
   };
-  const t = (clampStrength(club.strength) - 52) / 42;
   let wage = tierBase[club.tier] * (0.7 + 0.6 * t);
-  if (club.country === 'Saudi Arabia') wage *= 1.2;
-  if (club.league === 'MLS') wage *= 0.5;
+  if (club.country === 'Saudi Arabia' || league === 'Saudi Pro League') wage *= 1.2;
+  if (league === 'MLS') wage *= 0.5;
   const prestigeRate = club.tier === 1 ? 0.00016 : club.tier === 2 ? 0.00004 : 0.000012;
   wage += marketValue * prestigeRate;
   const floor = club.tier >= 5 ? 500 : club.tier >= 4 ? 800 : 1_200;

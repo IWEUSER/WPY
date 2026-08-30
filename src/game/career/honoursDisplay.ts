@@ -1,5 +1,6 @@
 import { getClub, type Club } from './data/clubs';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from './data/competitions';
+import { leagueDisplayName } from './data/leagueFormat';
 import type { SeasonHonours } from './seasonSim';
 import type { SeasonRecord } from './types';
 
@@ -63,6 +64,10 @@ export function formatGamesGoals(games: number, goals: number): string {
 
 export function seasonClubName(season: SeasonRecord): string {
   return getClub(season.clubId)?.name ?? season.clubId;
+}
+
+export function seasonLeagueLabel(season: SeasonRecord): string {
+  return leagueDisplayName(season.league ?? getClub(season.clubId)?.league);
 }
 
 export function seasonRatio(season: Pick<SeasonRecord, 'goals' | 'gamesPlayed'>): number {

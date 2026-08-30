@@ -1,7 +1,7 @@
 import { getClub } from '../data/clubs';
 import { INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { currentCalendarWeek } from '../calendar';
-import { awardLabels, careerAwardCounts, careerTrophyCounts, formatGamesGoals, seasonClubName, seasonRatio } from '../honoursDisplay';
+import { awardLabels, careerAwardCounts, careerTrophyCounts, formatGamesGoals, seasonClubName, seasonLeagueLabel, seasonRatio } from '../honoursDisplay';
 import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons } from '../playerValue';
 import { countsTowardCareerRecord, displaySeasonLabel } from '../seasonDisplay';
 import { aggregateContinental, aggregateDomestic, continentalLabel } from '../seasonStats';
@@ -205,7 +205,7 @@ function SeasonCard({ season }: { season: SeasonRecord & { inProgress?: boolean 
           </p>
           <h2 className="text-lg font-extrabold">{seasonClubName(season)}</h2>
           <p className="text-xs text-white/50">
-            {club?.league ?? ''} · {ROLE_LABEL[season.role] ?? season.role}
+            {seasonLeagueLabel(season)} · {ROLE_LABEL[season.role] ?? season.role}
           </p>
         </div>
         {season.wonWpy && (

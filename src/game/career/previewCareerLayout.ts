@@ -78,6 +78,48 @@ export function applyCareerLayoutPreview(): void {
       league: 'La Liga',
     }),
     season({
+      seasonNumber: 6,
+      clubId: 'leicester',
+      role: 'first-team',
+      matches: [],
+      goals: 22,
+      gamesPlayed: 46,
+      ratioMet: true,
+      age: 21,
+      leagueGoals: 20,
+      domesticGames: 48,
+      domesticGoals: 21,
+      continentalStats: [],
+      trophies: ['Championship'],
+      topGoalscorer: true,
+      playerOfTheYear: true,
+      wonWpy: false,
+      earnings: 1_200_000,
+      sponsorship: 0,
+      league: 'Championship',
+    }),
+    season({
+      seasonNumber: 7,
+      clubId: 'leicester',
+      role: 'first-team',
+      matches: [],
+      goals: 16,
+      gamesPlayed: 38,
+      ratioMet: true,
+      age: 22,
+      leagueGoals: 14,
+      domesticGames: 40,
+      domesticGoals: 15,
+      continentalStats: [],
+      trophies: [],
+      topGoalscorer: false,
+      playerOfTheYear: false,
+      wonWpy: false,
+      earnings: 2_400_000,
+      sponsorship: 0,
+      league: 'Premier League',
+    }),
+    season({
       seasonNumber: 12,
       clubId: 'inter-miami',
       role: 'first-team',
@@ -183,6 +225,22 @@ export function applyCareerLayoutPreview(): void {
         }
       : null;
 
+  const promoteSummary = preview === 'summary';
+  const leicester = getClub('leicester');
+  const leicesterTable = leicester
+    ? [{
+        clubId: 'leicester',
+        played: 46,
+        won: 30,
+        drawn: 8,
+        lost: 8,
+        goalsFor: 88,
+        goalsAgainst: 36,
+        points: 98,
+        position: 1,
+      }]
+    : sim.leagueTable;
+
   let nationalTeam = createNationalTeamState('spain');
   nationalTeam = recordInternationalAppearance(nationalTeam, 'world-cup', true, 1);
   nationalTeam = recordInternationalAppearance(nationalTeam, 'world-cup', true, 0);
@@ -203,12 +261,12 @@ export function applyCareerLayoutPreview(): void {
               : preview === 'summary'
                 ? 'season-summary'
                 : 'hub',
-    age: preview === 'end' ? 36 : 19,
-    seasonNumber: preview === 'end' ? 21 : 4,
-    clubId: preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : 'real-madrid',
-    parentClubId: preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : 'real-madrid',
+    age: preview === 'end' ? 36 : promoteSummary ? 22 : 19,
+    seasonNumber: preview === 'end' ? 21 : promoteSummary ? 6 : 4,
+    clubId: preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : promoteSummary ? 'leicester' : 'real-madrid',
+    parentClubId: preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : promoteSummary ? 'leicester' : 'real-madrid',
     role: 'first-team',
-    seasonsAtCurrentClub: preview === 'end' ? 10 : 3,
+    seasonsAtCurrentClub: preview === 'end' ? 10 : promoteSummary ? 1 : 3,
     nationality: preview === 'mls' ? 'united-states' : preview === 'saudi' ? 'saudi-arabia' : 'spain',
     nationalTeam,
     availability: createAvailability(),
@@ -216,11 +274,35 @@ export function applyCareerLayoutPreview(): void {
     careerGoals: preview === 'end' ? 312 : 58,
     careerGames: preview === 'end' ? 540 : 76,
     seasonCalendar: calendar,
-    seasonSim: sim,
-    seasonStandings: buildSeasonStandings(sim.leagueTable, sim.europeanStanding),
+    seasonSim: promoteSummary
+      ? { ...sim, leagueTable: leicesterTable, honours: { ...sim.honours, leagueChampion: true } }
+      : sim,
+    seasonStandings: buildSeasonStandings(promoteSummary ? leicesterTable : sim.leagueTable, promoteSummary ? null : sim.europeanStanding),
     currentSeason:
       preview === 'end'
         ? history[history.length - 1]
+        : promoteSummary
+          ? season({
+              seasonNumber: 6,
+              clubId: 'leicester',
+              role: 'first-team',
+              matches: [],
+              goals: 22,
+              gamesPlayed: 46,
+              ratioMet: true,
+              age: 22,
+              leagueGoals: 20,
+              domesticGames: 48,
+              domesticGoals: 21,
+              continentalStats: [],
+              trophies: ['Championship'],
+              topGoalscorer: true,
+              playerOfTheYear: true,
+              wonWpy: false,
+              earnings: 1_200_000,
+              sponsorship: 0,
+              league: 'Championship',
+            })
         : season({
             seasonNumber: 4,
             clubId: preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : 'real-madrid',
@@ -253,11 +335,11 @@ export function applyCareerLayoutPreview(): void {
       trophyName: 'European Championship',
       afterPhase: 'season-summary',
     },
-    weeklyWage: preview === 'end' ? 40_000 : 140_000,
+    weeklyWage: preview === 'end' ? 40_000 : promoteSummary && leicester ? weeklyWageForClub(leicester, value, 'Championship') : 140_000,
     careerEarnings: preview === 'end' ? 86_400_000 : 14_560_000,
-    contractYears: preview === 'end' ? 1 : 5,
-    contractYearsRemaining: preview === 'end' ? 1 : 5,
-    clubLeague: preview === 'end' || preview === 'mls' ? 'MLS' : preview === 'saudi' ? 'Saudi Pro League' : 'La Liga',
+    contractYears: preview === 'end' ? 1 : promoteSummary ? 2 : 5,
+    contractYearsRemaining: preview === 'end' ? 1 : promoteSummary ? 2 : 5,
+    clubLeague: preview === 'end' || preview === 'mls' ? 'MLS' : preview === 'saudi' ? 'Saudi Pro League' : promoteSummary ? 'Championship' : 'La Liga',
     seasonSponsorship: preview === 'end' ? 280_000 : 9_300_000,
     injuryGamesRemaining: 0,
     intlQualifying: { tournament: 'euro', points: 7, played: 3 },

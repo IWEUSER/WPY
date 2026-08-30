@@ -241,7 +241,7 @@ function attachSeasonAwards(state: CareerState): { season: SeasonRecord; wpyResu
   const club = getClub(state.clubId);
   const sim = state.seasonSim;
   const wpyResult = evaluateSeasonWpy(state);
-  const league = club?.league ?? '';
+  const league = state.clubLeague ?? club?.league ?? '';
   const boot = evaluateTopGoalscorer(season.leagueGoals, league);
   const poty = evaluatePlayerOfTheYear({
     leagueChampion: sim?.honours.leagueChampion ?? false,
@@ -787,6 +787,7 @@ export const useCareerStore = create<CareerStore>()(
               parentClubId,
               role,
               seasonsAtCurrentClub,
+              weeklyWage: transition.immediate.weeklyWage ?? state.weeklyWage,
               contractYearsRemaining: dealYears,
               contractYears: dealYears,
               seasonNumber: nextSeasonNumber,
@@ -857,6 +858,7 @@ export const useCareerStore = create<CareerStore>()(
               parentClubId: stay.parentClubId,
               role: stay.role,
               seasonsAtCurrentClub: stay.seasonsAtCurrentClub,
+              weeklyWage: stay.weeklyWage ?? state.weeklyWage,
               contractYearsRemaining: stay.contractYearsRemaining,
               contractYears: stay.contractYearsRemaining,
               availability: createAvailability(),

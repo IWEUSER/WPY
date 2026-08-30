@@ -83,6 +83,7 @@ export interface SeasonTransitionImmediate {
   contractYearsRemaining: number;
   /** League the club will play in next season (top flight after promotion). */
   clubLeague?: string;
+  weeklyWage?: number;
 }
 
 export interface SeasonTransitionResult {
@@ -220,15 +221,20 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
   const currentLeague = params.clubLeague ?? club.league;
   const promoted = role === 'first-team' && earnedPromotion(currentLeague, params.leaguePosition);
   const nextLeague = promoted ? (promotionTarget(currentLeague) ?? currentLeague) : currentLeague;
-  const stayOn = (extra: Partial<SeasonTransitionImmediate> = {}): SeasonTransitionImmediate => ({
-    clubId,
-    parentClubId,
-    role: role === 'reserve' ? 'first-team' : 'first-team',
-    seasonsAtCurrentClub: seasonsAtCurrentClub + 1,
-    contractYearsRemaining: nextContractYearsRemaining(yearsLeft, age),
-    clubLeague: nextLeague,
-    ...extra,
-  });
+  const stayOn = (extra: Partial<SeasonTransitionImmediate> = {}): SeasonTransitionImmediate => {
+    const stay: SeasonTransitionImmediate = {
+      clubId,
+      parentClubId,
+      role: role === 'reserve' ? 'first-team' : 'first-team',
+      seasonsAtCurrentClub: seasonsAtCurrentClub + 1,
+      contractYearsRemaining: nextContractYearsRemaining(yearsLeft, age),
+      clubLeague: nextLeague,
+      ...extra,
+    };
+    const stayClub = getClub(stay.clubId) ?? club;
+    stay.weeklyWage = weeklyWageForClub(stayClub, value, stay.clubLeague);
+    return stay;
+  };
   const withTwilight = (offers: ClubOfferTerms[]) =>
     withTwilightMlsOffers(offers, age, value, fee, [club.id, parentClubId]);
 

@@ -35,7 +35,7 @@ import {
   goldenBootWinChance,
   playerOfTheYearGoalTarget,
 } from '../src/game/career/domesticAwards';
-import { careerAwardCounts, careerTrophyCounts, formatGamesGoals } from '../src/game/career/honoursDisplay';
+import { careerAwardCounts, careerTrophyCounts, formatGamesGoals, seasonLeagueLabel } from '../src/game/career/honoursDisplay';
 import type { SeasonRecord } from '../src/game/career/types';
 
 const N = 50000;
@@ -271,13 +271,13 @@ console.log('\n--- Domestic awards: golden boot target + randomiser, POTY needs 
 const plTarget = goldenBootTarget('Premier League');
 const plPoty = playerOfTheYearGoalTarget('Premier League');
 console.log(`Premier League golden boot ${plTarget}, POTY bar ${plPoty}`);
-if (plTarget !== 16 || plPoty >= plTarget || plPoty < 10) {
-  console.error('POTY bar must sit below the golden-boot target');
+if (plTarget !== 25 || plPoty >= plTarget || plPoty < 16) {
+  console.error('Premier League golden boot must start at 25, with POTY below that');
   process.exitCode = 1;
 }
-const below = Array.from({ length: 80 }, () => evaluateTopGoalscorer(plTarget - 1, 'Premier League').won);
+const below = Array.from({ length: 80 }, () => evaluateTopGoalscorer(22, 'Premier League').won);
 if (below.some(Boolean)) {
-  console.error('scoring under the golden-boot target must never win it');
+  console.error('22 Premier League goals must never win the golden boot');
   process.exitCode = 1;
 }
 const exactTrials = 2000;
@@ -288,7 +288,21 @@ for (let i = 0; i < exactTrials; i++) {
 const exactRate = exactWins / exactTrials;
 console.log(`exactly ${plTarget} goals won ${exactWins}/${exactTrials} = ${(exactRate * 100).toFixed(1)}% (expect ~${(goldenBootWinChance(plTarget, plTarget) * 100).toFixed(0)}%)`);
 if (exactRate < 0.4 || exactRate > 0.6) {
-  console.error('hitting the golden-boot target must be a coin-flip, not a lock');
+  console.error('25 Premier League goals must be a medium-chance golden boot, not a lock');
+  process.exitCode = 1;
+}
+let thirtyWins = 0;
+for (let i = 0; i < exactTrials; i++) {
+  if (evaluateTopGoalscorer(30, 'Premier League').won) thirtyWins += 1;
+}
+const thirtyRate = thirtyWins / exactTrials;
+let thirtyOneWins = 0;
+for (let i = 0; i < exactTrials; i++) {
+  if (evaluateTopGoalscorer(31, 'Premier League').won) thirtyOneWins += 1;
+}
+console.log(`30 PL goals ${(thirtyRate * 100).toFixed(1)}%, 31 ${(thirtyOneWins / exactTrials * 100).toFixed(1)}%`);
+if (thirtyRate < 0.78 || thirtyOneWins / exactTrials <= thirtyRate) {
+  console.error('30 Premier League goals should be likely, and 31 even likelier');
   process.exitCode = 1;
 }
 const noTitle = evaluatePlayerOfTheYear({ leagueChampion: false, leagueGoals: 30, league: 'Premier League' });
@@ -836,6 +850,16 @@ if (barca && hilal && lafc) {
     console.error('lowest-level weekly wages must sit well below €5k');
     process.exitCode = 1;
   }
+  const palace = getClub('crystal-palace');
+  const leicester = getClub('leicester');
+  const palaceWage = palace ? weeklyWageForClub(palace, 8_000_000) : 0;
+  const champWage = leicester ? weeklyWageForClub(leicester, 8_000_000) : 0;
+  const promotedWage = leicester ? weeklyWageForClub(leicester, 8_000_000, 'Premier League') : 0;
+  console.log('PL Palace wage', palaceWage, 'Championship Leicester', champWage, 'Leicester in PL', promotedWage);
+  if (palaceWage < 32_000 || promotedWage < 32_000 || promotedWage <= champWage * 3) {
+    console.error('Premier League wages must sit far above Championship money, even at smaller clubs');
+    process.exitCode = 1;
+  }
   if (highWage <= 0 || euroWage < highWage * 2.5) {
     console.error('elite weekly wages must sit well above a high-tier club');
     process.exitCode = 1;
@@ -1324,6 +1348,13 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     console.error('staying after a Championship title must move the club into the Premier League');
     process.exitCode = 1;
   }
+  const stayWage = promoted.pendingTransfer?.stay?.weeklyWage ?? 0;
+  const stayYears = promoted.pendingTransfer?.stay?.contractYearsRemaining;
+  console.log('promotion stay wage', stayWage, 'years', stayYears);
+  if (stayWage < 32_000 || stayYears == null || stayYears < 1) {
+    console.error('promotion stay terms must include a Premier League wage and contract length');
+    process.exitCode = 1;
+  }
 
   const ages = [24, 25, 27, 30, 34];
   const maxes = ages.map(maxContractYearsForAge);
@@ -1499,6 +1530,55 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
   }
   if (lateS1 <= YOUTH_MARKET_VALUE) {
     console.error('season 1 market value must update after week 20');
+    process.exitCode = 1;
+  }
+  const finished = {
+    ...dummySeason,
+    seasonNumber: 3,
+    clubId: 'barcelona',
+    role: 'first-team' as const,
+    goals: 20,
+    gamesPlayed: 40,
+    ratioMet: true,
+    league: 'La Liga',
+  };
+  const hotStart = {
+    ...dummySeason,
+    seasonNumber: 4,
+    clubId: 'barcelona',
+    role: 'first-team' as const,
+    goals: 4,
+    gamesPlayed: 2,
+    ratioMet: null,
+    league: 'La Liga',
+  };
+  const afterHotStart = playerMarketValueFromSeasons({
+    age: 20,
+    careerGoals: 24,
+    careerGames: 42,
+    seasons: [finished, hotStart],
+    fallbackClub: getClub('barcelona')!,
+    contractYearsRemaining: 5,
+    seasonNumber: 4,
+    calendarWeek: 2,
+  });
+  const fromFinishedOnly = playerMarketValueFromSeasons({
+    age: 20,
+    careerGoals: 20,
+    careerGames: 40,
+    seasons: [finished],
+    fallbackClub: getClub('barcelona')!,
+    contractYearsRemaining: 5,
+    seasonNumber: 4,
+    calendarWeek: 2,
+  });
+  console.log('early-season value', afterHotStart, 'finished-only', fromFinishedOnly);
+  if (afterHotStart !== fromFinishedOnly) {
+    console.error('market value must ignore a 2-game hot start and stay on completed seasons');
+    process.exitCode = 1;
+  }
+  if (seasonLeagueLabel({ ...dummySeason, clubId: 'leicester', league: 'Premier League' }) !== 'Premier League') {
+    console.error('career cards must show the league the club played after promotion');
     process.exitCode = 1;
   }
   const trophyTally = careerTrophyCounts([

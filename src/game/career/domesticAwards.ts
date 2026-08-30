@@ -22,8 +22,9 @@ const SECOND_TIER_LEAGUES = new Set([
   'Ligue 2',
 ]);
 
-/** League goals that put you in the golden-boot conversation over 24 games. */
+/** League goals that put you in the golden-boot conversation. */
 export function goldenBootTarget(league: string): number {
+  if (league === 'Premier League') return 25;
   if (ELITE_LEAGUES.has(league)) return 16;
   if (SECOND_TIER_LEAGUES.has(league)) return 13;
   return 14;
@@ -43,11 +44,22 @@ export interface AwardResult {
 }
 
 /**
- * Chance of winning the golden boot once the target is hit. Exact target is
- * only a coin-flip; each extra league goal helps, but it never becomes a lock.
+ * Chance of winning the golden boot once the target is hit.
+ * Premier League: 25 is a medium-chance contender; 30 is likely; 31+ likelier.
+ * Other leagues: hitting the bar is a coin-flip, then each extra goal helps.
  */
-export function goldenBootWinChance(leagueGoals: number, target: number): number {
+export function goldenBootWinChance(leagueGoals: number, target: number, league?: string): number {
   if (leagueGoals < target) return 0;
+  if (league === 'Premier League') {
+    if (leagueGoals <= 25) return 0.48;
+    if (leagueGoals === 26) return 0.56;
+    if (leagueGoals === 27) return 0.64;
+    if (leagueGoals === 28) return 0.72;
+    if (leagueGoals === 29) return 0.78;
+    if (leagueGoals === 30) return 0.86;
+    if (leagueGoals === 31) return 0.92;
+    return Math.min(0.97, 0.92 + (leagueGoals - 31) * 0.015);
+  }
   return Math.min(0.88, 0.5 + (leagueGoals - target) * 0.08);
 }
 
@@ -63,7 +75,7 @@ export function evaluateTopGoalscorer(
       reason: `Golden boot target in ${league} is ${target} league goals; you scored ${leagueGoals}.`,
     };
   }
-  const chance = goldenBootWinChance(leagueGoals, target);
+  const chance = goldenBootWinChance(leagueGoals, target, league);
   const won = rng() < chance;
   return {
     won,
