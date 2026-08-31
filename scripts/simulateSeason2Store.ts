@@ -315,7 +315,7 @@ console.log('league pos', after.seasonStandings?.league.find((r) => r.clubId ===
 console.log('phase', after.phase, 'career games', after.careerGames, '(expect 1 after first first-team match)');
 const reserveEarnings = store.getState().seasonHistory[0]?.earnings ?? 0;
 const reserveSponsorship = store.getState().seasonHistory[0]?.sponsorship ?? 0;
-const s1Wages = after.weeklyWage * reserveGames;
+const s1Wages = 1000 * reserveGames;
 console.log(
   'earnings after S1',
   reserveEarnings,
