@@ -9,6 +9,7 @@ import type { SeasonStandings } from '../matchEngine';
 import { displaySeasonLabel } from '../seasonDisplay';
 import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
 import { conferenceTable, fixtureTitle, internationalRoundLabel, nextPlayableFixture, type SeasonSimState } from '../seasonSim';
+import { requiredGoalRatio } from '../transfers';
 import { useCareerStore } from '../store';
 
 const ROLE_LABEL: Record<string, string> = {
@@ -52,7 +53,8 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const played = season.gamesPlayed;
   const goals = season.goals;
   const ratio = played > 0 ? goals / played : 0;
-  const threshold = role === 'first-team' ? club.firstTeamGoalRatio : club.reserveGoalRatio;
+  const onLoan = role === 'loan';
+  const threshold = requiredGoalRatio(role, club, parentClub);
   const ratioProgress = Math.min(1, threshold > 0 ? ratio / threshold : 0);
   const injured = (injuryGamesRemaining ?? 0) > 0;
   const available = isAvailable(availability) && !injured;
@@ -126,8 +128,8 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         onClick={advance}
         className="mt-4 w-full rounded-2xl bg-emerald-500 px-6 py-4 text-lg font-bold text-black shadow-lg shadow-emerald-500/20 transition active:scale-[0.98]"
       >
-        {available ? 'Play Next Match' : 'Continue'}
-        {nextFixture && (
+        {available ? (nextFixture ? 'Play Next Match' : 'End of season') : 'Continue'}
+        {nextFixture ? (
           <span className="mt-1 block text-xs font-medium text-black/70">
             {fixtureTitle(nextFixture, { playerNationName: nation?.name })}
             {nextFixture.kind !== 'rest'
@@ -137,7 +139,9 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
               ? ' · league rival'
               : ''}
           </span>
-        )}
+        ) : seasonCalendar && seasonSim ? (
+          <span className="mt-1 block text-xs font-medium text-black/70">Review the campaign</span>
+        ) : null}
       </button>
 
       <div
@@ -194,15 +198,10 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
             />
           </div>
           <p className="mt-2 text-xs text-white/50">
-            Need {threshold.toFixed(2)} goals/game to {role === 'first-team' ? 'keep your place' : 'earn a promotion'} ·
-            currently {ratio.toFixed(2)}
+            {onLoan && parentClub
+              ? `Need ${threshold.toFixed(2)} goals/game to return to ${parentClub.name}'s first team · currently ${ratio.toFixed(2)}`
+              : `Need ${threshold.toFixed(2)} goals/game to ${role === 'first-team' ? 'keep your place' : 'earn a promotion'} · currently ${ratio.toFixed(2)}`}
           </p>
-          {parentClub && (
-            <p className="mt-2 text-xs text-emerald-300/80">
-              Hit {parentClub.firstTeamGoalRatio.toFixed(2)} and {parentClub.name} will bring you straight back into
-              their first team. Miss it and you choose another loan or a transfer — never the reserves.
-            </p>
-          )}
         </div>
 
         {nation && role !== 'reserve' && (

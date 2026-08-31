@@ -210,6 +210,13 @@ export interface CareerState {
   contractYearsRemaining: number;
   /** League the current club is competing in (top flight after a promotion). */
   clubLeague: string | null;
+  /**
+   * First-team years still on the parent deal while the player is out on a
+   * later-career loan. Null on the first youth/reserve loan (recall then
+   * signs a new 5-year deal). Restored when they return; a later loan does
+   * not reset the contract.
+   */
+  homeContractYearsRemaining: number | null;
   /** Sponsorship paid at the start of the current season. */
   seasonSponsorship: number;
   /** Upcoming club/country fixtures the player will sit out through injury. */

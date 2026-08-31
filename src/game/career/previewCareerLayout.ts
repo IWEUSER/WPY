@@ -578,6 +578,7 @@ export function applyCareerLayoutPreview(): void {
     contractYears: preview === 'end' ? 1 : promoteSummary || preview === 'expired' ? 2 : preview === 'hub' ? 2 : 5,
     contractYearsRemaining: preview === 'end' || preview === 'expired' ? 1 : promoteSummary || preview === 'hub' ? 2 : 5,
     clubLeague: preview === 'end' || preview === 'mls' ? 'MLS' : preview === 'saudi' ? 'Saudi Pro League' : promoteSummary ? 'Championship' : 'La Liga',
+    homeContractYearsRemaining: null,
     seasonSponsorship: preview === 'end' ? 280_000 : 9_300_000,
     injuryGamesRemaining: 0,
     intlQualifying: { tournament: 'euro', points: 7, played: 3 },

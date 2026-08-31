@@ -18,6 +18,7 @@ export default function TransferChoiceScreen() {
   const currentClub = clubId ? getClub(clubId) : undefined;
   if (!pending) return null;
 
+  const stayClub = pending.stay?.clubId ? getClub(pending.stay.clubId) : currentClub;
   const offers = (pending.offers?.length
     ? pending.offers
     : pending.clubIds.map((id) => ({ clubId: id, move: 'permanent' as const, fee: 0, weeklyWage: 0, contractYears: 0 }))
@@ -35,6 +36,7 @@ export default function TransferChoiceScreen() {
         {offers.map((offer) => {
           const club = getClub(offer.clubId);
           if (!club) return null;
+          const isCurrentClubRenewal = offer.move === 'permanent' && offer.clubId === clubId;
           return (
             <button
               key={`${offer.move}-${club.id}`}
@@ -59,7 +61,7 @@ export default function TransferChoiceScreen() {
               </div>
               <div className="flex flex-col items-end gap-1">
                 <span className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/70">
-                  {offer.move === 'loan' ? 'Loan' : offer.clubId === clubId ? 'New contract' : 'Transfer'}
+                  {offer.move === 'loan' ? 'Loan' : isCurrentClubRenewal ? 'New contract' : 'Transfer'}
                 </span>
                 <span className="text-[10px] uppercase tracking-wide text-white/40">{TIER_LABEL[club.tier]}</span>
               </div>
@@ -68,13 +70,13 @@ export default function TransferChoiceScreen() {
         })}
       </div>
 
-      {pending.allowDecline && currentClub && (
+      {pending.allowDecline && stayClub && (
         <button
           type="button"
           onClick={() => resolveTransferChoice(null)}
           className="rounded-2xl bg-white/10 px-6 py-3 text-sm font-semibold text-white/80 backdrop-blur transition active:scale-[0.98]"
         >
-          Stay at {currentClub.name}
+          Stay at {stayClub.name}
         </button>
       )}
     </div>

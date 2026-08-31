@@ -57,7 +57,7 @@ export function resolveMatchStadium(args: {
   const groundNationId = isInternational
     ? (isHome ? nation?.id : fixture?.opponentId)
     : undefined;
-  const ground = openingKind === 'youth-tournament'
+          const ground = openingKind === 'youth-tournament'
     ? groundForYouthTournament()
     : openingKind === 'club-trial'
       ? groundForClubTrial()
@@ -67,7 +67,9 @@ export function resolveMatchStadium(args: {
         ? groundForInternationalTournament()
         : isInternational
           ? groundForNationRank(fifaRank(groundNationId ?? ''))
-          : groundForClub(groundClub?.id);
+          : groundClub?.league === 'Ligue 2' || groundClub?.league === 'Serie B'
+            ? UNLISTED_GROUND
+            : groundForClub(groundClub?.id);
 
   return appearanceFromGround(ground, {
     isHome: neutral ? true : isHome,

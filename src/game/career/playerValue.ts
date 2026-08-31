@@ -16,7 +16,7 @@ const TOP_LEAGUES = new Set(['Premier League', 'La Liga', 'Serie A', 'Bundesliga
 export function leagueValueWeight(league: string): number {
   if (TOP_LEAGUES.has(league)) return 1;
   if (league === 'Saudi Pro League') return 0.42;
-  if (SECOND_DIVISIONS.has(league)) return 0.38;
+  if (SECOND_DIVISIONS.has(league)) return 0.22;
   if (league === 'Liga MX') return 0.32;
   if (league === 'MLS') return 0.22;
   return 0.3;
@@ -130,8 +130,9 @@ export function isSeason1ValueLocked(seasonNumber?: number, calendarWeek?: numbe
   return false;
 }
 
-/** Boot / shirt money for the season. Only once market value reaches €10m. */
-export function seasonalSponsorship(marketValue: number): number {
+/** Boot / shirt money. Big-5 leagues only, and only once value reaches €10m. */
+export function seasonalSponsorship(marketValue: number, league?: string | null): number {
+  if (!league || !TOP_LEAGUES.has(league)) return 0;
   if (marketValue < SPONSORSHIP_VALUE_FLOOR) return 0;
   const raw = marketValue * 0.04;
   if (raw >= 1_000_000) return Math.round(raw / 100_000) * 100_000;
@@ -179,7 +180,7 @@ export function clubLeagueScale(club: Club, league?: string | null): number {
 
 export function playerMarketValue(params: MarketValueParams): number {
   const { age, ratio, careerGoals, club } = params;
-  return valueFromScale(age, leagueAdjustedRatio(ratio, club.league), careerGoals, clubStrengthScale(club));
+  return valueFromScale(age, leagueAdjustedRatio(ratio, club.league), careerGoals, clubLeagueScale(club));
 }
 
 /**
@@ -244,7 +245,7 @@ export function formAdjustedRatio(careerRatio: number, recentRatio: number | nul
   if (recentRatio == null) return careerRatio;
   const blended = careerRatio * 0.65 + recentRatio * 0.35;
   const collapsed = careerRatio > 0.2 && recentRatio < careerRatio * 0.4;
-  return Math.max(0.05, blended * (collapsed ? 0.7 : 1));
+  return Math.max(0, blended * (collapsed ? 0.7 : 1));
 }
 
 export function playerMarketValueFromSeasons(params: {
@@ -278,10 +279,10 @@ export function playerMarketValueFromSeasons(params: {
     if (!countsTowardCareerRecord(season.seasonNumber, season.role)) continue;
     const club = getClub(season.clubId);
     if (!club || season.goals <= 0) continue;
-    weighted += clubStrengthScale(club) * season.goals;
+    weighted += clubLeagueScale(club, seasonLeague(season, club.league)) * season.goals;
     weight += season.goals;
   }
-  const scale = weight > 0 ? weighted / weight : clubStrengthScale(fallbackClub);
+  const scale = weight > 0 ? weighted / weight : clubLeagueScale(fallbackClub);
   const base = valueFromScale(age, ratio, careerGoals, scale);
   const poor = consecutivePoorFactor(consecutiveSeasonsBelow(seasons, 0.25));
   const raw = base * poor;
@@ -298,8 +299,8 @@ export function tierForMarketValue(value: number): ClubTier {
 }
 
 function valueFromScale(age: number, ratio: number, careerGoals: number, scale: number): number {
-  const ratioScale = Math.max(0.12, ratio / ANCHOR_RATIO);
-  const volume = Math.min(1.15, Math.max(0.55, 0.7 + careerGoals / 70));
+  const ratioScale = Math.max(0.015, ratio / ANCHOR_RATIO);
+  const volume = Math.min(1.15, Math.max(0.18, 0.7 + careerGoals / 70));
   const raw = BARCELONA_ANCHOR_VALUE * scale * ratioScale * ageValueFactor(age) * volume;
   return Math.max(100_000, Math.round(raw / 100_000) * 100_000);
 }

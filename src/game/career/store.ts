@@ -66,7 +66,7 @@ import {
   youthTrophyName,
 } from './openingFlow';
 import { getNation } from './international';
-import { countLoanSpells, forcedLoanPending, resolveSeasonTransition } from './transfers';
+import { countLoanSpells, forcedLoanPending, requiredGoalRatio, resolveSeasonTransition } from './transfers';
 import { evaluateWpy } from './wpy';
 import type { ShotResult } from '../shooting/types';
 import type { CareerStart, CareerState, MatchRecord, PlayerRole, SeasonRecord } from './types';
@@ -202,6 +202,7 @@ function startSimulatedSeason(
             seasonNumber,
             calendarWeek: 0,
           }),
+          league,
         )
       : 0;
   season = { ...season, sponsorship, earnings: (season.earnings ?? 0) + sponsorship };
@@ -525,6 +526,7 @@ function initialState(): CareerState {
     contractYears: DEFAULT_CONTRACT_YEARS,
     contractYearsRemaining: DEFAULT_CONTRACT_YEARS,
     clubLeague: null,
+    homeContractYearsRemaining: null,
     seasonSponsorship: 0,
     injuryGamesRemaining: 0,
     previousContinentalChampion: null,
@@ -1217,12 +1219,12 @@ export const useCareerStore = create<CareerStore>()(
             contractYearsRemaining: state.contractYearsRemaining,
             leaguePosition,
             clubLeague: state.clubLeague,
+            homeContractYearsRemaining: state.homeContractYearsRemaining,
           });
 
           const club = getClub(state.clubId);
-          const threshold = club
-            ? (state.role === 'first-team' ? club.firstTeamGoalRatio : club.reserveGoalRatio)
-            : 0;
+          const parent = state.parentClubId ? getClub(state.parentClubId) : undefined;
+          const threshold = club ? requiredGoalRatio(state.role, club, parent) : 0;
           const ratio = season.gamesPlayed > 0 ? season.goals / season.gamesPlayed : 0;
           const finishedSeason: SeasonRecord = {
             ...season,
@@ -1279,6 +1281,7 @@ export const useCareerStore = create<CareerStore>()(
               weeklyWage: transition.immediate.weeklyWage ?? state.weeklyWage,
               contractYearsRemaining: dealYears,
               contractYears: dealYears,
+              homeContractYearsRemaining: transition.immediate.role === 'loan' ? state.homeContractYearsRemaining : null,
               seasonNumber: nextSeasonNumber,
               age: nextAge,
               availability: createAvailability(),
@@ -1358,6 +1361,7 @@ export const useCareerStore = create<CareerStore>()(
               weeklyWage: stay.weeklyWage ?? state.weeklyWage,
               contractYearsRemaining: stay.contractYearsRemaining,
               contractYears: stay.contractYearsRemaining,
+              homeContractYearsRemaining: stay.role === 'loan' ? state.homeContractYearsRemaining : null,
               availability: createAvailability(),
               phase: 'hub',
               ...startSimulatedSeason(
@@ -1419,6 +1423,13 @@ export const useCareerStore = create<CareerStore>()(
             takeLoan && state.role === 'reserve'
               ? RESERVE_WEEKLY_WAGE
               : (offer?.weeklyWage ?? state.weeklyWage);
+          const homeYears = takeLoan
+            ? state.role === 'loan'
+              ? state.homeContractYearsRemaining
+              : state.role === 'first-team'
+                ? Math.max(0, state.contractYearsRemaining - 1)
+                : null
+            : null;
 
           return {
             pendingTransfer: null,
@@ -1431,6 +1442,7 @@ export const useCareerStore = create<CareerStore>()(
             weeklyWage: takeLoan ? loanWage : (offer?.weeklyWage ?? state.weeklyWage),
             contractYears: dealYears,
             contractYearsRemaining: dealYears,
+            homeContractYearsRemaining: homeYears,
             availability: createAvailability(),
             qualifiedContinentalCup: nextCup,
             seasonNumber: nextSeasonNumber,
@@ -1472,7 +1484,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 22,
+      version: 23,
       migrate: (persisted) => {
         const state = persisted as Partial<CareerState>;
         const sim = state.seasonSim;
@@ -1578,6 +1590,7 @@ export const useCareerStore = create<CareerStore>()(
                 ? FIRST_CONTRACT_YEARS
                 : (state.contractYearsRemaining ?? DEFAULT_CONTRACT_YEARS),
           clubLeague: state.clubLeague ?? (state.clubId ? getClub(state.clubId)?.league ?? null : null),
+          homeContractYearsRemaining: state.homeContractYearsRemaining ?? null,
           seasonSponsorship: state.seasonSponsorship ?? 0,
           injuryGamesRemaining: state.injuryGamesRemaining ?? 0,
           previousContinentalChampion: state.previousContinentalChampion ?? null,

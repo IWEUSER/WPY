@@ -5,7 +5,7 @@ import { formatEuros, formatWeeklyWage } from '../playerValue';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { formatInternationalSeason } from '../honoursDisplay';
 import { displaySeasonLabel, displaySeasonNumber } from '../seasonDisplay';
-import { countLoanSpells, resolveSeasonTransition } from '../transfers';
+import { countLoanSpells, requiredGoalRatio, resolveSeasonTransition } from '../transfers';
 import { leagueMatchWeeks } from '../data/clubs';
 import { useCareerStore } from '../store';
 
@@ -27,6 +27,7 @@ export default function SeasonSummaryScreen() {
   const seasonHistory = useCareerStore((s) => s.seasonHistory);
   const continueAfterSeason = useCareerStore((s) => s.continueAfterSeason);
   const contractYearsRemaining = useCareerStore((s) => s.contractYearsRemaining);
+  const homeContractYearsRemaining = useCareerStore((s) => s.homeContractYearsRemaining);
   const clubLeague = useCareerStore((s) => s.clubLeague);
   const seasonSponsorship = useCareerStore((s) => s.seasonSponsorship);
   const careerStart = useCareerStore((s) => s.careerStart);
@@ -34,8 +35,9 @@ export default function SeasonSummaryScreen() {
   const club = clubId ? getClub(clubId) : undefined;
   if (!club || !season || !clubId || !parentClubId) return null;
 
+  const parentClub = getClub(parentClubId);
   const ratio = season.gamesPlayed > 0 ? season.goals / season.gamesPlayed : 0;
-  const threshold = role === 'first-team' ? club.firstTeamGoalRatio : club.reserveGoalRatio;
+  const threshold = requiredGoalRatio(role, club, parentClub);
   const scheduled = seasonCalendar?.fixtures.length ?? leagueMatchWeeks(club.league);
   const gamesMissed = Math.max(0, scheduled - season.gamesPlayed);
   const us = seasonStandings?.league.find((r) => r.clubId === clubId);
@@ -55,6 +57,7 @@ export default function SeasonSummaryScreen() {
     contractYearsRemaining,
     leaguePosition: us?.position ?? null,
     clubLeague,
+    homeContractYearsRemaining,
   });
 
   const honours: string[] = [];
