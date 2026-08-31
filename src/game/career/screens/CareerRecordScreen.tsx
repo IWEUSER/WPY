@@ -101,6 +101,8 @@ export default function CareerRecordScreen() {
                 contractYearsRemaining,
                 seasonNumber,
                 calendarWeek: week,
+                careerStart,
+                role: current?.role,
               })
             : null;
         const fee = value != null ? transferFeeFromValue(value, contractYearsRemaining) : null;

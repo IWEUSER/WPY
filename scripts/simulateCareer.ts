@@ -12,7 +12,7 @@ import {
   meanChancesFromStrength,
 } from '../src/game/career/chanceEngine';
 import { assignClubTier, CLUBS, clubsForSeason, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, leagueMatchWeeks, playableClubsGroupedByLeague, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
-import { consecutivePoorFactor, contractValueFactor, FIRST_CONTRACT_YEARS, formAdjustedRatio, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, playerMarketValue, playerMarketValueFromSeasons, seasonalSponsorship, tierForMarketValue, transferFeeFromValue, weeklyWageForClub, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
+import { consecutivePoorFactor, contractValueFactor, FIRST_CONTRACT_YEARS, formAdjustedRatio, isSeason1ValueLocked, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, playerMarketValue, playerMarketValueFromSeasons, seasonalSponsorship, tierForMarketValue, transferFeeFromValue, weeklyWageForClub, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { nationKit } from '../src/game/career/data/nationColours';
 import { reserveStadium, resolveCareerStadium, resolveMatchStadium, trialStadium } from '../src/game/career/matchVenue';
@@ -38,12 +38,12 @@ import { clubKit } from '../src/game/career/data/clubKits';
 import { clubContinentalCup, internationalCalendarSeason, internationalCampaignForSeason, internationalTournamentForSeason } from '../src/game/career/data/competitions';
 import { cupFromLeaguePosition, continentalQualificationForNextSeason } from '../src/game/career/europeanQualification';
 import { fifaRank, knockoutRankCap, tournamentOpponents, worldCupKnockoutRankCap } from '../src/game/career/data/fifaRankings';
-import { displaySeasonLabel, displaySeasonNumber } from '../src/game/career/seasonDisplay';
-import { isSelectedForNationalTeam, selectionRatioForNation } from '../src/game/career/international';
+import { countsTowardCareerRecord, displaySeasonLabel, displaySeasonNumber } from '../src/game/career/seasonDisplay';
+import { callUpRatio, isSelectedForNationalTeam, markInjuryMissedFinals, selectionRatioForNation } from '../src/game/career/international';
 import { missedChanceWinFactor, simulateClubMatch, simulateLeagueSeason } from '../src/game/career/matchEngine';
 import { aggregateContinental, aggregateDomesticSplit, recordClubAppearanceStats, seasonDomesticSplit } from '../src/game/career/seasonStats';
 import { leaguePhaseOpponents } from '../src/game/career/continentalDraw';
-import { canWinLeague, hydrateSeason, leagueFixtureIsHome, nextPlayableFixture, pickTitleRival, resolveFixture, shouldSkipFixture } from '../src/game/career/seasonSim';
+import { canWinLeague, hydrateSeason, leagueFixtureIsHome, nextPlayableFixture, pickTitleRival, remainingPlayableCount, resolveFixture, shouldSkipFixture } from '../src/game/career/seasonSim';
 import {
   applyTrialMatch,
   applyYouthMatch,
@@ -64,7 +64,7 @@ import {
   trialContractWon,
 } from '../src/game/career/trial';
 import { nextYouthKnockoutRound, youthMaxGames } from '../src/game/career/youthTournament';
-import { consecutiveLoanSpells, LOAN_OFFER_COUNT, offerTierFromStanding, pickLoanClubsForMiss, requiredGoalRatio, resolveSeasonTransition, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, forcedLoanPending } from '../src/game/career/transfers';
+import { consecutiveLoanSpells, LOAN_OFFER_COUNT, offerFormRatio, offerTierFromStanding, pickLoanClubsForMiss, requiredGoalRatio, resolveSeasonTransition, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, forcedLoanPending } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
 import {
   evaluatePlayerOfTheYear,
@@ -707,6 +707,14 @@ if (displaySeasonNumber(2) !== 1) {
   console.error('internal season 2 is the first public season');
   process.exitCode = 1;
 }
+if (displaySeasonNumber(1, { careerStart: 'favourite-first-team', role: 'first-team' }) !== 1) {
+  console.error('favourite first-team starts as public Season 1');
+  process.exitCode = 1;
+}
+if (!countsTowardCareerRecord(1, 'first-team') || countsTowardCareerRecord(1, 'reserve')) {
+  console.error('first-team Season 1 must count for awards; reserve year must not');
+  process.exitCode = 1;
+}
 
 console.log('\n--- International selection uses career ratio, nation rank, and club level ---');
 console.log('Spain bar', selectionRatioForNation('spain'), '(expect 0.66)');
@@ -722,6 +730,17 @@ console.log('Spain 0.66 at Madrid', spainPick, 'Spain 0.65', spainMiss, 'Spain 1
 if (!spainPick || spainMiss || lutonPick) {
   console.error('selection must use 0.66 for Spain and never pick lower-league players');
   process.exitCode = 1;
+}
+
+{
+  const fromCareer = callUpRatio({ season: { goals: 0, gamesPlayed: 0 }, careerGoals: 45, careerGames: 40 });
+  const thinSample = callUpRatio({ season: { goals: 0, gamesPlayed: 13 }, careerGoals: 45, careerGames: 53 });
+  const afterSample = callUpRatio({ season: { goals: 0, gamesPlayed: 15 }, careerGoals: 45, careerGames: 55 });
+  console.log('call-up ratio career/thin/15-blank', fromCareer.toFixed(2), thinSample.toFixed(2), afterSample.toFixed(2));
+  if (fromCareer < 0.66 || thinSample < 0.66 || afterSample !== 0) {
+    console.error('call-up must use career ratio until 15 games this season, then this season');
+    process.exitCode = 1;
+  }
 }
 
 const lutonClub = getClub('luton');
@@ -855,6 +874,98 @@ if (madridClub) {
   if (favFirst.sim.internationalPhase !== 'qualifiers' || favIntl.some((f) => f.internationalRound !== 'qualifier')) {
     console.error('favourite first-team Season 1 must not schedule the World Cup tournament');
     process.exitCode = 1;
+  }
+
+  const wolvesClub = getClub('wolves');
+  if (wolvesClub) {
+    if (clubContinentalCup(wolvesClub) !== 'uecl') {
+      console.error('Wolves must play the Conference League, not the Champions League');
+      process.exitCode = 1;
+    }
+    const favBrazilS2 = hydrateSeason({
+      seasonNumber: 2,
+      club: wolvesClub,
+      careerGoalRatio: 1.13,
+      nationId: 'brazil',
+      careerStart: 'favourite-first-team',
+    });
+    const favBrazilS2Miss = hydrateSeason({
+      seasonNumber: 2,
+      club: wolvesClub,
+      careerGoalRatio: 0,
+      nationId: 'brazil',
+      careerStart: 'favourite-first-team',
+    });
+    const s2Finals = favBrazilS2.calendar.fixtures.filter(
+      (f) => f.kind === 'international' && f.internationalRound && f.internationalRound !== 'qualifier',
+    );
+    const s2Playable = remainingPlayableCount(favBrazilS2.calendar, favBrazilS2.sim);
+    const s2MissPlayable = remainingPlayableCount(favBrazilS2Miss.calendar, favBrazilS2Miss.sim);
+    console.log(
+      'favourite Brazil S2',
+      favBrazilS2.sim.internationalTournament,
+      favBrazilS2.sim.internationalSelected,
+      'finals',
+      s2Finals.length,
+      'playable',
+      s2Playable,
+      'unselected playable',
+      s2MissPlayable,
+      'weeks',
+      favBrazilS2.calendar.totalWeeks,
+    );
+    if (
+      favBrazilS2.sim.internationalTournament !== 'world-cup'
+      || favBrazilS2.sim.internationalPhase !== 'qualifiers-and-tournament'
+      || !favBrazilS2.sim.internationalSelected
+      || s2Finals.length === 0
+    ) {
+      console.error('favourite Season 2 for Brazil must schedule the World Cup and select a 1.13-ratio player');
+      process.exitCode = 1;
+    }
+    if (s2Playable <= s2MissPlayable) {
+      console.error('World Cup finals must remain playable when the player is selected');
+      process.exitCode = 1;
+    }
+    const skippedFinal = s2Finals[0];
+    if (skippedFinal && !shouldSkipFixture(skippedFinal, favBrazilS2Miss.sim)) {
+      console.error('unselected players must skip World Cup finals fixtures');
+      process.exitCode = 1;
+    }
+
+    const favBrazilS4 = hydrateSeason({
+      seasonNumber: 4,
+      club: wolvesClub,
+      careerGoalRatio: 1.13,
+      nationId: 'brazil',
+      careerStart: 'favourite-first-team',
+    });
+    const s4Finals = favBrazilS4.calendar.fixtures.filter((f) => f.kind === 'international');
+    const s4Playable = remainingPlayableCount(favBrazilS4.calendar, favBrazilS4.sim);
+    console.log(
+      'favourite Brazil S4',
+      favBrazilS4.sim.internationalTournament,
+      favBrazilS4.sim.internationalPhase,
+      'games',
+      s4Finals.length,
+      'playable',
+      s4Playable,
+      'weeks',
+      favBrazilS4.calendar.totalWeeks,
+    );
+    if (
+      favBrazilS4.sim.internationalTournament !== 'copa-america'
+      || favBrazilS4.sim.internationalPhase !== 'tournament-only'
+      || !favBrazilS4.sim.internationalSelected
+      || s4Finals.length === 0
+    ) {
+      console.error('favourite Season 4 for Brazil must be the Copa América after the club season');
+      process.exitCode = 1;
+    }
+    if (favBrazilS4.calendar.totalWeeks < 45 || s4Playable < 40) {
+      console.error('Copa América season must run past the club calendar when the player is selected');
+      process.exitCode = 1;
+    }
   }
 }
 
@@ -1857,6 +1968,39 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
     process.exitCode = 1;
   }
 
+  const thinMiss = resolveSeasonTransition({
+    season: { ...dummySeason, seasonNumber: 3, clubId: 'wolves', goals: 0, gamesPlayed: 13, leagueGoals: 0 },
+    role: 'first-team',
+    clubId: 'wolves',
+    parentClubId: 'wolves',
+    seasonsAtCurrentClub: 2,
+    age: 19,
+    careerGoals: 80,
+    careerGames: 38 + 38 + 13,
+    nationality: 'brazil',
+    loansUsed: 0,
+    contractYearsRemaining: 5,
+    seasonHistory: [
+      { ...dummySeason, seasonNumber: 1, clubId: 'wolves', role: 'first-team', goals: 40, gamesPlayed: 38 },
+      { ...dummySeason, seasonNumber: 2, clubId: 'wolves', role: 'first-team', goals: 40, gamesPlayed: 38 },
+    ],
+  });
+  const thinOffers = thinMiss.pendingTransfer?.offers ?? [];
+  const thinLoans = thinOffers.filter((o) => o.move === 'loan');
+  const thinPerms = thinOffers.filter((o) => o.move === 'permanent');
+  const thinLoanTiers = thinLoans.map((o) => getClub(o.clubId)?.tier ?? 5);
+  const thinPermTiers = thinPerms.map((o) => getClub(o.clubId)?.tier ?? 5);
+  const form = offerFormRatio({
+    lastSeason: { ...dummySeason, seasonNumber: 3, clubId: 'wolves', goals: 0, gamesPlayed: 13 },
+    careerGoals: 80,
+    careerGames: 89,
+  });
+  console.log('13-game 0.00 offers', thinOffers.map((o) => `${o.move}:${o.clubId}:${getClub(o.clubId)?.tier}`), 'form', form.toFixed(2));
+  if (form < 0.9 || thinLoanTiers.some((t) => t > 1) || thinPermTiers.some((t) => t > 1) || thinLoans.length === 0 || thinPerms.length === 0) {
+    console.error('a 13-game blank must not tank loans while transfers stay elite — both follow career form');
+    process.exitCode = 1;
+  }
+
   const laterRecall = resolveSeasonTransition({
     season: { ...loanSeason, goals: 20, gamesPlayed: 24 },
     role: 'loan',
@@ -2048,6 +2192,10 @@ if (madrid) {
   const phase = leaguePhaseOpponents(madrid, 'ucl', 8);
   if (phase.length !== 8 || new Set(phase.map((c) => c.id)).size !== 8 || phase.some((c) => c.id === madrid.id)) {
     console.error('league-phase draw must return 8 unique opponents');
+    process.exitCode = 1;
+  }
+  if (phase.some((c) => c.id === 'wolves' || clubContinentalCup(c) !== 'ucl')) {
+    console.error('Champions League opponents must all belong in the Champions League — no Wolves');
     process.exitCode = 1;
   }
   const wcFinal = noCup.calendar.fixtures.find((f) => f.kind === 'international' && f.internationalRound === 'final');
@@ -2410,6 +2558,84 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
   }
   if (lateS1 <= YOUTH_MARKET_VALUE) {
     console.error('season 1 market value must update after week 20');
+    process.exitCode = 1;
+  }
+  const favEarly = playerMarketValueFromSeasons({
+    age: 17,
+    careerGoals: 18,
+    careerGames: 20,
+    seasons: [{
+      ...dummySeason,
+      seasonNumber: 1,
+      clubId: 'wolves',
+      role: 'first-team',
+      goals: 18,
+      gamesPlayed: 20,
+    }],
+    fallbackClub: getClub('wolves')!,
+    contractYearsRemaining: 2,
+    seasonNumber: 1,
+    calendarWeek: 15,
+    careerStart: 'favourite-first-team',
+    role: 'first-team',
+  });
+  const favLate = playerMarketValueFromSeasons({
+    age: 17,
+    careerGoals: 22,
+    careerGames: 26,
+    seasons: [{
+      ...dummySeason,
+      seasonNumber: 1,
+      clubId: 'wolves',
+      role: 'first-team',
+      goals: 22,
+      gamesPlayed: 26,
+    }],
+    fallbackClub: getClub('wolves')!,
+    contractYearsRemaining: 2,
+    seasonNumber: 1,
+    calendarWeek: 25,
+    careerStart: 'favourite-first-team',
+    role: 'first-team',
+  });
+  const favS2Week1 = playerMarketValueFromSeasons({
+    age: 18,
+    careerGoals: 30,
+    careerGames: 40,
+    seasons: [{
+      ...dummySeason,
+      seasonNumber: 1,
+      clubId: 'wolves',
+      role: 'first-team',
+      goals: 30,
+      gamesPlayed: 40,
+    }],
+    fallbackClub: getClub('wolves')!,
+    contractYearsRemaining: 1,
+    seasonNumber: 2,
+    calendarWeek: 1,
+    careerStart: 'favourite-first-team',
+    role: 'first-team',
+  });
+  console.log('favourite S1 week 15', favEarly, 'week 25', favLate, 'S2 week 1', favS2Week1);
+  if (favEarly !== YOUTH_MARKET_VALUE) {
+    console.error('favourite first-team Season 1 must stay at €100k until week 20');
+    process.exitCode = 1;
+  }
+  if (favLate <= YOUTH_MARKET_VALUE) {
+    console.error('favourite first-team Season 1 must update market value after week 20');
+    process.exitCode = 1;
+  }
+  if (favS2Week1 <= YOUTH_MARKET_VALUE) {
+    console.error('favourite first-team Season 2 must not wait until week 20 to show market value');
+    process.exitCode = 1;
+  }
+  if (isSeason1ValueLocked(1, 25, { careerStart: 'favourite-first-team', role: 'first-team' })) {
+    console.error('favourite Season 1 week 25 must not be value-locked');
+    process.exitCode = 1;
+  }
+  if (!isSeason1ValueLocked(2, 15, { careerStart: 'youth', role: 'first-team' })) {
+    console.error('youth-path public Season 1 (internal 2) must stay locked until week 20');
     process.exitCode = 1;
   }
   const finished = {
@@ -3086,6 +3312,23 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
   }
   if (firstTeamLook.groundName !== groundForClub('real-madrid').name || firstTeamLook.capacity !== 83_186) {
     console.error('first-team matches must still use the club ground');
+    process.exitCode = 1;
+  }
+  const favouriteFirstS1Look = resolveCareerStadium({
+    fixture: homeFx,
+    club: madridClub,
+    nation: spain,
+    seasonNumber: 1,
+    role: 'first-team',
+    careerStart: 'favourite-first-team',
+  });
+  if (favouriteFirstS1Look.crowdFill !== 'full' || favouriteFirstS1Look.groundName !== groundForClub('real-madrid').name) {
+    console.error('favourite first-team Season 1 must use a packed first-team crowd');
+    process.exitCode = 1;
+  }
+  const injuredFinals = markInjuryMissedFinals(undefined, 'world-cup');
+  if (!injuredFinals.injuryMissedFinals || injuredFinals.tournament !== 'world-cup') {
+    console.error('missing an end-of-season tournament game through injury must be recorded');
     process.exitCode = 1;
   }
   const ligue2Club = getClub('le-havre');

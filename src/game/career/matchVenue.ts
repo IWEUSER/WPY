@@ -143,7 +143,7 @@ export function resolveCareerStadium(args: {
   ) {
     return { ...resolveMatchStadium({ ...args, openingKind: 'club-trial' }), crowdFill: 'sparse' };
   }
-  if ((args.seasonNumber != null && args.seasonNumber < 2) || args.role === 'reserve') {
+  if (args.role === 'reserve') {
     return { ...resolveMatchStadium(args), crowdFill: 'sparse' };
   }
   return resolveMatchStadium(args);

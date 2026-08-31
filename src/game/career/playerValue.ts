@@ -1,6 +1,6 @@
 import { clampStrength, getClub, SECOND_DIVISIONS, type Club, type ClubTier } from './data/clubs';
-import { countsTowardCareerRecord } from './seasonDisplay';
-import type { SeasonRecord } from './types';
+import { countsTowardCareerRecord, displaySeasonNumber } from './seasonDisplay';
+import type { PlayerRole, SeasonRecord } from './types';
 
 /** 18 at Barcelona with a 0.9 ratio is the €200m anchor. */
 export const BARCELONA_ANCHOR_VALUE = 200_000_000;
@@ -59,7 +59,7 @@ export const RESERVE_CONTRACT_YEARS = FIRST_CONTRACT_YEARS;
 export const RESERVE_WEEKLY_WAGE = 1000;
 /** Reserve-year and public-season-1 loans stay one year. */
 export const YOUTH_LOAN_YEARS = 1;
-/** Public Season 1 (internal season 2) stays at the youth value until week 21. */
+/** Public Season 1 stays at the youth value until week 21, on every career path. */
 export const SEASON_1_VALUE_LOCK_WEEKS = 20;
 export const YOUTH_MARKET_VALUE = 100_000;
 export const SPONSORSHIP_VALUE_FLOOR = 10_000_000;
@@ -123,11 +123,14 @@ export function loanContractYearsRemaining(
   return nextContractYearsRemaining(yearsRemaining, age);
 }
 
-export function isSeason1ValueLocked(seasonNumber?: number, calendarWeek?: number): boolean {
+export function isSeason1ValueLocked(
+  seasonNumber?: number,
+  calendarWeek?: number,
+  opts?: { careerStart?: string | null; role?: PlayerRole },
+): boolean {
   if (seasonNumber == null) return false;
-  if (seasonNumber < 2) return true;
-  if (seasonNumber === 2) return (calendarWeek ?? 99) <= SEASON_1_VALUE_LOCK_WEEKS;
-  return false;
+  if (displaySeasonNumber(seasonNumber, opts) !== 1) return false;
+  return (calendarWeek ?? 99) <= SEASON_1_VALUE_LOCK_WEEKS;
 }
 
 /** Boot / shirt money. Big-5 leagues only, and only once value reaches €10m. */
@@ -257,8 +260,15 @@ export function playerMarketValueFromSeasons(params: {
   contractYearsRemaining?: number;
   seasonNumber?: number;
   calendarWeek?: number;
+  careerStart?: string | null;
+  role?: PlayerRole;
 }): number {
-  if (isSeason1ValueLocked(params.seasonNumber, params.calendarWeek)) {
+  if (
+    isSeason1ValueLocked(params.seasonNumber, params.calendarWeek, {
+      careerStart: params.careerStart,
+      role: params.role,
+    })
+  ) {
     return YOUTH_MARKET_VALUE;
   }
   const { age, fallbackClub } = params;

@@ -3,6 +3,7 @@ import type { Confederation, InternationalTournamentId } from './data/competitio
 import { clubsInCountry, type ClubTier } from './data/clubs';
 import { fifaRank } from './data/fifaRankings';
 import { NATIONS, getNation, type Nation } from './data/nations';
+import { VALUE_FORM_MIN_GAMES } from './playerValue';
 import type { AvailabilityState, InternationalSeasonRecord } from './types';
 
 export type { Nation };
@@ -93,8 +94,8 @@ export function clubEligibleForNationalTeam(clubTier: ClubTier): boolean {
 }
 
 /**
- * Call-up uses this season's goals-per-game, not the career average.
- * Lower-league clubs are never selected.
+ * Call-up uses the ratio passed in (career until this season has a real
+ * sample, then this season). Lower-league clubs are never selected.
  */
 export function isSelectedForNationalTeam(params: {
   clubTier: ClubTier;
@@ -110,6 +111,25 @@ export function isSelectedForNationalTeam(params: {
 export function seasonRatioForSelection(season: { goals: number; gamesPlayed: number } | null): number {
   if (!season || season.gamesPlayed <= 0) return 0;
   return season.goals / season.gamesPlayed;
+}
+
+/**
+ * Until this season has VALUE_FORM_MIN_GAMES, use prior career ratio so a
+ * new campaign (or a 13-game injury/drop spell) cannot wipe a call-up.
+ * After that, this season's goals-per-game decides.
+ */
+export function callUpRatio(params: {
+  season?: { goals: number; gamesPlayed: number } | null;
+  careerGoals: number;
+  careerGames: number;
+}): number {
+  const gp = params.season?.gamesPlayed ?? 0;
+  const goals = params.season?.goals ?? 0;
+  if (gp >= VALUE_FORM_MIN_GAMES) return gp > 0 ? goals / gp : 0;
+  const priorGames = Math.max(0, params.careerGames - gp);
+  const priorGoals = Math.max(0, params.careerGoals - goals);
+  if (priorGames > 0) return priorGoals / priorGames;
+  return 0;
 }
 
 /**
@@ -138,7 +158,17 @@ export function emptyInternationalSeason(
     tournamentOutcome: 'none',
     playerOfTheTournament: false,
     topGoalscorer: false,
+    injuryMissedFinals: false,
   };
+}
+
+export function markInjuryMissedFinals(
+  rec: InternationalSeasonRecord | undefined,
+  tournament: InternationalTournamentId | null,
+): InternationalSeasonRecord {
+  const next = rec ? { ...rec, tournament: rec.tournament ?? tournament } : emptyInternationalSeason(tournament);
+  next.injuryMissedFinals = true;
+  return next;
 }
 
 export function bumpInternationalSeason(

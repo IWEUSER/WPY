@@ -4,10 +4,10 @@ import { conferenceLabel, leagueDisplayName, mlsConferenceOf } from '../data/lea
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { describeAvailability, isAvailable } from '../availabilityEngine';
 import { describeInjury } from '../injury';
-import { clubEligibleForNationalTeam, getNation, isSelectedForNationalTeam, seasonRatioForSelection, selectionRatioForNation } from '../international';
+import { clubEligibleForNationalTeam, callUpRatio, getNation, isSelectedForNationalTeam, selectionRatioForNation } from '../international';
 import type { SeasonStandings } from '../matchEngine';
 import { displaySeasonLabel } from '../seasonDisplay';
-import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
+import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons, transferFeeFromValue, VALUE_FORM_MIN_GAMES } from '../playerValue';
 import { conferenceTable, fixtureTitle, internationalRoundLabel, nextPlayableFixture, type SeasonSimState } from '../seasonSim';
 import { requiredGoalRatio } from '../transfers';
 import { useCareerStore } from '../store';
@@ -72,6 +72,8 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
     contractYearsRemaining,
     seasonNumber,
     calendarWeek: week,
+    careerStart,
+    role,
   });
   const transferFee = transferFeeFromValue(marketValue, contractYearsRemaining);
 
@@ -209,7 +211,8 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
             nationId={nationality!}
             nationName={nation.name}
             clubTier={club.tier}
-            careerRatio={seasonRatioForSelection(season)}
+            careerRatio={callUpRatio({ season, careerGoals, careerGames })}
+            seasonGames={season.gamesPlayed}
             sim={seasonSim}
             caps={nationalTeam?.caps ?? 0}
             intlGoals={nationalTeam?.goals ?? 0}
@@ -293,6 +296,7 @@ function InternationalCard({
   nationName,
   clubTier,
   careerRatio,
+  seasonGames,
   sim,
   caps,
   intlGoals,
@@ -301,6 +305,7 @@ function InternationalCard({
   nationName: string;
   clubTier: 1 | 2 | 3 | 4 | 5;
   careerRatio: number;
+  seasonGames: number;
   sim: SeasonSimState | null;
   caps: number;
   intlGoals: number;
@@ -336,8 +341,9 @@ function InternationalCard({
     if (!clubOk) {
       return `Need a move to a higher-level club before ${nationName} will consider you.`;
     }
-    if (inForm) return `This season’s ${careerRatio.toFixed(2)} goals/game is enough for ${nationName}.`;
-    return `Need a ${bar.toFixed(2)} goals/game ratio this season — currently ${careerRatio.toFixed(2)}.`;
+    const sample = seasonGames >= VALUE_FORM_MIN_GAMES ? 'this season' : 'career';
+    if (inForm) return `Your ${sample} ${careerRatio.toFixed(2)} goals/game is enough for ${nationName}.`;
+    return `Need a ${bar.toFixed(2)} goals/game ${sample} ratio — currently ${careerRatio.toFixed(2)}.`;
   })();
 
   return (

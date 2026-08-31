@@ -58,6 +58,7 @@ export default function SeasonSummaryScreen() {
     leaguePosition: us?.position ?? null,
     clubLeague,
     homeContractYearsRemaining,
+    careerStart,
   });
 
   const honours: string[] = [];
@@ -161,6 +162,14 @@ export default function SeasonSummaryScreen() {
       {missedTournament && (
         <div className="w-full max-w-sm rounded-2xl bg-white/5 px-4 py-3 text-sm text-white/60">
           {missedTournament}
+        </div>
+      )}
+
+      {season.international?.injuryMissedFinals && (season.international.tournament || seasonSim?.internationalTournament) && (
+        <div className="w-full max-w-sm rounded-2xl bg-white/5 px-4 py-3 text-sm text-white/60">
+          Missed at least one {(season.international.tournament ?? seasonSim?.internationalTournament)
+            ? INTERNATIONAL_TOURNAMENTS[(season.international.tournament ?? seasonSim!.internationalTournament)!].name
+            : 'tournament'} match through injury.
         </div>
       )}
 

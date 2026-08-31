@@ -669,5 +669,41 @@ store.getState().chooseNationality('england');
     console.error('Favourite first-team Season 1 must not schedule the World Cup tournament');
     process.exitCode = 1;
   }
+  const week = s.seasonCalendar && s.seasonSim
+    ? currentCalendarWeek(s.seasonCalendar, s.seasonSim.fixtureIndex)
+    : 1;
+  const club = getClub(s.clubId ?? 'liverpool');
+  const value = club
+    ? playerMarketValueFromSeasons({
+        age: s.age,
+        careerGoals: s.careerGoals,
+        careerGames: s.careerGames,
+        seasons: s.currentSeason ? [s.currentSeason] : [],
+        fallbackClub: club,
+        contractYearsRemaining: s.contractYearsRemaining,
+        seasonNumber: s.seasonNumber,
+        calendarWeek: week,
+        careerStart: s.careerStart,
+        role: s.role,
+      })
+    : 0;
+  console.log('favourite first-team S1 week', week, 'value', value, 'cup', s.seasonSim?.europeanStanding?.cup);
+  if (value !== YOUTH_MARKET_VALUE) {
+    console.error('Favourite first-team Season 1 must show €100k until week 20');
+    process.exitCode = 1;
+  }
+}
+
+store.getState().resetCareer();
+store.getState().startFavouritePath('favourite-first-team');
+store.getState().chooseFavouriteClub('wolves');
+store.getState().chooseNationality('brazil');
+{
+  const s = store.getState();
+  console.log('favourite Wolves Brazil', s.seasonSim?.europeanStanding?.cup, s.seasonSim?.internationalPhase, s.seasonSim?.internationalSelected);
+  if (s.seasonSim?.europeanStanding?.cup !== 'uecl') {
+    console.error('Wolves must start in the Conference League, not the Champions League');
+    process.exitCode = 1;
+  }
 }
 

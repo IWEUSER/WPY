@@ -68,6 +68,8 @@ export interface InternationalSeasonRecord {
   tournamentOutcome: TournamentSeasonOutcome;
   playerOfTheTournament: boolean;
   topGoalscorer: boolean;
+  /** Injury kept the player out of at least one end-of-season tournament match. */
+  injuryMissedFinals?: boolean;
 }
 
 export interface SeasonRecord {

@@ -1,5 +1,6 @@
 import { CLUBS, getClub, type Club } from './data/clubs';
 import {
+  clubContinentalCup,
   confederationForCountry,
   continentalCupForClub,
   type ContinentalCupId,
@@ -9,33 +10,18 @@ import { shuffle } from './util';
 const UEFA_CUPS: ContinentalCupId[] = ['ucl', 'uel', 'uecl'];
 
 function clubsInCup(cup: ContinentalCupId): Club[] {
-  return CLUBS.filter((c) => {
-    const conf = confederationForCountry(c.country);
-    if (cup === 'acle') {
-      return (c.league === 'Saudi Pro League' && c.strength >= 76) || (conf === 'AFC' && c.playable === false);
-    }
-    if (conf !== 'UEFA') return false;
-    return continentalCupForClub(c.tier, 'UEFA') === cup;
-  });
+  return CLUBS.filter((c) => clubContinentalCup(c) === cup);
 }
 
 /**
  * Current UEFA league-phase draw: 8 different opponents, two from each
- * ranking pot, never the same club twice.
+ * ranking pot, never the same club twice. Never pads with a club from
+ * another cup — Wolves stay in the Conference League, not the Champions League.
  */
 export function leaguePhaseOpponents(club: Club, cup: ContinentalCupId, count = 8): Club[] {
-  let pool = clubsInCup(cup).filter((c) => c.id !== club.id);
-  if (pool.length < count) {
-    const conf = confederationForCountry(club.country);
-    const extra = CLUBS.filter(
-      (c) =>
-        c.id !== club.id &&
-        !pool.some((p) => p.id === c.id) &&
-        confederationForCountry(c.country) === conf,
-    ).sort((a, b) => b.strength - a.strength);
-    pool = [...pool, ...extra];
-  }
-  pool = [...pool].sort((a, b) => b.strength - a.strength);
+  const pool = clubsInCup(cup)
+    .filter((c) => c.id !== club.id)
+    .sort((a, b) => b.strength - a.strength);
   const potSize = Math.max(1, Math.ceil(pool.length / 4));
   const pots = [0, 1, 2, 3].map((i) => pool.slice(i * potSize, (i + 1) * potSize));
   const picked: Club[] = [];

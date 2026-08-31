@@ -28,17 +28,18 @@ import { countsTowardCareerRecord } from './seasonDisplay';
 import { trophyLabels } from './honoursDisplay';
 import {
   bumpInternationalSeason,
+  callUpRatio,
   createNationalTeamState,
   emptyInternationalSeason,
   isSelectedForNationalTeam,
+  markInjuryMissedFinals,
   qualifierExcludeIds,
   recordInternationalAppearance,
   rememberQualifierOpponents,
-  seasonRatioForSelection,
   snapshotInternationalOutcomes,
 } from './international';
 import { buildSeasonStandings } from './matchEngine';
-import { isFinalFixture } from './calendar';
+import { isFinalFixture, isInternationalTournamentFixture } from './calendar';
 import {
   canWinLeague,
   hydrateSeason,
@@ -105,13 +106,15 @@ function withInternationalForm(
   season: SeasonRecord | null,
   clubId: string | null,
   nationId: string | null,
+  careerGoals: number,
+  careerGames: number,
 ): SeasonSimState {
   if (!clubId) return sim;
   const club = getClub(clubId);
   if (!club) return sim;
   const selected = isSelectedForNationalTeam({
     clubTier: club.tier,
-    careerGoalRatio: seasonRatioForSelection(season),
+    careerGoalRatio: callUpRatio({ season, careerGoals, careerGames }),
     nationId,
   });
   if (selected === sim.internationalSelected) return sim;
@@ -201,6 +204,8 @@ function startSimulatedSeason(
             contractYearsRemaining: extras?.contractYearsRemaining ?? DEFAULT_CONTRACT_YEARS,
             seasonNumber,
             calendarWeek: 0,
+            careerStart: extras?.careerStart,
+            role,
           }),
           league,
         )
@@ -227,7 +232,7 @@ function startSimulatedSeason(
   const { calendar, sim } = hydrateSeason({
     seasonNumber,
     club,
-    careerGoalRatio: seasonRatioForSelection(season),
+    careerGoalRatio: callUpRatio({ season, careerGoals, careerGames }),
     nationId,
     qualifierCarry,
     includeSuperCup: leagueOnly ? false : superCup?.include,
@@ -267,7 +272,7 @@ function evaluateSeasonWpy(state: CareerState) {
   const club = state.clubId ? getClub(state.clubId) : undefined;
   const season = state.currentSeason;
   const sim = state.seasonSim;
-  if (!club || !season || !sim || state.seasonNumber < 2) return null;
+  if (!club || !season || !sim || !countsTowardCareerRecord(state.seasonNumber, state.role)) return null;
   const ratio = season.gamesPlayed > 0 ? season.goals / season.gamesPlayed : 0;
   const formGoals = state.formWindow.reduce((a, b) => a + b, 0);
   return evaluateWpy({
@@ -291,7 +296,7 @@ function attachSeasonAwards(state: CareerState): { season: SeasonRecord; wpyResu
   if (!season || !state.clubId) {
     return { season: season as SeasonRecord, wpyResult: state.wpyResult };
   }
-  if (state.seasonNumber < 2 || state.role === 'reserve') {
+  if (!countsTowardCareerRecord(state.seasonNumber, state.role)) {
     return {
       season: {
         ...season,
@@ -677,6 +682,12 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
       const record: MatchRecord = { matchNumber: season.matches.length + 1, played: false, scored: null };
       const injuredPay = withWeeklyPay(season, careerEarnings, state.weeklyWage);
       season = { ...injuredPay.season, matches: [...injuredPay.season.matches, record] };
+      if (isInternational && isInternationalTournamentFixture(fixture)) {
+        season = {
+          ...season,
+          international: markInjuryMissedFinals(season.international, sim.internationalTournament),
+        };
+      }
       careerEarnings = injuredPay.careerEarnings;
       lastMatchSummary = `${resolution.summary} · you were injured`;
       injuryGamesRemaining -= 1;
@@ -774,7 +785,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
 
     const liveMatch: LiveMatch = { fixtureIndex: sim.fixtureIndex, chancesTotal: chances, chancesTaken: 0, goals: 0 };
     return {
-      seasonSim: withInternationalForm(sim, season, state.clubId, state.nationality),
+      seasonSim: withInternationalForm(sim, season, state.clubId, state.nationality, state.careerGoals, state.careerGames),
       currentSeason: season,
       availability,
       nationalTeam,
@@ -1082,7 +1093,17 @@ export const useCareerStore = create<CareerStore>()(
               }
             : updatedSeason;
 
-          const selectedSim = withInternationalForm(nextSim, withIntlSeason, state.clubId, state.nationality);
+          const counts = countsTowardCareerRecord(state.seasonNumber, state.role);
+          const nextCareerGoals = counts ? state.careerGoals + live.goals : state.careerGoals;
+          const nextCareerGames = counts ? state.careerGames + 1 : state.careerGames;
+          const selectedSim = withInternationalForm(
+            nextSim,
+            withIntlSeason,
+            state.clubId,
+            state.nationality,
+            nextCareerGoals,
+            nextCareerGames,
+          );
           const complete = nextSim.fixtureIndex >= calendar.fixtures.length;
           const withHonours = complete
             ? { ...selectedSim, honours: { ...selectedSim.honours, leagueChampion: canWinLeague(selectedSim, state.clubId) } }
@@ -1096,7 +1117,6 @@ export const useCareerStore = create<CareerStore>()(
             : (state.injuryGamesRemaining ?? 0) > 0
               ? state.injuryGamesRemaining
               : rollInjuryAbsence(remainingAfter);
-          const counts = countsTowardCareerRecord(state.seasonNumber, state.role);
           const merged = {
             ...state,
             seasonSim: withHonours,
@@ -1220,6 +1240,7 @@ export const useCareerStore = create<CareerStore>()(
             leaguePosition,
             clubLeague: state.clubLeague,
             homeContractYearsRemaining: state.homeContractYearsRemaining,
+            careerStart: state.careerStart,
           });
 
           const club = getClub(state.clubId);
@@ -1484,7 +1505,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 23,
+      version: 24,
       migrate: (persisted) => {
         const state = persisted as Partial<CareerState>;
         const sim = state.seasonSim;
