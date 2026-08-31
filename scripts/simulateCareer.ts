@@ -11,7 +11,7 @@ import {
   chancesForLeagueMatch,
   meanChancesFromStrength,
 } from '../src/game/career/chanceEngine';
-import { assignClubTier, CLUBS, clubsForSeason, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, leagueMatchWeeks, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
+import { assignClubTier, CLUBS, clubsForSeason, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, leagueMatchWeeks, playableClubsGroupedByLeague, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
 import { consecutivePoorFactor, contractValueFactor, FIRST_CONTRACT_YEARS, formAdjustedRatio, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, playerMarketValue, playerMarketValueFromSeasons, seasonalSponsorship, tierForMarketValue, transferFeeFromValue, weeklyWageForClub, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { nationKit } from '../src/game/career/data/nationColours';
@@ -64,7 +64,7 @@ import {
   trialContractWon,
 } from '../src/game/career/trial';
 import { nextYouthKnockoutRound, youthMaxGames } from '../src/game/career/youthTournament';
-import { offerTierFromStanding, resolveSeasonTransition, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS } from '../src/game/career/transfers';
+import { offerTierFromStanding, resolveSeasonTransition, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, forcedLoanPending } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
 import {
   evaluatePlayerOfTheYear,
@@ -899,8 +899,8 @@ const fixedRng = (() => {
 })();
 const youth = createYouthCampaign('spain', fixedRng);
 console.log('U16 opener', youth.youthName, 'group', youth.groupOpponents, 'fixtures', youth.calendar.fixtures.length);
-if (youth.youthName !== 'UEFA Under-16 Championship' || youth.calendar.fixtures.length !== 3) {
-  console.error('Spain must open in the UEFA U16 group of three matches');
+if (youth.youthName !== 'UEFA Youth Championship' || youth.calendar.fixtures.length !== 3) {
+  console.error('Spain must open in the UEFA Youth Championship group of three matches');
   process.exitCode = 1;
 }
 if (youth.calendar.fixtures.some((f) => f.kind !== 'international' || f.internationalRound !== 'group')) {
@@ -1005,6 +1005,21 @@ if (dropped.trialTier !== nextTrialTier(trialStart.trialTier ?? 1) || dropped.tr
 const passClub = trialClub;
 if (!trialContractWon(passClub, 3, 3)) {
   console.error('3 goals in 3 trial games must beat every club ratio');
+  process.exitCode = 1;
+}
+
+const picker = playableClubsGroupedByLeague();
+if (picker.some((g) => g.league === 'Liga MX' || g.clubs.some((c) => c.playable === false))) {
+  console.error('the favourite-club picker must hide cup-only guest clubs');
+  process.exitCode = 1;
+}
+if (!picker.some((g) => g.league === 'Premier League' && g.clubs.some((c) => c.id === 'liverpool'))) {
+  console.error('the favourite-club picker must include playable league clubs');
+  process.exitCode = 1;
+}
+const forced = forcedLoanPending({ clubId: 'real-madrid', nationality: 'spain', age: 16, seasonNumber: 2 });
+if (!forced || forced.kind !== 'loan' || forced.allowDecline || !forced.offers?.every((o) => o.move === 'loan')) {
+  console.error('a missed favourite-club trial must force loan offers with no stay option');
   process.exitCode = 1;
 }
 
@@ -2725,6 +2740,22 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
     || reserveLook.crowdFill !== 'sparse'
   ) {
     console.error('the reserve season must use first-team grounds with a sparse crowd');
+    process.exitCode = 1;
+  }
+  const favouriteReserveLook = resolveCareerStadium({
+    fixture: homeFx,
+    club: madridClub,
+    nation: spain,
+    seasonNumber: 1,
+    role: 'reserve',
+    careerStart: 'favourite-reserve',
+  });
+  if (
+    favouriteReserveLook.groundName !== CLUB_TRIAL_GROUND.name
+    || favouriteReserveLook.crowdFill !== 'sparse'
+    || favouriteReserveLook.standTiers !== 1
+  ) {
+    console.error('favourite-club reserve games must use the academy ground with a sparse crowd');
     process.exitCode = 1;
   }
   if (reserveStadium(madridClub).crowdFill !== 'sparse') {

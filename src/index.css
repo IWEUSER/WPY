@@ -16,10 +16,18 @@ body,
   margin: 0;
   overscroll-behavior: none;
   touch-action: none;
-  background: #05070c;
-  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background-color: #18261d;
+  font-family: "Nunito", "Trebuchet MS", "Segoe UI", sans-serif;
 }
 
 body {
   overflow: hidden;
+  background-image:
+    radial-gradient(ellipse 110% 70% at 50% -18%, rgba(78, 128, 90, 0.4), transparent 58%),
+    radial-gradient(ellipse 90% 50% at 50% 118%, rgba(16, 32, 22, 0.95), #141c16 70%);
+}
+
+.font-display {
+  font-family: "Nunito", "Trebuchet MS", "Segoe UI", sans-serif;
+  letter-spacing: 0.01em;
 }

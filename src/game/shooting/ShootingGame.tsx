@@ -752,7 +752,7 @@ export default function ShootingGame({
     <div className="relative flex h-full w-full flex-col">
       <header className="z-10 flex items-center justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 text-white">
         <div>
-          <h1 className="text-lg font-bold tracking-wide sm:text-xl">{title ?? 'World Player of the Year'}</h1>
+          <h1 className="font-display text-lg font-bold sm:text-xl">{title ?? 'World Player of the Year'}</h1>
           <p className="text-xs text-white/50">{subtitle ?? 'Swipe the ball to shoot'}</p>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {progressLabel && (
@@ -802,7 +802,7 @@ export default function ShootingGame({
         {resultLabel && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <div
-              className="animate-[pop_0.35s_ease-out] flex flex-col items-center gap-1.5 rounded-2xl border-2 bg-black/60 px-8 py-4 text-3xl font-extrabold tracking-wider backdrop-blur-sm sm:text-5xl"
+              className="animate-[pop_0.35s_ease-out] flex flex-col items-center gap-1.5 rounded-2xl border-2 bg-black/50 px-8 py-4 text-3xl font-bold backdrop-blur-sm sm:text-5xl"
               style={{ color: resultLabel.color, borderColor: resultLabel.color }}
             >
               {resultLabel.text}

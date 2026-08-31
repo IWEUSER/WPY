@@ -16,7 +16,7 @@ export default function ClubOfferScreen() {
     <div className="flex h-full w-full flex-col items-center gap-6 overflow-y-auto px-6 py-[max(1.5rem,env(safe-area-inset-top))] text-center text-white">
       <div>
         <p className="text-sm text-white/50">{fromOpeningTrial ? 'Trial complete' : 'Offers'}</p>
-        <h1 className="text-2xl font-extrabold tracking-wide">
+        <h1 className="font-display text-2xl font-bold">
           {games != null ? `${goals} goal${goals === 1 ? '' : 's'} in ${games} games` : `${goals} scored`}
         </h1>
         <p className="mt-2 text-sm text-white/60">

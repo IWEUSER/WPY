@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import ShootingGame from '../shooting/ShootingGame';
 import HomeScreen from './screens/HomeScreen';
+import ClubChoiceScreen from './screens/ClubChoiceScreen';
 import TrialScreen from './screens/TrialScreen';
 import ClubOfferScreen from './screens/ClubOfferScreen';
 import NationalityScreen from './screens/NationalityScreen';
@@ -51,7 +52,7 @@ export default function CareerApp() {
 
   // Existing saves created before nationality-first still have a club
   // but no country - ask before they can keep playing.
-  if (!nationality && phase !== 'menu' && phase !== 'trial' && phase !== 'club-offer' && phase !== 'nationality-choice') {
+  if (!nationality && phase !== 'menu' && phase !== 'trial' && phase !== 'club-offer' && phase !== 'nationality-choice' && phase !== 'club-choice') {
     return <NationalityScreen />;
   }
 
@@ -62,6 +63,8 @@ export default function CareerApp() {
       return <OpeningBriefScreen />;
     case 'club-offer':
       return <ClubOfferScreen />;
+    case 'club-choice':
+      return <ClubChoiceScreen />;
     case 'nationality-choice':
       return <NationalityScreen />;
     case 'match':

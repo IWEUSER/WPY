@@ -513,6 +513,28 @@ export function leagueMatchWeeks(league: string, playerClub?: Club): number {
   return Math.max(2, (n - 1) * 2);
 }
 
+export function playableClubsGroupedByLeague(): { league: string; clubs: Club[] }[] {
+  const order = Object.keys(TARGET_LEAGUE_SIZE);
+  const groups = new Map<string, Club[]>();
+  for (const club of CLUBS) {
+    if (club.playable === false) continue;
+    const list = groups.get(club.league) ?? [];
+    list.push(club);
+    groups.set(club.league, list);
+  }
+  for (const clubs of groups.values()) {
+    clubs.sort((a, b) => b.strength - a.strength || a.name.localeCompare(b.name));
+  }
+  const known = order
+    .filter((league) => groups.has(league))
+    .map((league) => ({ league, clubs: groups.get(league)! }));
+  const extra = [...groups.keys()]
+    .filter((league) => !order.includes(league))
+    .sort()
+    .map((league) => ({ league, clubs: groups.get(league)! }));
+  return [...known, ...extra];
+}
+
 export function clubsInCountry(country: string): Club[] {
   return CLUBS.filter((c) => c.country === country);
 }

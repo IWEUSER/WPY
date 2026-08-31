@@ -15,6 +15,7 @@ export default function MatchScreen() {
   const seasonNumber = useCareerStore((s) => s.seasonNumber);
   const role = useCareerStore((s) => s.role);
   const opening = useCareerStore((s) => s.openingCampaign);
+  const careerStart = useCareerStore((s) => s.careerStart);
   const season = useCareerStore((s) => s.currentSeason);
   const calendar = useCareerStore((s) => s.seasonCalendar);
   const liveMatch = useCareerStore((s) => s.liveMatch);
@@ -72,6 +73,7 @@ export default function MatchScreen() {
     seasonNumber,
     role,
     openingKind: opening?.kind,
+    careerStart,
   });
 
   return (

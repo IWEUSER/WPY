@@ -145,12 +145,19 @@ export interface OpeningCampaign {
   youthGoals: number;
 }
 
+export type CareerStart =
+  | 'youth'
+  | 'favourite-trial'
+  | 'favourite-reserve'
+  | 'favourite-first-team';
+
 export type CareerPhase =
   | 'menu'
   | 'trial'
   | 'club-offer'
   | 'opening-brief'
   | 'nationality-choice'
+  | 'club-choice'
   | 'hub'
   | 'match'
   | 'season-summary'
@@ -161,6 +168,8 @@ export type CareerPhase =
 
 export interface CareerState {
   phase: CareerPhase;
+  /** How this career opened. Null on older saves and a fresh menu. */
+  careerStart: CareerStart | null;
   age: number;
   seasonNumber: number;
   clubId: string | null;
@@ -225,7 +234,7 @@ export interface LastMatchResult {
   isFinal: boolean;
   won: boolean;
   trophyName: string | null;
-  afterPhase: 'hub' | 'season-summary' | 'match' | 'opening-brief' | 'club-offer';
+  afterPhase: 'hub' | 'season-summary' | 'match' | 'opening-brief' | 'club-offer' | 'transfer-choice';
 }
 
 export interface IntlQualifyingCarry {

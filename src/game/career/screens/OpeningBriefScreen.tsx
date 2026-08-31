@@ -22,9 +22,9 @@ export default function OpeningBriefScreen() {
     <div className="flex h-full w-full flex-col items-center gap-6 overflow-y-auto px-6 py-[max(1.5rem,env(safe-area-inset-top))] text-center text-white">
       <div>
         <p className="text-sm text-white/50">
-          {afterYouth ? opening?.youthName ?? 'Under-16 Championship' : 'Club trial'}
+          {afterYouth ? opening?.youthName ?? 'Youth Championship' : 'Club trial'}
         </p>
-        <h1 className="text-2xl font-extrabold tracking-wide">
+        <h1 className="font-display text-2xl font-bold">
           {afterYouth
             ? `${youthGoals} goal${youthGoals === 1 ? '' : 's'} for ${nation?.name ?? 'your country'}`
             : `${rejected?.name ?? 'The club'} turned you down`}

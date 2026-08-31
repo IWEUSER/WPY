@@ -1,6 +1,6 @@
 import type { ClubMatchResult } from './matchEngine';
 import { simulateClubMatch } from './matchEngine';
-import { getClub, type ClubTier } from './data/clubs';
+import { getClub, type Club, type ClubTier } from './data/clubs';
 import { nationStrength } from './data/fifaRankings';
 import { fixtureIsHome, type CalendarFixture } from './calendar';
 import {
@@ -168,6 +168,29 @@ export function assignOpeningTrialClub(
     youthGoals: campaign.youthGoals || campaign.goals,
     trialClubId: club.id,
     trialTier: club.tier,
+  };
+}
+
+/** Three-game academy trial at a club the player already chose. */
+export function beginFavouriteClubTrial(club: Club): OpeningCampaign {
+  return {
+    kind: 'club-trial',
+    calendar: buildClubTrialCalendar(club),
+    fixtureIndex: 0,
+    goals: 0,
+    gamesPlayed: 0,
+    youthName: '',
+    groupOpponents: [],
+    groupOthers: [],
+    playerGroup: { id: club.id, points: 0, gd: 0 },
+    qualified: null,
+    eliminated: false,
+    reachedSemi: false,
+    usedOpponentIds: [],
+    trialClubId: club.id,
+    trialTier: club.tier,
+    rejectedClubIds: [],
+    youthGoals: 0,
   };
 }
 

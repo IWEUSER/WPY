@@ -56,17 +56,24 @@ export function offerClubsForTrial(goals: number, count = 3, nationality?: strin
   return picks;
 }
 
-export function trialRatioRequired(club: Club): number {
-  return club.reserveGoalRatio;
+export type TrialRatioBar = 'reserve' | 'first-team';
+
+export function trialRatioRequired(club: Club, bar: TrialRatioBar = 'reserve'): number {
+  return bar === 'first-team' ? club.firstTeamGoalRatio : club.reserveGoalRatio;
 }
 
-export function trialGoalsNeeded(club: Club, games = CLUB_TRIAL_GAMES): number {
-  return Math.ceil(trialRatioRequired(club) * games - 1e-9);
+export function trialGoalsNeeded(club: Club, games = CLUB_TRIAL_GAMES, bar: TrialRatioBar = 'reserve'): number {
+  return Math.ceil(trialRatioRequired(club, bar) * games - 1e-9);
 }
 
-export function trialContractWon(club: Club, goals: number, games: number): boolean {
+export function trialContractWon(
+  club: Club,
+  goals: number,
+  games: number,
+  bar: TrialRatioBar = 'reserve',
+): boolean {
   if (games <= 0) return false;
-  return goals / games >= trialRatioRequired(club);
+  return goals / games >= trialRatioRequired(club, bar);
 }
 
 export function nextTrialTier(tier: ClubTier): ClubTier {

@@ -515,3 +515,112 @@ if (!loanClubId) {
     process.exitCode = 1;
   }
 }
+
+console.log('\n--- Favourite club start paths ---');
+store.getState().resetCareer();
+store.getState().startFavouritePath('favourite-trial');
+if (store.getState().phase !== 'club-choice' || store.getState().careerStart !== 'favourite-trial') {
+  console.error('Favourite trial must open the club picker');
+  process.exitCode = 1;
+}
+store.getState().chooseFavouriteClub('real-madrid');
+if (store.getState().phase !== 'nationality-choice' || store.getState().clubId !== 'real-madrid') {
+  console.error('Picking a favourite club must then ask for nationality');
+  process.exitCode = 1;
+}
+store.getState().chooseNationality('spain');
+{
+  const s = store.getState();
+  console.log('favourite trial start', s.phase, s.openingCampaign?.kind, s.clubId, s.seasonCalendar?.fixtures.length);
+  if (
+    s.phase !== 'match'
+    || s.openingCampaign?.kind !== 'club-trial'
+    || s.openingCampaign.calendar.fixtures.length !== 3
+    || s.clubId !== 'real-madrid'
+  ) {
+    console.error('Favourite trial must start the 3-game academy trial at the chosen club');
+    process.exitCode = 1;
+  }
+}
+for (let i = 0; i < 3; i++) playOpeningMatch(4);
+{
+  const s = store.getState();
+  console.log('favourite trial pass', s.phase, s.role, s.seasonNumber, s.contractYearsRemaining);
+  if (s.phase !== 'hub' || s.role !== 'first-team' || s.seasonNumber !== 2 || s.contractYearsRemaining !== 2) {
+    console.error('Hitting the favourite-trial first-team ratio must sign a 2-year first-team deal');
+    process.exitCode = 1;
+  }
+  const kinds = new Set(s.seasonCalendar?.fixtures.map((f) => f.kind) ?? []);
+  if (!kinds.has('league') || !kinds.has('domestic-cup')) {
+    console.error('Favourite first-team after a passed trial must play the full calendar, not league-only');
+    process.exitCode = 1;
+  }
+}
+
+store.getState().resetCareer();
+store.getState().startFavouritePath('favourite-trial');
+store.getState().chooseFavouriteClub('real-madrid');
+store.getState().chooseNationality('spain');
+for (let i = 0; i < 3; i++) playOpeningMatch(0);
+{
+  const s = store.getState();
+  console.log(
+    'favourite trial fail',
+    s.phase,
+    s.pendingTransfer?.kind,
+    s.parentClubId,
+    s.pendingTransfer?.offers?.map((o) => o.move).join(','),
+  );
+  if (
+    s.phase !== 'transfer-choice'
+    || s.pendingTransfer?.kind !== 'loan'
+    || s.parentClubId !== 'real-madrid'
+    || s.pendingTransfer.offers?.some((o) => o.move !== 'loan')
+  ) {
+    console.error('Failing a favourite-club trial must offer sequential loans from that club, not a drop-tier retry');
+    process.exitCode = 1;
+  }
+}
+
+store.getState().resetCareer();
+store.getState().startFavouritePath('favourite-reserve');
+store.getState().chooseFavouriteClub('barcelona');
+store.getState().chooseNationality('spain');
+{
+  const s = store.getState();
+  const kinds = new Set(s.seasonCalendar?.fixtures.map((f) => f.kind) ?? []);
+  console.log('favourite reserve', s.phase, s.role, s.seasonNumber, [...kinds].join('/'), s.seasonCalendar?.fixtures.length);
+  if (s.phase !== 'hub' || s.role !== 'reserve' || s.seasonNumber !== 1 || kinds.has('domestic-cup') || kinds.has('international')) {
+    console.error('Favourite reserve must start a league-only season 1 at the chosen club');
+    process.exitCode = 1;
+  }
+}
+
+store.getState().resetCareer();
+store.getState().startFavouritePath('favourite-first-team');
+store.getState().chooseFavouriteClub('liverpool');
+store.getState().chooseNationality('england');
+{
+  const s = store.getState();
+  const kinds = new Set(s.seasonCalendar?.fixtures.map((f) => f.kind) ?? []);
+  console.log(
+    'favourite first-team',
+    s.phase,
+    s.role,
+    s.seasonNumber,
+    s.contractYearsRemaining,
+    [...kinds].join('/'),
+  );
+  if (
+    s.phase !== 'hub'
+    || s.role !== 'first-team'
+    || s.seasonNumber !== 2
+    || s.contractYearsRemaining !== 2
+    || !kinds.has('league')
+    || !kinds.has('domestic-cup')
+  ) {
+    console.error('Favourite first-team must start a 2-year first-team season with the full calendar');
+    process.exitCode = 1;
+  }
+}
+

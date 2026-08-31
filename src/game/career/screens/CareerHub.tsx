@@ -91,7 +91,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
           {displaySeasonLabel(seasonNumber)} · {ROLE_LABEL[role]}
           {seasonNumber >= 2 ? ` · Week ${week} of ${totalWeeks}` : ''}
         </p>
-        <h1 className="text-2xl font-extrabold">{club.name}</h1>
+        <h1 className="font-display text-2xl font-bold">{club.name}</h1>
         <p className="text-xs text-white/50">
           {club.country} · {leagueDisplayName(clubLeague ?? club.league)}
           {mlsConferenceOf(club.id) ? ` · ${conferenceLabel(mlsConferenceOf(club.id))}` : ''}

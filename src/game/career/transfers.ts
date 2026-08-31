@@ -10,7 +10,9 @@ import {
   loanContractYearsRemaining,
   newContractYears,
   nextContractYearsRemaining,
+  playerMarketValue,
   playerMarketValueFromSeasons,
+  YOUTH_LOAN_YEARS,
   tierForMarketValue,
   transferFeeFromValue,
   weeklyWageForClub,
@@ -567,6 +569,27 @@ function withTwilightMlsOffers(
     applyTwilightDestinations(next, TWILIGHT_MLS_CLUB_IDS, value, fee, age, blocked);
   }
   return next;
+}
+
+/** Forced loan after missing a trial or reserve ratio. Sequential — no permanent offers yet. */
+export function forcedLoanPending(params: {
+  clubId: string;
+  nationality: string | null;
+  age: number;
+  seasonNumber: number;
+}): PendingTransfer | null {
+  const club = getClub(params.clubId);
+  if (!club) return null;
+  const value = playerMarketValue({ age: params.age, ratio: 0.3, careerGoals: 0, club });
+  const loanYears = loanContractYearsRemaining(params.seasonNumber, YOUTH_LOAN_YEARS, params.age);
+  const options = pickLoanClubsByValue(value, params.nationality, 3, [club.id]);
+  if (options.length === 0) return null;
+  return pendingFromOffers(
+    'loan',
+    `${club.name} have lined up a loan move for you. Hit their first-team ratio out on loan to earn a return.`,
+    offerTerms(options, 'loan', value, 0, params.age, loanYears),
+    false,
+  );
 }
 
 function pickLoanClubsByValue(

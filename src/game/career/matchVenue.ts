@@ -125,9 +125,21 @@ export function resolveCareerStadium(args: {
   seasonNumber?: number;
   role?: 'reserve' | 'first-team' | 'loan';
   openingKind?: 'youth-tournament' | 'club-trial' | null;
+  careerStart?: 'youth' | 'favourite-trial' | 'favourite-reserve' | 'favourite-first-team' | null;
 }): StadiumAppearance {
   if (args.openingKind === 'youth-tournament' || args.openingKind === 'club-trial') {
     return resolveMatchStadium({ ...args, openingKind: args.openingKind });
+  }
+  const fixture = args.fixture;
+  const clubFinal = fixture ? isClubFinalNeutral(fixture) : false;
+  const international = fixture?.kind === 'international';
+  if (
+    args.careerStart === 'favourite-reserve' &&
+    args.role === 'reserve' &&
+    !clubFinal &&
+    !international
+  ) {
+    return { ...resolveMatchStadium({ ...args, openingKind: 'club-trial' }), crowdFill: 'sparse' };
   }
   if ((args.seasonNumber != null && args.seasonNumber < 2) || args.role === 'reserve') {
     return { ...resolveMatchStadium(args), crowdFill: 'sparse' };

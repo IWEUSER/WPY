@@ -15,9 +15,12 @@ const CONFEDERATION_LABEL: Record<string, string> = {
 
 export default function NationalityScreen() {
   const chooseNationality = useCareerStore((s) => s.chooseNationality);
+  const backFromSetup = useCareerStore((s) => s.backFromSetup);
   const clubId = useCareerStore((s) => s.clubId);
+  const careerStart = useCareerStore((s) => s.careerStart);
   const [query, setQuery] = useState('');
   const [confederation, setConfederation] = useState<string | 'all'>('all');
+  const favourite = Boolean(careerStart?.startsWith('favourite'));
 
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -33,12 +36,21 @@ export default function NationalityScreen() {
   return (
     <div className="flex h-full w-full flex-col items-center gap-5 overflow-y-auto px-6 py-[max(1.5rem,env(safe-area-inset-top))] text-center text-white">
       <div>
+        <button
+          type="button"
+          onClick={backFromSetup}
+          className="mb-3 text-xs font-semibold text-white/50 underline underline-offset-2"
+        >
+          Back
+        </button>
         <p className="text-sm text-white/50">International career</p>
-        <h1 className="text-2xl font-extrabold tracking-wide">Who do you play for?</h1>
+        <h1 className="font-display text-2xl font-bold">Who do you play for?</h1>
         <p className="mt-2 max-w-sm text-sm text-white/60">
-          {clubId
-            ? 'This is independent of your club. Selectors later look at your goal ratio and the level of club you play for.'
-            : 'Choose your nationality first. You then play that country’s Under-16 continental championship. Clubs offer a trial from how many goals you score there.'}
+          {favourite
+            ? 'This is independent of your club. You skip the Youth Championships and join the club you picked. You still have to hit their ratio to stay.'
+            : clubId
+              ? 'This is independent of your club. Selectors later look at your goal ratio and the level of club you play for.'
+              : 'Choose your nationality first. You then play that country’s Youth Championship. Clubs offer a trial from how many goals you score there.'}
         </p>
       </div>
 
@@ -63,7 +75,7 @@ export default function NationalityScreen() {
 
       <div className="flex w-full max-w-sm flex-col gap-5 pb-8">
         {groups.map((group) => {
-          const tournament = clubId
+          const tournament = clubId || favourite
             ? INTERNATIONAL_TOURNAMENTS[CONTINENTAL_TOURNAMENT_FOR_CONFEDERATION[group.confederation]]
             : YOUTH_TOURNAMENTS[group.confederation];
           return (
