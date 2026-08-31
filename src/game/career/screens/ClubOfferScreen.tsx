@@ -48,6 +48,7 @@ export default function ClubOfferScreen() {
               <p className="text-xs text-white/50">
                 {club.country} · {club.league}
               </p>
+              <p className="mt-1 text-xs text-white/70">2-year contract</p>
             </div>
             <span className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/70">
               {TIER_LABEL[club.tier]}
@@ -57,7 +58,7 @@ export default function ClubOfferScreen() {
       </div>
 
       <p className="max-w-sm text-xs text-white/40">
-        You're only 16 - whichever club you join, you'll start out in the reserve team and need to hit their goal ratio to
+        You're only 16 - whichever club you join, you'll start on a 2-year reserve contract and need to hit their goal ratio to
         earn a first-team promotion.
       </p>
     </div>

@@ -4,6 +4,7 @@ import {
   clubTransferBudget,
   consecutiveSeasonsBelow,
   DEFAULT_CONTRACT_YEARS,
+  FIRST_CONTRACT_YEARS,
   MEGA_CLUB_IDS,
   MEGA_TRANSFER_FEE,
   loanContractYearsRemaining,
@@ -250,12 +251,12 @@ function parallelTransfers(
   age = 18,
   blockElite = false,
   loanYears = 1,
+  permYears = newContractYears(age),
 ): SeasonTransitionResult {
   const transfers = pickPermanentClubs(preferredTier, fee, excludeIds, nationality, blockElite);
   const loans = includeLoans
     ? pickLoanClubsByValue(value, nationality, 3, [...excludeIds, ...transfers.map((c) => c.id)])
     : [];
-  const permYears = newContractYears(age);
   const offers = withTwilightMlsOffers(
     [
       ...offerTerms(loans, 'loan', value, 0, age, loanYears),
@@ -345,7 +346,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       return parallelTransfers(
         'Promoted to the First Team!',
         `You hit ${threshold.toFixed(2)} goals/game in the reserves - ${club.name} want you in the first-team squad now.`,
-        stayOn({ role: 'first-team', contractYearsRemaining: newContractYears(age) }),
+        stayOn({ role: 'first-team', contractYearsRemaining: FIRST_CONTRACT_YEARS }),
         value,
         fee,
         nationality,
@@ -355,6 +356,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
         age,
         false,
         loanYears,
+        FIRST_CONTRACT_YEARS,
       );
     }
     const options = pickLoanClubsByValue(value, nationality, 3, [club.id]);

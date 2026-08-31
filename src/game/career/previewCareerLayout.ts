@@ -233,7 +233,7 @@ export function applyCareerLayoutPreview(): void {
   const isClubTrialPreview = preview === 'club-trial';
   const openingNationId = preview === 'mls' ? 'united-states' : preview === 'saudi' ? 'saudi-arabia' : 'spain';
   let openingCampaign: OpeningCampaign | null = null;
-  if (isYouthPreview || isTrialPreview || isClubTrialPreview) {
+  if (isYouthPreview || isTrialPreview || isClubTrialPreview || preview === 'club-offer') {
     const youth = createYouthCampaign(openingNationId, () => 0.31);
     const scored = { ...youth, goals: 6, youthGoals: 6, gamesPlayed: 7, qualified: true };
     if (isYouthPreview) openingCampaign = youth;
@@ -444,6 +444,8 @@ export function applyCareerLayoutPreview(): void {
         ? 'career'
         :       preview === 'transfer' || preview === 'expired' || preview === 'reserve-promo'
           ? 'transfer-choice'
+          : preview === 'club-offer'
+            ? 'club-offer'
           : preview === 'result'
             ? 'match-result'
             : preview === 'end'
@@ -458,7 +460,9 @@ export function applyCareerLayoutPreview(): void {
     clubId: isYouthPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : promoteSummary ? 'leicester' : 'real-madrid',
     parentClubId: isYouthPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : promoteSummary ? 'leicester' : 'real-madrid',
     role: isReservePreview || isTrialPreview || isYouthPreview || isClubTrialPreview ? 'reserve' : 'first-team',
-    trial: null,
+    trial: preview === 'club-offer'
+      ? { shots: [], goals: 6, offeredClubIds: ['real-madrid', 'barcelona', 'atletico-madrid'] }
+      : null,
     openingCampaign,
     seasonsAtCurrentClub: preview === 'end' ? 10 : promoteSummary ? 1 : 3,
     nationality: preview === 'mls' ? 'united-states' : preview === 'saudi' ? 'saudi-arabia' : 'spain',

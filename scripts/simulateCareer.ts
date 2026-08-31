@@ -12,7 +12,7 @@ import {
   meanChancesFromStrength,
 } from '../src/game/career/chanceEngine';
 import { assignClubTier, CLUBS, clubsForSeason, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, leagueMatchWeeks, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
-import { consecutivePoorFactor, contractValueFactor, formAdjustedRatio, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, playerMarketValue, playerMarketValueFromSeasons, RESERVE_CONTRACT_YEARS, seasonalSponsorship, tierForMarketValue, transferFeeFromValue, weeklyWageForClub, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
+import { consecutivePoorFactor, contractValueFactor, FIRST_CONTRACT_YEARS, formAdjustedRatio, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, playerMarketValue, playerMarketValueFromSeasons, seasonalSponsorship, tierForMarketValue, transferFeeFromValue, weeklyWageForClub, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { nationKit } from '../src/game/career/data/nationColours';
 import { reserveStadium, resolveCareerStadium, resolveMatchStadium, trialStadium } from '../src/game/career/matchVenue';
@@ -1119,8 +1119,14 @@ if (barca && hilal && lafc) {
     process.exitCode = 1;
   }
   const mlsSpell = playerMarketValue({ age: 18, ratio: 0.9, careerGoals: 22, club: lafc });
+  const plPeer = getClub('aston-villa');
+  const plSameStrength = plPeer ? playerMarketValue({ age: 18, ratio: 0.9, careerGoals: 22, club: plPeer }) : 0;
   if (mlsSpell >= young * 0.5) {
     console.error('goals in MLS must be worth less than the same spell at Barcelona');
+    process.exitCode = 1;
+  }
+  if (!plPeer || plSameStrength <= mlsSpell * 2.5) {
+    console.error('a 0.9 ratio in the Premier League must count for far more than the same ratio in MLS');
     process.exitCode = 1;
   }
   const mixed = playerMarketValueFromSeasons({
@@ -1143,7 +1149,7 @@ if (barca && hilal && lafc) {
     ],
     fallbackClub: barca,
   });
-  console.log('MLS spell', mlsSpell, 'mixed Barca/MLS', mixed, 'all Barca', allBarca);
+  console.log('MLS spell', mlsSpell, 'PL similar strength', plSameStrength, 'mixed Barca/MLS', mixed, 'all Barca', allBarca);
   if (mixed >= allBarca || mixed <= mlsSpell) {
     console.error('value must sit between MLS and Barcelona when goals are split across both');
     process.exitCode = 1;
@@ -1397,6 +1403,15 @@ if (barca && hilal && lafc) {
   }
   if (!reservePromo.pendingTransfer?.allowDecline || reservePromoPerm.length === 0) {
     console.error('a reserve promotion can still offer permanent transfers and a stay');
+    process.exitCode = 1;
+  }
+  const promoYears = [
+    reservePromo.pendingTransfer?.stay?.contractYearsRemaining,
+    ...reservePromoPerm.map((o) => o.contractYears),
+  ];
+  console.log('reserve promo contract years', promoYears);
+  if (promoYears.some((y) => y !== 2)) {
+    console.error('the first senior contract after the reserve year must be 2 years');
     process.exitCode = 1;
   }
   if (firstYears.length === 0 || firstYears.some((y) => y == null || y < 1)) {
@@ -2009,8 +2024,8 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     console.error('sponsorship must be zero below €10m and scale with market value above that');
     process.exitCode = 1;
   }
-  if (RESERVE_CONTRACT_YEARS !== 1 || loanContractYearsRemaining(2, 5, 17) !== 1) {
-    console.error('reserve and season-1 loans must be 1-year deals');
+  if (FIRST_CONTRACT_YEARS !== 2 || loanContractYearsRemaining(2, 5, 17) !== 1) {
+    console.error('the first professional contract is 2 years; season-1 loans stay 1 year');
     process.exitCode = 1;
   }
   if (loanContractYearsRemaining(5, 5, 22) !== 4) {

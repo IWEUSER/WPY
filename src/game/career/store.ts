@@ -10,14 +10,15 @@ import { clubContinentalCup, isInternationalFinalsSeason, type ContinentalCupId 
 import { continentalQualificationForNextSeason } from './europeanQualification';
 import {
   DEFAULT_CONTRACT_YEARS,
+  FIRST_CONTRACT_YEARS,
   loanContractYearsRemaining,
   newContractYears,
   nextContractYearsRemaining,
   playerMarketValue,
   playerMarketValueFromSeasons,
-  RESERVE_CONTRACT_YEARS,
   seasonalSponsorship,
   weeklyWageForClub,
+  YOUTH_LOAN_YEARS,
 } from './playerValue';
 import { evaluatePlayerOfTheYear, evaluateTopGoalscorer } from './domesticAwards';
 import { evaluateInternationalTournamentAwards } from './internationalAwards';
@@ -773,12 +774,12 @@ export const useCareerStore = create<CareerStore>()(
             seasonsAtCurrentClub: 0,
             availability: createAvailability(),
             weeklyWage,
-            contractYears: RESERVE_CONTRACT_YEARS,
-            contractYearsRemaining: RESERVE_CONTRACT_YEARS,
+            contractYears: FIRST_CONTRACT_YEARS,
+            contractYearsRemaining: FIRST_CONTRACT_YEARS,
             ...startSimulatedSeason(1, clubId, 'reserve', [], null, STARTING_AGE, 0, 0, null, undefined, {
               league: club?.league,
               careerEarnings: 0,
-              contractYearsRemaining: RESERVE_CONTRACT_YEARS,
+              contractYearsRemaining: FIRST_CONTRACT_YEARS,
             }),
             pendingTransfer: null,
             openingCampaign: null,
@@ -1393,13 +1394,17 @@ export const useCareerStore = create<CareerStore>()(
           weeklyWage: state.weeklyWage ?? 0,
           careerEarnings: state.careerEarnings ?? 0,
           contractYears:
-            (state.seasonNumber ?? 1) === 1 || (state.role === 'loan' && (state.seasonNumber ?? 1) <= 2)
-              ? RESERVE_CONTRACT_YEARS
-              : (state.contractYears ?? DEFAULT_CONTRACT_YEARS),
+            (state.role === 'loan' && (state.seasonNumber ?? 1) <= 2)
+              ? YOUTH_LOAN_YEARS
+              : (state.seasonNumber ?? 1) === 1
+                ? FIRST_CONTRACT_YEARS
+                : (state.contractYears ?? DEFAULT_CONTRACT_YEARS),
           contractYearsRemaining:
-            (state.seasonNumber ?? 1) === 1 || (state.role === 'loan' && (state.seasonNumber ?? 1) <= 2)
-              ? RESERVE_CONTRACT_YEARS
-              : (state.contractYearsRemaining ?? DEFAULT_CONTRACT_YEARS),
+            (state.role === 'loan' && (state.seasonNumber ?? 1) <= 2)
+              ? YOUTH_LOAN_YEARS
+              : (state.seasonNumber ?? 1) === 1
+                ? FIRST_CONTRACT_YEARS
+                : (state.contractYearsRemaining ?? DEFAULT_CONTRACT_YEARS),
           clubLeague: state.clubLeague ?? (state.clubId ? getClub(state.clubId)?.league ?? null : null),
           seasonSponsorship: state.seasonSponsorship ?? 0,
           injuryGamesRemaining: state.injuryGamesRemaining ?? 0,

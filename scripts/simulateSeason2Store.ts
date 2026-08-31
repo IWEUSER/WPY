@@ -132,8 +132,8 @@ console.log(
   'sponsorship',
   store.getState().seasonSponsorship,
 );
-if (store.getState().contractYearsRemaining !== 1) {
-  console.error('Reserve team contracts must be 1 year');
+if (store.getState().contractYearsRemaining !== 2) {
+  console.error('The first professional contract must be 2 years');
   process.exitCode = 1;
 }
 if (store.getState().seasonSponsorship !== 0) {
@@ -276,8 +276,8 @@ if (s2.seasonSim?.internationalSelected) {
   console.error('Call-up must wait until this season’s goal ratio meets the national bar');
   process.exitCode = 1;
 }
-if (s2.contractYearsRemaining !== 5) {
-  console.error('Promotion onto a first-team deal should start a 5-year contract');
+if (s2.contractYearsRemaining !== 2) {
+  console.error('Promotion onto a first-team deal should start a 2-year contract');
   process.exitCode = 1;
 }
 

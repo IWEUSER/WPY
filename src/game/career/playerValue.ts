@@ -1,4 +1,4 @@
-import { clampStrength, getClub, type Club, type ClubTier } from './data/clubs';
+import { clampStrength, getClub, SECOND_DIVISIONS, type Club, type ClubTier } from './data/clubs';
 import { countsTowardCareerRecord } from './seasonDisplay';
 import type { SeasonRecord } from './types';
 
@@ -9,11 +9,21 @@ const ANCHOR_RATIO = 0.9;
 
 const TOP_LEAGUES = new Set(['Premier League', 'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1']);
 
+/**
+ * How much a league's goals-per-game counts toward market value.
+ * A 0.9 in MLS is not treated like a 0.9 in the Premier League.
+ */
 export function leagueValueWeight(league: string): number {
   if (TOP_LEAGUES.has(league)) return 1;
-  if (league === 'Saudi Pro League') return 0.48;
-  if (league === 'MLS') return 0.3;
-  return 0.36;
+  if (league === 'Saudi Pro League') return 0.42;
+  if (SECOND_DIVISIONS.has(league)) return 0.38;
+  if (league === 'Liga MX') return 0.32;
+  if (league === 'MLS') return 0.22;
+  return 0.3;
+}
+
+export function leagueAdjustedRatio(ratio: number, league: string): number {
+  return ratio * leagueValueWeight(league);
 }
 
 /**
@@ -42,7 +52,11 @@ export interface MarketValueParams {
 }
 
 export const DEFAULT_CONTRACT_YEARS = 5;
-export const RESERVE_CONTRACT_YEARS = 1;
+/** First professional contract (trial signing and first-team promotion). */
+export const FIRST_CONTRACT_YEARS = 2;
+export const RESERVE_CONTRACT_YEARS = FIRST_CONTRACT_YEARS;
+/** Reserve-year and public-season-1 loans stay one year. */
+export const YOUTH_LOAN_YEARS = 1;
 /** Public Season 1 (internal season 2) stays at the youth value until week 21. */
 export const SEASON_1_VALUE_LOCK_WEEKS = 20;
 export const YOUTH_MARKET_VALUE = 100_000;
@@ -103,7 +117,7 @@ export function loanContractYearsRemaining(
   yearsRemaining: number,
   age: number,
 ): number {
-  if (seasonNumber <= 2) return RESERVE_CONTRACT_YEARS;
+  if (seasonNumber <= 2) return YOUTH_LOAN_YEARS;
   return nextContractYearsRemaining(yearsRemaining, age);
 }
 
@@ -152,18 +166,23 @@ export function consecutivePoorFactor(failedSeasons: number): number {
   return 0.02;
 }
 
+export function clubStrengthScale(club: Club): number {
+  return club.strength / ANCHOR_STRENGTH;
+}
+
+/** Club quality times the stature of the league those goals came in. */
 export function clubLeagueScale(club: Club, league?: string | null): number {
-  return (club.strength / ANCHOR_STRENGTH) * leagueValueWeight(league ?? club.league);
+  return clubStrengthScale(club) * leagueValueWeight(league ?? club.league);
 }
 
 export function playerMarketValue(params: MarketValueParams): number {
   const { age, ratio, careerGoals, club } = params;
-  return valueFromScale(age, ratio, careerGoals, clubLeagueScale(club));
+  return valueFromScale(age, leagueAdjustedRatio(ratio, club.league), careerGoals, clubStrengthScale(club));
 }
 
 /**
- * Same formula, but the club/league multiplier is a goal-weighted average of
- * every first-team season so a spell at Barcelona still counts after a move.
+ * Same formula, but club quality is a goal-weighted average of first-team
+ * seasons and the ratio is league-weighted so MLS goals count less.
  */
 export function seasonCountsTowardForm(season: SeasonRecord): boolean {
   if (!countsTowardCareerRecord(season.seasonNumber)) return false;
@@ -179,6 +198,40 @@ export function lastSeasonRatio(seasons: SeasonRecord[]): number | null {
     return season.goals / season.gamesPlayed;
   }
   return null;
+}
+
+function seasonLeague(season: SeasonRecord, fallbackLeague?: string): string {
+  return season.league ?? getClub(season.clubId)?.league ?? fallbackLeague ?? '';
+}
+
+/** Last finished season's ratio, scaled so MLS goals count less than Premier League goals. */
+export function lastSeasonLeagueAdjustedRatio(seasons: SeasonRecord[]): number | null {
+  for (let i = seasons.length - 1; i >= 0; i--) {
+    const season = seasons[i];
+    if (!seasonCountsTowardForm(season)) continue;
+    return leagueAdjustedRatio(season.goals / season.gamesPlayed, seasonLeague(season));
+  }
+  return null;
+}
+
+/**
+ * Career ratio with league stature: 20 Premier League goals move the needle
+ * more than 20 MLS goals.
+ */
+export function leagueWeightedCareerRatio(
+  seasons: SeasonRecord[],
+  careerGoals: number,
+  careerGames: number,
+): number {
+  let weightedGoals = 0;
+  let games = 0;
+  for (const season of seasons) {
+    if (!countsTowardCareerRecord(season.seasonNumber) || season.gamesPlayed <= 0) continue;
+    weightedGoals += season.goals * leagueValueWeight(seasonLeague(season));
+    games += season.gamesPlayed;
+  }
+  if (games > 0) return weightedGoals / games;
+  return careerGames > 0 ? careerGoals / careerGames : 0;
 }
 
 /**
@@ -215,18 +268,18 @@ export function playerMarketValueFromSeasons(params: {
     careerGames -= season.gamesPlayed;
     return false;
   });
-  const careerRatio = careerGames > 0 ? careerGoals / careerGames : 0;
-  const ratio = formAdjustedRatio(careerRatio, lastSeasonRatio(seasons));
+  const careerRatio = leagueWeightedCareerRatio(seasons, careerGoals, careerGames);
+  const ratio = formAdjustedRatio(careerRatio, lastSeasonLeagueAdjustedRatio(seasons));
   let weighted = 0;
   let weight = 0;
   for (const season of seasons) {
     if (!countsTowardCareerRecord(season.seasonNumber)) continue;
     const club = getClub(season.clubId);
     if (!club || season.goals <= 0) continue;
-    weighted += clubLeagueScale(club, season.league) * season.goals;
+    weighted += clubStrengthScale(club) * season.goals;
     weight += season.goals;
   }
-  const scale = weight > 0 ? weighted / weight : clubLeagueScale(fallbackClub);
+  const scale = weight > 0 ? weighted / weight : clubStrengthScale(fallbackClub);
   const base = valueFromScale(age, ratio, careerGoals, scale);
   const poor = consecutivePoorFactor(consecutiveSeasonsBelow(seasons, 0.25));
   const raw = base * poor;
