@@ -368,7 +368,9 @@ function SeasonCompetitions({ calendar }: { calendar: SeasonCalendar | null }) {
   const domesticCup = calendarDomesticCup(calendar);
   if (cupIds.size === 0 && !international && !domesticCup) return null;
   const internationalLabel = international
-    ? INTERNATIONAL_TOURNAMENTS[international].name
+    ? calendar.internationalPhase === 'qualifiers'
+      ? `${INTERNATIONAL_TOURNAMENTS[international].name} qualifying`
+      : INTERNATIONAL_TOURNAMENTS[international].name
     : null;
 
   return (
