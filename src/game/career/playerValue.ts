@@ -148,7 +148,7 @@ export function consecutiveSeasonsBelow(seasons: SeasonRecord[], threshold: numb
   let n = 0;
   for (let i = seasons.length - 1; i >= 0; i--) {
     const season = seasons[i];
-    if (!seasonCountsTowardForm(season) && season.ratioMet == null) continue;
+    if (!seasonCountsTowardForm(season)) continue;
     if (!countsTowardCareerRecord(season.seasonNumber, season.role)) continue;
     if (season.gamesPlayed <= 0) continue;
     if (season.goals / season.gamesPlayed < threshold) n += 1;
@@ -193,7 +193,6 @@ export function playerMarketValue(params: MarketValueParams): number {
 export function seasonCountsTowardForm(season: SeasonRecord): boolean {
   if (!countsTowardCareerRecord(season.seasonNumber, season.role)) return false;
   if (season.gamesPlayed <= 0) return false;
-  if (season.ratioMet != null) return true;
   return season.gamesPlayed >= VALUE_FORM_MIN_GAMES;
 }
 
@@ -275,8 +274,8 @@ export function playerMarketValueFromSeasons(params: {
   let careerGoals = params.careerGoals;
   let careerGames = params.careerGames;
   const seasons = params.seasons.filter((season) => {
-    if (season.ratioMet != null || season.gamesPlayed >= VALUE_FORM_MIN_GAMES) return true;
     if (!countsTowardCareerRecord(season.seasonNumber, season.role)) return true;
+    if (season.gamesPlayed >= VALUE_FORM_MIN_GAMES) return true;
     careerGoals -= season.goals;
     careerGames -= season.gamesPlayed;
     return false;

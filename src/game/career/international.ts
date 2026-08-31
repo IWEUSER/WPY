@@ -114,9 +114,11 @@ export function seasonRatioForSelection(season: { goals: number; gamesPlayed: nu
 }
 
 /**
- * Until this season has VALUE_FORM_MIN_GAMES, use prior career ratio so a
- * new campaign (or a 13-game injury/drop spell) cannot wipe a call-up.
- * After that, this season's goals-per-game decides.
+ * Until this season has VALUE_FORM_MIN_GAMES, take the better of this
+ * season and prior career so a new campaign with a 1.13 career ratio is
+ * selected from week 1, a hot start can still earn a call-up, and a
+ * 13-game blank cannot wipe the career figure. After 15 games, this
+ * season decides.
  */
 export function callUpRatio(params: {
   season?: { goals: number; gamesPlayed: number } | null;
@@ -125,11 +127,12 @@ export function callUpRatio(params: {
 }): number {
   const gp = params.season?.gamesPlayed ?? 0;
   const goals = params.season?.goals ?? 0;
-  if (gp >= VALUE_FORM_MIN_GAMES) return gp > 0 ? goals / gp : 0;
+  const seasonRatio = gp > 0 ? goals / gp : 0;
+  if (gp >= VALUE_FORM_MIN_GAMES) return seasonRatio;
   const priorGames = Math.max(0, params.careerGames - gp);
   const priorGoals = Math.max(0, params.careerGoals - goals);
-  if (priorGames > 0) return priorGoals / priorGames;
-  return 0;
+  const priorRatio = priorGames > 0 ? priorGoals / priorGames : 0;
+  return Math.max(seasonRatio, priorRatio);
 }
 
 /**

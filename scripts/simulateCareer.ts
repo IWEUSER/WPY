@@ -736,9 +736,10 @@ if (!spainPick || spainMiss || lutonPick) {
   const fromCareer = callUpRatio({ season: { goals: 0, gamesPlayed: 0 }, careerGoals: 45, careerGames: 40 });
   const thinSample = callUpRatio({ season: { goals: 0, gamesPlayed: 13 }, careerGoals: 45, careerGames: 53 });
   const afterSample = callUpRatio({ season: { goals: 0, gamesPlayed: 15 }, careerGoals: 45, careerGames: 55 });
-  console.log('call-up ratio career/thin/15-blank', fromCareer.toFixed(2), thinSample.toFixed(2), afterSample.toFixed(2));
-  if (fromCareer < 0.66 || thinSample < 0.66 || afterSample !== 0) {
-    console.error('call-up must use career ratio until 15 games this season, then this season');
+  const hotStart = callUpRatio({ season: { goals: 1, gamesPlayed: 1 }, careerGoals: 1, careerGames: 1 });
+  console.log('call-up ratio career/thin/15-blank/hot', fromCareer.toFixed(2), thinSample.toFixed(2), afterSample.toFixed(2), hotStart.toFixed(2));
+  if (fromCareer < 0.66 || thinSample < 0.66 || afterSample !== 0 || hotStart < 0.66) {
+    console.error('call-up must use career or a hot start until 15 games, then this season');
     process.exitCode = 1;
   }
 }
@@ -2194,8 +2195,8 @@ if (madrid) {
     console.error('league-phase draw must return 8 unique opponents');
     process.exitCode = 1;
   }
-  if (phase.some((c) => c.id === 'wolves' || clubContinentalCup(c) !== 'ucl')) {
-    console.error('Champions League opponents must all belong in the Champions League — no Wolves');
+  if (phase.some((c) => c.id === 'wolves' || clubContinentalCup(c) === 'uecl')) {
+    console.error('Champions League opponents must not include Conference League sides such as Wolves');
     process.exitCode = 1;
   }
   const wcFinal = noCup.calendar.fixtures.find((f) => f.kind === 'international' && f.internationalRound === 'final');
