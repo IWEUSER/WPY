@@ -29,6 +29,7 @@ export default function SeasonSummaryScreen() {
   const contractYearsRemaining = useCareerStore((s) => s.contractYearsRemaining);
   const clubLeague = useCareerStore((s) => s.clubLeague);
   const seasonSponsorship = useCareerStore((s) => s.seasonSponsorship);
+  const careerStart = useCareerStore((s) => s.careerStart);
 
   const club = clubId ? getClub(clubId) : undefined;
   if (!club || !season || !clubId || !parentClubId) return null;
@@ -95,7 +96,9 @@ export default function SeasonSummaryScreen() {
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-6 overflow-y-auto px-6 py-10 text-center text-white">
       <div>
-        <p className="text-xs uppercase tracking-wide text-white/40">{displaySeasonLabel(seasonNumber)} complete</p>
+        <p className="text-xs uppercase tracking-wide text-white/40">
+          {displaySeasonLabel(seasonNumber, { role, careerStart })} complete
+        </p>
         <h1 className="mt-1 text-2xl font-extrabold">{preview.headline}</h1>
       </div>
 
@@ -197,7 +200,7 @@ export default function SeasonSummaryScreen() {
       >
         {age >= RETIREMENT_AGE
           ? 'View career'
-          : `Continue to ${displaySeasonNumber(seasonNumber + 1) === null ? 'the first team' : `Season ${displaySeasonNumber(seasonNumber + 1)}`}`}
+          : `Continue to ${displaySeasonNumber(seasonNumber + 1, { role: role === 'reserve' ? 'first-team' : role, careerStart }) === null ? 'the first team' : `Season ${displaySeasonNumber(seasonNumber + 1, { role: role === 'reserve' ? 'first-team' : role, careerStart })}`}`}
       </button>
     </div>
   );

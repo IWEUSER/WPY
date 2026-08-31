@@ -31,16 +31,17 @@ export default function CareerRecordScreen() {
   const seasonCalendar = useCareerStore((s) => s.seasonCalendar);
   const seasonSim = useCareerStore((s) => s.seasonSim);
   const returnToHub = useCareerStore((s) => s.returnToHub);
+  const careerStart = useCareerStore((s) => s.careerStart);
 
   const seasons: Array<SeasonRecord & { inProgress?: boolean }> = [
-    ...(current && countsTowardCareerRecord(current.seasonNumber) ? [{ ...current, inProgress: true }] : []),
-    ...[...history].filter((s) => countsTowardCareerRecord(s.seasonNumber)).reverse(),
+    ...(current && countsTowardCareerRecord(current.seasonNumber, current.role) ? [{ ...current, inProgress: true }] : []),
+    ...[...history].filter((s) => countsTowardCareerRecord(s.seasonNumber, s.role)).reverse(),
   ];
   const wpyWins = [...history, ...(current?.wonWpy ? [current] : [])].filter(
-    (s) => s.wonWpy && countsTowardCareerRecord(s.seasonNumber),
+    (s) => s.wonWpy && countsTowardCareerRecord(s.seasonNumber, s.role),
   );
-  const recordSeasons = [...history, ...(current && countsTowardCareerRecord(current.seasonNumber) ? [current] : [])];
-  const scoredSeasons = recordSeasons.filter((s) => countsTowardCareerRecord(s.seasonNumber));
+  const recordSeasons = [...history, ...(current && countsTowardCareerRecord(current.seasonNumber, current.role) ? [current] : [])];
+  const scoredSeasons = recordSeasons.filter((s) => countsTowardCareerRecord(s.seasonNumber, s.role));
   const domestic = aggregateDomesticSplit(scoredSeasons);
   const continental = aggregateContinental(scoredSeasons);
   const intlGames = nationalTeam?.caps ?? 0;
@@ -48,8 +49,8 @@ export default function CareerRecordScreen() {
   const totalGames = careerGames + intlGames;
   const totalGoals = careerGoals + intlGoals;
   const ratio = totalGames > 0 ? totalGoals / totalGames : 0;
-  const trophies = careerTrophyCounts(recordSeasons.filter((s) => countsTowardCareerRecord(s.seasonNumber)));
-  const awards = careerAwardCounts(recordSeasons.filter((s) => countsTowardCareerRecord(s.seasonNumber)));
+  const trophies = careerTrophyCounts(recordSeasons.filter((s) => countsTowardCareerRecord(s.seasonNumber, s.role)));
+  const awards = careerAwardCounts(recordSeasons.filter((s) => countsTowardCareerRecord(s.seasonNumber, s.role)));
   const week = seasonCalendar && seasonSim
     ? currentCalendarWeek(seasonCalendar, seasonSim.fixtureIndex)
     : current?.gamesPlayed ?? 0;
@@ -159,7 +160,7 @@ export default function CareerRecordScreen() {
                   return (
                     <li key={`intl-${s.seasonNumber}`}>
                       <InternationalSeasonBlock
-                        title={`${displaySeasonLabel(s.seasonNumber)} · ${line.name}`}
+                        title={`${displaySeasonLabel(s.seasonNumber, { role: s.role, careerStart })} · ${line.name}`}
                         record={s.international}
                       />
                     </li>
@@ -185,7 +186,7 @@ export default function CareerRecordScreen() {
             <ul className="mt-3 space-y-2">
               {wpyWins.map((season) => (
                 <li key={`wpy-${season.seasonNumber}`} className="flex items-baseline justify-between gap-3 text-sm">
-                  <span className="font-semibold text-amber-100">{displaySeasonLabel(season.seasonNumber)}</span>
+                  <span className="font-semibold text-amber-100">{displaySeasonLabel(season.seasonNumber, { role: season.role, careerStart })}</span>
                   <span className="text-right text-xs text-white/50">
                     Age {season.age} · {seasonClubName(season)}
                   </span>
@@ -223,13 +224,14 @@ function SeasonCard({ season }: { season: SeasonRecord & { inProgress?: boolean 
   const club = getClub(season.clubId);
   const awards = awardLabels(season);
   const trophies = season.trophies ?? [];
+  const careerStart = useCareerStore((s) => s.careerStart);
 
   return (
     <article className="rounded-2xl bg-white/5 p-4" style={club ? { borderLeft: `4px solid ${club.color}` } : undefined}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-wide text-white/40">
-            {displaySeasonLabel(season.seasonNumber)}
+            {displaySeasonLabel(season.seasonNumber, { role: season.role, careerStart })}
             {season.inProgress ? ' · in progress' : ''}
             {' · '}
             Age {season.age}

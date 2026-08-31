@@ -19,10 +19,11 @@ export default function CareerEndScreen() {
   const careerEarnings = useCareerStore((s) => s.careerEarnings);
   const resetCareer = useCareerStore((s) => s.resetCareer);
   const returnToMenu = useCareerStore((s) => s.returnToMenu);
+  const careerStart = useCareerStore((s) => s.careerStart);
 
   const seen = new Set<number>();
   const seasons = [...history, ...(current ? [current] : [])].filter((s) => {
-    if (!countsTowardCareerRecord(s.seasonNumber) || seen.has(s.seasonNumber)) return false;
+    if (!countsTowardCareerRecord(s.seasonNumber, s.role) || seen.has(s.seasonNumber)) return false;
     seen.add(s.seasonNumber);
     return true;
   });
@@ -46,7 +47,7 @@ export default function CareerEndScreen() {
       <h1 className="mt-1 text-2xl font-extrabold">Retired at 36</h1>
       <p className="mt-2 text-sm text-white/60">
         {lastClub ? `${lastClub.name}` : 'Your career'}
-        {lastSeason ? ` · last season ${displaySeasonLabel(lastSeason.seasonNumber)}` : ''}
+        {lastSeason ? ` · last season ${displaySeasonLabel(lastSeason.seasonNumber, { role: lastSeason.role, careerStart })}` : ''}
       </p>
 
       <div className="mt-5 grid grid-cols-3 gap-2">
@@ -108,7 +109,7 @@ export default function CareerEndScreen() {
               return (
                 <div key={`intl-${s.seasonNumber}`} className="mt-3">
                   <InternationalSeasonBlock
-                    title={`${displaySeasonLabel(s.seasonNumber)} · ${line.name}`}
+                    title={`${displaySeasonLabel(s.seasonNumber, { role: s.role, careerStart })} · ${line.name}`}
                     record={s.international}
                   />
                 </div>
@@ -159,10 +160,11 @@ function StatTile({ value, label }: { value: string; label: string }) {
 function SeasonCard({ season }: { season: SeasonRecord }) {
   const club = getClub(season.clubId);
   const awards = awardLabels(season);
+  const careerStart = useCareerStore((s) => s.careerStart);
   return (
     <article className="rounded-2xl bg-white/5 p-4" style={club ? { borderLeft: `4px solid ${club.color}` } : undefined}>
       <p className="text-xs uppercase tracking-wide text-white/40">
-        {displaySeasonLabel(season.seasonNumber)} · Age {season.age}
+        {displaySeasonLabel(season.seasonNumber, { role: season.role, careerStart })} · Age {season.age}
       </p>
       <h2 className="text-lg font-extrabold">{seasonClubName(season)}</h2>
       <p className="text-xs text-white/50">{seasonLeagueLabel(season)}</p>

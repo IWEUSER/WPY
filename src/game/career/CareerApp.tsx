@@ -13,6 +13,7 @@ import SeasonSummaryScreen from './screens/SeasonSummaryScreen';
 import TransferChoiceScreen from './screens/TransferChoiceScreen';
 import MatchResultScreen from './screens/MatchResultScreen';
 import OpeningBriefScreen from './screens/OpeningBriefScreen';
+import OpeningStatusScreen from './screens/OpeningStatusScreen';
 import { useCareerStore } from './store';
 import { applyCareerLayoutPreview } from './previewCareerLayout';
 
@@ -33,6 +34,8 @@ export default function CareerApp() {
   );
   const phase = useCareerStore((s) => s.phase);
   const nationality = useCareerStore((s) => s.nationality);
+  const openingCampaign = useCareerStore((s) => s.openingCampaign);
+  const seasonSim = useCareerStore((s) => s.seasonSim);
   const returnToMenu = useCareerStore((s) => s.returnToMenu);
 
   if (practicing) {
@@ -76,7 +79,11 @@ export default function CareerApp() {
     case 'transfer-choice':
       return <TransferChoiceScreen />;
     case 'hub':
-      return <CareerHub onOpenMenu={returnToMenu} />;
+      return openingCampaign && !seasonSim ? (
+        <OpeningStatusScreen />
+      ) : (
+        <CareerHub onOpenMenu={returnToMenu} />
+      );
     case 'career':
       return <CareerRecordScreen />;
     case 'career-end':

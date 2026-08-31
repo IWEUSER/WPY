@@ -5,7 +5,7 @@ import { useCareerStore } from '../store';
 const PATH_COPY: Record<string, { title: string; detail: string }> = {
   'favourite-trial': {
     title: 'Pick your club',
-    detail: 'Three academy games, empty stands. You must hit this club’s first-team ratio to sign.',
+    detail: 'Three academy games, empty stands. Hit this club’s reserve ratio to sign a 2-year deal at €1,000 a week.',
   },
   'favourite-reserve': {
     title: 'Pick your club',

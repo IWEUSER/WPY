@@ -59,7 +59,7 @@ export default function TransferChoiceScreen() {
               </div>
               <div className="flex flex-col items-end gap-1">
                 <span className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/70">
-                  {offer.move === 'loan' ? 'Loan' : 'Transfer'}
+                  {offer.move === 'loan' ? 'Loan' : offer.clubId === clubId ? 'New contract' : 'Transfer'}
                 </span>
                 <span className="text-[10px] uppercase tracking-wide text-white/40">{TIER_LABEL[club.tier]}</span>
               </div>

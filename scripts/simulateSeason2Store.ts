@@ -60,6 +60,12 @@ if (
 }
 
 function playOpeningMatch(goals: number) {
+  if (store.getState().phase === 'hub' && store.getState().openingCampaign && !store.getState().seasonSim) {
+    store.getState().advance();
+  }
+  if (store.getState().phase === 'opening-brief') {
+    store.getState().startOpeningTrial();
+  }
   const live = store.getState().liveMatch;
   if (!live) {
     console.error('expected a live opening match');
@@ -99,18 +105,33 @@ function playSimSeason(scoreAll: boolean) {
 }
 
 function completeOpeningAndSign(): string | undefined {
-  while (store.getState().phase === 'match' && store.getState().openingCampaign?.kind === 'youth-tournament') {
-    playOpeningMatch(store.getState().liveMatch?.chancesTotal ?? 1);
+  let guard = 0;
+  while (guard++ < 80) {
+    const phase = store.getState().phase;
+    if (phase === 'hub' && store.getState().openingCampaign && !store.getState().seasonSim) {
+      store.getState().advance();
+      continue;
+    }
+    if (phase === 'match-result') {
+      store.getState().acknowledgeMatchResult();
+      continue;
+    }
+    if (phase === 'opening-brief') {
+      store.getState().startOpeningTrial();
+      continue;
+    }
+    if (phase === 'club-offer') {
+      const clubId = store.getState().trial?.offeredClubIds[0];
+      if (clubId) store.getState().chooseClub(clubId);
+      return clubId;
+    }
+    if (phase === 'match' && store.getState().openingCampaign) {
+      playOpeningMatch(store.getState().liveMatch?.chancesTotal ?? 1);
+      continue;
+    }
+    break;
   }
-  if (store.getState().phase === 'match-result') store.getState().acknowledgeMatchResult();
-  if (store.getState().phase === 'opening-brief') store.getState().startOpeningTrial();
-  while (store.getState().phase === 'match' && store.getState().openingCampaign?.kind === 'club-trial') {
-    playOpeningMatch(store.getState().liveMatch?.chancesTotal ?? 1);
-  }
-  if (store.getState().phase === 'match-result') store.getState().acknowledgeMatchResult();
-  const clubId = store.getState().trial?.offeredClubIds[0];
-  if (clubId) store.getState().chooseClub(clubId);
-  return clubId;
+  return store.getState().clubId ?? undefined;
 }
 
 const youthName = store.getState().openingCampaign?.youthName;
@@ -132,8 +153,8 @@ console.log(
   'sponsorship',
   store.getState().seasonSponsorship,
 );
-if (store.getState().contractYearsRemaining !== 2) {
-  console.error('The first professional contract must be 2 years');
+if (store.getState().contractYearsRemaining !== 2 || store.getState().weeklyWage !== 1000) {
+  console.error('The reserve contract must be 2 years at €1,000 a week');
   process.exitCode = 1;
 }
 if (store.getState().seasonSponsorship !== 0) {
@@ -244,8 +265,12 @@ console.log(
   'club opponents',
   s2ClubVsCountry.length,
 );
-if (s2.seasonSim?.internationalTournament !== 'world-cup') {
-  console.error('Season 2 must be a World Cup year for a Spanish player');
+if (s2.role !== 'first-team' || s2.age !== 17) {
+  console.error('The first first-team season must be at age 17');
+  process.exitCode = 1;
+}
+if (s2.seasonSim?.internationalTournament !== 'world-cup' || s2.seasonSim?.internationalPhase !== 'qualifiers') {
+  console.error('Youth-path first-team Season 1 must be World Cup qualifying, not the tournament');
   process.exitCode = 1;
 }
 if (s2ClubVsCountry.length > 0) {
@@ -258,18 +283,10 @@ const s2Expected = [
   'qualifier',
   'qualifier',
   'qualifier',
-  'group',
-  'group',
-  'group',
-  'round-of-32',
-  'round-of-16',
-  'quarter-final',
-  'semi-final',
-  'final',
 ];
 const s2Rounds = s2Intl.map((f) => f.internationalRound);
 if (s2Rounds.join() !== s2Expected.join()) {
-  console.error('Season 2 must include the remaining World Cup qualifiers and a last-32 tournament');
+  console.error('Youth-path first-team Season 1 must include five World Cup qualifiers and no tournament');
   process.exitCode = 1;
 }
 if (s2.seasonSim?.internationalSelected) {
@@ -431,33 +448,36 @@ if (after.seasonSponsorship !== 0) {
   process.exitCode = 1;
 }
 
-const finalIndex = after.seasonCalendar?.fixtures.findIndex(
+const cupFinalIndex = after.seasonCalendar?.fixtures.findIndex(
+  (f) => f.kind === 'domestic-cup' && f.domesticCupStage === 'final',
+);
+const wcFinal = after.seasonCalendar?.fixtures.find(
   (f) => f.kind === 'international' && f.internationalRound === 'final',
 );
-if (finalIndex == null || finalIndex < 0 || !after.seasonSim || !after.seasonCalendar) {
-  console.error('Season 2 must include a World Cup final');
+if (wcFinal) {
+  console.error('Youth-path first-team Season 1 must not include a World Cup final');
+  process.exitCode = 1;
+}
+if (cupFinalIndex == null || cupFinalIndex < 0 || !after.seasonSim || !after.seasonCalendar) {
+  console.error('Season 2 must include a domestic-cup final');
   process.exitCode = 1;
 } else {
   store.setState({
-    seasonSim: { ...after.seasonSim, fixtureIndex: finalIndex },
-    liveMatch: { fixtureIndex: finalIndex, chancesTotal: 1, chancesTaken: 1, goals: 1 },
+    seasonSim: {
+      ...after.seasonSim,
+      fixtureIndex: cupFinalIndex,
+      domesticCupStage: 'final',
+    },
+    liveMatch: { fixtureIndex: cupFinalIndex, chancesTotal: 1, chancesTaken: 1, goals: 1 },
   });
   store.getState().finishLiveMatch();
   const finalState = store.getState();
-  console.log('WC final phase', finalState.phase, finalState.lastMatchResult);
+  console.log('cup final phase', finalState.phase, finalState.lastMatchResult);
   if (finalState.phase !== 'match-result' || !finalState.lastMatchResult?.isFinal) {
-    console.error('A World Cup final must show the result screen before season summary');
-    process.exitCode = 1;
-  }
-  if (finalState.lastMatchResult?.afterPhase !== 'season-summary') {
-    console.error('Acknowledging the last final of the year should then open season summary');
+    console.error('A cup final must show the result screen before returning to the hub');
     process.exitCode = 1;
   }
   store.getState().acknowledgeMatchResult();
-  if (store.getState().phase !== 'season-summary') {
-    console.error('Continue after a season-ending final must reach season summary');
-    process.exitCode = 1;
-  }
   console.log('after acknowledge', store.getState().phase);
 }
 
@@ -502,8 +522,12 @@ if (!loanClubId) {
     'sponsorship',
     loaned.seasonSponsorship,
   );
-  if (loaned.role !== 'loan' || loaned.seasonNumber !== 2) {
-    console.error('The reserve miss must send the player on loan for public season 1');
+  if (loaned.role !== 'loan' || loaned.seasonNumber !== 2 || loaned.age !== 17) {
+    console.error('The reserve miss must send the player on loan for public season 1 at age 17');
+    process.exitCode = 1;
+  }
+  if (loaned.weeklyWage !== 1000) {
+    console.error('The first loan must keep the €1,000 reserve wage');
     process.exitCode = 1;
   }
   if (loaned.contractYearsRemaining !== 1) {
@@ -543,16 +567,27 @@ store.getState().chooseNationality('spain');
   }
 }
 for (let i = 0; i < 3; i++) playOpeningMatch(4);
+if (store.getState().phase === 'club-offer') {
+  const signed = store.getState().trial?.offeredClubIds[0];
+  if (signed) store.getState().chooseClub(signed);
+}
 {
   const s = store.getState();
-  console.log('favourite trial pass', s.phase, s.role, s.seasonNumber, s.contractYearsRemaining);
-  if (s.phase !== 'hub' || s.role !== 'first-team' || s.seasonNumber !== 2 || s.contractYearsRemaining !== 2) {
-    console.error('Hitting the favourite-trial first-team ratio must sign a 2-year first-team deal');
+  console.log('favourite trial pass', s.phase, s.role, s.seasonNumber, s.age, s.weeklyWage, s.contractYearsRemaining);
+  if (
+    s.phase !== 'hub'
+    || s.role !== 'reserve'
+    || s.seasonNumber !== 1
+    || s.age !== 16
+    || s.weeklyWage !== 1000
+    || s.contractYearsRemaining !== 2
+  ) {
+    console.error('Hitting the favourite-trial reserve ratio must sign a 2-year reserve deal at €1,000 a week');
     process.exitCode = 1;
   }
   const kinds = new Set(s.seasonCalendar?.fixtures.map((f) => f.kind) ?? []);
-  if (!kinds.has('league') || !kinds.has('domestic-cup')) {
-    console.error('Favourite first-team after a passed trial must play the full calendar, not league-only');
+  if (!kinds.has('league') || kinds.has('domestic-cup')) {
+    console.error('Favourite trial success must start the reserve season, not the first team');
     process.exitCode = 1;
   }
 }
@@ -562,6 +597,7 @@ store.getState().startFavouritePath('favourite-trial');
 store.getState().chooseFavouriteClub('real-madrid');
 store.getState().chooseNationality('spain');
 for (let i = 0; i < 3; i++) playOpeningMatch(0);
+if (store.getState().phase === 'opening-brief') store.getState().startOpeningTrial();
 {
   const s = store.getState();
   console.log(
@@ -569,6 +605,8 @@ for (let i = 0; i < 3; i++) playOpeningMatch(0);
     s.phase,
     s.pendingTransfer?.kind,
     s.parentClubId,
+    s.age,
+    s.weeklyWage,
     s.pendingTransfer?.offers?.map((o) => o.move).join(','),
   );
   if (
@@ -608,18 +646,27 @@ store.getState().chooseNationality('england');
     s.phase,
     s.role,
     s.seasonNumber,
+    s.age,
     s.contractYearsRemaining,
     [...kinds].join('/'),
   );
   if (
     s.phase !== 'hub'
     || s.role !== 'first-team'
-    || s.seasonNumber !== 2
+    || s.seasonNumber !== 1
+    || s.age !== 17
     || s.contractYearsRemaining !== 2
     || !kinds.has('league')
     || !kinds.has('domestic-cup')
   ) {
-    console.error('Favourite first-team must start a 2-year first-team season with the full calendar');
+    console.error('Favourite first-team must start Season 1 at age 17 on a 2-year deal with the full calendar');
+    process.exitCode = 1;
+  }
+  const tournamentGames = (s.seasonCalendar?.fixtures ?? []).filter(
+    (f) => f.kind === 'international' && f.internationalRound && f.internationalRound !== 'qualifier',
+  );
+  if (tournamentGames.length > 0 || (s.seasonSim?.internationalPhase && s.seasonSim.internationalPhase !== 'qualifiers' && s.seasonSim.internationalPhase !== 'none')) {
+    console.error('Favourite first-team Season 1 must not schedule the World Cup tournament');
     process.exitCode = 1;
   }
 }

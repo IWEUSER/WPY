@@ -22,6 +22,7 @@ import {
   CONTINENTAL_CUPS,
   DOMESTIC_CUPS,
   INTERNATIONAL_TOURNAMENTS,
+  internationalCalendarSeason,
   internationalCampaignForSeason,
   type ContinentalCupId,
   type DomesticCupId,
@@ -139,6 +140,8 @@ export interface HydrateSeasonParams {
   rng?: () => number;
   /** Reserve year: league fixtures only, no cups or continentals. */
   leagueOnly?: boolean;
+  /** Which start path this season belongs to — drives the international year. */
+  careerStart?: string | null;
 }
 
 const GROUP_GAMES = 8;
@@ -169,11 +172,20 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
       : clubContinentalCup(club);
   const isMls = league === 'MLS';
   const saudiSuper = !leagueOnly && league === 'Saudi Pro League' && qualifiesForSaudiSuperCup(club);
-  const campaign = internationalCampaignForSeason(seasonNumber, nation?.confederation ?? clubConfederation);
+  const intlSeason = internationalCalendarSeason(seasonNumber, {
+    leagueOnly,
+    careerStart: params.careerStart,
+  });
+  const campaign = internationalCampaignForSeason(intlSeason, nation?.confederation ?? clubConfederation);
   const tournament = campaign.tournament ?? null;
   const clubOk = clubEligibleForNationalTeam(club.tier);
   const campaignActive = Boolean(
-    !leagueOnly && nationId && campaign.tournament && campaignSchedulesInternational(campaign.phase) && clubOk,
+    !leagueOnly &&
+      intlSeason >= 1 &&
+      nationId &&
+      campaign.tournament &&
+      campaignSchedulesInternational(campaign.phase) &&
+      clubOk,
   );
   const internationalSelected = Boolean(
     campaignActive &&
@@ -204,6 +216,7 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
     includeSaudiSuperCup: saudiSuper,
     league,
     continentalCup: cup,
+    internationalSeasonNumber: intlSeason,
   });
   calendar = assignOpponentsAndChances(
     calendar,

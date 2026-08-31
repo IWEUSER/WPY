@@ -173,10 +173,33 @@ export const CONTINENTAL_TOURNAMENT_FOR_CONFEDERATION: Record<Confederation, Int
 };
 
 /**
- * International calendar (internal season numbers; the reserve year is 1):
- *  - Season 1, 5, 9…: World Cup qualifying exists, but the player is not
- *    called up — no international fixtures appear.
- *  - Season 2, 6, 10…: the second five World Cup qualifiers, then the World Cup.
+ * Maps an internal season onto the international campaign year.
+ *
+ * Favourite first-team starts at internal 1 = campaign year 1.
+ * Youth / trial / reserve paths spend internal 1 in the reserves, so
+ * first-team season 2 is campaign year 1. Tests that omit careerStart treat
+ * `seasonNumber` as the campaign year itself.
+ */
+export function internationalCalendarSeason(
+  seasonNumber: number,
+  opts?: { leagueOnly?: boolean; careerStart?: string | null; role?: string | null },
+): number {
+  if (opts?.leagueOnly || opts?.role === 'reserve') return 0;
+  if (opts?.careerStart === 'favourite-first-team') return Math.max(1, seasonNumber);
+  if (
+    opts?.careerStart === 'youth'
+    || opts?.careerStart === 'favourite-trial'
+    || opts?.careerStart === 'favourite-reserve'
+  ) {
+    return Math.max(0, seasonNumber - 1);
+  }
+  return Math.max(0, seasonNumber);
+}
+
+/**
+ * International campaign years (first-team Season 1, not the reserve year):
+ *  - Season 1, 5, 9…: World Cup qualifying — the player can be selected.
+ *  - Season 2, 6, 10…: five more World Cup qualifiers, then the World Cup.
  *  - Season 3, 7, 11…: Nations League (six in-season group games; knockout
  *    around week 30).
  *  - Season 4, 8, 12…: no qualifying; continental tournament after the club
@@ -203,27 +226,27 @@ export function internationalCampaignForSeason(
   seasonNumber: number,
   confederation?: Confederation | null,
 ): InternationalCampaign {
+  if (seasonNumber < 1) {
+    return { tournament: null, phase: 'none', qualifierGames: 0 };
+  }
   const continental = confederation
     ? CONTINENTAL_TOURNAMENT_FOR_CONFEDERATION[confederation]
     : 'continental-championship';
-  if (seasonNumber < 2) {
-    return { tournament: 'world-cup', phase: 'qualifiers-hidden', qualifierGames: 0 };
-  }
-  const cycle = (seasonNumber - 2) % 4;
+  const cycle = (seasonNumber - 1) % 4;
   if (cycle === 0) {
+    return { tournament: 'world-cup', phase: 'qualifiers', qualifierGames: QUALIFIER_GAMES_PER_SEASON };
+  }
+  if (cycle === 1) {
     return {
       tournament: 'world-cup',
       phase: 'qualifiers-and-tournament',
       qualifierGames: QUALIFIER_GAMES_PER_SEASON,
     };
   }
-  if (cycle === 1) {
+  if (cycle === 2) {
     return { tournament: 'nations-league', phase: 'nations-league', qualifierGames: 0 };
   }
-  if (cycle === 2) {
-    return { tournament: continental, phase: 'tournament-only', qualifierGames: 0 };
-  }
-  return { tournament: 'world-cup', phase: 'qualifiers-hidden', qualifierGames: 0 };
+  return { tournament: continental, phase: 'tournament-only', qualifierGames: 0 };
 }
 
 export function isInternationalFinalsSeason(seasonNumber: number): boolean {

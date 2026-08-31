@@ -35,7 +35,7 @@ import {
   isListedGround,
 } from '../src/game/shooting/grounds';
 import { clubKit } from '../src/game/career/data/clubKits';
-import { clubContinentalCup, internationalCampaignForSeason, internationalTournamentForSeason } from '../src/game/career/data/competitions';
+import { clubContinentalCup, internationalCalendarSeason, internationalCampaignForSeason, internationalTournamentForSeason } from '../src/game/career/data/competitions';
 import { cupFromLeaguePosition, continentalQualificationForNextSeason } from '../src/game/career/europeanQualification';
 import { fifaRank, knockoutRankCap, tournamentOpponents, worldCupKnockoutRankCap } from '../src/game/career/data/fifaRankings';
 import { displaySeasonLabel, displaySeasonNumber } from '../src/game/career/seasonDisplay';
@@ -64,7 +64,7 @@ import {
   trialContractWon,
 } from '../src/game/career/trial';
 import { nextYouthKnockoutRound, youthMaxGames } from '../src/game/career/youthTournament';
-import { offerTierFromStanding, resolveSeasonTransition, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, forcedLoanPending } from '../src/game/career/transfers';
+import { consecutiveLoanSpells, offerTierFromStanding, resolveSeasonTransition, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, forcedLoanPending } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
 import {
   evaluatePlayerOfTheYear,
@@ -491,16 +491,16 @@ console.log('season 3 Spain', internationalCampaignForSeason(3, 'UEFA'));
 console.log('season 4 Spain', internationalCampaignForSeason(4, 'UEFA'));
 console.log('season 2 Brazil', internationalCampaignForSeason(2, 'CONMEBOL'));
 console.log('season 4 Nigeria', internationalCampaignForSeason(4, 'CAF'));
-if (internationalTournamentForSeason(1, 'UEFA') !== null) {
-  console.error('season 1 must have no international tournament for the player');
+if (internationalTournamentForSeason(1, 'UEFA') !== 'world-cup') {
+  console.error('season 1 is World Cup qualifying — the player can be selected');
   process.exitCode = 1;
 }
-if (internationalCampaignForSeason(1, 'UEFA').phase !== 'qualifiers-hidden') {
-  console.error('season 1 is hidden World Cup qualifying — the player is not called up');
+if (internationalCampaignForSeason(1, 'UEFA').phase !== 'qualifiers' || internationalCampaignForSeason(1, 'UEFA').qualifierGames !== 5) {
+  console.error('season 1 is World Cup qualifying with five games the player can play');
   process.exitCode = 1;
 }
-if (internationalCampaignForSeason(2, 'UEFA').tournament !== 'world-cup') {
-  console.error('season 2 is the World Cup');
+if (internationalCampaignForSeason(2, 'UEFA').tournament !== 'world-cup' || internationalCampaignForSeason(2, 'UEFA').phase !== 'qualifiers-and-tournament') {
+  console.error('season 2 is World Cup qualifying plus the tournament');
   process.exitCode = 1;
 }
 if (internationalCampaignForSeason(3, 'UEFA').tournament !== 'nations-league' || internationalCampaignForSeason(3, 'UEFA').phase !== 'nations-league') {
@@ -511,8 +511,8 @@ if (internationalCampaignForSeason(4, 'UEFA').tournament !== 'euro' || internati
   console.error('season 4 is the Euros with no qualifying');
   process.exitCode = 1;
 }
-if (internationalCampaignForSeason(5, 'UEFA').phase !== 'qualifiers-hidden') {
-  console.error('season 5 is hidden World Cup qualifying');
+if (internationalCampaignForSeason(5, 'UEFA').phase !== 'qualifiers' || internationalCampaignForSeason(5, 'UEFA').qualifierGames !== 5) {
+  console.error('season 5 is World Cup qualifying again');
   process.exitCode = 1;
 }
 if (internationalCampaignForSeason(6, 'UEFA').tournament !== 'world-cup' || internationalCampaignForSeason(6, 'UEFA').qualifierGames !== 5) {
@@ -525,6 +525,18 @@ if (internationalCampaignForSeason(2, 'CONMEBOL').tournament !== 'world-cup') {
 }
 if (internationalCampaignForSeason(4, 'CAF').tournament !== 'afcon') {
   console.error('season 4 CAF must be AFCON, not the World Cup');
+  process.exitCode = 1;
+}
+if (internationalCalendarSeason(2, { careerStart: 'youth' }) !== 1) {
+  console.error('youth-path internal season 2 is first-team Season 1 (World Cup qualifying)');
+  process.exitCode = 1;
+}
+if (internationalCalendarSeason(1, { careerStart: 'favourite-first-team' }) !== 1) {
+  console.error('favourite first-team Season 1 is World Cup qualifying, not the tournament');
+  process.exitCode = 1;
+}
+if (internationalCalendarSeason(1, { leagueOnly: true, careerStart: 'youth' }) !== 0) {
+  console.error('the reserve year has no international campaign');
   process.exitCode = 1;
 }
 
@@ -816,6 +828,34 @@ if (madridClub) {
     console.error('season 4 must start at the tournament group stage with zero qualifiers');
     process.exitCode = 1;
   }
+
+  const youthFirst = hydrateSeason({
+    seasonNumber: 2,
+    club: madridClub,
+    careerGoalRatio: 0.8,
+    nationId: 'spain',
+    careerStart: 'youth',
+  });
+  const youthIntl = youthFirst.calendar.fixtures.filter((f) => f.kind === 'international');
+  console.log('youth first-team year 1', youthFirst.sim.internationalPhase, youthIntl.map((f) => f.internationalRound));
+  if (youthFirst.sim.internationalPhase !== 'qualifiers' || youthIntl.some((f) => f.internationalRound !== 'qualifier')) {
+    console.error('youth-path first-team Season 1 must be World Cup qualifying, not the tournament');
+    process.exitCode = 1;
+  }
+
+  const favFirst = hydrateSeason({
+    seasonNumber: 1,
+    club: madridClub,
+    careerGoalRatio: 0.8,
+    nationId: 'spain',
+    careerStart: 'favourite-first-team',
+  });
+  const favIntl = favFirst.calendar.fixtures.filter((f) => f.kind === 'international');
+  console.log('favourite first-team Season 1', favFirst.sim.internationalPhase, favIntl.map((f) => f.internationalRound));
+  if (favFirst.sim.internationalPhase !== 'qualifiers' || favIntl.some((f) => f.internationalRound !== 'qualifier')) {
+    console.error('favourite first-team Season 1 must not schedule the World Cup tournament');
+    process.exitCode = 1;
+  }
 }
 
 console.log('\n--- Goal ratio bars follow club strength (0.75 elite → 0.25 weakest) ---');
@@ -1017,10 +1057,21 @@ if (!picker.some((g) => g.league === 'Premier League' && g.clubs.some((c) => c.i
   console.error('the favourite-club picker must include playable league clubs');
   process.exitCode = 1;
 }
-const forced = forcedLoanPending({ clubId: 'real-madrid', nationality: 'spain', age: 16, seasonNumber: 2 });
+const forced = forcedLoanPending({ clubId: 'real-madrid', nationality: 'spain', age: 16, seasonNumber: 2, ratio: 0.1 });
 if (!forced || forced.kind !== 'loan' || forced.allowDecline || !forced.offers?.every((o) => o.move === 'loan')) {
   console.error('a missed favourite-club trial must force loan offers with no stay option');
   process.exitCode = 1;
+}
+if ((forced?.offers?.length ?? 0) !== 3 || forced?.offers?.some((o) => o.weeklyWage !== 1000 || o.contractYears !== 1)) {
+  console.error('forced loans after a missed trial keep the €1,000 reserve wage for one year');
+  process.exitCode = 1;
+}
+{
+  const home = (forced?.offers ?? []).filter((o) => getClub(o.clubId)?.country === 'Spain').length;
+  if (home < 2) {
+    console.error('forced loans should include two clubs from the player’s nationality when possible');
+    process.exitCode = 1;
+  }
 }
 
 console.log('\n--- Transfer offers: at least one home-nation club ---');
@@ -1429,6 +1480,68 @@ if (barca && hilal && lafc) {
     console.error('the first senior contract after the reserve year must be 2 years');
     process.exitCode = 1;
   }
+
+  const reserveMiss = resolveSeasonTransition({
+    season: {
+      ...dummySeason,
+      seasonNumber: 1,
+      clubId: 'real-madrid',
+      role: 'reserve',
+      goals: 2,
+      gamesPlayed: 38,
+      leagueGoals: 2,
+      age: 16,
+    },
+    role: 'reserve',
+    clubId: 'real-madrid',
+    parentClubId: 'real-madrid',
+    seasonsAtCurrentClub: 0,
+    age: 16,
+    careerGoals: 0,
+    careerGames: 0,
+    nationality: 'spain',
+    loansUsed: 0,
+    contractYearsRemaining: 2,
+  });
+  const missLoans = reserveMiss.pendingTransfer?.offers ?? [];
+  const missHome = missLoans.filter((o) => getClub(o.clubId)?.country === 'Spain').length;
+  console.log('reserve miss', reserveMiss.headline, 'loans', missLoans.length, 'home', missHome, missLoans.map((o) => o.clubId));
+  if (reserveMiss.pendingTransfer?.kind !== 'loan' || missLoans.length !== 3 || missLoans.some((o) => o.move !== 'loan')) {
+    console.error('missing the reserve ratio must offer three loans and no stay');
+    process.exitCode = 1;
+  }
+  if (missHome < 2) {
+    console.error('reserve-miss loans should include two clubs from the player’s nationality when possible');
+    process.exitCode = 1;
+  }
+  if (missLoans.some((o) => o.weeklyWage !== 1000 || o.contractYears !== 1)) {
+    console.error('the first loan keeps the €1,000 reserve wage for the second year of that contract');
+    process.exitCode = 1;
+  }
+  if (/career/i.test(`${reserveMiss.detail} ${reserveMiss.pendingTransfer?.detail ?? ''}`) && /2 loans|two loans/i.test(`${reserveMiss.detail} ${reserveMiss.pendingTransfer?.detail ?? ''}`)) {
+    console.error('do not tell the player that only two loans are allowed per career');
+    process.exitCode = 1;
+  }
+
+  const renewalDeal = resolveSeasonTransition({
+    season: { ...dummySeason, clubId: 'bayern', goals: 30, gamesPlayed: 38 },
+    role: 'first-team',
+    clubId: 'bayern',
+    parentClubId: 'bayern',
+    seasonsAtCurrentClub: 1,
+    age: 17,
+    careerGoals: 30,
+    careerGames: 38,
+    nationality: 'germany',
+    loansUsed: 0,
+    contractYearsRemaining: 2,
+  });
+  const ownRenewal = (renewalDeal.pendingTransfer?.offers ?? []).find((o) => o.clubId === 'bayern' && o.move === 'permanent');
+  console.log('renewal at 2 years left', ownRenewal, renewalDeal.headline);
+  if (!ownRenewal || ownRenewal.contractYears !== 5 || ownRenewal.weeklyWage <= 0) {
+    console.error('when two years remain the current club must offer a new 5-year deal (age 17)');
+    process.exitCode = 1;
+  }
   if (firstYears.length === 0 || firstYears.some((y) => y == null || y < 1)) {
     console.error('transfer offers must list a contract length beside the wage');
     process.exitCode = 1;
@@ -1665,8 +1778,23 @@ const loanCap = resolveSeasonTransition({
 const capLoans = (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan').length;
 console.log('second loan used up', loanCap.headline, 'further loans', capLoans);
 if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.move === 'permanent').length < 3) {
-  console.error('after two loan spells the player must transfer');
+  console.error('after two consecutive loans at a club the player must transfer');
   process.exitCode = 1;
+}
+{
+  const history = [
+    { ...loanSeason, role: 'loan' as const },
+    { ...loanSeason, role: 'loan' as const },
+    { ...dummySeason, role: 'first-team' as const, clubId: 'dortmund' },
+  ];
+  if (consecutiveLoanSpells(history) !== 0) {
+    console.error('a transfer must reset the consecutive-loan count so the player can loan twice at the new club');
+    process.exitCode = 1;
+  }
+  if (consecutiveLoanSpells(history.slice(0, 2)) !== 2) {
+    console.error('two trailing loan seasons must count as two consecutive loans');
+    process.exitCode = 1;
+  }
 }
 
 console.log('\n--- Next playable fixture skips eliminated finals and 0-chance weeks ---');

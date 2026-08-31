@@ -55,6 +55,8 @@ export const DEFAULT_CONTRACT_YEARS = 5;
 /** First professional contract (trial signing and first-team promotion). */
 export const FIRST_CONTRACT_YEARS = 2;
 export const RESERVE_CONTRACT_YEARS = FIRST_CONTRACT_YEARS;
+/** Academy / reserve wage — the same on every path. */
+export const RESERVE_WEEKLY_WAGE = 1000;
 /** Reserve-year and public-season-1 loans stay one year. */
 export const YOUTH_LOAN_YEARS = 1;
 /** Public Season 1 (internal season 2) stays at the youth value until week 21. */
@@ -143,7 +145,7 @@ export function consecutiveSeasonsBelow(seasons: SeasonRecord[], threshold: numb
   for (let i = seasons.length - 1; i >= 0; i--) {
     const season = seasons[i];
     if (!seasonCountsTowardForm(season) && season.ratioMet == null) continue;
-    if (!countsTowardCareerRecord(season.seasonNumber)) continue;
+    if (!countsTowardCareerRecord(season.seasonNumber, season.role)) continue;
     if (season.gamesPlayed <= 0) continue;
     if (season.goals / season.gamesPlayed < threshold) n += 1;
     else break;
@@ -185,7 +187,7 @@ export function playerMarketValue(params: MarketValueParams): number {
  * seasons and the ratio is league-weighted so MLS goals count less.
  */
 export function seasonCountsTowardForm(season: SeasonRecord): boolean {
-  if (!countsTowardCareerRecord(season.seasonNumber)) return false;
+  if (!countsTowardCareerRecord(season.seasonNumber, season.role)) return false;
   if (season.gamesPlayed <= 0) return false;
   if (season.ratioMet != null) return true;
   return season.gamesPlayed >= VALUE_FORM_MIN_GAMES;
@@ -226,7 +228,7 @@ export function leagueWeightedCareerRatio(
   let weightedGoals = 0;
   let games = 0;
   for (const season of seasons) {
-    if (!countsTowardCareerRecord(season.seasonNumber) || season.gamesPlayed <= 0) continue;
+    if (!countsTowardCareerRecord(season.seasonNumber, season.role) || season.gamesPlayed <= 0) continue;
     weightedGoals += season.goals * leagueValueWeight(seasonLeague(season));
     games += season.gamesPlayed;
   }
@@ -263,7 +265,7 @@ export function playerMarketValueFromSeasons(params: {
   let careerGames = params.careerGames;
   const seasons = params.seasons.filter((season) => {
     if (season.ratioMet != null || season.gamesPlayed >= VALUE_FORM_MIN_GAMES) return true;
-    if (!countsTowardCareerRecord(season.seasonNumber)) return true;
+    if (!countsTowardCareerRecord(season.seasonNumber, season.role)) return true;
     careerGoals -= season.goals;
     careerGames -= season.gamesPlayed;
     return false;
@@ -273,7 +275,7 @@ export function playerMarketValueFromSeasons(params: {
   let weighted = 0;
   let weight = 0;
   for (const season of seasons) {
-    if (!countsTowardCareerRecord(season.seasonNumber)) continue;
+    if (!countsTowardCareerRecord(season.seasonNumber, season.role)) continue;
     const club = getClub(season.clubId);
     if (!club || season.goals <= 0) continue;
     weighted += clubStrengthScale(club) * season.goals;

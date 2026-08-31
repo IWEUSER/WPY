@@ -40,6 +40,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const clubLeague = useCareerStore((s) => s.clubLeague);
   const seasonSponsorship = useCareerStore((s) => s.seasonSponsorship);
   const injuryGamesRemaining = useCareerStore((s) => s.injuryGamesRemaining);
+  const careerStart = useCareerStore((s) => s.careerStart);
   const advance = useCareerStore((s) => s.advance);
   const openCareerRecord = useCareerStore((s) => s.openCareerRecord);
 
@@ -88,8 +89,8 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
 
       <div className="rounded-2xl bg-white/5 p-4" style={{ borderLeft: `4px solid ${club.color}` }}>
         <p className="text-xs uppercase tracking-wide text-white/40">
-          {displaySeasonLabel(seasonNumber)} · {ROLE_LABEL[role]}
-          {seasonNumber >= 2 ? ` · Week ${week} of ${totalWeeks}` : ''}
+          {displaySeasonLabel(seasonNumber, { role, careerStart })} · {ROLE_LABEL[role]}
+          {` · Week ${week} of ${totalWeeks}`}
         </p>
         <h1 className="font-display text-2xl font-bold">{club.name}</h1>
         <p className="text-xs text-white/50">
@@ -98,7 +99,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         </p>
         {nation && <p className="mt-1 text-xs text-white/50">International: {nation.name}</p>}
         {parentClub && <p className="mt-1 text-xs text-white/40">On loan from {parentClub.name}</p>}
-        {seasonNumber >= 2 && (
+        {role !== 'reserve' && (
           <p className="mt-1 text-xs text-white/50">
             Market value {formatEuros(marketValue)}
             {` · Transfer fee ${transferFee <= 0 ? 'Free' : formatEuros(transferFee)}`}
@@ -147,7 +148,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         {injured ? describeInjury(injuryGamesRemaining) : describeAvailability(availability)}
       </div>
 
-      {seasonNumber >= 2 && (
+      {week > 0 && (
         <div className="mt-3 rounded-xl bg-white/5 px-4 py-3">
           <div className="flex items-baseline justify-between">
             <span className="text-xs uppercase tracking-wide text-white/40">Season week</span>
@@ -204,12 +205,11 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
           )}
         </div>
 
-        {nation && (
+        {nation && role !== 'reserve' && (
           <InternationalCard
             nationId={nationality!}
             nationName={nation.name}
             clubTier={club.tier}
-            seasonNumber={seasonNumber}
             careerRatio={seasonRatioForSelection(season)}
             sim={seasonSim}
             caps={nationalTeam?.caps ?? 0}
@@ -293,7 +293,6 @@ function InternationalCard({
   nationId,
   nationName,
   clubTier,
-  seasonNumber,
   careerRatio,
   sim,
   caps,
@@ -302,7 +301,6 @@ function InternationalCard({
   nationId: string;
   nationName: string;
   clubTier: 1 | 2 | 3 | 4 | 5;
-  seasonNumber: number;
   careerRatio: number;
   sim: SeasonSimState | null;
   caps: number;
@@ -315,7 +313,6 @@ function InternationalCard({
     ? INTERNATIONAL_TOURNAMENTS[sim.internationalTournament].name
     : null;
   const campaignLine = (() => {
-    if (seasonNumber < 2) return `${nationName} do not pick players during the reserve year.`;
     if (!clubOk) return `Call-ups are for players at a higher club level.`;
     if (!sim?.internationalSelected || !tournamentName) return null;
     if (sim.internationalStage === 'qualifying') {
@@ -337,9 +334,6 @@ function InternationalCard({
   })();
 
   const statusLine = (() => {
-    if (seasonNumber < 2) {
-      return 'International football begins in Season 1, once you are in the first team.';
-    }
     if (!clubOk) {
       return `Need a move to a higher-level club before ${nationName} will consider you.`;
     }
@@ -350,7 +344,7 @@ function InternationalCard({
   return (
     <div className="rounded-2xl bg-white/5 p-4">
       <p className="text-xs uppercase tracking-wide text-white/40">{nationName} call-up</p>
-      <p className={`mt-1 text-sm font-semibold ${inForm && seasonNumber >= 2 ? 'text-emerald-300' : 'text-white/80'}`}>
+      <p className={`mt-1 text-sm font-semibold ${inForm ? 'text-emerald-300' : 'text-white/80'}`}>
         {statusLine}
       </p>
       {campaignLine && <p className="mt-1 text-xs text-emerald-200/80">{campaignLine}</p>}

@@ -12,7 +12,7 @@ const FAVOURITE_OPTIONS: {
   {
     kind: 'favourite-trial',
     title: 'Trial',
-    detail: 'Three academy games with empty stands. Hit the first-team ratio to sign.',
+    detail: 'Three academy games with empty stands. Hit the reserve ratio to sign a 2-year deal.',
   },
   {
     kind: 'favourite-reserve',
@@ -30,6 +30,8 @@ export default function HomeScreen({ onPractice }: { onPractice: () => void }) {
   const clubId = useCareerStore((s) => s.clubId);
   const seasonNumber = useCareerStore((s) => s.seasonNumber);
   const opening = useCareerStore((s) => s.openingCampaign);
+  const role = useCareerStore((s) => s.role);
+  const careerStart = useCareerStore((s) => s.careerStart);
   const startYouthChampionships = useCareerStore((s) => s.startYouthChampionships);
   const startFavouritePath = useCareerStore((s) => s.startFavouritePath);
   const resetCareer = useCareerStore((s) => s.resetCareer);
@@ -59,7 +61,7 @@ export default function HomeScreen({ onPractice }: { onPractice: () => void }) {
                 ? opening.kind === 'youth-tournament'
                   ? opening.youthName
                   : `${club?.name ?? 'Club trial'}`
-                : `${displaySeasonLabel(seasonNumber)} · ${club?.name ?? ''}`}
+                : `${displaySeasonLabel(seasonNumber, { role, careerStart })} · ${club?.name ?? ''}`}
             </span>
           </button>
         )}

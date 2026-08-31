@@ -191,6 +191,8 @@ export interface BuildCalendarParams {
   league?: string;
   /** Override the club-tier default so last season's table can place the club. */
   continentalCup?: ContinentalCupId | null;
+  /** Campaign year for internations (first-team Season 1, 2, …). Defaults to seasonNumber. */
+  internationalSeasonNumber?: number;
 }
 
 const GROUP_STAGE_MATCHDAYS = 8;
@@ -349,7 +351,10 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
     });
   }
 
-  const campaign = internationalCampaignForSeason(seasonNumber, nationConfederation ?? confederation);
+  const campaign = internationalCampaignForSeason(
+    params.internationalSeasonNumber ?? seasonNumber,
+    nationConfederation ?? confederation,
+  );
   const intlLive = includeInternational && campaign.tournament && campaignSchedulesInternational(campaign.phase);
   if (intlLive && campaign.qualifierGames > 0) {
     const qualifierCount = campaign.qualifierGames || qualifierCountFor(campaign.tournament!);
