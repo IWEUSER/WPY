@@ -57,6 +57,8 @@ export interface StadiumAppearance {
   bowl?: boolean;
   /** How full the stands are. First-team games stay packed. */
   crowdFill?: CrowdFill;
+  /** Daylight sun. False in mid-season weeks 7–32 and at night. */
+  showSun?: boolean;
 }
 
 export type CrowdFill = 'full' | 'sparse' | 'empty';
@@ -699,7 +701,7 @@ export function drawStadium(
     wash.addColorStop(1, 'rgba(255,244,210,0)');
     ctx.fillStyle = wash;
     ctx.fillRect(0, 0, w, layout.bottom + h * 0.08);
-  } else {
+  } else if (stadium.showSun !== false) {
     const sun = ctx.createRadialGradient(w * 0.78, h * 0.05, 0, w * 0.78, h * 0.05, w * 0.42);
     sun.addColorStop(0, 'rgba(255,252,220,0.55)');
     sun.addColorStop(0.18, 'rgba(255,236,170,0.22)');

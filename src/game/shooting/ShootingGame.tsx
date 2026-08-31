@@ -19,6 +19,7 @@ import {
   pickPlayerSkin,
   worldToScreen,
   type KeeperPose,
+  type SkinPalette,
 } from './render';
 import { drawStadium, DEFAULT_STADIUM, defenderKitFromStadium, profileFromScale, type StadiumAppearance } from './stadium';
 import { groundForClub } from './grounds';
@@ -201,7 +202,7 @@ function readDevStadium(): StadiumAppearance | null {
   };
 }
 
-function nextChance(clubStrength?: number): ChanceSetup {
+function nextChance(clubStrength?: number, skinPalette: SkinPalette = 'any'): ChanceSetup {
   const forcePenalty = readDevPenalty();
   const forceDistance = readDevDistance();
   return rollChanceSetup({
@@ -209,6 +210,7 @@ function nextChance(clubStrength?: number): ChanceSetup {
     forcePenalty,
     forceDistanceM: forcePenalty ? undefined : (forceDistance ?? undefined),
     disableDefender: readDevDefenderOff(),
+    skinPalette,
   });
 }
 
@@ -252,8 +254,8 @@ function readDevPoseCell(): { col: number; row: number } | null {
   return { col, row };
 }
 
-function makeIdleKeeper(): KeeperPose {
-  return idleKeeperPose();
+function makeIdleKeeper(palette: SkinPalette = 'any'): KeeperPose {
+  return idleKeeperPose(Math.random, palette);
 }
 
 export interface ShootingGameProps {
@@ -277,6 +279,8 @@ export interface ShootingGameProps {
   clubStrength?: number;
   /** Stadium bowl, home/away crowd colours, and opposition defender kit. */
   stadium?: StadiumAppearance;
+  /** Skin palette for the opposition keeper and defender. */
+  opponentSkinPalette?: SkinPalette;
 }
 
 export default function ShootingGame({
@@ -290,6 +294,7 @@ export default function ShootingGame({
   onComplete,
   clubStrength,
   stadium,
+  opponentSkinPalette = 'any',
 }: ShootingGameProps = {}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -300,7 +305,7 @@ export default function ShootingGame({
   const [stats, setStats] = useState<ShotStats>({ shots: 0, goals: 0, streak: 0, bestStreak: 0 });
   const [muted, setMuted] = useState(false);
 
-  const [initialChance] = useState(() => nextChance(clubStrength));
+  const [initialChance] = useState(() => nextChance(clubStrength, opponentSkinPalette));
   const [ballHintX, setBallHintX] = useState(initialChance.ballStartXRatio);
   const [chanceKind, setChanceKind] = useState<ChanceKind>(initialChance.kind);
 
@@ -313,6 +318,8 @@ export default function ShootingGame({
   onCompleteRef.current = onComplete;
   const clubStrengthRef = useRef(clubStrength);
   clubStrengthRef.current = clubStrength;
+  const skinPaletteRef = useRef(opponentSkinPalette);
+  skinPaletteRef.current = opponentSkinPalette;
   const stadiumRef = useRef<StadiumAppearance>(stadium ?? readDevStadium() ?? DEFAULT_STADIUM);
   stadiumRef.current = stadium ?? readDevStadium() ?? DEFAULT_STADIUM;
 
@@ -326,7 +333,7 @@ export default function ShootingGame({
     ballRadius: 0,
     ballRotation: 0,
     ballTrail: [],
-    keeperPose: makeIdleKeeper(),
+    keeperPose: makeIdleKeeper(opponentSkinPalette),
     resultAtMs: 0,
     shakeMagnitude: 0,
     shakeUntilMs: 0,
@@ -375,7 +382,7 @@ export default function ShootingGame({
 
   const resetForNextShot = useCallback(() => {
     const { w, h } = sizeRef.current;
-    const chance = nextChance(clubStrengthRef.current);
+    const chance = nextChance(clubStrengthRef.current, skinPaletteRef.current);
     const view = createPitchView(w, h, chance.distanceM);
     const start = ballStartPixel(view, chance.ballStartXRatio);
     const anim = animRef.current;
@@ -392,7 +399,7 @@ export default function ShootingGame({
     anim.ballRadius = ballRadiusNear(view);
     anim.ballRotation = 0;
     anim.ballTrail = [];
-    anim.keeperPose = makeIdleKeeper();
+    anim.keeperPose = makeIdleKeeper(skinPaletteRef.current);
     anim.shakeMagnitude = 0;
     anim.shakeUntilMs = 0;
     setBallHintX(chance.ballStartXRatio);

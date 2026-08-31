@@ -913,7 +913,7 @@ function cupRoundLabel(stage: DomesticCupStage | undefined): string {
 
 export function fixtureTitle(
   fixture: CalendarFixture,
-  opts?: { playerNationName?: string },
+  opts?: { playerNationName?: string; tournament?: InternationalTournamentId | null; tournamentName?: string },
 ): string {
   const vs = fixture.opponentLabel ? ` vs ${fixture.opponentLabel}` : '';
   if (fixture.kind === 'rest') return 'International break';
@@ -948,11 +948,19 @@ export function fixtureTitle(
   }
   if (fixture.kind === 'continental-final') return `Final${vs}`;
   if (fixture.kind === 'international') {
+    const tournamentName =
+      opts?.tournamentName
+      ?? (opts?.tournament ? INTERNATIONAL_TOURNAMENTS[opts.tournament].name : undefined);
     const round = internationalRoundLabel(fixture.internationalRound);
+    const namedRound = tournamentName
+      ? fixture.internationalRound === 'qualifier'
+        ? `${tournamentName} qualifying`
+        : `${tournamentName} ${round}`
+      : round;
     if (opts?.playerNationName && fixture.opponentLabel) {
-      return `${round}: ${opts.playerNationName} vs ${fixture.opponentLabel}`;
+      return `${namedRound}: ${opts.playerNationName} vs ${fixture.opponentLabel}`;
     }
-    return `${round}${vs}`;
+    return `${namedRound}${vs}`;
   }
   return vs.trim();
 }

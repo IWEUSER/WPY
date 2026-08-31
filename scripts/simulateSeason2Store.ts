@@ -191,8 +191,8 @@ console.log(
   'loans',
   reserveHitLoans.length,
 );
-if (reserveHitLoans.length !== 0) {
-  console.error('hitting the reserve ratio must not show loan offers');
+if (reserveHitLoans.length !== 0 || afterReserveHit.pendingTransfer) {
+  console.error('hitting the reserve ratio must promote immediately with no transfer offers');
   process.exitCode = 1;
 }
 if (store.getState().phase === 'transfer-choice') {
@@ -704,6 +704,83 @@ store.getState().chooseNationality('brazil');
   if (s.seasonSim?.europeanStanding?.cup !== 'uecl') {
     console.error('Wolves must start in the Conference League, not the Champions League');
     process.exitCode = 1;
+  }
+}
+
+console.log('\n--- Renew vs continue without renewing ---');
+store.getState().resetCareer();
+store.getState().startFavouritePath('favourite-first-team');
+store.getState().chooseFavouriteClub('liverpool');
+store.getState().chooseNationality('england');
+{
+  const s = store.getState();
+  if (!s.currentSeason || !s.clubId) {
+    console.error('favourite first-team must have a live season before testing contract renewal');
+    process.exitCode = 1;
+  } else {
+    store.setState({
+      currentSeason: {
+        ...s.currentSeason,
+        goals: 30,
+        gamesPlayed: 38,
+        leagueGoals: 30,
+      },
+      seasonsAtCurrentClub: 1,
+      contractYearsRemaining: 2,
+    });
+    store.getState().continueAfterSeason();
+    const pending = store.getState().pendingTransfer;
+    const renewal = pending?.offers?.find((o) => o.renewal && o.clubId === s.clubId);
+    console.log(
+      'S1 end renewal',
+      Boolean(renewal),
+      'years',
+      renewal?.contractYears,
+      'stay',
+      pending?.stay?.contractYearsRemaining,
+    );
+    if (!renewal || !pending?.allowDecline || pending.stay?.contractYearsRemaining !== 1) {
+      console.error('after Season 1 there must be a new contract and a stay-without-renewing option');
+      process.exitCode = 1;
+    }
+    store.getState().resolveTransferChoice(null);
+    const stayed = store.getState();
+    console.log('S2 after stay-without-renew', stayed.contractYearsRemaining, stayed.phase, stayed.seasonNumber);
+    if (stayed.contractYearsRemaining !== 1 || stayed.phase !== 'hub') {
+      console.error('continuing without renewing must leave 1 year on the existing deal');
+      process.exitCode = 1;
+    }
+    if (!stayed.currentSeason) {
+      console.error('Season 2 must start after staying without a renewal');
+      process.exitCode = 1;
+    } else {
+      store.setState({
+        currentSeason: {
+          ...stayed.currentSeason,
+          goals: 30,
+          gamesPlayed: 38,
+          leagueGoals: 30,
+        },
+        seasonsAtCurrentClub: 2,
+        contractYearsRemaining: 1,
+      });
+      store.getState().continueAfterSeason();
+      const late = store.getState().pendingTransfer;
+      const lateRenewal = late?.offers?.find((o) => o.renewal && o.clubId === stayed.clubId);
+      console.log('S2 end renewal', Boolean(lateRenewal), lateRenewal?.contractYears);
+      if (!lateRenewal) {
+        console.error('the end of Season 2 must still offer a contract renewal');
+        process.exitCode = 1;
+      } else {
+        store.getState().resolveTransferChoice(stayed.clubId);
+        const renewed = store.getState();
+        console.log('S3 after renew', renewed.contractYearsRemaining);
+        if (renewed.contractYearsRemaining !== lateRenewal.contractYears) {
+          console.error('accepting the renewal must apply the new contract length');
+          process.exitCode = 1;
+        }
+      }
+    }
   }
 }
 

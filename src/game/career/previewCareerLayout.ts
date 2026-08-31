@@ -243,7 +243,8 @@ export function applyCareerLayoutPreview(): void {
   const isReservePreview = preview === 'reserve';
   const isMatchPreview = preview === 'match' || preview === 'match-away' || preview === 'match-local'
     || preview === 'match-night'
-    || preview === 'match-intl' || preview === 'match-ucl' || preview === 'match-intl-ko';
+    || preview === 'match-intl' || preview === 'match-ucl' || preview === 'match-intl-ko'
+    || preview === 'match-africa' || preview === 'match-overcast';
   let matchFixtureIndex = Math.max(0, calendar.fixtures.findIndex((f) => f.kind !== 'rest'));
   if (preview === 'match' || preview === 'match-away' || preview === 'match-local' || preview === 'match-night') {
     const wantHome = preview !== 'match-away';
@@ -303,6 +304,8 @@ export function applyCareerLayoutPreview(): void {
       fx.opponentLabel = 'Italy';
       sim.fixtureIndex = idx;
     }
+    calendar.internationalTournament = 'world-cup';
+    sim.internationalTournament = 'world-cup';
   } else if (preview === 'match-intl-ko') {
     const idx = calendar.fixtures.findIndex((f) => f.kind === 'international');
     if (idx >= 0) matchFixtureIndex = idx;
@@ -314,6 +317,34 @@ export function applyCareerLayoutPreview(): void {
       fx.opponentLabel = 'France';
       fx.isHome = true;
       fx.playerChances = 2;
+    }
+  } else if (preview === 'match-africa') {
+    const idx = calendar.fixtures.findIndex((f) => f.kind === 'international');
+    if (idx >= 0) matchFixtureIndex = idx;
+    const fx = calendar.fixtures[matchFixtureIndex];
+    if (fx) {
+      fx.kind = 'international';
+      fx.internationalRound = 'group';
+      fx.week = 4;
+      fx.opponentId = 'senegal';
+      fx.opponentLabel = 'Senegal';
+      fx.isHome = true;
+      fx.playerChances = 2;
+    }
+  } else if (preview === 'match-overcast') {
+    const idx = calendar.fixtures.findIndex((f) => f.kind === 'league' && f.isHome);
+    if (idx >= 0) matchFixtureIndex = idx;
+    const fx = calendar.fixtures[matchFixtureIndex];
+    if (fx) {
+      fx.kind = 'league';
+      fx.opponentId = 'getafe';
+      fx.opponentLabel = 'Getafe';
+      fx.isHome = true;
+      fx.playerChances = 2;
+      for (let week = 7; week <= 32; week++) {
+        fx.week = week;
+        if (!fixtureIsNight(fx)) break;
+      }
     }
   }
 
@@ -377,8 +408,39 @@ export function applyCareerLayoutPreview(): void {
         contractYearsRemaining: 1,
       })
     : null;
+  const renewalPreview = preview === 'renew'
+    ? resolveSeasonTransition({
+        season: season({
+          seasonNumber: 2,
+          clubId: 'real-madrid',
+          role: 'first-team',
+          matches: [],
+          goals: 30,
+          gamesPlayed: 38,
+          ratioMet: true,
+          age: 17,
+          leagueGoals: 24,
+          trophies: [],
+          topGoalscorer: false,
+          playerOfTheYear: false,
+          wonWpy: false,
+        }),
+        role: 'first-team',
+        clubId: 'real-madrid',
+        parentClubId: 'real-madrid',
+        seasonsAtCurrentClub: 1,
+        age: 17,
+        careerGoals: 30,
+        careerGames: 38,
+        nationality: 'spain',
+        loansUsed: 0,
+        contractYearsRemaining: 2,
+      })
+    : null;
   const pendingTransfer: PendingTransfer | null =
-    preview === 'reserve-promo'
+    preview === 'renew'
+      ? renewalPreview?.pendingTransfer ?? null
+      : preview === 'reserve-promo'
       ? reservePromo?.pendingTransfer ?? null
       : preview === 'expired'
       ? {
@@ -442,8 +504,10 @@ export function applyCareerLayoutPreview(): void {
           ? 'match'
         : preview === 'record'
         ? 'career'
-        :       preview === 'transfer' || preview === 'expired' || preview === 'reserve-promo'
+        :       preview === 'transfer' || preview === 'expired' || preview === 'renew'
           ? 'transfer-choice'
+          : preview === 'reserve-promo'
+            ? 'season-summary'
           : preview === 'club-offer'
             ? 'club-offer'
           : preview === 'result'

@@ -31,12 +31,13 @@ export default function MatchScreen() {
   const fixture = calendar && liveMatch ? calendar.fixtures[liveMatch.fixtureIndex] : undefined;
   const simulated = Boolean(calendar && liveMatch && fixture);
 
+  const tournament = seasonSim?.internationalTournament ?? calendar?.internationalTournament;
   const title = simulated && fixture
     ? fixture.kind === 'international'
       ? opening
-        ? `${opening.youthName} — ${fixtureTitle(fixture, { playerNationName: nation?.name })}`
-        : fixtureTitle(fixture, { playerNationName: nation?.name })
-      : `${club?.name ?? 'Match'} — ${fixtureTitle(fixture)}`
+        ? `${opening.youthName} — ${fixtureTitle(fixture, { playerNationName: nation?.name, tournament })}`
+        : fixtureTitle(fixture, { playerNationName: nation?.name, tournament })
+      : `${club?.name ?? 'Match'} — ${fixtureTitle(fixture, { tournament })}`
     : club ? `${club.name} — Matchday ${matchNumber}` : `Matchday ${matchNumber}`;
 
   const competitionName = opening
@@ -75,6 +76,9 @@ export default function MatchScreen() {
     openingKind: opening?.kind,
     careerStart,
   });
+  const opponentNation = fixture?.kind === 'international' && fixture.opponentId
+    ? getNation(fixture.opponentId)
+    : undefined;
 
   return (
     <ShootingGame
@@ -86,6 +90,7 @@ export default function MatchScreen() {
       maxShots={chances}
       clubStrength={club?.strength}
       stadium={stadium}
+      opponentSkinPalette={opponentNation?.confederation === 'CAF' ? 'africa' : 'any'}
       onShotResolved={(result) => {
         lastResultRef.current = result;
         if (simulated) recordMatchChance(result);

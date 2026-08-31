@@ -11,7 +11,6 @@ import {
   formAdjustedRatio,
   loanContractYearsRemaining,
   newContractYears,
-  nextContractYearsRemaining,
   playerMarketValueFromSeasons,
   RESERVE_WEEKLY_WAGE,
   seasonCountsTowardForm,
@@ -203,6 +202,8 @@ export interface ClubOfferTerms {
   fee: number;
   weeklyWage: number;
   contractYears: number;
+  /** Current-club re-sign. Stay without this offer ticks the existing deal down one year. */
+  renewal?: boolean;
 }
 
 export interface PendingTransfer {
@@ -459,7 +460,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       parentClubId,
       role: role === 'reserve' ? 'first-team' : 'first-team',
       seasonsAtCurrentClub: seasonsAtCurrentClub + 1,
-      contractYearsRemaining: nextContractYearsRemaining(yearsLeft, age),
+      contractYearsRemaining: Math.max(0, yearsLeft - 1),
       clubLeague: nextLeague,
       ...extra,
     };
@@ -475,21 +476,11 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
   if (role === 'reserve') {
     const threshold = club.reserveGoalRatio;
     if (ratio >= threshold) {
-      return parallelTransfers(
-        'Promoted to the First Team!',
-        `You hit ${threshold.toFixed(2)} goals/game in the reserves - ${club.name} want you in the first-team squad now.`,
-        stayOn({ role: 'first-team', contractYearsRemaining: FIRST_CONTRACT_YEARS }),
-        value,
-        fee,
-        nationality,
-        [club.id],
-        club.tier,
-        false,
-        age,
-        false,
-        loanYears,
-        FIRST_CONTRACT_YEARS,
-      );
+      return {
+        headline: 'Promoted to the First Team!',
+        detail: `You hit ${threshold.toFixed(2)} goals/game in the reserves - ${club.name} want you in the first-team squad now.`,
+        immediate: stayOn({ role: 'first-team', contractYearsRemaining: FIRST_CONTRACT_YEARS }),
+      };
     }
     const options = pickLoanClubsForMiss(ratio, nationality, LOAN_OFFER_COUNT, [club.id], club.id);
     return {
@@ -722,7 +713,8 @@ function attachCurrentClubRenewal(
 ): SeasonTransitionResult {
   if (params.role === 'reserve' || params.role === 'loan') return result;
   if (!ratioMet) return result;
-  if ((params.contractYearsRemaining ?? 0) !== 2) return result;
+  const yearsLeft = params.contractYearsRemaining ?? 0;
+  if (yearsLeft !== 1 && yearsLeft !== 2) return result;
   const years = newContractYears(params.age);
   const wage = weeklyWageForClub(club, value, params.clubLeague);
   const renewal = {
@@ -731,6 +723,7 @@ function attachCurrentClubRenewal(
     fee: 0,
     weeklyWage: wage,
     contractYears: years,
+    renewal: true,
   };
   if (result.pendingTransfer) {
     const offers = result.pendingTransfer.offers ?? [];

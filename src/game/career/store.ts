@@ -13,7 +13,6 @@ import {
   FIRST_CONTRACT_YEARS,
   loanContractYearsRemaining,
   newContractYears,
-  nextContractYearsRemaining,
   playerMarketValue,
   playerMarketValueFromSeasons,
   RESERVE_CONTRACT_YEARS,
@@ -1361,7 +1360,7 @@ export const useCareerStore = create<CareerStore>()(
               parentClubId: state.parentClubId,
               role: state.role,
               seasonsAtCurrentClub: state.seasonsAtCurrentClub + 1,
-              contractYearsRemaining: nextContractYearsRemaining(state.contractYearsRemaining, state.age),
+              contractYearsRemaining: Math.max(0, state.contractYearsRemaining - 1),
               clubLeague: state.clubLeague ?? undefined,
             };
             const nextClub = getClub(stay.clubId);

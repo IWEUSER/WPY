@@ -84,8 +84,11 @@ export default function OpeningStatusScreen() {
         {next && (
           <span className="mt-1 block text-xs font-medium text-black/70">
             {youth
-              ? fixtureTitle(next, { playerNationName: nation?.name })
-              : `${club?.name ?? 'Trial'} — ${fixtureTitle(next)}`}
+              ? fixtureTitle(next, {
+                playerNationName: nation?.name,
+                tournament: opening.calendar.internationalTournament,
+              })
+              : `${club?.name ?? 'Trial'} — ${fixtureTitle(next, { tournament: opening.calendar.internationalTournament })}`}
             {next.kind !== 'rest' ? ` · ${fixtureVenueLabel(next)}` : ''}
           </span>
         )}

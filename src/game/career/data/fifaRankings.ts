@@ -318,6 +318,44 @@ export function pickMixedRankOpponents(
   return picks;
 }
 
+/** Prefer sides within a few FIFA places of the player — used for Nations League groups. */
+export function pickCloseRankOpponents(
+  nationId: string,
+  count: number,
+  pool: { id: string; name: string; confederation: Confederation }[],
+  options?: OpponentPickOptions,
+): { id: string; name: string; confederation: Confederation }[] {
+  const exclude = new Set(options?.extraExcludeIds ?? []);
+  const filtered = pool.filter((n) => n.id !== nationId && !exclude.has(n.id));
+  if (filtered.length === 0 || count <= 0) return [];
+  const self = fifaRank(nationId);
+  const ranked = [...filtered].sort((a, b) => fifaRank(a.id) - fifaRank(b.id));
+  const picked: { id: string; name: string; confederation: Confederation }[] = [];
+  const take = (maxGap: number) => {
+    if (picked.length >= count) return;
+    const close = ranked.filter(
+      (n) => !picked.some((p) => p.id === n.id) && Math.abs(fifaRank(n.id) - self) <= maxGap,
+    );
+    for (const n of close) {
+      if (picked.length >= count) break;
+      picked.push(n);
+    }
+  };
+  take(12);
+  take(22);
+  take(35);
+  if (picked.length < count) {
+    const byDistance = [...ranked].sort(
+      (a, b) => Math.abs(fifaRank(a.id) - self) - Math.abs(fifaRank(b.id) - self),
+    );
+    for (const n of byDistance) {
+      if (picked.length >= count) break;
+      if (!picked.some((p) => p.id === n.id)) picked.push(n);
+    }
+  }
+  return picked.slice(0, count);
+}
+
 export function qualifierOpponents(
   nationId: string,
   tournament: InternationalTournamentId,
@@ -343,10 +381,19 @@ export function qualifierOpponents(
 const GROUP_REUSE_KNOCKOUT = new Set<InternationalKnockoutRound>(['semi-final', 'final']);
 
 /**
- * Knockout rank caps for every international tournament: last 16 is FIFA top 16;
- * quarter-final, semi-final and final are top 8.
+ * World Cup knockouts: last 32, last 16 and quarter-final are FIFA top 32;
+ * semi-final and final are top 8. Other tournaments keep last 16 as top 16
+ * and quarter-final onward as top 8.
  */
-export function knockoutRankCap(round: InternationalKnockoutRound): number | undefined {
+export function knockoutRankCap(
+  round: InternationalKnockoutRound,
+  tournament?: InternationalTournamentId,
+): number | undefined {
+  if (tournament === 'world-cup') {
+    if (round === 'round-of-32' || round === 'round-of-16' || round === 'quarter-final') return 32;
+    if (round === 'semi-final' || round === 'final') return 8;
+    return undefined;
+  }
   if (round === 'round-of-16') return 16;
   if (round === 'quarter-final' || round === 'semi-final' || round === 'final') return 8;
   return undefined;
@@ -354,7 +401,7 @@ export function knockoutRankCap(round: InternationalKnockoutRound): number | und
 
 /** @deprecated Use knockoutRankCap — kept so older tests still compile. */
 export function worldCupKnockoutRankCap(round: InternationalKnockoutRound): number | undefined {
-  return knockoutRankCap(round);
+  return knockoutRankCap(round, 'world-cup');
 }
 
 function drawKnockoutOpponents(
@@ -388,9 +435,9 @@ function drawKnockoutOpponents(
   return picks;
 }
 
-/** Group then knockout opponents. World Cup and Nations League mix confederations;
- * continental stays in-region. Group sides cannot reappear until the semi-final.
- * Last 16 is FIFA top 16; quarter-final, semi-final and final are top 8. */
+/** Group then knockout opponents. World Cup mixes confederations. Nations League
+ * stays with closely ranked European (or home-confederation) sides. Continental
+ * stays in-region. Group sides cannot reappear until the semi-final. */
 export function tournamentOpponents(
   nationId: string,
   tournament: InternationalTournamentId,
@@ -404,9 +451,18 @@ export function tournamentOpponents(
   const regional = nationsInConfederation(nation.confederation).filter((n) => n.id !== nationId);
   const knockoutOpts = {
     rng,
-    rankCapForRound: knockoutRankCap,
+    rankCapForRound: (round: InternationalKnockoutRound) => knockoutRankCap(round, tournament),
   };
-  if (tournament === 'world-cup' || tournament === 'nations-league') {
+  if (tournament === 'nations-league') {
+    const pool =
+      nation.confederation === 'UEFA'
+        ? nationsInConfederation('UEFA').filter((n) => n.id !== nationId)
+        : regional;
+    const group = pickCloseRankOpponents(nationId, groupCount, pool, { rng });
+    const groupIds = new Set(group.map((n) => n.id));
+    return [...group, ...drawKnockoutOpponents(nationId, knockoutRounds, pool, groupIds, knockoutOpts)];
+  }
+  if (tournament === 'world-cup') {
     const confeds: Confederation[] = ['UEFA', 'CONMEBOL', 'CONCACAF', 'CAF', 'AFC', 'OFC'];
     const byConfed = confeds
       .filter((c) => c !== nation.confederation)

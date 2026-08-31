@@ -48,7 +48,7 @@ const PRIMARY: Record<string, string> = {
   'northern-ireland': '#00A651',
   norway: '#BA0C2F',
   poland: '#DC143C',
-  portugal: '#006600',
+  portugal: '#FF0000',
   'republic-of-ireland': '#169B62',
   romania: '#002B7F',
   russia: '#D52B1E',
@@ -110,7 +110,7 @@ const SECONDARY: Record<string, string> = {
   brazil: '#009C3B',
   argentina: '#FFFFFF',
   france: '#ED2939',
-  portugal: '#FF0000',
+  portugal: '#006600',
   netherlands: '#21468B',
   sweden: '#006AA7',
   ukraine: '#FFD700',
@@ -160,7 +160,7 @@ function hashId(id: string): number {
 }
 
 const PATTERN: Record<string, ShirtPattern> = {
-  argentina: 'hoops',
+  argentina: 'vertical',
   uruguay: 'hoops',
   croatia: 'vertical',
 };
@@ -169,10 +169,11 @@ const SHORTS: Record<string, string> = {
   england: '#00147A',
   germany: '#000000',
   spain: '#0033A0',
-  brazil: '#009C3B',
+  brazil: '#002776',
   italy: '#FFFFFF',
   france: '#002395',
-  argentina: '#FFFFFF',
+  argentina: '#000000',
+  portugal: '#006600',
 };
 
 const SOCKS: Record<string, string> = {
@@ -184,7 +185,7 @@ const SOCKS: Record<string, string> = {
   france: '#ED2939',
   argentina: '#FFFFFF',
   netherlands: '#F36C21',
-  portugal: '#006600',
+  portugal: '#FF0000',
   belgium: '#C8102E',
   croatia: '#FF0000',
   scotland: '#006EB6',

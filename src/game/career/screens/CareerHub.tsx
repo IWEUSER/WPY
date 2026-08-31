@@ -133,7 +133,10 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         {available ? (nextFixture ? 'Play Next Match' : 'End of season') : 'Continue'}
         {nextFixture ? (
           <span className="mt-1 block text-xs font-medium text-black/70">
-            {fixtureTitle(nextFixture, { playerNationName: nation?.name })}
+            {fixtureTitle(nextFixture, {
+              playerNationName: nation?.name,
+              tournament: seasonCalendar?.internationalTournament ?? seasonSim?.internationalTournament,
+            })}
             {nextFixture.kind !== 'rest'
               ? ` · ${fixtureVenueLabel(nextFixture)}`
               : ''}

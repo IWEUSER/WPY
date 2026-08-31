@@ -94,6 +94,7 @@ export function isClubFinalNeutral(fixture: CalendarFixture): boolean {
   return (
     fixture.kind === 'continental-final'
     || (fixture.kind === 'domestic-cup' && fixture.domesticCupStage === 'final')
+    || (fixture.kind === 'domestic-cup' && fixture.domesticCup === 'fa-cup' && fixture.domesticCupStage === 'semi-final')
     || (fixture.kind === 'super-cup' && (fixture.superCupStage === 'final' || !fixture.superCupStage))
     || (fixture.kind === 'leagues-cup' && fixture.leaguesCupStage === 'final')
     || (fixture.kind === 'playoff' && fixture.playoffRound === 'mls-cup')
@@ -161,10 +162,24 @@ export function fixtureIsNight(fixture: CalendarFixture): boolean {
       || round === 'third-place'
       || round === 'final';
   }
+  if (fixture.kind === 'domestic-cup') {
+    return (
+      fixture.domesticCup === 'copa-del-rey'
+      || fixture.domesticCup === 'coppa-italia'
+      || fixture.domesticCup === 'dfb-pokal'
+      || fixture.domesticCup === 'coupe-de-france'
+    );
+  }
   if (fixture.kind === 'league') {
     return fixtureKickoffSeed(fixture) % 5 === 0;
   }
   return false;
+}
+
+/** Day games: sun in weeks 1–6 and from week 33. Mid-season daylight is overcast. */
+export function fixtureShowsSun(fixture: CalendarFixture): boolean {
+  if (fixtureIsNight(fixture)) return false;
+  return fixture.week <= 6 || fixture.week >= 33;
 }
 
 export interface BuildCalendarParams {
@@ -270,6 +285,7 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
         domesticCup,
         domesticCupStage: round.stage,
         isDecisive: false,
+        neutral: domesticCup === 'fa-cup' && round.stage === 'semi-final',
       });
     }
   }

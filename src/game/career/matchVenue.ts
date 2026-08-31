@@ -1,4 +1,4 @@
-import { fixtureCrowdAwayShare, fixtureIsHome, fixtureIsNight, isClubFinalNeutral, isInternationalTournamentFixture, type CalendarFixture } from './calendar';
+import { fixtureCrowdAwayShare, fixtureIsHome, fixtureIsNight, fixtureShowsSun, isClubFinalNeutral, isInternationalTournamentFixture, type CalendarFixture } from './calendar';
 import { getClub, type Club } from './data/clubs';
 import { clubKit } from './data/clubKits';
 import { nationKitOrFallback } from './data/nationColours';
@@ -74,6 +74,7 @@ export function resolveMatchStadium(args: {
   return appearanceFromGround(ground, {
     isHome: neutral ? true : isHome,
     night: fixture ? fixtureIsNight(fixture) : false,
+    showSun: fixture ? fixtureShowsSun(fixture) : true,
     homeColor: home.primary,
     homeSecondary: home.secondary,
     awayColor: away.primary,
@@ -94,6 +95,7 @@ export function trialStadium(nation?: Nation): StadiumAppearance {
   return {
     isHome: true,
     night: false,
+    showSun: true,
     homeColor: home.primary,
     homeSecondary: home.secondary,
     awayColor: GENERIC_OPPONENT.primary,
@@ -110,6 +112,7 @@ export function reserveStadium(club?: Club): StadiumAppearance {
   return appearanceFromGround(UNLISTED_GROUND, {
     isHome: true,
     night: false,
+    showSun: true,
     homeColor: home.primary,
     homeSecondary: home.secondary,
     awayColor: GENERIC_OPPONENT.primary,

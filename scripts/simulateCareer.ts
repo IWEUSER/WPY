@@ -4,7 +4,7 @@
  *
  * Run with: npm run simulate:career
  */
-import { buildSeasonCalendar, fixtureCrowdAwayShare, fixtureIsHome, fixtureIsNeutral, fixtureIsNight, fixtureVenueLabel, INTERNATIONAL_BREAK_WEEKS, isFinalFixture, nationsLeagueKnockoutWeeks, tournamentWeekCount } from '../src/game/career/calendar';
+import { buildSeasonCalendar, fixtureCrowdAwayShare, fixtureIsHome, fixtureIsNeutral, fixtureIsNight, fixtureShowsSun, fixtureVenueLabel, INTERNATIONAL_BREAK_WEEKS, isClubFinalNeutral, isFinalFixture, nationsLeagueKnockoutWeeks, tournamentWeekCount } from '../src/game/career/calendar';
 import { INJURY_CHANCE_PER_MATCH, injuryDuration } from '../src/game/career/injury';
 import {
   chancesForKnockoutTie,
@@ -17,7 +17,7 @@ import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { nationKit } from '../src/game/career/data/nationColours';
 import { reserveStadium, resolveCareerStadium, resolveMatchStadium, trialStadium } from '../src/game/career/matchVenue';
 import { crowdSwatch, kitFromColor, kitFromScheme, luminance } from '../src/game/shooting/kitPalette';
-import { createPitchView, idleKeeperPose, MAX_SHOT_DISTANCE_M, MIN_SHOT_DISTANCE_M, PLAYER_SKIN_TONES, pickPlayerSkin, SHORTS_HALF_H, THIGH_SHARE } from '../src/game/shooting/render';
+import { AFRICA_SKIN_TONES, createPitchView, idleKeeperPose, MAX_SHOT_DISTANCE_M, MIN_SHOT_DISTANCE_M, PLAYER_SKIN_TONES, pickPlayerSkin, SHORTS_HALF_H, THIGH_SHARE } from '../src/game/shooting/render';
 import { standBottomY, crowdCellSize, stadiumLayout, stadiumRoofBand } from '../src/game/shooting/stadium';
 import {
   CLUB_GROUNDS,
@@ -37,13 +37,13 @@ import {
 import { clubKit } from '../src/game/career/data/clubKits';
 import { clubContinentalCup, internationalCalendarSeason, internationalCampaignForSeason, internationalTournamentForSeason } from '../src/game/career/data/competitions';
 import { cupFromLeaguePosition, continentalQualificationForNextSeason } from '../src/game/career/europeanQualification';
-import { fifaRank, knockoutRankCap, tournamentOpponents, worldCupKnockoutRankCap } from '../src/game/career/data/fifaRankings';
+import { fifaRank, knockoutRankCap, nationsInConfederation, tournamentOpponents, worldCupKnockoutRankCap } from '../src/game/career/data/fifaRankings';
 import { countsTowardCareerRecord, displaySeasonLabel, displaySeasonNumber } from '../src/game/career/seasonDisplay';
 import { callUpRatio, isSelectedForNationalTeam, markInjuryMissedFinals, selectionRatioForNation } from '../src/game/career/international';
 import { missedChanceWinFactor, simulateClubMatch, simulateLeagueSeason } from '../src/game/career/matchEngine';
 import { aggregateContinental, aggregateDomesticSplit, recordClubAppearanceStats, seasonDomesticSplit } from '../src/game/career/seasonStats';
 import { leaguePhaseOpponents } from '../src/game/career/continentalDraw';
-import { canWinLeague, hydrateSeason, leagueFixtureIsHome, nextPlayableFixture, pickTitleRival, remainingPlayableCount, resolveFixture, shouldSkipFixture } from '../src/game/career/seasonSim';
+import { canWinLeague, fixtureTitle, hydrateSeason, leagueFixtureIsHome, nextPlayableFixture, pickTitleRival, remainingPlayableCount, resolveFixture, shouldSkipFixture } from '../src/game/career/seasonSim';
 import {
   applyTrialMatch,
   applyYouthMatch,
@@ -830,6 +830,18 @@ if (madridClub) {
     console.error('Nations League has no qualifying matches');
     process.exitCode = 1;
   }
+  const spainRank = fifaRank('spain');
+  const nlGroupOpp = s3Groups.filter((f) => f.opponentId);
+  const nlNonUefa = nlGroupOpp.filter((f) => getNation(f.opponentId!)?.confederation !== 'UEFA');
+  const nlFar = nlGroupOpp.filter((f) => Math.abs(fifaRank(f.opponentId!) - spainRank) > 35);
+  console.log(
+    'NL group ranks',
+    nlGroupOpp.map((f) => `${f.opponentLabel} #${fifaRank(f.opponentId!)}`),
+  );
+  if (nlNonUefa.length > 0 || nlFar.length > 0) {
+    console.error('Nations League group games must be closely ranked European countries only');
+    process.exitCode = 1;
+  }
 
   const s4 = hydrateSeason({
     seasonNumber: 4,
@@ -1564,31 +1576,25 @@ if (barca && hilal && lafc) {
   console.log(
     'reserve ratio met',
     reservePromo.headline,
+    'immediate',
+    reservePromo.immediate?.role,
+    reservePromo.immediate?.contractYearsRemaining,
+    'pending',
+    Boolean(reservePromo.pendingTransfer),
     'loans',
     reservePromoLoans.length,
     'transfers',
     reservePromoPerm.length,
-    'stay',
-    reservePromo.pendingTransfer?.stay?.role,
   );
-  if (reservePromoLoans.length !== 0) {
-    console.error('hitting the reserve ratio must not table loan offers');
+  if (reservePromo.pendingTransfer || reservePromoLoans.length !== 0 || reservePromoPerm.length !== 0) {
+    console.error('hitting the reserve ratio must promote immediately with no transfer offers');
     process.exitCode = 1;
   }
-  if ((reservePromo.pendingTransfer?.stay?.role ?? reservePromo.immediate?.role) !== 'first-team') {
+  if (reservePromo.immediate?.role !== 'first-team') {
     console.error('hitting the reserve ratio must promote to the first team');
     process.exitCode = 1;
   }
-  if (!reservePromo.pendingTransfer?.allowDecline || reservePromoPerm.length === 0) {
-    console.error('a reserve promotion can still offer permanent transfers and a stay');
-    process.exitCode = 1;
-  }
-  const promoYears = [
-    reservePromo.pendingTransfer?.stay?.contractYearsRemaining,
-    ...reservePromoPerm.map((o) => o.contractYears),
-  ];
-  console.log('reserve promo contract years', promoYears);
-  if (promoYears.some((y) => y !== 2)) {
+  if (reservePromo.immediate?.contractYearsRemaining !== 2) {
     console.error('the first senior contract after the reserve year must be 2 years');
     process.exitCode = 1;
   }
@@ -1650,8 +1656,35 @@ if (barca && hilal && lafc) {
   });
   const ownRenewal = (renewalDeal.pendingTransfer?.offers ?? []).find((o) => o.clubId === 'bayern' && o.move === 'permanent');
   console.log('renewal at 2 years left', ownRenewal, renewalDeal.headline);
-  if (!ownRenewal || ownRenewal.contractYears !== 5 || ownRenewal.weeklyWage <= 0) {
+  if (!ownRenewal || ownRenewal.contractYears !== 5 || ownRenewal.weeklyWage <= 0 || !ownRenewal.renewal) {
     console.error('when two years remain the current club must offer a new 5-year deal (age 17)');
+    process.exitCode = 1;
+  }
+  if (renewalDeal.pendingTransfer?.stay?.contractYearsRemaining !== 1) {
+    console.error('staying without renewing must tick a 2-year deal down to 1 year left');
+    process.exitCode = 1;
+  }
+  const lateRenewal = resolveSeasonTransition({
+    season: { ...dummySeason, clubId: 'bayern', goals: 30, gamesPlayed: 38 },
+    role: 'first-team',
+    clubId: 'bayern',
+    parentClubId: 'bayern',
+    seasonsAtCurrentClub: 2,
+    age: 18,
+    careerGoals: 60,
+    careerGames: 76,
+    nationality: 'germany',
+    loansUsed: 0,
+    contractYearsRemaining: 1,
+  });
+  const lateOwn = (lateRenewal.pendingTransfer?.offers ?? []).find((o) => o.clubId === 'bayern' && o.renewal);
+  console.log('renewal at 1 year left', lateOwn?.contractYears, 'stay', lateRenewal.pendingTransfer?.stay?.contractYearsRemaining);
+  if (!lateOwn || lateOwn.contractYears !== 5) {
+    console.error('when one year remains the current club must still offer a new contract');
+    process.exitCode = 1;
+  }
+  if (lateRenewal.pendingTransfer?.stay?.contractYearsRemaining !== 0) {
+    console.error('declining a last-year renewal must leave 0 years on the existing deal');
     process.exitCode = 1;
   }
   if (firstYears.length === 0 || firstYears.some((y) => y == null || y < 1)) {
@@ -2949,14 +2982,20 @@ console.log('\n--- Five unique qualifying opponents, not a repeating draw ---');
 console.log('\n--- International knockout rank caps ---');
 {
   if (
-    knockoutRankCap('round-of-16') !== 16
+    knockoutRankCap('round-of-32', 'world-cup') !== 32
+    || knockoutRankCap('round-of-16', 'world-cup') !== 32
+    || knockoutRankCap('quarter-final', 'world-cup') !== 32
+    || knockoutRankCap('semi-final', 'world-cup') !== 8
+    || knockoutRankCap('final', 'world-cup') !== 8
+    || worldCupKnockoutRankCap('final') !== 8
+    || knockoutRankCap('round-of-16') !== 16
     || knockoutRankCap('quarter-final') !== 8
-    || worldCupKnockoutRankCap('semi-final') !== 8
     || knockoutRankCap('final') !== 8
   ) {
-    console.error('Last 16 must be top 16; quarter-final, semi-final and final must be top 8');
+    console.error('World Cup knockouts are top 32 until the last four; other tournaments stay top 16 / top 8');
     process.exitCode = 1;
   }
+  let r32Over = 0;
   let r16Over = 0;
   let qfOver = 0;
   let sfOver = 0;
@@ -2965,12 +3004,14 @@ console.log('\n--- International knockout rank caps ---');
   let euroQfOver = 0;
   for (let i = 0; i < 30; i++) {
     const drawn = tournamentOpponents('spain', 'world-cup');
+    const r32 = drawn[3];
     const r16 = drawn[4];
     const qf = drawn[5];
     const sf = drawn[6];
     const fin = drawn[7];
-    if (!r16 || fifaRank(r16.id) > 16) r16Over += 1;
-    if (!qf || fifaRank(qf.id) > 8) qfOver += 1;
+    if (!r32 || fifaRank(r32.id) > 32) r32Over += 1;
+    if (!r16 || fifaRank(r16.id) > 32) r16Over += 1;
+    if (!qf || fifaRank(qf.id) > 32) qfOver += 1;
     if (!sf || fifaRank(sf.id) > 8) sfOver += 1;
     if (!fin || fifaRank(fin.id) > 8) finalOver += 1;
     const euro = tournamentOpponents('spain', 'euro');
@@ -2979,8 +3020,18 @@ console.log('\n--- International knockout rank caps ---');
     if (!euroR16 || fifaRank(euroR16.id) > 16) euroR16Over += 1;
     if (!euroQf || fifaRank(euroQf.id) > 8) euroQfOver += 1;
   }
-  console.log('rank-cap misses WC R16/QF/SF/final', r16Over, qfOver, sfOver, finalOver, 'Euro R16/QF', euroR16Over, euroQfOver);
-  if (r16Over > 0 || qfOver > 0 || sfOver > 0 || finalOver > 0 || euroR16Over > 0 || euroQfOver > 0) {
+  console.log(
+    'rank-cap misses WC R32/R16/QF/SF/final',
+    r32Over,
+    r16Over,
+    qfOver,
+    sfOver,
+    finalOver,
+    'Euro R16/QF',
+    euroR16Over,
+    euroQfOver,
+  );
+  if (r32Over > 0 || r16Over > 0 || qfOver > 0 || sfOver > 0 || finalOver > 0 || euroR16Over > 0 || euroQfOver > 0) {
     console.error('knockout opponents must respect FIFA rank caps in every tournament');
     process.exitCode = 1;
   }
@@ -3725,6 +3776,133 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
   }
   if (Object.keys(CLUB_GROUNDS).length < 36) {
     console.error('the listed stadium table is missing clubs');
+    process.exitCode = 1;
+  }
+}
+
+console.log('\n--- Kits, cup nights, FA Cup semis, sun, World Cup copy, African skin ---');
+{
+  const portugal = nationKit('portugal');
+  const argentina = nationKit('argentina');
+  const brazil = nationKit('brazil');
+  console.log('portugal kit', portugal.primary, portugal.shorts, portugal.socks);
+  console.log('argentina kit', argentina.pattern, argentina.shorts, argentina.socks);
+  console.log('brazil kit', brazil.primary, brazil.shorts, brazil.socks);
+  if (portugal.primary !== '#FF0000' || portugal.shorts !== '#006600' || portugal.socks !== '#FF0000') {
+    console.error('Portugal must wear a red jersey, green shorts and red socks');
+    process.exitCode = 1;
+  }
+  if (argentina.pattern !== 'vertical' || argentina.shorts !== '#000000' || argentina.socks !== '#FFFFFF') {
+    console.error('Argentina must wear light-blue stripes, black shorts and white socks');
+    process.exitCode = 1;
+  }
+  if (brazil.primary !== '#FFDF00' || brazil.shorts !== '#002776' || brazil.socks !== '#FFFFFF') {
+    console.error('Brazil must wear a yellow jersey, blue shorts and white socks');
+    process.exitCode = 1;
+  }
+  const brentford = clubKit(getClub('brentford'));
+  const bournemouth = clubKit(getClub('bournemouth'));
+  const valencia = clubKit(getClub('valencia'));
+  const lyon = clubKit(getClub('lyon'));
+  if (brentford.pattern !== 'vertical' || bournemouth.pattern !== 'vertical') {
+    console.error('Brentford and Bournemouth must wear red and white striped shirts');
+    process.exitCode = 1;
+  }
+  if (valencia.primary !== '#FFFFFF' || valencia.shorts !== '#000000' || valencia.socks !== '#FFFFFF') {
+    console.error('Valencia must wear a white jersey, black shorts and white socks');
+    process.exitCode = 1;
+  }
+  if (lyon.primary !== '#FFFFFF' || lyon.shorts !== '#FFFFFF' || lyon.socks !== '#FFFFFF') {
+    console.error('Lyon must wear all white');
+    process.exitCode = 1;
+  }
+
+  const nightCups = [
+    { week: 12, kind: 'domestic-cup' as const, isDecisive: false, domesticCup: 'copa-del-rey' as const, domesticCupStage: 'quarter-final' as const },
+    { week: 12, kind: 'domestic-cup' as const, isDecisive: false, domesticCup: 'coppa-italia' as const, domesticCupStage: 'quarter-final' as const },
+    { week: 12, kind: 'domestic-cup' as const, isDecisive: false, domesticCup: 'dfb-pokal' as const, domesticCupStage: 'quarter-final' as const },
+    { week: 12, kind: 'domestic-cup' as const, isDecisive: false, domesticCup: 'coupe-de-france' as const, domesticCupStage: 'quarter-final' as const },
+  ];
+  if (nightCups.some((f) => !fixtureIsNight(f))) {
+    console.error('Spanish, German, Italian and French cup ties must be night games');
+    process.exitCode = 1;
+  }
+
+  const faSemi = {
+    week: 28,
+    kind: 'domestic-cup' as const,
+    isDecisive: false,
+    domesticCup: 'fa-cup' as const,
+    domesticCupStage: 'semi-final' as const,
+    isHome: true,
+  };
+  if (!isClubFinalNeutral(faSemi) || fixtureVenueLabel(faSemi) !== 'Neutral') {
+    console.error('FA Cup semi-finals must be played at a neutral venue');
+    process.exitCode = 1;
+  }
+
+  const earlyDay = { week: 3, kind: 'international' as const, isDecisive: false, internationalRound: 'group' as const, opponentId: 'italy' };
+  const midDay = { week: 18, kind: 'international' as const, isDecisive: false, internationalRound: 'group' as const, opponentId: 'italy' };
+  const lateDay = { week: 34, kind: 'international' as const, isDecisive: false, internationalRound: 'group' as const, opponentId: 'italy' };
+  const earlyLook = resolveMatchStadium({ fixture: earlyDay, club: getClub('real-madrid') });
+  const midLook = resolveMatchStadium({ fixture: midDay, club: getClub('real-madrid') });
+  const lateLook = resolveMatchStadium({ fixture: lateDay, club: getClub('real-madrid') });
+  console.log('sun weeks', earlyLook.showSun, midLook.showSun, lateLook.showSun, 'nights', nightCups.map(fixtureIsNight));
+  if (!fixtureShowsSun(earlyDay) || fixtureShowsSun(midDay) || !fixtureShowsSun(lateDay)) {
+    console.error('day games need sun in weeks 1–6 and from week 33, and no sun in weeks 7–32');
+    process.exitCode = 1;
+  }
+  if (earlyLook.showSun !== true || midLook.showSun !== false || lateLook.showSun !== true) {
+    console.error('stadium appearance must follow the seasonal sun calendar');
+    process.exitCode = 1;
+  }
+  if (nightCups.some((f) => fixtureShowsSun(f))) {
+    console.error('night games must not show the sun');
+    process.exitCode = 1;
+  }
+
+  const wcTitle = fixtureTitle(
+    { week: 30, kind: 'international', isDecisive: false, internationalRound: 'group', opponentLabel: 'Italy' },
+    { tournament: 'world-cup', playerNationName: 'Spain' },
+  );
+  const wcKoTitle = fixtureTitle(
+    { week: 34, kind: 'international', isDecisive: false, internationalRound: 'round-of-16', opponentLabel: 'Brazil' },
+    { tournamentName: 'World Cup' },
+  );
+  console.log('WC titles', wcTitle, wcKoTitle);
+  if (!wcTitle.includes('World Cup') || !wcKoTitle.includes('World Cup')) {
+    console.error('Play Next Match must mention World Cup during the tournament');
+    process.exitCode = 1;
+  }
+
+  for (let i = 0; i < 80; i++) {
+    const tone = pickPlayerSkin(i * 17 + 3, 'africa');
+    if (!AFRICA_SKIN_TONES.includes(tone as typeof AFRICA_SKIN_TONES[number])) {
+      console.error('African national-team keepers and defenders must use brown skin only');
+      process.exitCode = 1;
+      break;
+    }
+  }
+  const africaKeeper = idleKeeperPose(() => 0.11, 'africa');
+  if (!AFRICA_SKIN_TONES.includes(africaKeeper.skinTone as typeof AFRICA_SKIN_TONES[number])) {
+    console.error('African keepers must spawn with a brown skin tone');
+    process.exitCode = 1;
+  }
+
+  let nlMiss = 0;
+  for (let i = 0; i < 20; i++) {
+    const drawn = tournamentOpponents('spain', 'nations-league');
+    const group = drawn.slice(0, 6);
+    if (
+      group.some((n) => getNation(n.id)?.confederation !== 'UEFA')
+      || group.some((n) => Math.abs(fifaRank(n.id) - fifaRank('spain')) > 35)
+    ) {
+      nlMiss += 1;
+    }
+  }
+  console.log('NL close-rank misses', nlMiss, 'UEFA pool', nationsInConfederation('UEFA').length);
+  if (nlMiss > 0) {
+    console.error('Nations League groups must stay with closely ranked European countries');
     process.exitCode = 1;
   }
 }

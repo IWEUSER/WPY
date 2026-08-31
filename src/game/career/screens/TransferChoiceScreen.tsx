@@ -21,8 +21,10 @@ export default function TransferChoiceScreen() {
   const stayClub = pending.stay?.clubId ? getClub(pending.stay.clubId) : currentClub;
   const offers = (pending.offers?.length
     ? pending.offers
-    : pending.clubIds.map((id) => ({ clubId: id, move: 'permanent' as const, fee: 0, weeklyWage: 0, contractYears: 0 }))
+    : pending.clubIds.map((id) => ({ clubId: id, move: 'permanent' as const, fee: 0, weeklyWage: 0, contractYears: 0, renewal: false }))
   );
+  const hasRenewalOffer = offers.some((o) => o.renewal && o.clubId === clubId);
+  const stayYears = pending.stay?.contractYearsRemaining;
 
   return (
     <div className="flex h-full w-full flex-col items-center gap-6 overflow-y-auto px-6 py-[max(1.5rem,env(safe-area-inset-top))] text-center text-white">
@@ -36,7 +38,7 @@ export default function TransferChoiceScreen() {
         {offers.map((offer) => {
           const club = getClub(offer.clubId);
           if (!club) return null;
-          const isCurrentClubRenewal = offer.move === 'permanent' && offer.clubId === clubId;
+          const isCurrentClubRenewal = Boolean(offer.renewal) || (offer.move === 'permanent' && offer.clubId === clubId);
           return (
             <button
               key={`${offer.move}-${club.id}`}
@@ -76,7 +78,9 @@ export default function TransferChoiceScreen() {
           onClick={() => resolveTransferChoice(null)}
           className="rounded-2xl bg-white/10 px-6 py-3 text-sm font-semibold text-white/80 backdrop-blur transition active:scale-[0.98]"
         >
-          Stay at {stayClub.name}
+          {hasRenewalOffer && stayYears != null
+            ? `Continue at ${stayClub.name} without renewing (${stayYears} year${stayYears === 1 ? '' : 's'} left)`
+            : `Stay at ${stayClub.name}`}
         </button>
       )}
     </div>

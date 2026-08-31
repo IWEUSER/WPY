@@ -364,6 +364,11 @@ export const PLAYER_SKIN_TONES = [
   '#6b3d1f',
 ] as const;
 
+export type SkinPalette = 'any' | 'africa';
+
+/** Medium through dark brown — African national-team keepers and defenders. */
+export const AFRICA_SKIN_TONES = PLAYER_SKIN_TONES.slice(2);
+
 /** Hip→knee share of the hip-to-boot line. Shorts must stay shorter than this. */
 export const THIGH_SHARE = 0.42;
 /** Shorts drop below the hip and overlap the jersey hem. */
@@ -374,12 +379,13 @@ export const JERSEY_SHOULDER_INSET = 0.12;
 /** Raise the shorts oval so it covers the lower jersey instead of sitting under it. */
 export const SHORTS_CENTER = -0.08;
 
-export function pickPlayerSkin(seed: number): string {
-  const i = Math.abs(Math.floor(seed)) % PLAYER_SKIN_TONES.length;
-  return PLAYER_SKIN_TONES[i];
+export function pickPlayerSkin(seed: number, palette: SkinPalette = 'any'): string {
+  const tones = palette === 'africa' ? AFRICA_SKIN_TONES : PLAYER_SKIN_TONES;
+  const i = Math.abs(Math.floor(seed)) % tones.length;
+  return tones[i];
 }
 
-export function idleKeeperPose(rng: () => number = Math.random): KeeperPose {
+export function idleKeeperPose(rng: () => number = Math.random, palette: SkinPalette = 'any'): KeeperPose {
   return {
     pos: { x: 0, y: 0.28 },
     stretch: 0,
@@ -388,7 +394,7 @@ export function idleKeeperPose(rng: () => number = Math.random): KeeperPose {
     layout: 0,
     elevation: 0,
     hand: { x: 0, y: 0.34 },
-    skinTone: pickPlayerSkin(Math.floor(rng() * 1_000_000)),
+    skinTone: pickPlayerSkin(Math.floor(rng() * 1_000_000), palette),
   };
 }
 
