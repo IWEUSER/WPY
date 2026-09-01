@@ -899,8 +899,11 @@ function drawHumanoid(
 
   ctx.fillStyle = shadeHex(skin, -0.14);
   ctx.beginPath();
-  ctx.moveTo(-H * 0.18, collarY + H * 0.06);
-  ctx.lineTo(H * 0.18, collarY + H * 0.06);
+  ctx.ellipse(0, collarY + H * 0.14, H * 0.24, H * 0.16, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-H * 0.2, collarY + H * 0.02);
+  ctx.lineTo(H * 0.2, collarY + H * 0.02);
   ctx.lineTo(H * 0.16, head.y + H * 0.48);
   ctx.lineTo(-H * 0.16, head.y + H * 0.48);
   ctx.closePath();
@@ -910,10 +913,10 @@ function drawHumanoid(
   neckGrad.addColorStop(1, skinHi);
   ctx.fillStyle = neckGrad;
   ctx.beginPath();
-  ctx.moveTo(-H * 0.165, collarY + H * 0.02);
-  ctx.lineTo(H * 0.165, collarY + H * 0.02);
-  ctx.lineTo(H * 0.145, head.y + H * 0.44);
-  ctx.lineTo(-H * 0.145, head.y + H * 0.44);
+  ctx.moveTo(-H * 0.18, collarY + H * 0.02);
+  ctx.lineTo(H * 0.18, collarY + H * 0.02);
+  ctx.lineTo(H * 0.155, head.y + H * 0.44);
+  ctx.lineTo(-H * 0.155, head.y + H * 0.44);
   ctx.closePath();
   ctx.fill();
 
