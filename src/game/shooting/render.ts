@@ -569,97 +569,109 @@ function drawHumanHead(
   scale: number,
   skinColor: string,
 ) {
-  const hx = scale * 0.56;
-  const hy = scale * 0.7;
+  const hx = scale * 0.58;
+  const hy = scale * 0.74;
   const hair = hairColorForSkin(skinColor);
   const shade = shadeHex(skinColor, -0.22);
-  const lip = mixHex(shadeHex(skinColor, -0.28), '#5a3028', 0.35);
+  const light = mixHex(skinColor, '#fff1e4', 0.24);
+  const lip = mixHex(shadeHex(skinColor, -0.3), '#5a3028', 0.4);
 
   ctx.fillStyle = shade;
   ctx.beginPath();
-  ctx.ellipse(x, y + scale * 0.95, scale * 0.2, scale * 0.4, 0, 0, Math.PI * 2);
+  ctx.ellipse(x, y + scale * 0.95, scale * 0.2, scale * 0.42, 0, 0, Math.PI * 2);
   ctx.fill();
 
   const skull = ctx.createRadialGradient(
-    x - hx * 0.18,
+    x - hx * 0.2,
     y - hy * 0.28,
-    scale * 0.08,
+    scale * 0.1,
     x,
-    y + hy * 0.08,
-    hx * 1.2,
+    y + hy * 0.12,
+    hx * 1.18,
   );
-  skull.addColorStop(0, mixHex(skinColor, '#fff4e8', 0.28));
-  skull.addColorStop(0.55, skinColor);
+  skull.addColorStop(0, light);
+  skull.addColorStop(0.52, skinColor);
   skull.addColorStop(1, shade);
   ctx.fillStyle = skull;
   ctx.beginPath();
   ctx.ellipse(x, y, hx, hy, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = shade;
+  ctx.save();
   ctx.beginPath();
-  ctx.ellipse(x - hx * 0.98, y + hy * 0.04, scale * 0.09, scale * 0.14, 0.12, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(x + hx * 0.98, y + hy * 0.04, scale * 0.09, scale * 0.14, -0.12, 0, Math.PI * 2);
-  ctx.fill();
-
+  ctx.ellipse(x, y, hx, hy, 0, 0, Math.PI * 2);
+  ctx.clip();
   ctx.fillStyle = hair;
   ctx.beginPath();
-  ctx.ellipse(x, y - hy * 0.38, hx * 1.02, hy * 0.62, 0, Math.PI * 1.08, Math.PI * 1.92, true);
+  ctx.ellipse(x, y - hy * 0.14, hx * 1.05, hy * 0.78, 0, Math.PI, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.moveTo(x - hx * 0.9, y - hy * 0.06);
-  ctx.quadraticCurveTo(x - hx * 0.62, y - hy * 0.48, x, y - hy * 0.18);
-  ctx.quadraticCurveTo(x + hx * 0.62, y - hy * 0.48, x + hx * 0.9, y - hy * 0.06);
-  ctx.quadraticCurveTo(x + hx * 0.42, y - hy * 0.02, x, y - hy * 0.1);
-  ctx.quadraticCurveTo(x - hx * 0.42, y - hy * 0.02, x - hx * 0.9, y - hy * 0.06);
+  ctx.moveTo(x - hx * 1.02, y - hy * 0.14);
+  ctx.quadraticCurveTo(x - hx * 0.4, y + hy * 0.02, x, y - hy * 0.16);
+  ctx.quadraticCurveTo(x + hx * 0.4, y + hy * 0.02, x + hx * 1.02, y - hy * 0.14);
+  ctx.lineTo(x + hx * 1.02, y - hy);
+  ctx.lineTo(x - hx * 1.02, y - hy);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  ctx.fillStyle = skull;
+  ctx.beginPath();
+  ctx.ellipse(x, y + hy * 0.2, hx * 0.94, hy * 0.66, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  const eyeY = y - hy * 0.02;
-  const eyeDx = hx * 0.34;
-  const eyeW = scale * 0.11;
-  const eyeH = scale * 0.08;
+  ctx.fillStyle = shade;
+  ctx.beginPath();
+  ctx.ellipse(x - hx * 0.98, y + hy * 0.08, scale * 0.09, scale * 0.15, 0.12, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(x + hx * 0.98, y + hy * 0.08, scale * 0.09, scale * 0.15, -0.12, 0, Math.PI * 2);
+  ctx.fill();
+
+  const eyeY = y + hy * 0.02;
+  const eyeDx = hx * 0.32;
+  const eyeW = Math.max(1.5, scale * 0.13);
+  const eyeH = Math.max(1.15, scale * 0.09);
   for (const side of [-1, 1]) {
     const ex = x + side * eyeDx;
-    ctx.fillStyle = '#f2ebe3';
+    ctx.fillStyle = '#efe6dc';
     ctx.beginPath();
     ctx.ellipse(ex, eyeY, eyeW, eyeH, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#1a1410';
+    ctx.fillStyle = '#1c1612';
     ctx.beginPath();
-    ctx.ellipse(ex, eyeY + scale * 0.012, scale * 0.055, scale * 0.058, 0, 0, Math.PI * 2);
+    ctx.ellipse(ex, eyeY + scale * 0.01, Math.max(1.1, scale * 0.07), Math.max(1.2, scale * 0.075), 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.beginPath();
-    ctx.ellipse(ex - scale * 0.028, eyeY - scale * 0.018, scale * 0.018, scale * 0.016, 0, 0, Math.PI * 2);
+    ctx.ellipse(ex - scale * 0.03, eyeY - scale * 0.02, Math.max(0.6, scale * 0.02), Math.max(0.5, scale * 0.018), 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = hair;
-    ctx.lineWidth = Math.max(1.2, scale * 0.08);
+    ctx.lineWidth = Math.max(1.25, scale * 0.085);
     ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(ex - scale * 0.13, eyeY - scale * 0.15);
-    ctx.lineTo(ex + scale * 0.12, eyeY - scale * 0.13);
+    ctx.moveTo(ex - scale * 0.14, eyeY - scale * 0.16);
+    ctx.lineTo(ex + scale * 0.13, eyeY - scale * 0.14);
     ctx.stroke();
   }
 
   ctx.strokeStyle = shade;
-  ctx.lineWidth = Math.max(1.1, scale * 0.07);
+  ctx.lineWidth = Math.max(1.15, scale * 0.075);
   ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(x, eyeY + scale * 0.08);
-  ctx.lineTo(x + scale * 0.02, eyeY + scale * 0.26);
+  ctx.moveTo(x, eyeY + scale * 0.1);
+  ctx.lineTo(x + scale * 0.015, eyeY + scale * 0.28);
   ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(x - scale * 0.05, eyeY + scale * 0.24);
-  ctx.lineTo(x + scale * 0.06, eyeY + scale * 0.26);
+  ctx.moveTo(x - scale * 0.055, eyeY + scale * 0.26);
+  ctx.lineTo(x + scale * 0.065, eyeY + scale * 0.28);
   ctx.stroke();
 
   ctx.strokeStyle = lip;
-  ctx.lineWidth = Math.max(1.2, scale * 0.075);
+  ctx.lineWidth = Math.max(1.2, scale * 0.08);
   ctx.beginPath();
-  ctx.moveTo(x - scale * 0.1, y + hy * 0.42);
-  ctx.lineTo(x + scale * 0.1, y + hy * 0.42);
+  ctx.moveTo(x - scale * 0.11, y + hy * 0.48);
+  ctx.lineTo(x + scale * 0.11, y + hy * 0.48);
   ctx.stroke();
 }
 
@@ -816,12 +828,12 @@ export function drawDefender(
   const shoulderL = s(pts.shoulderL.x, pts.shoulderL.y);
   const shoulderR = s(pts.shoulderR.x, pts.shoulderR.y);
   const handL = {
-    x: -scale * 1.42 - swing * 0.55,
-    y: scale * 1.18 + Math.max(0, -Math.sin(stride)) * scale * 0.08,
+    x: -scale * 1.18 - swing * 0.5,
+    y: scale * 0.88 + Math.max(0, -Math.sin(stride)) * scale * 0.1,
   };
   const handR = {
-    x: scale * 1.42 + swing * 0.55,
-    y: scale * 1.18 + Math.max(0, Math.sin(stride)) * scale * 0.08,
+    x: scale * 1.18 + swing * 0.5,
+    y: scale * 0.88 + Math.max(0, Math.sin(stride)) * scale * 0.1,
   };
 
   drawThighAndSock(ctx, scale, -scale * 0.28, hipY, footL, skinColor, sockColor, bootColor);
@@ -880,27 +892,31 @@ export function drawDefender(
 
   const drawArm = (shoulder: { x: number; y: number }, hand: { x: number; y: number }, side: number) => {
     const elbow = {
-      x: (shoulder.x + hand.x) / 2 + side * scale * 0.16,
-      y: (shoulder.y + hand.y) / 2 + scale * 0.04,
+      x: (shoulder.x + hand.x) / 2 + side * scale * 0.28,
+      y: (shoulder.y + hand.y) / 2 + scale * 0.12,
     };
-    ctx.strokeStyle = kitLight;
-    ctx.lineWidth = scale * 0.56;
+    const sleeve = {
+      x: shoulder.x * 0.55 + elbow.x * 0.45,
+      y: shoulder.y * 0.55 + elbow.y * 0.45,
+    };
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+    ctx.strokeStyle = kitLight;
+    ctx.lineWidth = scale * 0.5;
     ctx.beginPath();
     ctx.moveTo(shoulder.x, shoulder.y);
-    ctx.lineTo(elbow.x, (shoulder.y + elbow.y) / 2);
+    ctx.lineTo(sleeve.x, sleeve.y);
     ctx.stroke();
     ctx.strokeStyle = skinColor;
-    ctx.lineWidth = scale * 0.46;
+    ctx.lineWidth = scale * 0.36;
     ctx.beginPath();
-    ctx.moveTo(elbow.x, (shoulder.y + elbow.y) / 2);
+    ctx.moveTo(sleeve.x, sleeve.y);
     ctx.lineTo(elbow.x, elbow.y);
     ctx.lineTo(hand.x, hand.y);
     ctx.stroke();
     ctx.fillStyle = skinColor;
     ctx.beginPath();
-    ctx.ellipse(hand.x, hand.y, scale * 0.22, scale * 0.28, 0, 0, Math.PI * 2);
+    ctx.ellipse(hand.x, hand.y, scale * 0.2, scale * 0.26, side * 0.15, 0, Math.PI * 2);
     ctx.fill();
   };
 
