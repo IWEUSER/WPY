@@ -940,7 +940,7 @@ export function drawDefender(
     ctx.stroke();
     ctx.fillStyle = kitLight;
     ctx.beginPath();
-    ctx.ellipse(shoulder.x + side * scale * 0.08, shoulder.y + scale * 0.06, scale * 0.34, scale * 0.28, side * 0.4, 0, Math.PI * 2);
+    ctx.ellipse(shoulder.x + side * scale * 0.06, shoulder.y + scale * 0.04, scale * 0.22, scale * 0.2, side * 0.35, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = skinColor;
     ctx.lineWidth = scale * 0.44;
