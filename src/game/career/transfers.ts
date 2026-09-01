@@ -1,4 +1,4 @@
-import { CLUBS, clubsInCountry, earnedPromotion, getClub, goalRatioFromStrength, promotionTarget, type Club, type ClubTier } from './data/clubs';
+import { CLUBS, clubsInCountry, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, promotionTarget, SECOND_DIVISIONS, type Club, type ClubTier } from './data/clubs';
 import { countryForNationality, pickClubsBiasedToCountry, nearbyTierClubs, tierPool } from './clubOffers';
 import { shuffle } from './util';
 import {
@@ -98,7 +98,8 @@ function pickClubsFromTier(
   return pickClubsBiasedToCountry(preferred, count, country, minHome, extraHome);
 }
 
-export const LOAN_OFFER_COUNT = 5;
+export const LOAN_OFFER_COUNT = 6;
+export const TRANSFER_OFFER_COUNT = 6;
 
 function takeShuffled(pool: Club[], count: number, seen: Set<string>): Club[] {
   const out: Club[] = [];
@@ -112,10 +113,10 @@ function takeShuffled(pool: Club[], count: number, seen: Set<string>): Club[] {
 }
 
 /**
- * Five loan destinations at the ratio-appropriate level:
- * two from the parent/reserve club's country, two from the player's
- * nationality when that country can supply them, and one random.
- * If nationality cannot supply two, four come from the parent country.
+ * Six loan destinations at the ratio-appropriate level:
+ * parent-country clubs first, then nationality when that country can
+ * supply them, then the rest of the world. If nationality cannot supply
+ * two, five come from the parent country.
  */
 export function pickLoanClubsForMiss(
   ratio: number,
@@ -140,9 +141,9 @@ export function pickLoanClubsForMiss(
   const natPool = atTierIn(natCountry);
   const sameCountry = Boolean(parentCountry && natCountry && parentCountry === natCountry);
   if (sameCountry || natPool.length < 2) {
-    picked.push(...takeShuffled(atTierIn(parentCountry), 4, seen));
+    picked.push(...takeShuffled(atTierIn(parentCountry), 5, seen));
   } else {
-    picked.push(...takeShuffled(atTierIn(parentCountry), 2, seen));
+    picked.push(...takeShuffled(atTierIn(parentCountry), 3, seen));
     picked.push(...takeShuffled(natPool, 2, seen));
   }
   const world = CLUBS.filter((c) => c.playable !== false && c.tier === tier && !seen.has(c.id));
@@ -156,6 +157,53 @@ export function pickLoanClubsForMiss(
   return picked.slice(0, count);
 }
 
+function canPayFee(club: Club, fee: number): boolean {
+  return fee <= 0 || clubTransferBudget(club) >= fee;
+}
+
+/**
+ * Second-division windows stay in that league. A high market value
+ * (mid-table band and above) also opens the promotion-target top flight,
+ * never a better club than the value band allows.
+ */
+function pickSecondDivisionClubs(
+  fromLeague: string,
+  fee: number,
+  excludeIds: string[],
+  marketValue: number,
+  blockElite: boolean,
+): Club[] {
+  const seen = new Set<string>(excludeIds);
+  const same = clubsInLeague(fromLeague).filter(
+    (c) => !seen.has(c.id) && c.playable !== false && canPayFee(c, fee),
+  );
+  const higherLeague = promotionTarget(fromLeague);
+  const valueTier = tierForMarketValue(marketValue);
+  const minHigher = (blockElite ? Math.max(2, valueTier) : valueTier) as ClubTier;
+  const higher = higherLeague
+    ? clubsInLeague(higherLeague).filter((c) => {
+        if (seen.has(c.id) || c.playable === false || !canPayFee(c, fee)) return false;
+        if (c.tier < minHigher) return false;
+        if (MEGA_CLUB_IDS.has(c.id) && minHigher > 1) return false;
+        return true;
+      })
+    : [];
+  const warrantHigher = valueTier <= 3 && higher.length > 0;
+  const picked: Club[] = [];
+  const add = (pool: Club[], n: number) => {
+    picked.push(...takeShuffled(pool, Math.max(0, n), seen));
+  };
+  if (warrantHigher) {
+    add(same, 3);
+    add(higher, TRANSFER_OFFER_COUNT - picked.length);
+    add(same, TRANSFER_OFFER_COUNT - picked.length);
+  } else {
+    add(same, TRANSFER_OFFER_COUNT);
+    if (picked.length < TRANSFER_OFFER_COUNT) add(higher, TRANSFER_OFFER_COUNT - picked.length);
+  }
+  return picked.slice(0, TRANSFER_OFFER_COUNT);
+}
+
 /** Paid bids need a budget. A free agent still draws quality clubs — just more of them. */
 function pickPermanentClubs(
   qualityTier: ClubTier,
@@ -163,25 +211,34 @@ function pickPermanentClubs(
   excludeIds: string[],
   nationality?: string | null,
   blockElite = false,
+  fromLeague?: string | null,
+  marketValue?: number,
 ): Club[] {
+  if (fromLeague && SECOND_DIVISIONS.has(fromLeague)) {
+    const local = pickSecondDivisionClubs(fromLeague, fee, excludeIds, marketValue ?? 0, blockElite);
+    if (local.length > 0) return local;
+  }
   const country = countryForNationality(nationality);
   if (fee >= MEGA_TRANSFER_FEE && !blockElite && qualityTier === 1) {
     const megas = CLUBS.filter((c) => MEGA_CLUB_IDS.has(c.id) && !excludeIds.includes(c.id));
-    return pickClubsBiasedToCountry(megas, Math.min(3, megas.length), country, 0);
+    const picked = pickClubsBiasedToCountry(megas, Math.min(TRANSFER_OFFER_COUNT, megas.length), country, 0);
+    if (picked.length >= TRANSFER_OFFER_COUNT) return picked;
+    const rest = pickClubsFromTier(1, TRANSFER_OFFER_COUNT - picked.length, [...excludeIds, ...picked.map((c) => c.id)], nationality);
+    return [...picked, ...rest];
   }
   if (fee <= 0) {
     const primary = pickClubsFromTier(qualityTier, 3, excludeIds, nationality);
     const wider = Math.min(5, (qualityTier + 1) as ClubTier) as ClubTier;
     if (wider === qualityTier) {
-      return pickClubsFromTier(qualityTier, 6, excludeIds, nationality);
+      return pickClubsFromTier(qualityTier, TRANSFER_OFFER_COUNT, excludeIds, nationality);
     }
     const extra = pickClubsFromTier(wider, 3, [...excludeIds, ...primary.map((c) => c.id)], nationality);
-    return [...primary, ...extra];
+    return [...primary, ...extra].slice(0, TRANSFER_OFFER_COUNT);
   }
   const affordable = (tier: ClubTier) =>
     tierPool(tier, excludeIds).filter((c) => clubTransferBudget(c) >= fee);
   let pool = affordable(qualityTier);
-  if (pool.length < 3 && qualityTier < 5) {
+  if (pool.length < TRANSFER_OFFER_COUNT && qualityTier < 5) {
     pool = [...pool, ...affordable(((qualityTier + 1) as ClubTier))];
   }
   if (pool.length === 0) {
@@ -191,7 +248,13 @@ function pickPermanentClubs(
     (c) => clubTransferBudget(c) >= fee && c.tier >= qualityTier,
   );
   const minHome = country && pool.some((c) => c.country === country) ? 1 : 0;
-  return pickClubsBiasedToCountry(pool, Math.min(3, Math.max(pool.length, 1)), country, minHome, extraHome);
+  return pickClubsBiasedToCountry(
+    pool,
+    Math.min(TRANSFER_OFFER_COUNT, Math.max(pool.length, 1)),
+    country,
+    minHome,
+    extraHome,
+  );
 }
 
 export type TransferKind = 'loan' | 'sold' | 'promotion-offer' | 'loan-or-transfer' | 'end-of-season';
@@ -375,8 +438,17 @@ function parallelTransfers(
   permYears = newContractYears(age),
   loanRatio = 0,
   parentClubId?: string | null,
+  fromLeague?: string | null,
 ): SeasonTransitionResult {
-  const transfers = pickPermanentClubs(preferredTier, fee, excludeIds, nationality, blockElite);
+  const transfers = pickPermanentClubs(
+    preferredTier,
+    fee,
+    excludeIds,
+    nationality,
+    blockElite,
+    fromLeague,
+    value,
+  );
   const loans = includeLoans
     ? pickLoanClubsForMiss(
         loanRatio,
@@ -535,6 +607,9 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
         false,
         loanYears,
         recalledYears,
+        0,
+        parentClubId,
+        parentClub.league,
       );
     }
 
@@ -545,7 +620,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       careerRatio: formRatio,
       blockElite,
     });
-    const transfers = pickPermanentClubs(saleTier, fee, exclude, nationality, blockElite);
+    const transfers = pickPermanentClubs(saleTier, fee, exclude, nationality, blockElite, club.league, value);
     const canLoanAgain = loansUsed < MAX_CONSECUTIVE_LOANS;
     const loans = canLoanAgain
       ? pickLoanClubsForMiss(
@@ -612,11 +687,12 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       permYears,
       formRatio,
       club.id,
+      currentLeague,
     );
   }
 
   if (!ratioMet && !graceActive) {
-    const transfers = pickPermanentClubs(ratioTier, fee, [club.id], nationality, blockElite);
+    const transfers = pickPermanentClubs(ratioTier, fee, [club.id], nationality, blockElite, currentLeague, value);
     const canLoan = loansUsed < MAX_CONSECUTIVE_LOANS;
     const loans = canLoan
       ? pickLoanClubsForMiss(formRatio, nationality, LOAN_OFFER_COUNT, [club.id, ...transfers.map((c) => c.id)], club.id)
@@ -657,7 +733,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
   const betterTier = tierForRatio(effectiveRatio);
   const valueTier = tierForMarketValue(value);
   if (betterTier < club.tier && !blockElite && valueTier <= betterTier) {
-    const offers = pickPermanentClubs(betterTier, fee, [club.id], nationality, blockElite);
+    const offers = pickPermanentClubs(betterTier, fee, [club.id], nationality, blockElite, currentLeague, value);
     const basis = age < 28 ? 'career' : "last season's";
     return attachCurrentClubRenewal(
       {
@@ -696,6 +772,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       permYears,
       formRatio,
       club.id,
+      currentLeague,
     ),
     params,
     club,

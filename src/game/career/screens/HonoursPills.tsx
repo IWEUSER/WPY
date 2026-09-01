@@ -12,7 +12,9 @@ export function HonoursPills({
   tone: 'trophy' | 'award';
 }) {
   const box =
-    tone === 'trophy' ? 'bg-emerald-400/10' : 'bg-sky-400/10';
+    tone === 'trophy'
+      ? 'border border-emerald-300/25 bg-emerald-400/10'
+      : 'border border-sky-300/25 bg-sky-400/10';
   const heading =
     tone === 'trophy' ? 'text-emerald-200/70' : 'text-sky-200/70';
   const pill =

@@ -64,7 +64,7 @@ import {
   trialContractWon,
 } from '../src/game/career/trial';
 import { nextYouthKnockoutRound, youthMaxGames } from '../src/game/career/youthTournament';
-import { consecutiveLoanSpells, LOAN_OFFER_COUNT, offerFormRatio, offerTierFromStanding, pickLoanClubsForMiss, requiredGoalRatio, resolveSeasonTransition, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, forcedLoanPending } from '../src/game/career/transfers';
+import { consecutiveLoanSpells, LOAN_OFFER_COUNT, TRANSFER_OFFER_COUNT, offerFormRatio, offerTierFromStanding, pickLoanClubsForMiss, requiredGoalRatio, resolveSeasonTransition, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, forcedLoanPending } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
 import {
   evaluatePlayerOfTheYear,
@@ -382,6 +382,22 @@ const titleHigh = evaluatePlayerOfTheYear({ leagueChampion: true, leagueGoals: p
 console.log('POTY no title', noTitle.won, 'title but low goals', titleLow.won, 'title + bar', titleHigh.won);
 if (noTitle.won || titleLow.won || !titleHigh.won) {
   console.error('Player of the Year needs the league title and the lower goal bar');
+  process.exitCode = 1;
+}
+const lowerLeagues = ['Championship', 'La Liga 2', 'Serie B', '2. Bundesliga', 'Ligue 2'];
+for (const league of lowerLeagues) {
+  const target = goldenBootTarget(league);
+  if (target !== 20) {
+    console.error(`${league} golden boot must be 20, not ${target}`);
+    process.exitCode = 1;
+  }
+  if (evaluateTopGoalscorer(17, league, () => 0).won || evaluateTopGoalscorer(19, league, () => 0).won) {
+    console.error(`${league} must never award the golden boot below 20 goals`);
+    process.exitCode = 1;
+  }
+}
+if (playerOfTheYearGoalTarget('Championship') !== 14) {
+  console.error('Championship Player of the Year should sit at 14 (70% of 20)');
   process.exitCode = 1;
 }
 
@@ -1236,8 +1252,8 @@ if (saleHome < 1) {
   console.error('German player sale offers must include at least one German club');
   process.exitCode = 1;
 }
-if (saleLoans !== LOAN_OFFER_COUNT || salePerms.length !== 3) {
-  console.error('a failed first-team season must offer 5 loans and 3 transfers');
+if (saleLoans !== LOAN_OFFER_COUNT || salePerms.length !== TRANSFER_OFFER_COUNT) {
+  console.error('a failed first-team season must offer 6 loans and 6 transfers');
   process.exitCode = 1;
 }
 if (saleTiers.some((tier) => tier < 5) || salePerms.some((o) => o.clubId === 'west-ham')) {
@@ -1625,7 +1641,7 @@ if (barca && hilal && lafc) {
   const missHome = missLoans.filter((o) => getClub(o.clubId)?.country === 'Spain').length;
   console.log('reserve miss', reserveMiss.headline, 'loans', missLoans.length, 'home', missHome, missLoans.map((o) => o.clubId));
   if (reserveMiss.pendingTransfer?.kind !== 'loan' || missLoans.length !== LOAN_OFFER_COUNT || missLoans.some((o) => o.move !== 'loan')) {
-    console.error('missing the reserve ratio must offer five loans and no stay');
+    console.error('missing the reserve ratio must offer six loans and no stay');
     process.exitCode = 1;
   }
   if (missHome < 2) {
@@ -1885,7 +1901,7 @@ if ((loanBack.pendingTransfer?.stay?.role ?? loanBack.immediate?.role) !== 'firs
   console.error('meeting the parent first-team bar must return to the first team');
   process.exitCode = 1;
 }
-if (!loanBack.pendingTransfer || loanBack.pendingTransfer.offers.filter((o) => o.move === 'permanent').length < 3) {
+if (!loanBack.pendingTransfer || loanBack.pendingTransfer.offers.filter((o) => o.move === 'permanent').length < TRANSFER_OFFER_COUNT) {
   console.error('a successful loan return still offers parallel transfers');
   process.exitCode = 1;
 }
@@ -1917,8 +1933,8 @@ const missMoves = loanMiss.pendingTransfer?.offers ?? [];
 const loanOffers = missMoves.filter((o) => o.move === 'loan').length;
 const transferOffers = missMoves.filter((o) => o.move === 'permanent').length;
 console.log('missed return', loanMiss.headline, 'loans', loanOffers, 'transfers', transferOffers, loanMiss.immediate?.role);
-if (loanMiss.immediate?.role === 'reserve' || loanOffers !== LOAN_OFFER_COUNT || transferOffers !== 3) {
-  console.error('a missed loan return must offer 5 loans and 3 transfers, never reserves');
+if (loanMiss.immediate?.role === 'reserve' || loanOffers !== LOAN_OFFER_COUNT || transferOffers !== TRANSFER_OFFER_COUNT) {
+  console.error('a missed loan return must offer 6 loans and 6 transfers, never reserves');
   process.exitCode = 1;
 }
 const loanCap = resolveSeasonTransition({
@@ -1935,7 +1951,7 @@ const loanCap = resolveSeasonTransition({
 });
 const capLoans = (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan').length;
 console.log('second loan used up', loanCap.headline, 'further loans', capLoans);
-if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.move === 'permanent').length < 3) {
+if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.move === 'permanent').length < TRANSFER_OFFER_COUNT) {
   console.error('after two consecutive loans at a club the player must transfer');
   process.exitCode = 1;
 }
@@ -1977,7 +1993,7 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
     process.exitCode = 1;
   }
   if (zeroOffers.filter((o) => o.move === 'loan').length !== LOAN_OFFER_COUNT) {
-    console.error('a 0.0 ratio must still produce five loan offers at the smallest level');
+    console.error('a 0.0 ratio must still produce six loan offers at the smallest level');
     process.exitCode = 1;
   }
 
@@ -1985,8 +2001,8 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
   const splitFrance = splitLoans.filter((c) => c.country === 'France').length;
   const splitEngland = splitLoans.filter((c) => c.country === 'England').length;
   console.log('loan split FR/EN', splitFrance, splitEngland, splitLoans.map((c) => `${c.id}:${c.country}:${c.tier}`));
-  if (splitLoans.length !== 5 || splitLoans.some((c) => c.tier < 5)) {
-    console.error('loan offers must be five clubs at the ratio-appropriate (smallest) level');
+  if (splitLoans.length !== LOAN_OFFER_COUNT || splitLoans.some((c) => c.tier < 5)) {
+    console.error('loan offers must be six clubs at the ratio-appropriate (smallest) level');
     process.exitCode = 1;
   }
   if (splitFrance < 2 || splitEngland < 2) {
@@ -1997,8 +2013,8 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
   const brazilLoans = pickLoanClubsForMiss(0, 'brazil', LOAN_OFFER_COUNT, ['toulouse'], 'toulouse');
   const brazilFrance = brazilLoans.filter((c) => c.country === 'France').length;
   console.log('loan split Brazil at Toulouse', brazilFrance, brazilLoans.map((c) => c.country));
-  if (brazilFrance < 4) {
-    console.error('when nationality cannot supply two clubs, four loans must come from the reserve-club country');
+  if (brazilFrance < 5) {
+    console.error('when nationality cannot supply two clubs, five loans must come from the reserve-club country');
     process.exitCode = 1;
   }
 
@@ -2084,7 +2100,7 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
     process.exitCode = 1;
   }
   if (liverpoolLoanTiers.some((tier) => tier < 5) || liverpoolLoanTiers.length !== LOAN_OFFER_COUNT) {
-    console.error('a 0.33 ratio must produce five smallest-band loans, not Strong clubs');
+    console.error('a 0.33 ratio must produce six smallest-band loans, not Strong clubs');
     process.exitCode = 1;
   }
 
@@ -2102,8 +2118,8 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
       })
     : 0;
   console.log('Ligue 2 / 2. Bundesliga 0.15 value', ligue2Value);
-  if (!leHavre || ligue2Value >= 2_500_000) {
-    console.error('a 0.15 ratio in Ligue 2 and 2. Bundesliga must be worth well under €2.5m, not €6.8m');
+  if (!leHavre || ligue2Value >= 5_000_000) {
+    console.error('a 0.15 ratio in Ligue 2 and 2. Bundesliga must stay well under €5m');
     process.exitCode = 1;
   }
 
@@ -2144,13 +2160,123 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
     : 0;
   const midTiers = (midLower.pendingTransfer?.offers ?? []).map((o) => getClub(o.clubId)?.tier ?? 1);
   console.log('0.34/0.45 lower-league value', midValue, 'offer tiers', midTiers);
-  if (midValue >= 8_000_000) {
+  if (midValue >= 18_000_000) {
     console.error('a 0.34 career / 0.45 last season in second divisions must not be valued near €25m');
     process.exitCode = 1;
   }
   if (midTiers.some((tier) => tier <= 2)) {
     console.error('a 0.34/0.45 ratio from lower leagues must not attract Strong or Elite clubs');
     process.exitCode = 1;
+  }
+
+  const leicester = getClub('leicester');
+  if (leicester) {
+    const champSeasons = [2, 3, 4].map((n) => ({
+      ...dummySeason,
+      seasonNumber: n,
+      clubId: 'leicester',
+      league: 'Championship',
+      goals: 22,
+      gamesPlayed: 46,
+      leagueGoals: 22,
+      leagueGames: 46,
+      cupGames: 0,
+      cupGoals: 0,
+      domesticGames: 46,
+      domesticGoals: 22,
+      topGoalscorer: n === 4,
+    }));
+    const champStarValue = playerMarketValueFromSeasons({
+      age: 20,
+      careerGoals: 66,
+      careerGames: 138,
+      seasons: champSeasons,
+      fallbackClub: leicester,
+    });
+    console.log('Championship star 66 goals / golden boot value', champStarValue);
+    if (champStarValue < 28_000_000) {
+      console.error('a young Championship golden-boot winner with 66 goals must be worth far more than €4.7m');
+      process.exitCode = 1;
+    }
+    const hotSeasons = champSeasons.map((s) => ({ ...s, goals: 138, leagueGoals: 138, domesticGoals: 138, gamesPlayed: 46 }));
+    const hotValue = playerMarketValueFromSeasons({
+      age: 20,
+      careerGoals: 414,
+      careerGames: 138,
+      seasons: hotSeasons,
+      fallbackClub: leicester,
+    });
+    console.log('Championship 3.00 ratio over 138 games', hotValue);
+    if (hotValue <= champStarValue) {
+      console.error('a 3.0 ratio over a large sample must exceed the young-star floor, not sit under a cap');
+      process.exitCode = 1;
+    }
+    const champStarMove = resolveSeasonTransition({
+      season: champSeasons[2],
+      role: 'first-team',
+      clubId: 'leicester',
+      parentClubId: 'leicester',
+      seasonsAtCurrentClub: 3,
+      age: 20,
+      careerGoals: 66,
+      careerGames: 138,
+      nationality: 'england',
+      loansUsed: 0,
+      seasonHistory: champSeasons.slice(0, 2),
+      contractYearsRemaining: 3,
+      clubLeague: 'Championship',
+    });
+    const champPerms = (champStarMove.pendingTransfer?.offers ?? []).filter(
+      (o) => o.move === 'permanent' && !o.renewal && o.clubId !== 'leicester',
+    );
+    const champLeagues = champPerms.map((o) => getClub(o.clubId)?.league);
+    console.log('Championship star offers', champPerms.length, champLeagues);
+    if (champPerms.length !== TRANSFER_OFFER_COUNT) {
+      console.error('Championship transfer windows must table six permanent offers');
+      process.exitCode = 1;
+    }
+    if (champLeagues.some((league) => league !== 'Championship' && league !== 'Premier League')) {
+      console.error('a Championship player must only be offered Championship or Premier League clubs');
+      process.exitCode = 1;
+    }
+    if (!champLeagues.includes('Premier League')) {
+      console.error('a Championship golden-boot star must attract Premier League bids');
+      process.exitCode = 1;
+    }
+    const champModest = resolveSeasonTransition({
+      season: {
+        ...dummySeason,
+        clubId: 'leicester',
+        league: 'Championship',
+        goals: 8,
+        gamesPlayed: 46,
+        leagueGoals: 8,
+      },
+      role: 'first-team',
+      clubId: 'leicester',
+      parentClubId: 'leicester',
+      seasonsAtCurrentClub: 1,
+      age: 19,
+      careerGoals: 8,
+      careerGames: 46,
+      nationality: 'england',
+      loansUsed: 0,
+      contractYearsRemaining: 4,
+      clubLeague: 'Championship',
+    });
+    const modestPerms = (champModest.pendingTransfer?.offers ?? []).filter(
+      (o) => o.move === 'permanent' && !o.renewal && o.clubId !== 'leicester',
+    );
+    const modestLeagues = modestPerms.map((o) => getClub(o.clubId)?.league);
+    console.log('Championship modest offers', modestPerms.length, modestLeagues);
+    if (modestPerms.length !== TRANSFER_OFFER_COUNT) {
+      console.error('a modest Championship season must still offer six clubs');
+      process.exitCode = 1;
+    }
+    if (modestLeagues.some((league) => league !== 'Championship')) {
+      console.error('a modest Championship market value must only attract Championship clubs');
+      process.exitCode = 1;
+    }
   }
 
   const toulouse = getClub('toulouse');

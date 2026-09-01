@@ -14,20 +14,11 @@ const ELITE_LEAGUES = new Set([
   'Ligue 1',
 ]);
 
-const SECOND_TIER_LEAGUES = new Set([
-  'Championship',
-  'La Liga 2',
-  'Serie B',
-  '2. Bundesliga',
-  'Ligue 2',
-]);
-
 /** League goals that put you in the golden-boot conversation. */
 export function goldenBootTarget(league: string): number {
   if (league === 'Premier League') return 25;
   if (ELITE_LEAGUES.has(league)) return 16;
-  if (SECOND_TIER_LEAGUES.has(league)) return 13;
-  return 14;
+  return 20;
 }
 
 /**

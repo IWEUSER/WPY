@@ -8,6 +8,7 @@ import { displaySeasonLabel, displaySeasonNumber } from '../seasonDisplay';
 import { countLoanSpells, requiredGoalRatio, resolveSeasonTransition } from '../transfers';
 import { leagueMatchWeeks } from '../data/clubs';
 import { useCareerStore } from '../store';
+import { DATA_CARD, DATA_INSET, DATA_TILE } from './dataUi';
 
 export default function SeasonSummaryScreen() {
   const clubId = useCareerStore((s) => s.clubId);
@@ -106,17 +107,17 @@ export default function SeasonSummaryScreen() {
         <h1 className="mt-1 text-2xl font-extrabold">{preview.headline}</h1>
       </div>
 
-      <div className="w-full max-w-sm rounded-2xl bg-white/5 p-5">
+      <div className={`w-full max-w-sm ${DATA_CARD}`}>
         <div className="grid grid-cols-3 gap-2 text-center">
-          <div>
+          <div className={DATA_TILE}>
             <p className="text-xl font-bold">{season.goals}</p>
             <p className="text-[10px] uppercase tracking-wide text-white/40">Goals</p>
           </div>
-          <div>
+          <div className={DATA_TILE}>
             <p className="text-xl font-bold">{season.gamesPlayed}</p>
             <p className="text-[10px] uppercase tracking-wide text-white/40">Played</p>
           </div>
-          <div>
+          <div className={DATA_TILE}>
             <p className="text-xl font-bold">{gamesMissed}</p>
             <p className="text-[10px] uppercase tracking-wide text-white/40">Missed</p>
           </div>
@@ -143,13 +144,13 @@ export default function SeasonSummaryScreen() {
       </div>
 
       {honours.length > 0 && (
-        <div className="w-full max-w-sm rounded-2xl bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+        <div className="w-full max-w-sm rounded-2xl border border-emerald-300/25 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
           {honours.join(' · ')}
         </div>
       )}
 
       {intlLine && (
-        <div className="w-full max-w-sm rounded-2xl bg-white/5 px-4 py-3 text-sm text-white/70">
+        <div className={`w-full max-w-sm ${DATA_INSET} text-sm text-white/70`}>
           <p className="font-semibold text-white/90">{intlLine.name}</p>
           {intlLine.qualifying && <p className="mt-1 text-xs text-white/50">{intlLine.qualifying}</p>}
           {intlLine.tournament && <p className="mt-1 text-xs text-white/50">{intlLine.tournament}</p>}
@@ -160,13 +161,13 @@ export default function SeasonSummaryScreen() {
       )}
 
       {missedTournament && (
-        <div className="w-full max-w-sm rounded-2xl bg-white/5 px-4 py-3 text-sm text-white/60">
+        <div className={`w-full max-w-sm ${DATA_INSET} text-sm text-white/60`}>
           {missedTournament}
         </div>
       )}
 
       {season.international?.injuryMissedFinals && (season.international.tournament || seasonSim?.internationalTournament) && (
-        <div className="w-full max-w-sm rounded-2xl bg-white/5 px-4 py-3 text-sm text-white/60">
+        <div className={`w-full max-w-sm ${DATA_INSET} text-sm text-white/60`}>
           Missed at least one {(season.international.tournament ?? seasonSim?.internationalTournament)
             ? INTERNATIONAL_TOURNAMENTS[(season.international.tournament ?? seasonSim!.internationalTournament)!].name
             : 'tournament'} match through injury.
@@ -175,8 +176,10 @@ export default function SeasonSummaryScreen() {
 
       {wpyResult && (
         <div
-          className={`w-full max-w-sm rounded-2xl px-4 py-3 text-sm ${
-            wpyResult.won ? 'bg-amber-400/15 text-amber-200' : 'bg-white/5 text-white/60'
+          className={`w-full max-w-sm rounded-2xl border px-4 py-3 text-sm ${
+            wpyResult.won
+              ? 'border-amber-200/25 bg-amber-400/15 text-amber-200'
+              : 'border-white/16 bg-[#0c1410] text-white/60'
           }`}
         >
           <p className="text-xs uppercase tracking-wide text-white/40">World Player of the Year</p>
@@ -192,7 +195,7 @@ export default function SeasonSummaryScreen() {
         if (!promoted || !stay || age >= RETIREMENT_AGE) return null;
         const years = stay.contractYearsRemaining;
         return (
-          <div className="w-full max-w-sm rounded-2xl bg-white/5 px-4 py-3 text-sm text-white/80">
+          <div className={`w-full max-w-sm ${DATA_INSET} text-sm text-white/80`}>
             <p className="text-xs uppercase tracking-wide text-white/40">If you stay</p>
             <p className="mt-1 font-semibold">
               {leagueDisplayName(nextLeague)}

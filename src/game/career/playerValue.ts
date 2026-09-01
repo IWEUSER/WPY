@@ -16,7 +16,7 @@ const TOP_LEAGUES = new Set(['Premier League', 'La Liga', 'Serie A', 'Bundesliga
 export function leagueValueWeight(league: string): number {
   if (TOP_LEAGUES.has(league)) return 1;
   if (league === 'Saudi Pro League') return 0.42;
-  if (SECOND_DIVISIONS.has(league)) return 0.22;
+  if (SECOND_DIVISIONS.has(league)) return 0.4;
   if (league === 'Liga MX') return 0.32;
   if (league === 'MLS') return 0.22;
   return 0.3;
@@ -176,9 +176,40 @@ export function clubStrengthScale(club: Club): number {
   return club.strength / ANCHOR_STRENGTH;
 }
 
-/** Club quality times the stature of the league those goals came in. */
+/** Club quality times the stature of the league those goals came in.
+ * Second divisions use a square-root weight so league stature is not
+ * applied twice as harshly as the ratio discount. */
 export function clubLeagueScale(club: Club, league?: string | null): number {
-  return clubStrengthScale(club) * leagueValueWeight(league ?? club.league);
+  const weight = leagueValueWeight(league ?? club.league);
+  return clubStrengthScale(club) * Math.sqrt(weight);
+}
+
+/**
+ * Floor for a young standout in this division — a Championship golden boot
+ * should be the most valuable player in that league, not a €5m afterthought.
+ * Exceptional ratio over a long sample can still climb above this.
+ */
+export function youngDivisionStarFloor(params: {
+  age: number;
+  league: string;
+  seasons: SeasonRecord[];
+}): number {
+  if (params.age > 24) return 0;
+  let divisionGoals = 0;
+  let starred = false;
+  for (const season of params.seasons) {
+    if (!countsTowardCareerRecord(season.seasonNumber, season.role)) continue;
+    if (seasonLeague(season) !== params.league) continue;
+    divisionGoals += season.goals;
+    if (season.topGoalscorer) starred = true;
+  }
+  if (!starred && divisionGoals < 40) return 0;
+  let base = 8_000_000;
+  if (TOP_LEAGUES.has(params.league)) base = 80_000_000;
+  else if (SECOND_DIVISIONS.has(params.league)) base = 36_000_000;
+  else if (params.league === 'Saudi Pro League') base = 18_000_000;
+  else if (params.league === 'Liga MX' || params.league === 'MLS') base = 14_000_000;
+  return Math.max(100_000, Math.round((base * ageValueFactor(params.age)) / 100_000) * 100_000);
 }
 
 export function playerMarketValue(params: MarketValueParams): number {
@@ -292,10 +323,22 @@ export function playerMarketValueFromSeasons(params: {
     weight += season.goals;
   }
   const scale = weight > 0 ? weighted / weight : clubLeagueScale(fallbackClub);
-  const base = valueFromScale(age, ratio, careerGoals, scale);
+  const base = valueFromScale(age, ratio, careerGoals, scale, careerGames);
   const poor = consecutivePoorFactor(consecutiveSeasonsBelow(seasons, 0.25));
-  const raw = base * poor;
+  const lastLeague = lastSeasonLeague(seasons) ?? fallbackClub.league;
+  const floor = youngDivisionStarFloor({ age, league: lastLeague, seasons });
+  const raw = Math.max(floor, base * poor);
   return Math.max(100_000, Math.round(raw / 100_000) * 100_000);
+}
+
+function lastSeasonLeague(seasons: SeasonRecord[]): string | null {
+  for (let i = seasons.length - 1; i >= 0; i--) {
+    const season = seasons[i];
+    if (!countsTowardCareerRecord(season.seasonNumber, season.role)) continue;
+    if (season.gamesPlayed <= 0) continue;
+    return seasonLeague(season);
+  }
+  return null;
 }
 
 /** Which transfer band a fee belongs in. A €100m+ player is never tier 5. */
@@ -307,10 +350,20 @@ export function tierForMarketValue(value: number): ClubTier {
   return 5;
 }
 
-function valueFromScale(age: number, ratio: number, careerGoals: number, scale: number): number {
+function valueFromScale(
+  age: number,
+  ratio: number,
+  careerGoals: number,
+  scale: number,
+  careerGames?: number,
+): number {
   const ratioScale = Math.max(0.015, ratio / ANCHOR_RATIO);
   const volume = Math.min(1.15, Math.max(0.18, 0.7 + careerGoals / 70));
-  const raw = BARCELONA_ANCHOR_VALUE * scale * ratioScale * ageValueFactor(age) * volume;
+  const proven =
+    careerGames != null && careerGames >= 50
+      ? Math.min(1.35, 0.92 + (careerGames - 50) / 200)
+      : 1;
+  const raw = BARCELONA_ANCHOR_VALUE * scale * ratioScale * ageValueFactor(age) * volume * proven;
   return Math.max(100_000, Math.round(raw / 100_000) * 100_000);
 }
 

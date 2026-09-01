@@ -553,6 +553,86 @@ function drawThighAndSock(
   ctx.fill();
 }
 
+function hairColorForSkin(skin: string): string {
+  const lum = luminance(skin);
+  if (lum > 0.72) return '#3f2a14';
+  if (lum > 0.5) return '#2a1810';
+  if (lum > 0.32) return '#1a0f0a';
+  return '#0d0806';
+}
+
+/** Egg-shaped caricature head used by the keeper and defenders. */
+function drawCaricatureHead(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  scale: number,
+  skinColor: string,
+) {
+  const hx = scale * 0.78;
+  const hy = scale * 1.02;
+  const hair = hairColorForSkin(skinColor);
+  ctx.fillStyle = skinColor;
+  ctx.beginPath();
+  ctx.ellipse(x, y + scale * 0.88, scale * 0.3, scale * 0.36, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(x - hx * 0.98, y + scale * 0.1, scale * 0.18, scale * 0.26, 0, 0, Math.PI * 2);
+  ctx.ellipse(x + hx * 0.98, y + scale * 0.1, scale * 0.18, scale * 0.26, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(x, y, hx, hy, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = hair;
+  ctx.beginPath();
+  ctx.ellipse(x, y - hy * 0.22, hx * 1.02, hy * 0.78, 0, Math.PI, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(x - hx * 0.7, y - hy * 0.02, scale * 0.22, scale * 0.44, -0.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(x + hx * 0.7, y - hy * 0.02, scale * 0.22, scale * 0.44, 0.4, 0, Math.PI * 2);
+  ctx.fill();
+  const eyeY = y - scale * 0.06;
+  const eyeDx = scale * 0.28;
+  ctx.fillStyle = '#f8fafc';
+  ctx.beginPath();
+  ctx.ellipse(x - eyeDx, eyeY, scale * 0.18, scale * 0.14, 0, 0, Math.PI * 2);
+  ctx.ellipse(x + eyeDx, eyeY, scale * 0.18, scale * 0.14, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#1c1917';
+  ctx.beginPath();
+  ctx.ellipse(x - eyeDx + scale * 0.03, eyeY + scale * 0.02, scale * 0.08, scale * 0.1, 0, 0, Math.PI * 2);
+  ctx.ellipse(x + eyeDx + scale * 0.03, eyeY + scale * 0.02, scale * 0.08, scale * 0.1, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#f8fafc';
+  ctx.beginPath();
+  ctx.arc(x - eyeDx + scale * 0.06, eyeY - scale * 0.03, scale * 0.035, 0, Math.PI * 2);
+  ctx.arc(x + eyeDx + scale * 0.06, eyeY - scale * 0.03, scale * 0.035, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = hair;
+  ctx.lineWidth = Math.max(1.2, scale * 0.08);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x - eyeDx - scale * 0.16, eyeY - scale * 0.22);
+  ctx.lineTo(x - eyeDx + scale * 0.14, eyeY - scale * 0.16);
+  ctx.moveTo(x + eyeDx - scale * 0.14, eyeY - scale * 0.16);
+  ctx.lineTo(x + eyeDx + scale * 0.16, eyeY - scale * 0.22);
+  ctx.stroke();
+  ctx.fillStyle = shadeHex(skinColor, -0.14);
+  ctx.beginPath();
+  ctx.moveTo(x, y - scale * 0.02);
+  ctx.lineTo(x - scale * 0.1, y + scale * 0.24);
+  ctx.lineTo(x + scale * 0.1, y + scale * 0.24);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = shadeHex(skinColor, -0.3);
+  ctx.lineWidth = Math.max(1.1, scale * 0.07);
+  ctx.beginPath();
+  ctx.arc(x, y + scale * 0.4, scale * 0.2, 0.12 * Math.PI, 0.88 * Math.PI);
+  ctx.stroke();
+}
+
 export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose: KeeperPose) {
   const scale = keeperScale(view);
   const hips = goalToPixel(pose.pos, view);
@@ -653,14 +733,7 @@ export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose:
   drawArm(shoulderL, gloveL);
   drawArm(shoulderR, gloveR);
 
-  ctx.fillStyle = skinColor;
-  ctx.beginPath();
-  ctx.arc(headPx.x, headPx.y, scale * 0.95, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = 'rgba(0,0,0,0.18)';
-  ctx.beginPath();
-  ctx.arc(headPx.x, headPx.y - scale * 0.08, scale * 0.95, Math.PI * 0.95, Math.PI * 2.05);
-  ctx.fill();
+  drawCaricatureHead(ctx, headPx.x, headPx.y, scale, skinColor);
   ctx.restore();
 }
 
@@ -791,14 +864,7 @@ export function drawDefender(
   drawArm(shoulderL, gloveL);
   drawArm(shoulderR, gloveR);
 
-  ctx.fillStyle = skinColor;
-  ctx.beginPath();
-  ctx.arc(headPx.x, headPx.y, scale * 0.95, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = 'rgba(0,0,0,0.18)';
-  ctx.beginPath();
-  ctx.arc(headPx.x, headPx.y - scale * 0.08, scale * 0.95, Math.PI * 0.95, Math.PI * 2.05);
-  ctx.fill();
+  drawCaricatureHead(ctx, headPx.x, headPx.y, scale, skinColor);
   ctx.restore();
 }
 

@@ -3,8 +3,11 @@ import {
   qualifyingOutcomeLabel,
   tournamentOutcomeLabel,
 } from '../honoursDisplay';
-import type { DomesticSplit } from '../seasonStats';
-import type { InternationalSeasonRecord } from '../types';
+import {
+  continentalLabel,
+  type DomesticSplit,
+} from '../seasonStats';
+import type { ContinentalSeasonStat, InternationalSeasonRecord } from '../types';
 
 export interface StatsTableRow {
   label: string;
@@ -15,10 +18,12 @@ export interface StatsTableRow {
 export default function StatsTable({
   rows,
   footer,
+  footerNote,
   alwaysShowRows = false,
 }: {
   rows: StatsTableRow[];
   footer?: StatsTableRow;
+  footerNote?: string;
   alwaysShowRows?: boolean;
 }) {
   const visible = alwaysShowRows ? rows : rows.filter((row) => row.games > 0 || row.goals > 0);
@@ -48,9 +53,52 @@ export default function StatsTable({
             <td className="pt-1.5 text-right tabular-nums">{footer.games}</td>
             <td className="pt-1.5 text-right tabular-nums">{footer.goals}</td>
           </tr>
+          {footerNote && (
+            <tr>
+              <td colSpan={3} className="pt-1 text-right text-xs font-semibold tabular-nums text-white/70">
+                {footerNote}
+              </td>
+            </tr>
+          )}
         </tfoot>
       )}
     </table>
+  );
+}
+
+/** League, cup, and European rows in one list, with a single total + ratio. */
+export function ClubCompetitionTable({
+  split,
+  continental = [],
+  alwaysShowEuropean = false,
+}: {
+  split: DomesticSplit;
+  continental?: ContinentalSeasonStat[];
+  alwaysShowEuropean?: boolean;
+}) {
+  const euroRows = continental.map((row) => ({
+    label: continentalLabel(row.cup),
+    games: row.games,
+    goals: row.goals,
+  }));
+  const rows: StatsTableRow[] = [
+    { label: 'League', games: split.league.games, goals: split.league.goals },
+    { label: 'Cup', games: split.cup.games, goals: split.cup.goals },
+    ...euroRows,
+  ];
+  if (alwaysShowEuropean && euroRows.length === 0) {
+    rows.push({ label: 'European', games: 0, goals: 0 });
+  }
+  const totalGames = split.total.games + euroRows.reduce((sum, row) => sum + row.games, 0);
+  const totalGoals = split.total.goals + euroRows.reduce((sum, row) => sum + row.goals, 0);
+  const ratio = totalGames > 0 ? totalGoals / totalGames : 0;
+  return (
+    <StatsTable
+      alwaysShowRows
+      rows={rows}
+      footer={{ label: 'Total', games: totalGames, goals: totalGoals }}
+      footerNote={`Ratio ${ratio.toFixed(2)}`}
+    />
   );
 }
 

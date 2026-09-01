@@ -11,6 +11,7 @@ import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons, transferFe
 import { conferenceTable, fixtureTitle, internationalRoundLabel, nextPlayableFixture, type SeasonSimState } from '../seasonSim';
 import { requiredGoalRatio } from '../transfers';
 import { useCareerStore } from '../store';
+import { DATA_CARD, DATA_INSET } from './dataUi';
 
 const ROLE_LABEL: Record<string, string> = {
   reserve: 'Reserve Team',
@@ -91,7 +92,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         </div>
       </div>
 
-      <div className="rounded-2xl bg-white/5 p-4" style={{ borderLeft: `4px solid ${club.color}` }}>
+      <div className={DATA_CARD} style={{ borderLeft: `4px solid ${club.color}` }}>
         <p className="text-xs uppercase tracking-wide text-white/40">
           {displaySeasonLabel(seasonNumber, { role, careerStart })} · {ROLE_LABEL[role]}
           {` · Week ${week} of ${totalWeeks}`}
@@ -158,7 +159,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
       </div>
 
       {week > 0 && (
-        <div className="mt-3 rounded-xl bg-white/5 px-4 py-3">
+        <div className={`mt-3 ${DATA_INSET}`}>
           <div className="flex items-baseline justify-between">
             <span className="text-xs uppercase tracking-wide text-white/40">Season week</span>
             <span className="text-sm font-bold">
@@ -175,7 +176,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
       )}
 
       {lastMatchSummary && (
-        <div className="mt-3 rounded-xl bg-white/5 px-4 py-3 text-sm text-white/80">{lastMatchSummary}</div>
+        <div className={`mt-3 ${DATA_INSET} text-sm text-white/80`}>{lastMatchSummary}</div>
       )}
 
       <div className="mt-5 flex flex-col gap-5">
@@ -189,7 +190,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
           />
         )}
 
-        <div className="rounded-2xl bg-white/5 p-4">
+        <div className={DATA_CARD}>
           <div className="mb-2 flex items-baseline justify-between">
             <span className="text-xs uppercase tracking-wide text-white/40">Season ratio</span>
             <span className="text-sm font-bold">
@@ -255,7 +256,7 @@ function StandingsCard({
   };
 
   return (
-    <div className="rounded-2xl bg-white/5 p-4">
+    <div className={DATA_CARD}>
       <p className="text-xs uppercase tracking-wide text-white/40">Standings</p>
       <div className="mt-2 grid grid-cols-2 gap-3">
         <div>
@@ -346,7 +347,7 @@ function InternationalCard({
   })();
 
   return (
-    <div className="rounded-2xl bg-white/5 p-4">
+    <div className={DATA_CARD}>
       <p className="text-xs uppercase tracking-wide text-white/40">{nationName} call-up</p>
       <p className={`mt-1 text-sm font-semibold ${inForm ? 'text-emerald-300' : 'text-white/80'}`}>
         {statusLine}
@@ -418,7 +419,7 @@ function RecentForm({ matches }: { matches: { played: boolean; scored: boolean |
   if (recent.length === 0) return null;
 
   return (
-    <div className="rounded-2xl bg-white/5 p-4">
+    <div className={DATA_CARD}>
       <p className="mb-2 text-xs uppercase tracking-wide text-white/40">Recent form</p>
       <div className="flex items-center gap-2">
         {recent.map((m, i) => {

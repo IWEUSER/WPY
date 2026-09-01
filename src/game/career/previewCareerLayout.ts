@@ -437,11 +437,54 @@ export function applyCareerLayoutPreview(): void {
         contractYearsRemaining: 2,
       })
     : null;
+  const champSeasons = [2, 3, 4].map((n) =>
+    season({
+      seasonNumber: n,
+      clubId: 'leicester',
+      role: 'first-team',
+      matches: [],
+      goals: 22,
+      gamesPlayed: 46,
+      ratioMet: true,
+      age: 17 + n,
+      leagueGoals: 22,
+      leagueGames: 46,
+      cupGames: 0,
+      cupGoals: 0,
+      domesticGames: 46,
+      domesticGoals: 22,
+      trophies: n === 4 ? ['Championship'] : [],
+      topGoalscorer: n === 4,
+      playerOfTheYear: false,
+      wonWpy: false,
+      league: 'Championship',
+    }),
+  );
+  const champTransferPreview =
+    preview === 'championship-transfer'
+      ? resolveSeasonTransition({
+          season: champSeasons[2],
+          role: 'first-team',
+          clubId: 'leicester',
+          parentClubId: 'leicester',
+          seasonsAtCurrentClub: 3,
+          age: 20,
+          careerGoals: 66,
+          careerGames: 138,
+          nationality: 'england',
+          loansUsed: 0,
+          seasonHistory: champSeasons.slice(0, 2),
+          contractYearsRemaining: 3,
+          clubLeague: 'Championship',
+        })
+      : null;
   const pendingTransfer: PendingTransfer | null =
     preview === 'renew'
       ? renewalPreview?.pendingTransfer ?? null
       : preview === 'reserve-promo'
       ? reservePromo?.pendingTransfer ?? null
+      : preview === 'championship-transfer'
+      ? champTransferPreview?.pendingTransfer ?? null
       : preview === 'expired'
       ? {
           kind: 'end-of-season',
@@ -459,15 +502,21 @@ export function applyCareerLayoutPreview(): void {
       : preview === 'transfer'
       ? {
           kind: 'loan-or-transfer',
-          detail: 'Loan wages follow your value. A €200m fee is only payable by PSG, Real Madrid or Manchester City.',
-          clubIds: ['dortmund', 'real-sociedad', 'sevilla', 'psg', 'real-madrid', 'man-city'],
+          detail: 'Loan wages follow your value. Permanent fees follow the contract, not your market value.',
+          clubIds: ['dortmund', 'real-sociedad', 'sevilla', 'getafe', 'osasuna', 'mainz', 'psg', 'real-madrid', 'man-city', 'bayern', 'arsenal', 'chelsea'],
           offers: [
             { clubId: 'dortmund', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('dortmund')!, value), contractYears: 1 },
             { clubId: 'real-sociedad', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('real-sociedad')!, value), contractYears: 1 },
             { clubId: 'sevilla', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('sevilla')!, value), contractYears: 1 },
+            { clubId: 'getafe', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('getafe')!, value), contractYears: 1 },
+            { clubId: 'osasuna', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('osasuna')!, value), contractYears: 1 },
+            { clubId: 'mainz', move: 'loan', fee: 0, weeklyWage: weeklyWageForClub(getClub('mainz')!, value), contractYears: 1 },
             { clubId: 'psg', move: 'permanent', fee: Math.max(value, 200_000_000), weeklyWage: weeklyWageForClub(getClub('psg')!, value), contractYears: newContractYears(19) },
             { clubId: 'real-madrid', move: 'permanent', fee: Math.max(value, 200_000_000), weeklyWage: weeklyWageForClub(getClub('real-madrid')!, value), contractYears: newContractYears(19) },
             { clubId: 'man-city', move: 'permanent', fee: Math.max(value, 200_000_000), weeklyWage: weeklyWageForClub(getClub('man-city')!, value), contractYears: newContractYears(19) },
+            { clubId: 'bayern', move: 'permanent', fee: 80_000_000, weeklyWage: weeklyWageForClub(getClub('bayern')!, value), contractYears: newContractYears(19) },
+            { clubId: 'arsenal', move: 'permanent', fee: 80_000_000, weeklyWage: weeklyWageForClub(getClub('arsenal')!, value), contractYears: newContractYears(19) },
+            { clubId: 'chelsea', move: 'permanent', fee: 80_000_000, weeklyWage: weeklyWageForClub(getClub('chelsea')!, value), contractYears: newContractYears(19) },
           ],
           allowDecline: false,
         }
@@ -504,7 +553,7 @@ export function applyCareerLayoutPreview(): void {
           ? 'match'
         : preview === 'record'
         ? 'career'
-        :       preview === 'transfer' || preview === 'expired' || preview === 'renew'
+        : preview === 'transfer' || preview === 'expired' || preview === 'renew' || preview === 'championship-transfer'
           ? 'transfer-choice'
           : preview === 'reserve-promo'
             ? 'season-summary'
@@ -519,22 +568,22 @@ export function applyCareerLayoutPreview(): void {
                 : isMatchPreview || isReservePreview
                   ? 'match'
                   : 'hub',
-    age: isTrialPreview || isYouthPreview || isClubTrialPreview || isReservePreview ? 16 : preview === 'end' ? 36 : promoteSummary ? 22 : 19,
+    age: isTrialPreview || isYouthPreview || isClubTrialPreview || isReservePreview ? 16 : preview === 'end' ? 36 : preview === 'championship-transfer' ? 20 : promoteSummary ? 22 : 19,
     seasonNumber: isTrialPreview || isYouthPreview || isClubTrialPreview || isReservePreview ? 1 : preview === 'end' ? 21 : promoteSummary ? 6 : 4,
-    clubId: isYouthPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : promoteSummary ? 'leicester' : 'real-madrid',
-    parentClubId: isYouthPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : promoteSummary ? 'leicester' : 'real-madrid',
+    clubId: isYouthPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : preview === 'championship-transfer' || promoteSummary ? 'leicester' : 'real-madrid',
+    parentClubId: isYouthPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : preview === 'championship-transfer' || promoteSummary ? 'leicester' : 'real-madrid',
     role: isReservePreview || isTrialPreview || isYouthPreview || isClubTrialPreview ? 'reserve' : 'first-team',
     trial: preview === 'club-offer'
       ? { shots: [], goals: 6, offeredClubIds: ['real-madrid', 'barcelona', 'atletico-madrid'] }
       : null,
     openingCampaign,
     seasonsAtCurrentClub: preview === 'end' ? 10 : promoteSummary ? 1 : 3,
-    nationality: preview === 'mls' ? 'united-states' : preview === 'saudi' ? 'saudi-arabia' : 'spain',
+    nationality: preview === 'mls' ? 'united-states' : preview === 'saudi' ? 'saudi-arabia' : preview === 'championship-transfer' ? 'england' : 'spain',
     nationalTeam,
     availability: createAvailability(),
-    seasonHistory: history,
-    careerGoals: preview === 'end' ? 312 : 58,
-    careerGames: preview === 'end' ? 540 : 76,
+    seasonHistory: preview === 'championship-transfer' ? champSeasons.slice(0, 2) : history,
+    careerGoals: preview === 'end' ? 312 : preview === 'championship-transfer' ? 66 : 58,
+    careerGames: preview === 'end' ? 540 : preview === 'championship-transfer' ? 138 : 76,
     seasonCalendar: isReservePreview
       ? reserveSeason?.calendar ?? null
       : isTrialPreview || isYouthPreview || isClubTrialPreview
@@ -640,8 +689,8 @@ export function applyCareerLayoutPreview(): void {
     weeklyWage: preview === 'end' ? 40_000 : promoteSummary && leicester ? weeklyWageForClub(leicester, value, 'Championship') : 140_000,
     careerEarnings: preview === 'end' ? 86_400_000 : 14_560_000,
     contractYears: preview === 'end' ? 1 : promoteSummary || preview === 'expired' ? 2 : preview === 'hub' ? 2 : 5,
-    contractYearsRemaining: preview === 'end' || preview === 'expired' ? 1 : promoteSummary || preview === 'hub' ? 2 : 5,
-    clubLeague: preview === 'end' || preview === 'mls' ? 'MLS' : preview === 'saudi' ? 'Saudi Pro League' : promoteSummary ? 'Championship' : 'La Liga',
+    contractYearsRemaining: preview === 'end' || preview === 'expired' ? 1 : preview === 'championship-transfer' ? 3 : promoteSummary || preview === 'hub' ? 2 : 5,
+    clubLeague: preview === 'end' || preview === 'mls' ? 'MLS' : preview === 'saudi' ? 'Saudi Pro League' : preview === 'championship-transfer' || promoteSummary ? 'Championship' : 'La Liga',
     homeContractYearsRemaining: null,
     seasonSponsorship: preview === 'end' ? 280_000 : 9_300_000,
     injuryGamesRemaining: 0,

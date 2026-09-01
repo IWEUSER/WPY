@@ -1,14 +1,15 @@
 import { getClub } from '../data/clubs';
 import { INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { currentCalendarWeek } from '../calendar';
-import { awardLabels, careerAwardCounts, careerTrophyCounts, formatInternationalSeason, seasonClubName, seasonLeagueLabel, seasonRatio } from '../honoursDisplay';
+import { awardLabels, careerAwardCounts, careerTrophyCounts, formatInternationalSeason, seasonClubName, seasonLeagueLabel } from '../honoursDisplay';
 import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
 import { countsTowardCareerRecord, displaySeasonLabel } from '../seasonDisplay';
-import { aggregateContinental, aggregateDomesticSplit, continentalLabel, seasonDomesticSplit } from '../seasonStats';
+import { aggregateContinental, aggregateDomesticSplit, seasonDomesticSplit } from '../seasonStats';
 import { useCareerStore } from '../store';
 import type { SeasonRecord } from '../types';
+import { DATA_CARD, DATA_TILE } from './dataUi';
 import { HonoursPills } from './HonoursPills';
-import StatsTable, { DomesticStatsTable, InternationalSeasonBlock } from './StatsTable';
+import StatsTable, { ClubCompetitionTable, InternationalSeasonBlock } from './StatsTable';
 
 const ROLE_LABEL: Record<string, string> = {
   reserve: 'Reserves',
@@ -71,22 +72,10 @@ export default function CareerRecordScreen() {
       </div>
       <p className="mt-2 text-center text-[11px] text-white/40">Club and country combined</p>
 
-      <div className="mt-3 rounded-2xl bg-white/5 p-4 text-sm">
-        <p className="text-xs uppercase tracking-wide text-white/40">Domestic</p>
-        <DomesticStatsTable split={domestic} />
+      <div className={`mt-3 ${DATA_CARD} text-sm`}>
+        <p className="text-xs uppercase tracking-wide text-white/40">Club</p>
+        <ClubCompetitionTable split={domestic} continental={continental} alwaysShowEuropean />
       </div>
-      {continental.length > 0 && (
-        <div className="mt-3 rounded-2xl bg-white/5 p-4 text-sm">
-          <p className="text-xs uppercase tracking-wide text-white/40">Continental</p>
-          <StatsTable
-            rows={continental.map((row) => ({
-              label: continentalLabel(row.cup),
-              games: row.games,
-              goals: row.goals,
-            }))}
-          />
-        </div>
-      )}
 
       {(() => {
         const club = clubId ? getClub(clubId) : undefined;
@@ -126,7 +115,7 @@ export default function CareerRecordScreen() {
       })()}
 
       {nationalTeam && (
-        <section className="mt-5 rounded-2xl bg-white/5 p-4">
+        <section className={`mt-5 ${DATA_CARD}`}>
           <p className="text-xs uppercase tracking-wide text-white/40">International</p>
           <p className="mt-1 text-lg font-bold">
             {nationalTeam.caps} caps · {nationalTeam.goals} goals
@@ -176,7 +165,7 @@ export default function CareerRecordScreen() {
       <HonoursPills title="Trophies" items={trophies} empty="No trophies yet" tone="trophy" />
       <HonoursPills title="Awards" items={awards} empty="No awards yet" tone="award" />
 
-      <section className="mt-5 rounded-2xl bg-amber-400/10 p-4">
+      <section className="mt-5 rounded-2xl border border-amber-200/25 bg-amber-400/10 p-4">
         <p className="text-xs uppercase tracking-wide text-amber-200/70">World Player of the Year</p>
         {wpyWins.length === 0 ? (
           <p className="mt-2 text-sm text-white/60">No titles yet. Win the Champions League or a major international with an elite season.</p>
@@ -215,7 +204,7 @@ export default function CareerRecordScreen() {
 
 function StatTile({ value, label }: { value: string; label: string }) {
   return (
-    <div className="rounded-xl bg-white/5 p-3 text-center">
+    <div className={DATA_TILE}>
       <p className="text-lg font-bold">{value}</p>
       <p className="text-[10px] uppercase tracking-wide text-white/40">{label}</p>
     </div>
@@ -229,7 +218,7 @@ function SeasonCard({ season }: { season: SeasonRecord & { inProgress?: boolean 
   const careerStart = useCareerStore((s) => s.careerStart);
 
   return (
-    <article className="rounded-2xl bg-white/5 p-4" style={club ? { borderLeft: `4px solid ${club.color}` } : undefined}>
+    <article className={DATA_CARD} style={club ? { borderLeft: `4px solid ${club.color}` } : undefined}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-wide text-white/40">
@@ -250,30 +239,10 @@ function SeasonCard({ season }: { season: SeasonRecord & { inProgress?: boolean 
         )}
       </div>
 
-      <dl className="mt-3 grid grid-cols-3 gap-2 text-center">
-        <div>
-          <dt className="text-[10px] uppercase tracking-wide text-white/40">Games</dt>
-          <dd className="text-base font-bold">{season.gamesPlayed}</dd>
-        </div>
-        <div>
-          <dt className="text-[10px] uppercase tracking-wide text-white/40">Goals</dt>
-          <dd className="text-base font-bold">{season.goals}</dd>
-        </div>
-        <div>
-          <dt className="text-[10px] uppercase tracking-wide text-white/40">Ratio</dt>
-          <dd className="text-base font-bold">{seasonRatio(season).toFixed(2)}</dd>
-        </div>
-      </dl>
-      <DomesticStatsTable split={seasonDomesticSplit(season)} />
-      {(season.continentalStats ?? []).length > 0 && (
-        <StatsTable
-          rows={(season.continentalStats ?? []).map((row) => ({
-            label: continentalLabel(row.cup),
-            games: row.games,
-            goals: row.goals,
-          }))}
-        />
-      )}
+      <ClubCompetitionTable
+        split={seasonDomesticSplit(season)}
+        continental={season.continentalStats ?? []}
+      />
       {season.international && (
         <div className="mt-2">
           <InternationalSeasonBlock
