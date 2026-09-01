@@ -1,6 +1,11 @@
+import { pickPlayerLook, type AppearanceRegion } from './appearance';
 import { DIVE_LAYOUT_RAD } from './constants';
 import { luminance, mixHex, shadeHex, type DefenderKit } from './kitPalette';
+import type { PitchQuality } from './stadium';
 import type { AimPoint } from './types';
+
+export type { AppearanceRegion };
+export { appearanceRegionForNation, pickPlayerLook } from './appearance';
 
 /** FIFA markings in metres. Boxes are drawn from these ratios to the goal
  * (7.32 × 2.44), so the 6-yard and 18-yard areas stay in true proportion
@@ -163,7 +168,12 @@ function drawBoxOutline(ctx: CanvasRenderingContext2D, w: number, box: BoxSpec) 
   ctx.stroke();
 }
 
-export function drawPitch(ctx: CanvasRenderingContext2D, view: PitchView, time: number, opts?: { night?: boolean; plain?: boolean }) {
+export function drawPitch(ctx: CanvasRenderingContext2D, view: PitchView, time: number, opts?: {
+  night?: boolean;
+  plain?: boolean;
+  quality?: PitchQuality;
+  seed?: string;
+}) {
   const { w, h } = view;
   const { halfW, botY } = view.goal;
   const plain = Boolean(opts?.plain);
@@ -171,6 +181,7 @@ export function drawPitch(ctx: CanvasRenderingContext2D, view: PitchView, time: 
   const grassTop = plain ? 0 : botY;
   const vanishY = plain ? HORIZON_Y * h : grassTop;
   const night = Boolean(opts?.night);
+  const quality: PitchQuality = opts?.quality ?? 'good';
 
   ctx.save();
   if (!plain) {
@@ -188,7 +199,15 @@ export function drawPitch(ctx: CanvasRenderingContext2D, view: PitchView, time: 
   }
 
   const grad = ctx.createLinearGradient(0, grassTop, 0, h);
-  if (plain || night) {
+  if (quality === 'elite' && !night && !plain) {
+    grad.addColorStop(0, '#178a38');
+    grad.addColorStop(0.4, '#22a344');
+    grad.addColorStop(1, '#2ec853');
+  } else if (quality === 'worn' || quality === 'tired') {
+    grad.addColorStop(0, night || plain ? '#163820' : '#1c5c30');
+    grad.addColorStop(0.45, night || plain ? '#1a4a28' : '#21703a');
+    grad.addColorStop(1, night || plain ? '#1f5c32' : '#268244');
+  } else if (plain || night) {
     grad.addColorStop(0, '#0f3d1f');
     grad.addColorStop(0.4, '#155a29');
     grad.addColorStop(1, '#1f7a37');
@@ -200,7 +219,9 @@ export function drawPitch(ctx: CanvasRenderingContext2D, view: PitchView, time: 
   ctx.fillStyle = grad;
   ctx.fillRect(0, grassTop, w, Math.max(0, h - grassTop));
 
-  const stripeCount = 9;
+  const stripeCount = quality === 'worn' ? 7 : 9;
+  const stripeLight = quality === 'elite' ? 'rgba(255,255,255,0.055)' : quality === 'worn' ? 'rgba(255,255,255,0.018)' : 'rgba(255,255,255,0.035)';
+  const stripeDark = quality === 'elite' ? 'rgba(0,0,0,0.045)' : quality === 'worn' ? 'rgba(40,24,8,0.08)' : 'rgba(0,0,0,0.03)';
   for (let i = 0; i < stripeCount; i++) {
     const t0 = i / stripeCount;
     const t1 = (i + 1) / stripeCount;
@@ -210,8 +231,25 @@ export function drawPitch(ctx: CanvasRenderingContext2D, view: PitchView, time: 
     ctx.lineTo(lerp(w * 0.38, w * 0.62, t1), vanishY);
     ctx.lineTo(lerp(w * 0.38, w * 0.62, t0), vanishY);
     ctx.closePath();
-    ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.03)';
+    ctx.fillStyle = i % 2 === 0 ? stripeLight : stripeDark;
     ctx.fill();
+  }
+
+  if (quality === 'tired' || quality === 'worn') {
+    const rng = mulberry32(hashKey(opts?.seed ?? `pitch-${quality}`));
+    const patches = quality === 'worn' ? 9 : 4;
+    for (let i = 0; i < patches; i++) {
+      const px = w * (0.12 + rng() * 0.76);
+      const py = grassTop + (h - grassTop) * (0.18 + rng() * 0.72);
+      const rx = w * (0.04 + rng() * (quality === 'worn' ? 0.09 : 0.05));
+      const ry = rx * (0.35 + rng() * 0.3);
+      ctx.beginPath();
+      ctx.ellipse(px, py, rx, ry, rng() * 0.6 - 0.3, 0, Math.PI * 2);
+      ctx.fillStyle = quality === 'worn'
+        ? `rgba(${90 + rng() * 40 | 0},${70 + rng() * 30 | 0},${28 + rng() * 18 | 0},${(0.22 + rng() * 0.22).toFixed(3)})`
+        : `rgba(70,90,40,${(0.12 + rng() * 0.12).toFixed(3)})`;
+      ctx.fill();
+    }
   }
 
   const goalLineY = botY;
@@ -343,6 +381,8 @@ export interface KeeperPose {
   hand: AimPoint;
   /** Stable skin tone for this chance — not the same beige every time. */
   skinTone: string;
+  /** Hair colour paired with the skin; blonde/brown on fair skins. */
+  hairColor?: string;
 }
 
 /** Collision skeleton stays in these units. Drawing uses 8-head proportions. */
@@ -353,17 +393,21 @@ const KEEPER_HEAD_FROM_HIP = 3.9;
 
 /** Light through dark — keepers and defenders pick one per chance. */
 export const PLAYER_SKIN_TONES = [
+  '#f7e4cc',
   '#f6dec0',
+  '#edd0a8',
   '#e8b88a',
+  '#e0c09a',
+  '#d4a574',
   '#c68642',
   '#8d5524',
   '#6b3d1f',
 ] as const;
 
-export type SkinPalette = 'any' | 'africa';
+export type SkinPalette = AppearanceRegion;
 
 /** Medium through dark brown — African national-team keepers and defenders. */
-export const AFRICA_SKIN_TONES = PLAYER_SKIN_TONES.slice(2);
+export const AFRICA_SKIN_TONES = ['#c68642', '#8d5524', '#6b3d1f'] as const;
 
 /** Hip→knee share of the hip-to-boot line. Shorts must stay shorter than this. */
 export const THIGH_SHARE = 0.42;
@@ -376,12 +420,11 @@ export const JERSEY_SHOULDER_INSET = 0.12;
 export const SHORTS_CENTER = -0.08;
 
 export function pickPlayerSkin(seed: number, palette: SkinPalette = 'any'): string {
-  const tones = palette === 'africa' ? AFRICA_SKIN_TONES : PLAYER_SKIN_TONES;
-  const i = Math.abs(Math.floor(seed)) % tones.length;
-  return tones[i];
+  return pickPlayerLook(seed, palette).skin;
 }
 
 export function idleKeeperPose(rng: () => number = Math.random, palette: SkinPalette = 'any'): KeeperPose {
+  const look = pickPlayerLook(Math.floor(rng() * 1_000_000), palette);
   return {
     pos: { x: 0, y: 0.28 },
     stretch: 0,
@@ -390,7 +433,8 @@ export function idleKeeperPose(rng: () => number = Math.random, palette: SkinPal
     layout: 0,
     elevation: 0,
     hand: { x: 0, y: 0.34 },
-    skinTone: pickPlayerSkin(Math.floor(rng() * 1_000_000), palette),
+    skinTone: look.skin,
+    hairColor: look.hair,
   };
 }
 
@@ -506,8 +550,8 @@ type FigPt = { x: number; y: number };
 
 function hairColorForSkin(skin: string): string {
   const lum = luminance(skin);
-  if (lum > 0.72) return '#3a2418';
-  if (lum > 0.5) return '#2a1810';
+  if (lum > 0.72) return '#5a3820';
+  if (lum > 0.55) return '#3d2416';
   if (lum > 0.32) return '#1a100c';
   return '#0e0906';
 }
@@ -565,10 +609,11 @@ function drawAthleteHead(
   y: number,
   H: number,
   skin: string,
+  hairColor?: string,
 ) {
   const hx = H * 0.54;
   const hy = H * 0.60;
-  const hair = hairColorForSkin(skin);
+  const hair = hairColor ?? hairColorForSkin(skin);
   const shade = shadeHex(skin, -0.22);
   const light = mixHex(skin, '#fff3e8', 0.28);
   const lip = mixHex(shadeHex(skin, -0.3), '#6a3a32', 0.4);
@@ -750,6 +795,7 @@ function drawGlove(
 
 interface HumanoidStyle {
   skin: string;
+  hair?: string;
   shirt: string;
   shirtDark: string;
   shorts: string;
@@ -928,7 +974,7 @@ function drawHumanoid(
   ctx.closePath();
   ctx.fill();
 
-  drawAthleteHead(ctx, head.x, head.y, H, skin);
+  drawAthleteHead(ctx, head.x, head.y, H, skin, style.hair);
 }
 
 export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose: KeeperPose) {
@@ -942,9 +988,23 @@ export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose:
   // standing sprite is lifted onto the goal line so a 1.88 m keeper actually
   // occupies ~77% of the 2.44 m posts (and ~4–6% of the goal face).
   const standing = dir === 0 && layout < 0.12;
-  const hips = standing
+  let hips = standing
     ? { x: collisionHips.x, y: groundY - 4 * H }
-    : collisionHips;
+    : { ...collisionHips };
+
+  const handPx = goalToPixel(pose.hand, view);
+  // On a dive, slide the whole body toward the gloves so arms stay human-length
+  // instead of stretching across the goal.
+  const maxArm = H * 4.9;
+  if (!standing) {
+    const dx = handPx.x - hips.x;
+    const dy = handPx.y - hips.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist > maxArm && dist > 1e-3) {
+      const extra = dist - maxArm;
+      hips = { x: hips.x + (dx / dist) * extra, y: hips.y + (dy / dist) * extra };
+    }
+  }
 
   const shadowW = H * (1.15 * BODY_X + layout * 2.4);
   ctx.save();
@@ -954,19 +1014,18 @@ export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose:
   ctx.fill();
   ctx.restore();
 
-  const handPx = goalToPixel(pose.hand, view);
-  const wx = handPx.x - collisionHips.x;
-  const wy = handPx.y - collisionHips.y;
+  const wx = handPx.x - hips.x;
+  const wy = handPx.y - hips.y;
   const cosA = Math.cos(ang);
   const sinA = Math.sin(ang);
   const localHx = wx * cosA + wy * sinA;
   const localHy = -wx * sinA + wy * cosA;
   const gloveL = standing
     ? { x: -H * 1.18, y: -H * 1.62 }
-    : { x: localHx - H * 0.32, y: localHy };
+    : { x: localHx - H * 0.28, y: localHy };
   const gloveR = standing
     ? { x: H * 1.24, y: -H * 1.42 }
-    : { x: localHx + H * 0.36, y: localHy + H * 0.18 };
+    : { x: localHx + H * 0.32, y: localHy + H * 0.16 };
 
   ctx.save();
   ctx.translate(hips.x, hips.y);
@@ -976,6 +1035,7 @@ export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose:
     H,
     {
       skin: pose.skinTone || PLAYER_SKIN_TONES[1],
+      hair: pose.hairColor,
       shirt: pose.beaten ? '#9ca3af' : '#fde047',
       shirtDark: pose.beaten ? '#4b5563' : '#ca8a04',
       shorts: pose.beaten ? '#1f2937' : '#14532d',
@@ -1000,6 +1060,7 @@ export function drawDefender(
   kit?: DefenderKit,
   stride = 0,
   skinTone?: string,
+  hairColor?: string,
 ) {
   const meterPx = view.halfWidthPx(1, worldZ);
   const feet = worldToScreen(view, worldX, worldZ);
@@ -1021,6 +1082,7 @@ export function drawDefender(
     H,
     {
       skin: skinTone ?? PLAYER_SKIN_TONES[2],
+      hair: hairColor,
       shirt: kit?.shirt ?? '#1d4ed8',
       shirtDark: kit?.shirtDark ?? '#1e3a8a',
       shorts: kit?.shorts ?? '#f8fafc',
@@ -1088,4 +1150,24 @@ export function drawTrail(ctx: CanvasRenderingContext2D, points: { x: number; y:
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
+}
+
+function hashKey(key: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }

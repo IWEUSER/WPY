@@ -244,7 +244,9 @@ export function applyCareerLayoutPreview(): void {
   const isMatchPreview = preview === 'match' || preview === 'match-away' || preview === 'match-local'
     || preview === 'match-night'
     || preview === 'match-intl' || preview === 'match-ucl' || preview === 'match-intl-ko'
-    || preview === 'match-africa' || preview === 'match-overcast';
+    || preview === 'match-africa' || preview === 'match-overcast'
+    || preview === 'match-sweden' || preview === 'match-poland' || preview === 'match-brazil'
+    || preview === 'match-psg';
   let matchFixtureIndex = Math.max(0, calendar.fixtures.findIndex((f) => f.kind !== 'rest'));
   if (preview === 'match' || preview === 'match-away' || preview === 'match-local' || preview === 'match-night') {
     const wantHome = preview !== 'match-away';
@@ -328,6 +330,35 @@ export function applyCareerLayoutPreview(): void {
       fx.week = 4;
       fx.opponentId = 'senegal';
       fx.opponentLabel = 'Senegal';
+      fx.isHome = true;
+      fx.playerChances = 2;
+    }
+  } else if (preview === 'match-sweden' || preview === 'match-poland' || preview === 'match-brazil') {
+    const idx = calendar.fixtures.findIndex((f) => f.kind === 'international');
+    if (idx >= 0) matchFixtureIndex = idx;
+    const fx = calendar.fixtures[matchFixtureIndex];
+    const opp = preview === 'match-sweden'
+      ? { id: 'sweden', label: 'Sweden' }
+      : preview === 'match-poland'
+        ? { id: 'poland', label: 'Poland' }
+        : { id: 'brazil', label: 'Brazil' };
+    if (fx) {
+      fx.kind = 'international';
+      fx.internationalRound = 'group';
+      fx.week = 4;
+      fx.opponentId = opp.id;
+      fx.opponentLabel = opp.label;
+      fx.isHome = true;
+      fx.playerChances = 2;
+    }
+  } else if (preview === 'match-psg') {
+    const idx = calendar.fixtures.findIndex((f) => f.kind === 'league' && f.isHome);
+    if (idx >= 0) matchFixtureIndex = idx;
+    const fx = calendar.fixtures[matchFixtureIndex];
+    if (fx) {
+      fx.kind = 'league';
+      fx.opponentId = 'marseille';
+      fx.opponentLabel = 'Marseille';
       fx.isHome = true;
       fx.playerChances = 2;
     }
@@ -570,8 +601,8 @@ export function applyCareerLayoutPreview(): void {
                   : 'hub',
     age: isTrialPreview || isYouthPreview || isClubTrialPreview || isReservePreview ? 16 : preview === 'end' ? 36 : preview === 'championship-transfer' ? 20 : promoteSummary ? 22 : 19,
     seasonNumber: isTrialPreview || isYouthPreview || isClubTrialPreview || isReservePreview ? 1 : preview === 'end' ? 21 : promoteSummary ? 6 : 4,
-    clubId: isYouthPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : preview === 'championship-transfer' || promoteSummary ? 'leicester' : 'real-madrid',
-    parentClubId: isYouthPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : preview === 'championship-transfer' || promoteSummary ? 'leicester' : 'real-madrid',
+    clubId: isYouthPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : preview === 'match-psg' ? 'psg' : preview === 'championship-transfer' || promoteSummary ? 'leicester' : 'real-madrid',
+    parentClubId: isYouthPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : preview === 'match-psg' ? 'psg' : preview === 'championship-transfer' || promoteSummary ? 'leicester' : 'real-madrid',
     role: isReservePreview || isTrialPreview || isYouthPreview || isClubTrialPreview ? 'reserve' : 'first-team',
     trial: preview === 'club-offer'
       ? { shots: [], goals: 6, offeredClubIds: ['real-madrid', 'barcelona', 'atletico-madrid'] }

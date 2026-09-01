@@ -59,9 +59,29 @@ export interface StadiumAppearance {
   crowdFill?: CrowdFill;
   /** Daylight sun. False in mid-season weeks 7–32 and at night. */
   showSun?: boolean;
+  /** Playing surface: elite clubs are lush, lower clubs are worn. */
+  pitchQuality?: PitchQuality;
 }
 
 export type CrowdFill = 'full' | 'sparse' | 'empty';
+export type PitchQuality = 'elite' | 'good' | 'tired' | 'worn';
+
+/** Stronger clubs water a better pitch. Capacity is the fallback when there is no club. */
+export function pitchQualityFromStrength(strength?: number, capacity?: number): PitchQuality {
+  if (strength != null && Number.isFinite(strength)) {
+    if (strength >= 86) return 'elite';
+    if (strength >= 74) return 'good';
+    if (strength >= 64) return 'tired';
+    return 'worn';
+  }
+  if (capacity != null && Number.isFinite(capacity)) {
+    if (capacity >= 60_000) return 'elite';
+    if (capacity >= 40_000) return 'good';
+    if (capacity >= 22_000) return 'tired';
+    return 'worn';
+  }
+  return 'good';
+}
 
 export const SPARSE_CROWD_OCCUPANCY = 0.2;
 export const EMPTY_CROWD_OCCUPANCY = 0;
@@ -111,6 +131,7 @@ export const DEFAULT_STADIUM: StadiumAppearance = {
   standTiers: 5,
   unique: 'camp-nou',
   groundName: 'Camp Nou',
+  pitchQuality: 'elite',
 };
 
 export function defenderKitFromStadium(stadium: StadiumAppearance): DefenderKit {

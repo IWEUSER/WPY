@@ -5,6 +5,7 @@ import { currentCalendarWeek, fixtureVenueLabel } from '../calendar';
 import { getClub, leagueMatchWeeks } from '../data/clubs';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { getNation } from '../international';
+import { appearanceRegionForNation } from '../../shooting/appearance';
 import { resolveCareerStadium } from '../matchVenue';
 import { fixtureTitle } from '../seasonSim';
 import { useCareerStore } from '../store';
@@ -90,7 +91,7 @@ export default function MatchScreen() {
       maxShots={chances}
       clubStrength={club?.strength}
       stadium={stadium}
-      opponentSkinPalette={opponentNation?.confederation === 'CAF' ? 'africa' : 'any'}
+      opponentSkinPalette={appearanceRegionForNation(opponentNation)}
       onShotResolved={(result) => {
         lastResultRef.current = result;
         if (simulated) recordMatchChance(result);

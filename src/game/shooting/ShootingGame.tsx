@@ -16,12 +16,13 @@ import {
   drawTrail,
   goalToPixel,
   idleKeeperPose,
+  pickPlayerLook,
   pickPlayerSkin,
   worldToScreen,
   type KeeperPose,
   type SkinPalette,
 } from './render';
-import { drawStadium, DEFAULT_STADIUM, defenderKitFromStadium, profileFromScale, type StadiumAppearance } from './stadium';
+import { drawStadium, DEFAULT_STADIUM, defenderKitFromStadium, pitchQualityFromStrength, profileFromScale, type StadiumAppearance } from './stadium';
 import { groundForClub } from './grounds';
 import { normalizeHex } from './kitPalette';
 import { getClub } from '../career/data/clubs';
@@ -199,6 +200,7 @@ function readDevStadium(): StadiumAppearance | null {
     standTiers,
     unique: ground?.unique,
     groundName: ground?.name,
+    pitchQuality: pitchQualityFromStrength(clubId ? getClub(clubId)?.strength : undefined, capacity),
   };
 }
 
@@ -240,6 +242,7 @@ function readDevKeeperPose(): KeeperPose | null {
     hand: dive.hand,
     beaten: !saved,
     skinTone: pickPlayerSkin(col * 17 + row * 5),
+    hairColor: pickPlayerLook(col * 17 + row * 5).hair,
   };
 }
 
@@ -517,7 +520,12 @@ export default function ShootingGame({
         const defenderKit = defenderKitFromStadium(look);
         const plainPitch = look.bowl === false;
         if (!plainPitch) drawStadium(ctx, view, now, look);
-        drawPitch(ctx, view, now, { night: look.night, plain: plainPitch });
+        drawPitch(ctx, view, now, {
+          night: look.night,
+          plain: plainPitch,
+          quality: look.pitchQuality,
+          seed: look.groundName ?? look.scale,
+        });
         drawGoal(ctx, view);
 
         if (anim.phase === 'idle' || anim.phase === 'dragging') {
@@ -533,7 +541,7 @@ export default function ShootingGame({
           const devCell = readDevPoseCell();
           drawKeeper(ctx, view, devPose ?? anim.keeperPose);
           if (anim.defender) {
-            drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit, anim.defender.stride, anim.defender.skinTone);
+            drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit, anim.defender.stride, anim.defender.skinTone, anim.defender.hairColor);
           }
           if (anim.phase === 'dragging' && anim.dragStart && anim.dragPoints.length > 1) {
             // Show the actual curved path being swiped, not just a straight
@@ -606,12 +614,13 @@ export default function ShootingGame({
             },
             beaten: false,
             skinTone: anim.keeperPose.skinTone,
+            hairColor: anim.keeperPose.hairColor,
           };
 
           drawTrail(ctx, anim.ballTrail);
           drawKeeper(ctx, view, anim.keeperPose);
           if (anim.defender) {
-            drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit, anim.defender.stride, anim.defender.skinTone);
+            drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit, anim.defender.stride, anim.defender.skinTone, anim.defender.hairColor);
           }
           drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
 
@@ -643,13 +652,14 @@ export default function ShootingGame({
               hand: dive.hand,
               beaten: !saved,
               skinTone: anim.keeperPose.skinTone,
+              hairColor: anim.keeperPose.hairColor,
             };
             finishShot(result);
           }
         } else if (anim.phase === 'result' && anim.result) {
           drawKeeper(ctx, view, anim.keeperPose);
           if (anim.defender) {
-            drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit, anim.defender.stride, anim.defender.skinTone);
+            drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit, anim.defender.stride, anim.defender.skinTone, anim.defender.hairColor);
           }
           drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
           if (now - anim.resultAtMs > RESULT_HOLD_MS) {

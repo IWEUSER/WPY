@@ -109,7 +109,7 @@ export const CLUB_GROUNDS: Record<string, ClubGround> = {
   lille: { name: 'Stade Pierre-Mauroy', capacity: 50_186, tiers: 3 },
   koln: { name: 'RheinEnergieStadion', capacity: 49_698, tiers: 2 },
   sunderland: { name: 'Stadium of Light', capacity: 48_095, tiers: 3 },
-  psg: { name: 'Parc des Princes', capacity: 47_926, tiers: 3 },
+  psg: { name: 'Parc des Princes', capacity: 47_926, tiers: 2 },
   leipzig: { name: 'Red Bull Arena', capacity: 47_800, tiers: 2 },
   sevilla: { name: 'Ramón Sánchez-Pizjuán', capacity: 43_883, tiers: 3 },
   fiorentina: { name: 'Stadio Artemio Franchi', capacity: 43_118, tiers: 2 },

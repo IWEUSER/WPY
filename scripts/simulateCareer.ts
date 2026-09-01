@@ -17,8 +17,9 @@ import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { nationKit } from '../src/game/career/data/nationColours';
 import { reserveStadium, resolveCareerStadium, resolveMatchStadium, trialStadium } from '../src/game/career/matchVenue';
 import { crowdSwatch, kitFromColor, kitFromScheme, luminance } from '../src/game/shooting/kitPalette';
-import { AFRICA_SKIN_TONES, createPitchView, idleKeeperPose, MAX_SHOT_DISTANCE_M, MIN_SHOT_DISTANCE_M, PLAYER_SKIN_TONES, pickPlayerSkin, SHORTS_HALF_H, THIGH_SHARE } from '../src/game/shooting/render';
-import { standBottomY, crowdCellSize, stadiumLayout, stadiumRoofBand } from '../src/game/shooting/stadium';
+import { AFRICA_SKIN_TONES, createPitchView, idleKeeperPose, MAX_SHOT_DISTANCE_M, MIN_SHOT_DISTANCE_M, PLAYER_SKIN_TONES, pickPlayerLook, pickPlayerSkin, SHORTS_HALF_H, THIGH_SHARE } from '../src/game/shooting/render';
+import { appearanceRegionForNation, isBlackHair, isBlondeHair, isFairSkin } from '../src/game/shooting/appearance';
+import { standBottomY, crowdCellSize, pitchQualityFromStrength, stadiumLayout, stadiumRoofBand } from '../src/game/shooting/stadium';
 import {
   CLUB_GROUNDS,
   CUP_FINAL_CAPACITY,
@@ -3900,6 +3901,14 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
     console.error('Getafe must be a shorter two-deck municipal than Reale Arena');
     process.exitCode = 1;
   }
+  const psgG = groundForClub('psg');
+  const psgL = stadiumLayout(close, psgG);
+  console.log('PSG', psgG.name, psgG.capacity, psgG.tiers, 'decks', psgL.decks.length);
+  if (psgG.tiers !== 2 || psgL.decks.length !== 2 || psgG.capacity < 45_000 || psgG.capacity > 52_000) {
+    console.error('Parc des Princes must be two tiers at about 45–48k capacity');
+    process.exitCode = 1;
+  }
+  evenDecks(psgL, 2, 'Parc des Princes');
   if (Object.keys(CLUB_GROUNDS).length < 36) {
     console.error('the listed stadium table is missing clubs');
     process.exitCode = 1;
@@ -4012,6 +4021,71 @@ console.log('\n--- Kits, cup nights, FA Cup semis, sun, World Cup copy, African 
   const africaKeeper = idleKeeperPose(() => 0.11, 'africa');
   if (!AFRICA_SKIN_TONES.includes(africaKeeper.skinTone as typeof AFRICA_SKIN_TONES[number])) {
     console.error('African keepers must spawn with a brown skin tone');
+    process.exitCode = 1;
+  }
+
+  const swedenN = getNation('sweden')!;
+  const polandN = getNation('poland')!;
+  const brazilN = getNation('brazil')!;
+  if (appearanceRegionForNation(swedenN) !== 'nordic' || appearanceRegionForNation(polandN) !== 'eastern-europe' || appearanceRegionForNation(brazilN) !== 'latino') {
+    console.error('Sweden/Poland/Brazil must map to nordic, eastern-europe, latino looks');
+    process.exitCode = 1;
+  }
+  let swedenBlonde = 0;
+  let polandFair = 0;
+  let brazilBlack = 0;
+  for (let i = 0; i < 40; i++) {
+    const sw = pickPlayerLook(i * 19 + 4, 'nordic');
+    const pl = pickPlayerLook(i * 19 + 4, 'eastern-europe');
+    const br = pickPlayerLook(i * 19 + 4, 'latino');
+    if (!isFairSkin(sw.skin) || !isFairSkin(pl.skin)) {
+      console.error('Nordic and eastern-European players must be white-skinned');
+      process.exitCode = 1;
+      break;
+    }
+    if (isBlondeHair(sw.hair)) swedenBlonde += 1;
+    if (isFairSkin(pl.skin)) polandFair += 1;
+    if (isBlackHair(br.hair)) brazilBlack += 1;
+    if (luminance(br.skin) > 0.78) {
+      console.error('Latino sides should not spawn very-fair Nordic skin');
+      process.exitCode = 1;
+      break;
+    }
+  }
+  console.log('looks sweden-blonde', swedenBlonde, 'poland-fair', polandFair, 'brazil-black-brown', brazilBlack);
+  if (swedenBlonde < 24) {
+    console.error('Sweden must be predominantly blonde');
+    process.exitCode = 1;
+  }
+  if (polandFair < 40) {
+    console.error('Eastern Europe must only use fair skin');
+    process.exitCode = 1;
+  }
+  if (brazilBlack < 28) {
+    console.error('Latino sides must typically be light-brown with black hair');
+    process.exitCode = 1;
+  }
+
+  console.log('pitch quality', pitchQualityFromStrength(94), pitchQualityFromStrength(66), pitchQualityFromStrength(52));
+  if (pitchQualityFromStrength(94) !== 'elite' || pitchQualityFromStrength(66) !== 'tired' || pitchQualityFromStrength(52) !== 'worn') {
+    console.error('pitch quality must follow club strength');
+    process.exitCode = 1;
+  }
+  const madridPitchClub = getClub('real-madrid')!;
+  const elitePitchLook = resolveMatchStadium({ club: madridPitchClub });
+  const reservePitchLook = resolveCareerStadium({ club: madridPitchClub, role: 'reserve' });
+  const youthPitchLook = resolveCareerStadium({
+    nation: getNation('spain'),
+    openingKind: 'youth-tournament',
+    role: 'reserve',
+  });
+  if (elitePitchLook.pitchQuality !== 'elite' || reservePitchLook.pitchQuality !== 'worn' || youthPitchLook.pitchQuality !== 'worn') {
+    console.error('elite first-team grass must be lush; reserve and youth pitches must be worn');
+    process.exitCode = 1;
+  }
+  const lutonLook = resolveMatchStadium({ club: getClub('luton') });
+  if (lutonLook.pitchQuality !== 'worn') {
+    console.error('a Championship side must play on a worn pitch');
     process.exitCode = 1;
   }
 

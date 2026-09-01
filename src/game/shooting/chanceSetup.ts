@@ -3,7 +3,7 @@ import {
   CAMERA_FOCAL,
   FIFA,
   YARD_M,
-  pickPlayerSkin,
+  pickPlayerLook,
   type SkinPalette,
   randomBallStartXRatio,
   randomShotDistanceM,
@@ -39,6 +39,7 @@ export interface DefenderPose {
   stride?: number;
   /** Stable skin tone for this chance. */
   skinTone?: string;
+  hairColor?: string;
 }
 
 export type ChanceKind = 'open' | 'penalty';
@@ -124,13 +125,15 @@ export function placeDefender(
     const z = MIN_DEFENDER_Z_M + t * (maxZ - MIN_DEFENDER_Z_M);
     const offset = 0.7 + rng() * 0.95;
     const worldX = clamp(lineToGoalCentreX(ballWorldX, shotDistanceM, z) + coverSide * offset, -7.5, 7.5);
-    return { worldX, z, coverSide, stride: 0, skinTone: pickPlayerSkin(rng() * 1_000_000, palette) };
+    const look = pickPlayerLook(rng() * 1_000_000, palette);
+    return { worldX, z, coverSide, stride: 0, skinTone: look.skin, hairColor: look.hair };
   }
 
   const z = clamp(Math.min(shotDistanceM * 0.38, 3.2), 1.55, Math.max(1.55, shotDistanceM - 1.15));
   const offset = CLOSE_COVER_MIN_OFFSET_M + rng() * (CLOSE_COVER_MAX_OFFSET_M - CLOSE_COVER_MIN_OFFSET_M);
   const worldX = clamp(lineToGoalCentreX(ballWorldX, shotDistanceM, z) + coverSide * offset, -3.45, 3.45);
-  return { worldX, z, coverSide, stride: 0, skinTone: pickPlayerSkin(rng() * 1_000_000, palette) };
+  const look = pickPlayerLook(rng() * 1_000_000, palette);
+  return { worldX, z, coverSide, stride: 0, skinTone: look.skin, hairColor: look.hair };
 }
 
 /** Point they rush — on the shooting line, a few metres in front of the ball. */
