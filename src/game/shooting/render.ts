@@ -345,15 +345,11 @@ export interface KeeperPose {
   skinTone: string;
 }
 
-/** Figure height is ~7.95×scale (feet at 0, top of head at 6.9+1.05). */
+/** Collision skeleton stays in these units. Drawing uses 8-head proportions. */
 const KEEPER_FIGURE_HEIGHT = 7.95;
 const KEEPER_HIP_FROM_FOOT = 3.0;
 const KEEPER_SHOULDER_FROM_HIP = 2.5;
 const KEEPER_HEAD_FROM_HIP = 3.9;
-
-function keeperScale(view: PitchView): number {
-  return (FIFA.keeperHeight / FIFA.goalHeight) * view.goal.heightPx / KEEPER_FIGURE_HEIGHT;
-}
 
 /** Light through dark — keepers and defenders pick one per chance. */
 export const PLAYER_SKIN_TONES = [
@@ -506,53 +502,7 @@ export function keeperSilhouetteX(pose: KeeperPose): { hip: number; glove: numbe
   return { hip, glove: (g1 + g2) / 2, foot: (f1 + f2) / 2 };
 }
 
-function strokeLimb(
-  ctx: CanvasRenderingContext2D,
-  x0: number,
-  y0: number,
-  x1: number,
-  y1: number,
-  width: number,
-  color: string,
-) {
-  ctx.strokeStyle = color;
-  ctx.lineWidth = width;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.beginPath();
-  ctx.moveTo(x0, y0);
-  ctx.lineTo(x1, y1);
-  ctx.stroke();
-}
-
-/** Thigh (skin) to the knee, then a sock to the boot — no black stick-legs. */
-function drawThighAndSock(
-  ctx: CanvasRenderingContext2D,
-  scale: number,
-  hipX: number,
-  hipY: number,
-  foot: { x: number; y: number },
-  skinColor: string,
-  sockColor: string,
-  bootColor: string,
-  widthScale = 1,
-) {
-  const kneeX = hipX * (1 - THIGH_SHARE) + foot.x * THIGH_SHARE;
-  const kneeY = hipY + (foot.y - hipY) * THIGH_SHARE;
-  const darkSocks = luminance(sockColor) < 0.22;
-  const thighHi = mixHex(skinColor, '#f6dec0', darkSocks ? 0.55 : 0.32);
-  strokeLimb(ctx, hipX, hipY, kneeX, kneeY, scale * 0.84 * widthScale, skinColor);
-  strokeLimb(ctx, hipX + scale * 0.08, hipY, kneeX + scale * 0.06, kneeY, scale * 0.34 * widthScale, thighHi);
-  strokeLimb(ctx, kneeX, kneeY, foot.x, foot.y, scale * 0.9 * widthScale, sockColor);
-  const cuff = darkSocks || luminance(sockColor) < 0.55
-    ? mixHex(sockColor, '#f8fafc', 0.55)
-    : shadeHex(sockColor, -0.28);
-  strokeLimb(ctx, kneeX - scale * 0.22 * widthScale, kneeY, kneeX + scale * 0.22 * widthScale, kneeY, scale * 0.2, cuff);
-  ctx.fillStyle = bootColor;
-  ctx.beginPath();
-  ctx.ellipse(foot.x, foot.y, scale * 0.42 * widthScale, scale * 0.24, 0, 0, Math.PI * 2);
-  ctx.fill();
-}
+type FigPt = { x: number; y: number };
 
 function hairColorForSkin(skin: string): string {
   const lum = luminance(skin);
@@ -562,192 +512,435 @@ function hairColorForSkin(skin: string): string {
   return '#0e0906';
 }
 
-/** Athletic human head: short crop, jaw, dark eyes, closed mouth. */
-function drawHumanHead(
+/** Tapered 3D-ish limb: two end caps plus a trapezoid, filled with a highlight. */
+function fillCapsule(
+  ctx: CanvasRenderingContext2D,
+  a: FigPt,
+  ra: number,
+  b: FigPt,
+  rb: number,
+  color: string,
+) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy);
+  const light = mixHex(color, '#fff6ea', 0.22);
+  const dark = shadeHex(color, -0.2);
+  ctx.save();
+  ctx.translate(a.x, a.y);
+  ctx.rotate(Math.atan2(dy, dx));
+  const grad = ctx.createLinearGradient(0, -Math.max(ra, rb), 0, Math.max(ra, rb));
+  grad.addColorStop(0, light);
+  grad.addColorStop(0.45, color);
+  grad.addColorStop(1, dark);
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(0, -ra);
+  ctx.lineTo(len, -rb);
+  ctx.lineTo(len, rb);
+  ctx.lineTo(0, ra);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(0, 0, ra, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(len, 0, rb, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
+ * Front-facing athletic head. `H` is one head-height. `(x, y)` is the skull centre.
+ * Hair stays on the cranium so the face is always visible.
+ */
+function drawAthleteHead(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
-  scale: number,
-  skinColor: string,
-  sizeMul = 1,
+  H: number,
+  skin: string,
 ) {
-  const hx = scale * 0.62 * sizeMul;
-  const hy = scale * 0.74 * sizeMul;
-  const hair = hairColorForSkin(skinColor);
-  const shade = shadeHex(skinColor, -0.2);
-  const light = mixHex(skinColor, '#fff3e8', 0.22);
-  const lip = mixHex(shadeHex(skinColor, -0.28), '#6a3a32', 0.35);
-
-  const skull = ctx.createRadialGradient(
-    x - hx * 0.22,
-    y - hy * 0.32,
-    scale * 0.08,
-    x,
-    y + hy * 0.18,
-    hx * 1.25,
-  );
-  skull.addColorStop(0, light);
-  skull.addColorStop(0.5, skinColor);
-  skull.addColorStop(1, shade);
-
-  const traceHead = () => {
-    ctx.beginPath();
-    ctx.moveTo(x - hx, y + hy * 0.05);
-    ctx.bezierCurveTo(x - hx * 1.02, y - hy * 0.55, x - hx * 0.55, y - hy, x, y - hy);
-    ctx.bezierCurveTo(x + hx * 0.55, y - hy, x + hx * 1.02, y - hy * 0.55, x + hx, y + hy * 0.05);
-    ctx.quadraticCurveTo(x + hx * 0.88, y + hy * 0.62, x + hx * 0.42, y + hy * 0.96);
-    ctx.quadraticCurveTo(x, y + hy * 1.08, x - hx * 0.42, y + hy * 0.96);
-    ctx.quadraticCurveTo(x - hx * 0.88, y + hy * 0.62, x - hx, y + hy * 0.05);
-    ctx.closePath();
-  };
+  const hx = H * 0.36;
+  const hy = H * 0.5;
+  const hair = hairColorForSkin(skin);
+  const shade = shadeHex(skin, -0.22);
+  const light = mixHex(skin, '#fff3e8', 0.28);
+  const lip = mixHex(shadeHex(skin, -0.3), '#6a3a32', 0.4);
 
   ctx.fillStyle = shade;
   ctx.beginPath();
-  ctx.ellipse(x - hx * 1.05, y + hy * 0.14, scale * 0.075, scale * 0.13, 0.2, 0, Math.PI * 2);
+  ctx.ellipse(x - hx * 0.98, y + hy * 0.12, H * 0.07, H * 0.12, 0.18, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.ellipse(x + hx * 1.05, y + hy * 0.14, scale * 0.075, scale * 0.13, -0.2, 0, Math.PI * 2);
+  ctx.ellipse(x + hx * 0.98, y + hy * 0.12, H * 0.07, H * 0.12, -0.18, 0, Math.PI * 2);
   ctx.fill();
 
-  traceHead();
+  const skull = ctx.createRadialGradient(x - hx * 0.25, y - hy * 0.28, H * 0.06, x, y + hy * 0.1, hx * 1.35);
+  skull.addColorStop(0, light);
+  skull.addColorStop(0.55, skin);
+  skull.addColorStop(1, shade);
+
+  const trace = () => {
+    ctx.beginPath();
+    ctx.moveTo(x - hx * 0.92, y + hy * 0.08);
+    ctx.bezierCurveTo(x - hx * 1.05, y - hy * 0.35, x - hx * 0.55, y - hy, x, y - hy);
+    ctx.bezierCurveTo(x + hx * 0.55, y - hy, x + hx * 1.05, y - hy * 0.35, x + hx * 0.92, y + hy * 0.08);
+    ctx.quadraticCurveTo(x + hx * 0.82, y + hy * 0.55, x + hx * 0.38, y + hy * 0.92);
+    ctx.quadraticCurveTo(x, y + hy * 1.05, x - hx * 0.38, y + hy * 0.92);
+    ctx.quadraticCurveTo(x - hx * 0.82, y + hy * 0.55, x - hx * 0.92, y + hy * 0.08);
+    ctx.closePath();
+  };
+  trace();
   ctx.fillStyle = skull;
   ctx.fill();
 
   ctx.save();
-  traceHead();
+  trace();
   ctx.clip();
   ctx.fillStyle = hair;
   ctx.beginPath();
-  ctx.ellipse(x, y - hy * 0.28, hx * 1.02, hy * 0.62, 0, Math.PI, Math.PI * 2);
+  ctx.ellipse(x, y - hy * 0.22, hx * 1.02, hy * 0.58, 0, Math.PI, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.moveTo(x - hx * 0.98, y - hy * 0.28);
-  ctx.quadraticCurveTo(x, y - hy * 0.12, x + hx * 0.98, y - hy * 0.28);
+  ctx.moveTo(x - hx, y - hy * 0.08);
+  ctx.quadraticCurveTo(x, y + hy * 0.02, x + hx, y - hy * 0.08);
   ctx.lineTo(x + hx * 0.7, y - hy);
   ctx.lineTo(x - hx * 0.7, y - hy);
   ctx.closePath();
   ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.06)';
+  ctx.beginPath();
+  ctx.ellipse(x - hx * 0.2, y - hy * 0.42, hx * 0.35, hy * 0.18, -0.4, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
 
-  if (scale < 6) return;
+  if (H < 7) return;
 
-  const eyeY = y + hy * 0.06;
-  const eyeDx = hx * 0.34;
+  const eyeY = y + hy * 0.08;
+  const eyeDx = hx * 0.38;
   for (const side of [-1, 1]) {
     const ex = x + side * eyeDx;
-    ctx.fillStyle = shadeHex(skinColor, -0.1);
+    ctx.fillStyle = '#f4ebe3';
     ctx.beginPath();
-    ctx.ellipse(ex, eyeY, Math.max(1.2, scale * 0.11), Math.max(0.9, scale * 0.07), 0, 0, Math.PI * 2);
+    ctx.ellipse(ex, eyeY, Math.max(1.1, H * 0.075), Math.max(0.85, H * 0.05), 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#241c16';
+    ctx.fillStyle = '#2a2018';
     ctx.beginPath();
-    ctx.ellipse(ex, eyeY + scale * 0.008, Math.max(1.05, scale * 0.075), Math.max(1.1, scale * 0.07), 0, 0, Math.PI * 2);
+    ctx.ellipse(ex, eyeY + H * 0.006, Math.max(0.9, H * 0.048), Math.max(0.9, H * 0.048), 0, 0, Math.PI * 2);
     ctx.fill();
-    if (scale >= 10) {
-      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    if (H >= 11) {
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
       ctx.beginPath();
-      ctx.ellipse(ex - scale * 0.025, eyeY - scale * 0.018, scale * 0.016, scale * 0.014, 0, 0, Math.PI * 2);
+      ctx.ellipse(ex - H * 0.018, eyeY - H * 0.012, H * 0.012, H * 0.01, 0, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.strokeStyle = hair;
-    ctx.lineWidth = Math.max(1.1, scale * 0.07);
+    ctx.lineWidth = Math.max(1, H * 0.055);
     ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(ex - scale * 0.12, eyeY - scale * 0.13);
-    ctx.lineTo(ex + scale * 0.11, eyeY - scale * 0.12);
+    ctx.moveTo(ex - H * 0.1, eyeY - H * 0.1);
+    ctx.quadraticCurveTo(ex, eyeY - H * 0.14, ex + H * 0.1, eyeY - H * 0.1);
     ctx.stroke();
   }
 
+  ctx.fillStyle = shade;
+  ctx.beginPath();
+  ctx.moveTo(x - H * 0.02, eyeY + H * 0.06);
+  ctx.lineTo(x + H * 0.04, eyeY + H * 0.22);
+  ctx.lineTo(x - H * 0.03, eyeY + H * 0.22);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = light;
+  ctx.beginPath();
+  ctx.ellipse(x + H * 0.012, eyeY + H * 0.2, H * 0.035, H * 0.028, 0, 0, Math.PI * 2);
+  ctx.fill();
+
   ctx.strokeStyle = shade;
-  ctx.lineWidth = Math.max(1.05, scale * 0.065);
-  ctx.lineCap = 'round';
+  ctx.lineWidth = Math.max(0.8, H * 0.035);
   ctx.beginPath();
-  ctx.moveTo(x, eyeY + scale * 0.08);
-  ctx.lineTo(x + scale * 0.012, eyeY + scale * 0.22);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(x - scale * 0.045, eyeY + scale * 0.2);
-  ctx.lineTo(x + scale * 0.05, eyeY + scale * 0.22);
+  ctx.moveTo(x - H * 0.05, eyeY + H * 0.2);
+  ctx.lineTo(x + H * 0.055, eyeY + H * 0.22);
   ctx.stroke();
 
   ctx.strokeStyle = lip;
-  ctx.lineWidth = Math.max(1.1, scale * 0.07);
+  ctx.lineWidth = Math.max(1, H * 0.055);
+  ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(x - scale * 0.09, y + hy * 0.52);
-  ctx.lineTo(x + scale * 0.09, y + hy * 0.52);
+  ctx.moveTo(x - H * 0.085, y + hy * 0.52);
+  ctx.quadraticCurveTo(x, y + hy * 0.56, x + H * 0.085, y + hy * 0.52);
   ctx.stroke();
 }
 
-function traceAthleticShirt(ctx: CanvasRenderingContext2D, scale: number, shirtTop: number, hemY: number) {
-  const neck = scale * 0.16;
-  const chest = scale * 0.56;
-  const waist = scale * 0.36;
-  const shoulderDrop = scale * 0.62;
+function traceJersey(ctx: CanvasRenderingContext2D, H: number, collarY: number, hemY: number) {
+  const neck = H * 0.2;
+  const deltoidX = H * 0.98;
+  const deltoidY = collarY + H * 0.5;
+  const chestX = H * 0.82;
+  const chestY = collarY + H * 1.05;
+  const hemX = H * 0.64;
   ctx.beginPath();
-  ctx.moveTo(-neck, shirtTop);
-  ctx.lineTo(neck, shirtTop);
-  ctx.quadraticCurveTo(scale * 0.22, shirtTop + scale * 0.28, chest, shirtTop + shoulderDrop);
-  ctx.quadraticCurveTo(chest, shirtTop + shoulderDrop + scale * 0.2, chest * 0.88, shirtTop + shoulderDrop + scale * 0.4);
-  ctx.quadraticCurveTo(waist + scale * 0.04, (shirtTop + hemY) * 0.55, waist, hemY);
-  ctx.lineTo(-waist, hemY);
-  ctx.quadraticCurveTo(-waist - scale * 0.04, (shirtTop + hemY) * 0.55, -chest * 0.88, shirtTop + shoulderDrop + scale * 0.4);
-  ctx.quadraticCurveTo(-chest, shirtTop + shoulderDrop + scale * 0.2, -chest, shirtTop + shoulderDrop);
-  ctx.quadraticCurveTo(-scale * 0.22, shirtTop + scale * 0.28, -neck, shirtTop);
+  ctx.moveTo(-neck, collarY + H * 0.06);
+  ctx.quadraticCurveTo(0, collarY + H * 0.2, neck, collarY + H * 0.06);
+  ctx.quadraticCurveTo(H * 0.48, collarY + H * 0.14, deltoidX, deltoidY);
+  ctx.quadraticCurveTo(deltoidX + H * 0.06, deltoidY + H * 0.22, chestX, chestY);
+  ctx.quadraticCurveTo(hemX + H * 0.06, (chestY + hemY) * 0.55, hemX, hemY);
+  ctx.lineTo(-hemX, hemY);
+  ctx.quadraticCurveTo(-hemX - H * 0.06, (chestY + hemY) * 0.55, -chestX, chestY);
+  ctx.quadraticCurveTo(-deltoidX - H * 0.06, deltoidY + H * 0.22, -deltoidX, deltoidY);
+  ctx.quadraticCurveTo(-H * 0.48, collarY + H * 0.14, -neck, collarY + H * 0.06);
   ctx.closePath();
 }
 
-function traceAthleticShorts(ctx: CanvasRenderingContext2D, scale: number) {
-  const topW = scale * 0.42;
-  const botW = scale * 0.48;
-  const top = -scale * 0.14;
-  const bot = scale * 0.4;
+function traceShorts(ctx: CanvasRenderingContext2D, H: number) {
+  const top = -H * 0.12;
+  const bot = H * 0.95;
+  const topW = H * 0.68;
+  const botW = H * 0.78;
   ctx.beginPath();
   ctx.moveTo(-topW, top);
   ctx.lineTo(topW, top);
-  ctx.quadraticCurveTo(botW + scale * 0.05, (top + bot) * 0.5, botW, bot);
-  ctx.lineTo(-botW, bot);
-  ctx.quadraticCurveTo(-botW - scale * 0.05, (top + bot) * 0.5, -topW, top);
+  ctx.quadraticCurveTo(botW + H * 0.04, (top + bot) * 0.5, botW, bot);
+  ctx.quadraticCurveTo(H * 0.2, bot + H * 0.06, 0, bot - H * 0.04);
+  ctx.quadraticCurveTo(-H * 0.2, bot + H * 0.06, -botW, bot);
+  ctx.quadraticCurveTo(-botW - H * 0.04, (top + bot) * 0.5, -topW, top);
   ctx.closePath();
 }
 
+function drawGlove(
+  ctx: CanvasRenderingContext2D,
+  p: FigPt,
+  H: number,
+  color: string,
+  line: string,
+  side: number,
+) {
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.rotate(side * -0.2);
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, H * 0.26, H * 0.32, 0, 0, Math.PI * 2);
+  ctx.fill();
+  for (let i = -1; i <= 1; i++) {
+    ctx.beginPath();
+    ctx.ellipse(i * H * 0.09, -H * 0.28, H * 0.075, H * 0.14, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.strokeStyle = line;
+  ctx.lineWidth = Math.max(1, H * 0.045);
+  ctx.beginPath();
+  ctx.ellipse(0, 0, H * 0.26, H * 0.32, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+interface HumanoidStyle {
+  skin: string;
+  shirt: string;
+  shirtDark: string;
+  shorts: string;
+  socks: string;
+  boot: string;
+  stripe?: string;
+  pattern?: DefenderKit['pattern'];
+  glove?: string;
+  gloveLine?: string;
+}
+
+/**
+ * One 8-head footballer, hips at the origin, +Y toward the feet.
+ * `H` is the height of the head. Arms hang by the sides unless `hands` is set
+ * (keeper gloves). Collision stick-points are intentionally not used here.
+ */
+function drawHumanoid(
+  ctx: CanvasRenderingContext2D,
+  H: number,
+  style: HumanoidStyle,
+  stride = 0,
+  hands?: { left: FigPt; right: FigPt },
+  stance: 'walk' | 'ready' = 'walk',
+) {
+  const skin = style.skin;
+  const skinHi = mixHex(skin, '#fff3e8', 0.18);
+  const walk = Math.sin(stride);
+  const collarY = -H * 2.82;
+  const hemY = -H * 0.08;
+  const shoulderY = collarY + H * 0.52;
+  const head = { x: 0, y: -H * 3.48 };
+  const footY = H * 4;
+  const stanceW = stance === 'ready' ? 0.55 : 0.38;
+  const footL = { x: -H * stanceW + walk * H * 0.32, y: footY };
+  const footR = { x: H * stanceW - walk * H * 0.32, y: footY };
+  const hipL = { x: -H * 0.32, y: H * 0.08 };
+  const hipR = { x: H * 0.32, y: H * 0.08 };
+  const kneeL = {
+    x: hipL.x * 0.45 + footL.x * 0.55,
+    y: H * (stance === 'ready' ? 1.88 : 2.02),
+  };
+  const kneeR = {
+    x: hipR.x * 0.45 + footR.x * 0.55,
+    y: H * (stance === 'ready' ? 1.88 : 2.02),
+  };
+  const shoulderL = { x: -H * 0.88, y: shoulderY };
+  const shoulderR = { x: H * 0.88, y: shoulderY };
+  const handL = hands?.left ?? {
+    x: -H * 0.7 - walk * H * 0.16,
+    y: H * 0.58 + Math.max(0, -walk) * H * 0.06,
+  };
+  const handR = hands?.right ?? {
+    x: H * 0.7 + walk * H * 0.16,
+    y: H * 0.58 + Math.max(0, walk) * H * 0.06,
+  };
+  const elbowL = {
+    x: (shoulderL.x + handL.x) * 0.5 - H * 0.12,
+    y: (shoulderL.y + handL.y) * 0.52,
+  };
+  const elbowR = {
+    x: (shoulderR.x + handR.x) * 0.5 + H * 0.12,
+    y: (shoulderR.y + handR.y) * 0.52,
+  };
+
+  const drawLeg = (hip: FigPt, knee: FigPt, foot: FigPt) => {
+    fillCapsule(ctx, hip, H * 0.34, knee, H * 0.24, skin);
+    ctx.fillStyle = skinHi;
+    fillCapsule(ctx, { x: hip.x + H * 0.06, y: hip.y }, H * 0.12, { x: knee.x + H * 0.04, y: knee.y }, H * 0.08, skinHi);
+    fillCapsule(ctx, knee, H * 0.25, foot, H * 0.16, style.socks);
+    const cuff = luminance(style.socks) < 0.55
+      ? mixHex(style.socks, '#f8fafc', 0.45)
+      : shadeHex(style.socks, -0.25);
+    ctx.fillStyle = cuff;
+    ctx.beginPath();
+    ctx.ellipse(knee.x, knee.y, H * 0.26, H * 0.1, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = style.boot;
+    ctx.beginPath();
+    ctx.ellipse(foot.x, foot.y, H * 0.32, H * 0.16, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(foot.x + H * 0.08, foot.y + H * 0.04, H * 0.22, H * 0.1, 0.15, 0, Math.PI * 2);
+    ctx.fill();
+  };
+
+  drawLeg(hipL, kneeL, footL);
+  drawLeg(hipR, kneeR, footR);
+
+  const shortsGrad = ctx.createLinearGradient(-H * 0.4, -H * 0.2, H * 0.5, H * 0.9);
+  shortsGrad.addColorStop(0, mixHex(style.shorts, '#ffffff', 0.14));
+  shortsGrad.addColorStop(1, shadeHex(style.shorts, luminance(style.shorts) > 0.7 ? -0.14 : -0.2));
+  traceShorts(ctx, H);
+  ctx.fillStyle = shortsGrad;
+  ctx.fill();
+  ctx.strokeStyle = shadeHex(style.shorts, luminance(style.shorts) > 0.7 ? -0.22 : 0.1);
+  ctx.lineWidth = Math.max(0.7, H * 0.04);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(0, -H * 0.06);
+  ctx.lineTo(0, H * 0.82);
+  ctx.stroke();
+
+  const torsoGrad = ctx.createLinearGradient(-H * 0.5, collarY, H * 0.6, hemY);
+  torsoGrad.addColorStop(0, mixHex(style.shirt, '#ffffff', 0.2));
+  torsoGrad.addColorStop(0.4, style.shirt);
+  torsoGrad.addColorStop(1, style.shirtDark);
+  traceJersey(ctx, H, collarY, hemY);
+  ctx.fillStyle = torsoGrad;
+  ctx.fill();
+
+  if (style.stripe && style.pattern && style.pattern !== 'solid') {
+    ctx.save();
+    traceJersey(ctx, H, collarY, hemY);
+    ctx.clip();
+    if (style.pattern === 'vertical') {
+      const stripeW = Math.max(2, H * 0.28);
+      for (let x = -H * 1.4, i = 0; x < H * 1.4; x += stripeW, i++) {
+        if (i % 2 === 0) continue;
+        ctx.fillStyle = style.stripe;
+        ctx.fillRect(x, collarY - H * 0.2, stripeW, (hemY - collarY) + H * 0.5);
+      }
+    } else {
+      const hoopH = Math.max(2.2, H * 0.26);
+      for (let y = collarY, i = 0; y < hemY + H * 0.2; y += hoopH, i++) {
+        if (i % 2 === 0) continue;
+        ctx.fillStyle = style.stripe;
+        ctx.fillRect(-H * 1.4, y, H * 2.8, hoopH);
+      }
+    }
+    ctx.restore();
+  }
+
+  ctx.fillStyle = shadeHex(style.shirt, -0.14);
+  ctx.beginPath();
+  ctx.ellipse(0, collarY + H * 0.16, H * 0.22, H * 0.09, 0, 0, Math.PI);
+  ctx.fill();
+
+  const sleeveEndL = {
+    x: shoulderL.x + (elbowL.x - shoulderL.x) * 0.38,
+    y: shoulderL.y + (elbowL.y - shoulderL.y) * 0.38,
+  };
+  const sleeveEndR = {
+    x: shoulderR.x + (elbowR.x - shoulderR.x) * 0.38,
+    y: shoulderR.y + (elbowR.y - shoulderR.y) * 0.38,
+  };
+  fillCapsule(ctx, shoulderL, H * 0.26, sleeveEndL, H * 0.2, style.shirt);
+  fillCapsule(ctx, shoulderR, H * 0.26, sleeveEndR, H * 0.2, style.shirt);
+  fillCapsule(ctx, sleeveEndL, H * 0.18, elbowL, H * 0.155, skin);
+  fillCapsule(ctx, elbowL, H * 0.155, handL, H * 0.12, skin);
+  fillCapsule(ctx, sleeveEndR, H * 0.18, elbowR, H * 0.155, skin);
+  fillCapsule(ctx, elbowR, H * 0.155, handR, H * 0.12, skin);
+
+  if (style.glove) {
+    drawGlove(ctx, handL, H, style.glove, style.gloveLine ?? shadeHex(style.glove, -0.35), -1);
+    drawGlove(ctx, handR, H, style.glove, style.gloveLine ?? shadeHex(style.glove, -0.35), 1);
+  } else {
+    ctx.fillStyle = skin;
+    ctx.beginPath();
+    ctx.ellipse(handL.x, handL.y, H * 0.11, H * 0.14, -0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(handR.x, handR.y, H * 0.11, H * 0.14, 0.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.fillStyle = shadeHex(skin, -0.14);
+  ctx.beginPath();
+  ctx.moveTo(-H * 0.16, collarY + H * 0.08);
+  ctx.lineTo(H * 0.16, collarY + H * 0.08);
+  ctx.lineTo(H * 0.13, head.y + H * 0.42);
+  ctx.lineTo(-H * 0.13, head.y + H * 0.42);
+  ctx.closePath();
+  ctx.fill();
+  const neckGrad = ctx.createLinearGradient(-H * 0.1, collarY, H * 0.12, head.y);
+  neckGrad.addColorStop(0, shadeHex(skin, -0.1));
+  neckGrad.addColorStop(1, skinHi);
+  ctx.fillStyle = neckGrad;
+  ctx.beginPath();
+  ctx.moveTo(-H * 0.145, collarY + H * 0.02);
+  ctx.lineTo(H * 0.145, collarY + H * 0.02);
+  ctx.lineTo(H * 0.12, head.y + H * 0.38);
+  ctx.lineTo(-H * 0.12, head.y + H * 0.38);
+  ctx.closePath();
+  ctx.fill();
+
+  drawAthleteHead(ctx, head.x, head.y, H, skin);
+}
+
 export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose: KeeperPose) {
-  const scale = keeperScale(view);
+  const H = (FIFA.keeperHeight / FIFA.goalHeight) * view.goal.heightPx / 8;
   const hips = goalToPixel(pose.pos, view);
   const groundY = view.goal.botY;
   const dir = pose.direction;
   const layout = clamp(pose.layout, 0, 1);
   const ang = keeperDiveAngle(dir, layout);
-  const pts = keeperLocalPoints(pose);
-  const s = (lx: number, ly: number) => ({ x: lx * scale, y: ly * scale });
 
-  const shadowW = scale * (1.15 + layout * 2.6);
+  const shadowW = H * (1.15 + layout * 2.4);
   ctx.save();
   ctx.beginPath();
-  ctx.ellipse(hips.x, groundY + scale * 0.12, shadowW, scale * 0.34, 0, 0, Math.PI * 2);
+  ctx.ellipse(hips.x, groundY + H * 0.1, shadowW, H * 0.28, 0, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(0,0,0,0.32)';
   ctx.fill();
   ctx.restore();
 
-  const kitLight = pose.beaten ? '#9ca3af' : '#fde047';
-  const kitDark = pose.beaten ? '#4b5563' : '#ca8a04';
-  const shortsColor = pose.beaten ? '#1f2937' : '#14532d';
-  const sockColor = pose.beaten ? '#374151' : '#166534';
-  const skinColor = pose.skinTone || PLAYER_SKIN_TONES[1];
-  const gloveColor = pose.beaten ? '#4b5563' : '#22c55e';
-  const bootColor = '#181818';
-
-  ctx.save();
-  ctx.translate(hips.x, hips.y);
-  ctx.rotate(ang);
-
-  const hipY = 0;
-  const shoulderY = -scale * KEEPER_SHOULDER_FROM_HIP;
-  const headPx = s(pts.head.x, pts.head.y);
-  const footL = s(pts.footL.x, pts.footL.y);
-  const footR = s(pts.footR.x, pts.footR.y);
-  const shoulderL = s(pts.shoulderL.x, pts.shoulderL.y);
-  const shoulderR = s(pts.shoulderR.x, pts.shoulderR.y);
-  // Gloves sit on pose.hand in world space so a save actually covers the ball.
   const handPx = goalToPixel(pose.hand, view);
   const wx = handPx.x - hips.x;
   const wy = handPx.y - hips.y;
@@ -755,66 +948,29 @@ export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose:
   const sinA = Math.sin(ang);
   const localHx = wx * cosA + wy * sinA;
   const localHy = -wx * sinA + wy * cosA;
-  const gloveL = { x: localHx - scale * 0.38, y: localHy };
-  const gloveR = { x: localHx + scale * 0.42, y: localHy + scale * 0.22 };
+  const gloveL = { x: localHx - H * 0.32, y: localHy };
+  const gloveR = { x: localHx + H * 0.36, y: localHy + H * 0.18 };
 
-  drawThighAndSock(ctx, scale, -scale * 0.28, hipY, footL, skinColor, sockColor, bootColor);
-  drawThighAndSock(ctx, scale, scale * 0.28, hipY, footR, skinColor, sockColor, bootColor);
-
-  const shirtTop = shoulderY + scale * JERSEY_SHOULDER_INSET;
-  const hemY = hipY - scale * JERSEY_HEM;
-  const torsoGrad = ctx.createLinearGradient(0, shirtTop, 0, hemY);
-  torsoGrad.addColorStop(0, kitLight);
-  torsoGrad.addColorStop(1, kitDark);
-  ctx.fillStyle = torsoGrad;
-  ctx.beginPath();
-  if (pts.diving) {
-    ctx.moveTo(-scale * 0.85, shirtTop);
-    ctx.quadraticCurveTo(-scale * 1.05, (shirtTop + hemY) / 2, -scale * 0.7, hemY);
-    ctx.lineTo(scale * 0.7, hemY);
-    ctx.quadraticCurveTo(scale * 1.05, (shirtTop + hemY) / 2, scale * 0.85, shirtTop);
-  } else {
-    ctx.moveTo(-scale * 1.25, shirtTop);
-    ctx.quadraticCurveTo(-scale * 1.35, (shirtTop + hemY) / 2, -scale * 1.0, hemY);
-    ctx.lineTo(scale * 1.0, hemY);
-    ctx.quadraticCurveTo(scale * 1.35, (shirtTop + hemY) / 2, scale * 1.25, shirtTop);
-  }
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = shortsColor;
-  ctx.beginPath();
-  ctx.ellipse(0, hipY + scale * SHORTS_CENTER, scale * (pts.diving ? 0.92 : 1.1), scale * (pts.diving ? 0.55 : SHORTS_HALF_H), 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  const drawArm = (shoulder: { x: number; y: number }, glove: { x: number; y: number }) => {
-    const mx = (shoulder.x + glove.x) / 2;
-    const my = (shoulder.y + glove.y) / 2;
-    ctx.strokeStyle = skinColor;
-    ctx.lineWidth = scale * 0.5;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(shoulder.x, shoulder.y);
-    ctx.lineTo(mx, my);
-    ctx.lineTo(glove.x, glove.y);
-    ctx.stroke();
-    ctx.fillStyle = gloveColor;
-    ctx.beginPath();
-    ctx.arc(glove.x, glove.y, scale * 0.42, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = pose.beaten ? '#1f2937' : '#166534';
-    ctx.lineWidth = Math.max(1, scale * 0.1);
-    ctx.stroke();
-  };
-
-  drawArm(shoulderL, gloveL);
-  drawArm(shoulderR, gloveR);
-
-  ctx.fillStyle = shadeHex(skinColor, -0.18);
-  ctx.beginPath();
-  ctx.ellipse(headPx.x, headPx.y + scale * 0.72, scale * 0.2, scale * 0.38, 0, 0, Math.PI * 2);
-  ctx.fill();
-  drawHumanHead(ctx, headPx.x, headPx.y, scale, skinColor);
+  ctx.save();
+  ctx.translate(hips.x, hips.y);
+  ctx.rotate(ang);
+  drawHumanoid(
+    ctx,
+    H,
+    {
+      skin: pose.skinTone || PLAYER_SKIN_TONES[1],
+      shirt: pose.beaten ? '#9ca3af' : '#fde047',
+      shirtDark: pose.beaten ? '#4b5563' : '#ca8a04',
+      shorts: pose.beaten ? '#1f2937' : '#14532d',
+      socks: pose.beaten ? '#374151' : '#166534',
+      boot: '#181818',
+      glove: pose.beaten ? '#4b5563' : '#22c55e',
+      gloveLine: pose.beaten ? '#1f2937' : '#166534',
+    },
+    0,
+    { left: gloveL, right: gloveR },
+    'ready',
+  );
   ctx.restore();
 }
 
@@ -831,150 +987,35 @@ export function drawDefender(
   const meterPx = view.halfWidthPx(1, worldZ);
   const feet = worldToScreen(view, worldX, worldZ);
   const heightM = 1.82;
-  const scale = (heightM * meterPx) / KEEPER_FIGURE_HEIGHT;
-  const hips = { x: feet.x, y: feet.y - KEEPER_HIP_FROM_FOOT * scale };
+  const H = (heightM * meterPx) / 8;
+  const hips = { x: feet.x, y: feet.y - 4 * H };
 
   ctx.save();
   ctx.beginPath();
-  ctx.ellipse(feet.x, feet.y + scale * 0.08, scale * 0.95, scale * 0.22, 0, 0, Math.PI * 2);
+  ctx.ellipse(feet.x, feet.y + H * 0.08, H * 0.85, H * 0.2, 0, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
   ctx.fill();
   ctx.restore();
 
-  const kitLight = kit?.shirt ?? '#1d4ed8';
-  const kitDark = kit?.shirtDark ?? '#1e3a8a';
-  const shortsColor = kit?.shorts ?? '#f8fafc';
-  const sockColor = kit?.socks ?? kit?.shorts ?? '#1e1e1e';
-  const stripeColor = kit?.stripe;
-  const pattern = kit?.pattern ?? 'solid';
-  const skinColor = skinTone ?? PLAYER_SKIN_TONES[2];
-  const bootColor = '#1a1a1a';
-  const skinShade = shadeHex(skinColor, -0.16);
-
   ctx.save();
   ctx.translate(hips.x, hips.y);
-
-  const hipY = 0;
-  const shirtTop = -scale * 2.08;
-  const hemY = hipY - scale * 0.06;
-  const head = { x: 0, y: -scale * 2.98 };
-  const swing = Math.sin(stride) * scale * 0.28;
-  const footL = { x: -scale * 0.42 + swing, y: scale * KEEPER_HIP_FROM_FOOT };
-  const footR = { x: scale * 0.42 - swing, y: scale * KEEPER_HIP_FROM_FOOT };
-  const shoulderL = { x: -scale * 0.48, y: shirtTop + scale * 0.68 };
-  const shoulderR = { x: scale * 0.48, y: shirtTop + scale * 0.68 };
-  const handL = {
-    x: -scale * 0.52 - swing * 0.28,
-    y: -scale * 0.04 + Math.max(0, -Math.sin(stride)) * scale * 0.04,
-  };
-  const handR = {
-    x: scale * 0.52 + swing * 0.28,
-    y: -scale * 0.04 + Math.max(0, Math.sin(stride)) * scale * 0.04,
-  };
-
-  drawThighAndSock(ctx, scale, -scale * 0.26, hipY + scale * 0.08, footL, skinColor, sockColor, bootColor, 0.68);
-  drawThighAndSock(ctx, scale, scale * 0.26, hipY + scale * 0.08, footR, skinColor, sockColor, bootColor, 0.68);
-
-  const shortsGrad = ctx.createLinearGradient(-scale * 0.4, -scale * 0.2, scale * 0.5, scale * 0.9);
-  shortsGrad.addColorStop(0, mixHex(shortsColor, '#ffffff', 0.12));
-  shortsGrad.addColorStop(1, shadeHex(shortsColor, luminance(shortsColor) > 0.7 ? -0.12 : -0.18));
-  traceAthleticShorts(ctx, scale);
-  ctx.fillStyle = shortsGrad;
-  ctx.fill();
-  ctx.strokeStyle = shadeHex(shortsColor, luminance(shortsColor) > 0.7 ? -0.22 : 0.12);
-  ctx.lineWidth = Math.max(0.8, scale * 0.045);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(0, -scale * 0.08);
-  ctx.lineTo(0, scale * 0.36);
-  ctx.stroke();
-
-  const torsoGrad = ctx.createLinearGradient(-scale * 0.4, shirtTop, scale * 0.55, hemY);
-  torsoGrad.addColorStop(0, mixHex(kitLight, '#ffffff', 0.16));
-  torsoGrad.addColorStop(0.45, kitLight);
-  torsoGrad.addColorStop(1, kitDark);
-  traceAthleticShirt(ctx, scale, shirtTop, hemY);
-  ctx.fillStyle = torsoGrad;
-  ctx.fill();
-
-  if (stripeColor && pattern !== 'solid') {
-    ctx.save();
-    traceAthleticShirt(ctx, scale, shirtTop, hemY);
-    ctx.clip();
-    if (pattern === 'vertical') {
-      const stripeW = Math.max(2.2, scale * 0.32);
-      for (let x = -scale * 1.6, i = 0; x < scale * 1.6; x += stripeW, i++) {
-        if (i % 2 === 0) continue;
-        ctx.fillStyle = stripeColor;
-        ctx.fillRect(x, shirtTop - scale * 0.2, stripeW, (hemY - shirtTop) + scale * 0.5);
-      }
-    } else if (pattern === 'hoops') {
-      const hoopH = Math.max(2.4, scale * 0.3);
-      for (let y = shirtTop, i = 0; y < hemY + scale * 0.2; y += hoopH, i++) {
-        if (i % 2 === 0) continue;
-        ctx.fillStyle = stripeColor;
-        ctx.fillRect(-scale * 1.6, y, scale * 3.2, hoopH);
-      }
-    }
-    ctx.restore();
-  }
-
-  if (luminance(kitLight) > 0.78) {
-    traceAthleticShirt(ctx, scale, shirtTop, hemY);
-    ctx.strokeStyle = 'rgba(15,23,42,0.2)';
-    ctx.lineWidth = Math.max(1, scale * 0.07);
-    ctx.stroke();
-  }
-
-  const drawArm = (shoulder: { x: number; y: number }, hand: { x: number; y: number }, side: number) => {
-    const elbow = {
-      x: (shoulder.x + hand.x) * 0.5 + side * scale * 0.1,
-      y: (shoulder.y + hand.y) * 0.55,
-    };
-    const sleeveEnd = {
-      x: shoulder.x + side * scale * 0.04,
-      y: shoulder.y + (elbow.y - shoulder.y) * 0.42,
-    };
-    ctx.lineJoin = 'round';
-    ctx.strokeStyle = kitLight;
-    ctx.lineWidth = scale * 0.3;
-    ctx.lineCap = 'butt';
-    ctx.beginPath();
-    ctx.moveTo(shoulder.x, shoulder.y);
-    ctx.lineTo(sleeveEnd.x, sleeveEnd.y);
-    ctx.stroke();
-    ctx.strokeStyle = skinColor;
-    ctx.lineWidth = scale * 0.22;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(sleeveEnd.x, sleeveEnd.y);
-    ctx.lineTo(elbow.x, elbow.y);
-    ctx.lineTo(hand.x, hand.y);
-    ctx.stroke();
-    ctx.fillStyle = skinColor;
-    ctx.beginPath();
-    ctx.ellipse(hand.x, hand.y, scale * 0.11, scale * 0.14, side * 0.15, 0, Math.PI * 2);
-    ctx.fill();
-  };
-
-  drawArm(shoulderL, handL, -1);
-  drawArm(shoulderR, handR, 1);
-
-  ctx.fillStyle = skinShade;
-  ctx.beginPath();
-  ctx.moveTo(-scale * 0.16, shirtTop + scale * 0.06);
-  ctx.lineTo(scale * 0.16, shirtTop + scale * 0.06);
-  ctx.lineTo(scale * 0.14, head.y + scale * 0.58);
-  ctx.lineTo(-scale * 0.14, head.y + scale * 0.58);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = shadeHex(kitLight, -0.12);
-  ctx.beginPath();
-  ctx.ellipse(0, shirtTop + scale * 0.12, scale * 0.2, scale * 0.08, 0, 0, Math.PI);
-  ctx.fill();
-
-  drawHumanHead(ctx, head.x, head.y, scale, skinColor, 1.14);
+  drawHumanoid(
+    ctx,
+    H,
+    {
+      skin: skinTone ?? PLAYER_SKIN_TONES[2],
+      shirt: kit?.shirt ?? '#1d4ed8',
+      shirtDark: kit?.shirtDark ?? '#1e3a8a',
+      shorts: kit?.shorts ?? '#f8fafc',
+      socks: kit?.socks ?? kit?.shorts ?? '#1e1e1e',
+      boot: '#1a1a1a',
+      stripe: kit?.stripe,
+      pattern: kit?.pattern ?? 'solid',
+    },
+    stride,
+    undefined,
+    'walk',
+  );
   ctx.restore();
 }
 
