@@ -520,6 +520,7 @@ function fillCapsule(
   b: FigPt,
   rb: number,
   color: string,
+  caps: { start?: boolean; end?: boolean } = {},
 ) {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
@@ -541,12 +542,16 @@ function fillCapsule(
   ctx.lineTo(0, ra);
   ctx.closePath();
   ctx.fill();
-  ctx.beginPath();
-  ctx.arc(0, 0, ra, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(len, 0, rb, 0, Math.PI * 2);
-  ctx.fill();
+  if (caps.start !== false) {
+    ctx.beginPath();
+    ctx.arc(0, 0, ra, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  if (caps.end !== false) {
+    ctx.beginPath();
+    ctx.arc(len, 0, rb, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.restore();
 }
 
@@ -561,8 +566,8 @@ function drawAthleteHead(
   H: number,
   skin: string,
 ) {
-  const hx = H * 0.36;
-  const hy = H * 0.5;
+  const hx = H * 0.5;
+  const hy = H * 0.56;
   const hair = hairColorForSkin(skin);
   const shade = shadeHex(skin, -0.22);
   const light = mixHex(skin, '#fff3e8', 0.28);
@@ -615,7 +620,7 @@ function drawAthleteHead(
   ctx.fill();
   ctx.restore();
 
-  if (H < 7) return;
+  if (H < 5) return;
 
   const eyeY = y + hy * 0.08;
   const eyeDx = hx * 0.38;
@@ -673,37 +678,39 @@ function drawAthleteHead(
 }
 
 function traceJersey(ctx: CanvasRenderingContext2D, H: number, collarY: number, hemY: number) {
-  const neck = H * 0.2;
-  const deltoidX = H * 0.98;
-  const deltoidY = collarY + H * 0.5;
-  const chestX = H * 0.82;
-  const chestY = collarY + H * 1.05;
-  const hemX = H * 0.64;
+  const neck = H * 0.24;
+  const shoulderX = H * 0.72;
+  const shoulderY = collarY + H * 0.52;
+  const sleeveHemX = H * 0.66;
+  const sleeveHemY = collarY + H * 0.88;
+  const armpitX = H * 0.5;
+  const armpitY = collarY + H * 1.02;
+  const hemX = H * 0.5;
   ctx.beginPath();
-  ctx.moveTo(-neck, collarY + H * 0.06);
-  ctx.quadraticCurveTo(0, collarY + H * 0.2, neck, collarY + H * 0.06);
-  ctx.quadraticCurveTo(H * 0.48, collarY + H * 0.14, deltoidX, deltoidY);
-  ctx.quadraticCurveTo(deltoidX + H * 0.06, deltoidY + H * 0.22, chestX, chestY);
-  ctx.quadraticCurveTo(hemX + H * 0.06, (chestY + hemY) * 0.55, hemX, hemY);
+  ctx.moveTo(-neck, collarY + H * 0.08);
+  ctx.quadraticCurveTo(0, collarY + H * 0.18, neck, collarY + H * 0.08);
+  ctx.quadraticCurveTo(H * 0.4, collarY + H * 0.16, shoulderX, shoulderY);
+  ctx.quadraticCurveTo(shoulderX + H * 0.05, sleeveHemY - H * 0.08, sleeveHemX, sleeveHemY);
+  ctx.lineTo(armpitX, armpitY);
+  ctx.quadraticCurveTo(hemX + H * 0.04, (armpitY + hemY) * 0.55, hemX, hemY);
   ctx.lineTo(-hemX, hemY);
-  ctx.quadraticCurveTo(-hemX - H * 0.06, (chestY + hemY) * 0.55, -chestX, chestY);
-  ctx.quadraticCurveTo(-deltoidX - H * 0.06, deltoidY + H * 0.22, -deltoidX, deltoidY);
-  ctx.quadraticCurveTo(-H * 0.48, collarY + H * 0.14, -neck, collarY + H * 0.06);
+  ctx.quadraticCurveTo(-hemX - H * 0.04, (armpitY + hemY) * 0.55, -armpitX, armpitY);
+  ctx.lineTo(-sleeveHemX, sleeveHemY);
+  ctx.quadraticCurveTo(-shoulderX - H * 0.05, sleeveHemY - H * 0.08, -shoulderX, shoulderY);
+  ctx.quadraticCurveTo(-H * 0.4, collarY + H * 0.16, -neck, collarY + H * 0.08);
   ctx.closePath();
 }
 
 function traceShorts(ctx: CanvasRenderingContext2D, H: number) {
-  const top = -H * 0.12;
-  const bot = H * 0.95;
-  const topW = H * 0.68;
-  const botW = H * 0.78;
+  const top = -H * 0.1;
+  const bot = H * 0.88;
+  const topW = H * 0.5;
+  const botW = H * 0.56;
   ctx.beginPath();
   ctx.moveTo(-topW, top);
   ctx.lineTo(topW, top);
-  ctx.quadraticCurveTo(botW + H * 0.04, (top + bot) * 0.5, botW, bot);
-  ctx.quadraticCurveTo(H * 0.2, bot + H * 0.06, 0, bot - H * 0.04);
-  ctx.quadraticCurveTo(-H * 0.2, bot + H * 0.06, -botW, bot);
-  ctx.quadraticCurveTo(-botW - H * 0.04, (top + bot) * 0.5, -topW, top);
+  ctx.lineTo(botW, bot);
+  ctx.lineTo(-botW, bot);
   ctx.closePath();
 }
 
@@ -764,16 +771,15 @@ function drawHumanoid(
   const skin = style.skin;
   const skinHi = mixHex(skin, '#fff3e8', 0.18);
   const walk = Math.sin(stride);
-  const collarY = -H * 2.82;
+  const collarY = -H * 2.72;
   const hemY = -H * 0.08;
-  const shoulderY = collarY + H * 0.52;
-  const head = { x: 0, y: -H * 3.48 };
+  const head = { x: 0, y: -H * 3.22 };
   const footY = H * 4;
-  const stanceW = stance === 'ready' ? 0.55 : 0.38;
-  const footL = { x: -H * stanceW + walk * H * 0.32, y: footY };
-  const footR = { x: H * stanceW - walk * H * 0.32, y: footY };
-  const hipL = { x: -H * 0.32, y: H * 0.08 };
-  const hipR = { x: H * 0.32, y: H * 0.08 };
+  const stanceW = stance === 'ready' ? 0.52 : 0.36;
+  const footL = { x: -H * stanceW + walk * H * 0.28, y: footY };
+  const footR = { x: H * stanceW - walk * H * 0.28, y: footY };
+  const hipL = { x: -H * 0.28, y: H * 0.06 };
+  const hipR = { x: H * 0.28, y: H * 0.06 };
   const kneeL = {
     x: hipL.x * 0.45 + footL.x * 0.55,
     y: H * (stance === 'ready' ? 1.88 : 2.02),
@@ -782,30 +788,29 @@ function drawHumanoid(
     x: hipR.x * 0.45 + footR.x * 0.55,
     y: H * (stance === 'ready' ? 1.88 : 2.02),
   };
-  const shoulderL = { x: -H * 0.88, y: shoulderY };
-  const shoulderR = { x: H * 0.88, y: shoulderY };
+  const sleeveL = { x: -H * 0.58, y: collarY + H * 0.82 };
+  const sleeveR = { x: H * 0.58, y: collarY + H * 0.82 };
   const handL = hands?.left ?? {
-    x: -H * 0.7 - walk * H * 0.16,
-    y: H * 0.58 + Math.max(0, -walk) * H * 0.06,
+    x: -H * 0.52 - walk * H * 0.1,
+    y: H * 0.18 + Math.max(0, -walk) * H * 0.04,
   };
   const handR = hands?.right ?? {
-    x: H * 0.7 + walk * H * 0.16,
-    y: H * 0.58 + Math.max(0, walk) * H * 0.06,
+    x: H * 0.52 + walk * H * 0.1,
+    y: H * 0.18 + Math.max(0, walk) * H * 0.04,
   };
   const elbowL = {
-    x: (shoulderL.x + handL.x) * 0.5 - H * 0.12,
-    y: (shoulderL.y + handL.y) * 0.52,
+    x: (sleeveL.x + handL.x) * 0.5 - (hands ? 0 : H * 0.14),
+    y: (sleeveL.y + handL.y) * 0.58,
   };
   const elbowR = {
-    x: (shoulderR.x + handR.x) * 0.5 + H * 0.12,
-    y: (shoulderR.y + handR.y) * 0.52,
+    x: (sleeveR.x + handR.x) * 0.5 + (hands ? 0 : H * 0.14),
+    y: (sleeveR.y + handR.y) * 0.58,
   };
 
   const drawLeg = (hip: FigPt, knee: FigPt, foot: FigPt) => {
-    fillCapsule(ctx, hip, H * 0.34, knee, H * 0.24, skin);
-    ctx.fillStyle = skinHi;
-    fillCapsule(ctx, { x: hip.x + H * 0.06, y: hip.y }, H * 0.12, { x: knee.x + H * 0.04, y: knee.y }, H * 0.08, skinHi);
-    fillCapsule(ctx, knee, H * 0.25, foot, H * 0.16, style.socks);
+    fillCapsule(ctx, hip, H * 0.26, knee, H * 0.2, skin);
+    fillCapsule(ctx, { x: hip.x + H * 0.05, y: hip.y }, H * 0.09, { x: knee.x + H * 0.03, y: knee.y }, H * 0.06, skinHi);
+    fillCapsule(ctx, knee, H * 0.2, foot, H * 0.14, style.socks);
     const cuff = luminance(style.socks) < 0.55
       ? mixHex(style.socks, '#f8fafc', 0.45)
       : shadeHex(style.socks, -0.25);
@@ -835,8 +840,8 @@ function drawHumanoid(
   ctx.lineWidth = Math.max(0.7, H * 0.04);
   ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(0, -H * 0.06);
-  ctx.lineTo(0, H * 0.82);
+  ctx.moveTo(0, -H * 0.04);
+  ctx.lineTo(0, H * 0.78);
   ctx.stroke();
 
   const torsoGrad = ctx.createLinearGradient(-H * 0.5, collarY, H * 0.6, hemY);
@@ -874,20 +879,10 @@ function drawHumanoid(
   ctx.ellipse(0, collarY + H * 0.16, H * 0.22, H * 0.09, 0, 0, Math.PI);
   ctx.fill();
 
-  const sleeveEndL = {
-    x: shoulderL.x + (elbowL.x - shoulderL.x) * 0.38,
-    y: shoulderL.y + (elbowL.y - shoulderL.y) * 0.38,
-  };
-  const sleeveEndR = {
-    x: shoulderR.x + (elbowR.x - shoulderR.x) * 0.38,
-    y: shoulderR.y + (elbowR.y - shoulderR.y) * 0.38,
-  };
-  fillCapsule(ctx, shoulderL, H * 0.26, sleeveEndL, H * 0.2, style.shirt);
-  fillCapsule(ctx, shoulderR, H * 0.26, sleeveEndR, H * 0.2, style.shirt);
-  fillCapsule(ctx, sleeveEndL, H * 0.18, elbowL, H * 0.155, skin);
-  fillCapsule(ctx, elbowL, H * 0.155, handL, H * 0.12, skin);
-  fillCapsule(ctx, sleeveEndR, H * 0.18, elbowR, H * 0.155, skin);
-  fillCapsule(ctx, elbowR, H * 0.155, handR, H * 0.12, skin);
+  fillCapsule(ctx, sleeveL, H * 0.14, elbowL, H * 0.125, skin, { start: false });
+  fillCapsule(ctx, elbowL, H * 0.125, handL, H * 0.1, skin);
+  fillCapsule(ctx, sleeveR, H * 0.14, elbowR, H * 0.125, skin, { start: false });
+  fillCapsule(ctx, elbowR, H * 0.125, handR, H * 0.1, skin);
 
   if (style.glove) {
     drawGlove(ctx, handL, H, style.glove, style.gloveLine ?? shadeHex(style.glove, -0.35), -1);
@@ -904,10 +899,10 @@ function drawHumanoid(
 
   ctx.fillStyle = shadeHex(skin, -0.14);
   ctx.beginPath();
-  ctx.moveTo(-H * 0.16, collarY + H * 0.08);
-  ctx.lineTo(H * 0.16, collarY + H * 0.08);
-  ctx.lineTo(H * 0.13, head.y + H * 0.42);
-  ctx.lineTo(-H * 0.13, head.y + H * 0.42);
+  ctx.moveTo(-H * 0.18, collarY + H * 0.06);
+  ctx.lineTo(H * 0.18, collarY + H * 0.06);
+  ctx.lineTo(H * 0.16, head.y + H * 0.48);
+  ctx.lineTo(-H * 0.16, head.y + H * 0.48);
   ctx.closePath();
   ctx.fill();
   const neckGrad = ctx.createLinearGradient(-H * 0.1, collarY, H * 0.12, head.y);
@@ -915,10 +910,10 @@ function drawHumanoid(
   neckGrad.addColorStop(1, skinHi);
   ctx.fillStyle = neckGrad;
   ctx.beginPath();
-  ctx.moveTo(-H * 0.145, collarY + H * 0.02);
-  ctx.lineTo(H * 0.145, collarY + H * 0.02);
-  ctx.lineTo(H * 0.12, head.y + H * 0.38);
-  ctx.lineTo(-H * 0.12, head.y + H * 0.38);
+  ctx.moveTo(-H * 0.165, collarY + H * 0.02);
+  ctx.lineTo(H * 0.165, collarY + H * 0.02);
+  ctx.lineTo(H * 0.145, head.y + H * 0.44);
+  ctx.lineTo(-H * 0.145, head.y + H * 0.44);
   ctx.closePath();
   ctx.fill();
 
