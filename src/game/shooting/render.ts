@@ -679,20 +679,20 @@ function drawHumanHead(
 }
 
 function traceAthleticShirt(ctx: CanvasRenderingContext2D, scale: number, shirtTop: number, hemY: number) {
-  const neck = scale * 0.2;
-  const chest = scale * 0.58;
-  const waist = scale * 0.38;
-  const shoulderDrop = scale * 0.5;
+  const neck = scale * 0.16;
+  const chest = scale * 0.56;
+  const waist = scale * 0.36;
+  const shoulderDrop = scale * 0.62;
   ctx.beginPath();
   ctx.moveTo(-neck, shirtTop);
   ctx.lineTo(neck, shirtTop);
-  ctx.quadraticCurveTo(scale * 0.34, shirtTop + scale * 0.1, chest, shirtTop + shoulderDrop);
-  ctx.quadraticCurveTo(chest + scale * 0.02, shirtTop + shoulderDrop + scale * 0.22, chest * 0.9, shirtTop + shoulderDrop + scale * 0.42);
-  ctx.quadraticCurveTo(waist + scale * 0.05, (shirtTop + hemY) * 0.55, waist, hemY);
+  ctx.quadraticCurveTo(scale * 0.22, shirtTop + scale * 0.28, chest, shirtTop + shoulderDrop);
+  ctx.quadraticCurveTo(chest, shirtTop + shoulderDrop + scale * 0.2, chest * 0.88, shirtTop + shoulderDrop + scale * 0.4);
+  ctx.quadraticCurveTo(waist + scale * 0.04, (shirtTop + hemY) * 0.55, waist, hemY);
   ctx.lineTo(-waist, hemY);
-  ctx.quadraticCurveTo(-waist - scale * 0.05, (shirtTop + hemY) * 0.55, -chest * 0.9, shirtTop + shoulderDrop + scale * 0.42);
-  ctx.quadraticCurveTo(-chest - scale * 0.02, shirtTop + shoulderDrop + scale * 0.22, -chest, shirtTop + shoulderDrop);
-  ctx.quadraticCurveTo(-scale * 0.34, shirtTop + scale * 0.1, -neck, shirtTop);
+  ctx.quadraticCurveTo(-waist - scale * 0.04, (shirtTop + hemY) * 0.55, -chest * 0.88, shirtTop + shoulderDrop + scale * 0.4);
+  ctx.quadraticCurveTo(-chest, shirtTop + shoulderDrop + scale * 0.2, -chest, shirtTop + shoulderDrop);
+  ctx.quadraticCurveTo(-scale * 0.22, shirtTop + scale * 0.28, -neck, shirtTop);
   ctx.closePath();
 }
 
@@ -861,8 +861,8 @@ export function drawDefender(
   const swing = Math.sin(stride) * scale * 0.28;
   const footL = { x: -scale * 0.42 + swing, y: scale * KEEPER_HIP_FROM_FOOT };
   const footR = { x: scale * 0.42 - swing, y: scale * KEEPER_HIP_FROM_FOOT };
-  const shoulderL = { x: -scale * 0.5, y: shirtTop + scale * 0.58 };
-  const shoulderR = { x: scale * 0.5, y: shirtTop + scale * 0.58 };
+  const shoulderL = { x: -scale * 0.48, y: shirtTop + scale * 0.68 };
+  const shoulderR = { x: scale * 0.48, y: shirtTop + scale * 0.68 };
   const handL = {
     x: -scale * 0.52 - swing * 0.28,
     y: -scale * 0.04 + Math.max(0, -Math.sin(stride)) * scale * 0.04,
