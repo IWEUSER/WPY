@@ -44,7 +44,7 @@ export default function TransferChoiceScreen() {
               key={`${offer.move}-${club.id}`}
               type="button"
               onClick={() => resolveTransferChoice(club.id)}
-              className="flex items-center gap-3 rounded-2xl border border-white/18 bg-[#0c1410] p-4 text-left shadow-[0_8px_24px_rgba(0,0,0,0.28)] backdrop-blur transition active:scale-[0.98]"
+              className="flex items-center gap-3 rounded-2xl border border-white/30 bg-[#050807] p-4 text-left shadow-[0_10px_28px_rgba(0,0,0,0.45)] backdrop-blur transition active:scale-[0.98]"
               style={{ borderLeft: `4px solid ${club.color}` }}
             >
               <div className="flex-1">
