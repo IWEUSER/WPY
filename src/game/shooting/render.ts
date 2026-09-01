@@ -566,8 +566,8 @@ function drawAthleteHead(
   H: number,
   skin: string,
 ) {
-  const hx = H * 0.5;
-  const hy = H * 0.56;
+  const hx = H * 0.54;
+  const hy = H * 0.60;
   const hair = hairColorForSkin(skin);
   const shade = shadeHex(skin, -0.22);
   const light = mixHex(skin, '#fff3e8', 0.28);
@@ -677,8 +677,11 @@ function drawAthleteHead(
   ctx.stroke();
 }
 
-/** Horizontal build so a 1.88 m keeper has ~0.50 m shoulders (4–6% of the goal face). */
-const BODY_X = 1.48;
+/** Horizontal build so a 1.88 m keeper in kit fills ~4–6% of the goal face.
+ * A 1.90 × 0.50 m rectangle is 5.3% of a 7.32 × 2.44 m goal; a stick-figure
+ * of the same height is closer to 3%. Extra torso and limb mass matches kit. */
+const BODY_X = 1.92;
+const LIMB = 1.68;
 
 function traceJersey(ctx: CanvasRenderingContext2D, H: number, collarY: number, hemY: number) {
   const neck = H * 0.24;
@@ -730,17 +733,17 @@ function drawGlove(
   ctx.rotate(side * -0.2);
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.ellipse(0, 0, H * 0.26, H * 0.32, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, 0, H * 0.30, H * 0.36, 0, 0, Math.PI * 2);
   ctx.fill();
   for (let i = -1; i <= 1; i++) {
     ctx.beginPath();
-    ctx.ellipse(i * H * 0.09, -H * 0.28, H * 0.075, H * 0.14, 0, 0, Math.PI * 2);
+    ctx.ellipse(i * H * 0.1, -H * 0.32, H * 0.085, H * 0.15, 0, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.strokeStyle = line;
   ctx.lineWidth = Math.max(1, H * 0.045);
   ctx.beginPath();
-  ctx.ellipse(0, 0, H * 0.26, H * 0.32, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, 0, H * 0.30, H * 0.36, 0, 0, Math.PI * 2);
   ctx.stroke();
   ctx.restore();
 }
@@ -778,11 +781,13 @@ function drawHumanoid(
   const hemY = -H * 0.08;
   const head = { x: 0, y: -H * 3.22 };
   const footY = H * 4;
-  const stanceW = (stance === 'ready' ? 0.52 : 0.36) * BODY_X;
-  const footL = { x: -H * stanceW + walk * H * 0.28 * BODY_X, y: footY };
-  const footR = { x: H * stanceW - walk * H * 0.28 * BODY_X, y: footY };
-  const hipL = { x: -H * 0.28 * BODY_X, y: H * 0.06 };
-  const hipR = { x: H * 0.28 * BODY_X, y: H * 0.06 };
+  // Stance is not scaled with BODY_X: a wider torso should not open a hole
+  // between the legs.
+  const stanceW = stance === 'ready' ? 0.32 : 0.24;
+  const footL = { x: -H * stanceW + walk * H * 0.22, y: footY };
+  const footR = { x: H * stanceW - walk * H * 0.22, y: footY };
+  const hipL = { x: -H * 0.26 * BODY_X, y: H * 0.06 };
+  const hipR = { x: H * 0.26 * BODY_X, y: H * 0.06 };
   const kneeL = {
     x: hipL.x * 0.45 + footL.x * 0.55,
     y: H * (stance === 'ready' ? 1.88 : 2.02),
@@ -811,22 +816,22 @@ function drawHumanoid(
   };
 
   const drawLeg = (hip: FigPt, knee: FigPt, foot: FigPt) => {
-    fillCapsule(ctx, hip, H * 0.26, knee, H * 0.2, skin);
-    fillCapsule(ctx, { x: hip.x + H * 0.05, y: hip.y }, H * 0.09, { x: knee.x + H * 0.03, y: knee.y }, H * 0.06, skinHi);
-    fillCapsule(ctx, knee, H * 0.2, foot, H * 0.14, style.socks);
+    fillCapsule(ctx, hip, H * 0.26 * LIMB, knee, H * 0.2 * LIMB, skin);
+    fillCapsule(ctx, { x: hip.x + H * 0.05, y: hip.y }, H * 0.09 * LIMB, { x: knee.x + H * 0.03, y: knee.y }, H * 0.06 * LIMB, skinHi);
+    fillCapsule(ctx, knee, H * 0.2 * LIMB, foot, H * 0.14 * LIMB, style.socks);
     const cuff = luminance(style.socks) < 0.55
       ? mixHex(style.socks, '#f8fafc', 0.45)
       : shadeHex(style.socks, -0.25);
     ctx.fillStyle = cuff;
     ctx.beginPath();
-    ctx.ellipse(knee.x, knee.y, H * 0.26, H * 0.1, 0, 0, Math.PI * 2);
+    ctx.ellipse(knee.x, knee.y, H * 0.26 * LIMB, H * 0.1 * LIMB, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = style.boot;
     ctx.beginPath();
-    ctx.ellipse(foot.x, foot.y, H * 0.32, H * 0.16, 0, 0, Math.PI * 2);
+    ctx.ellipse(foot.x, foot.y, H * 0.32 * LIMB, H * 0.16 * LIMB, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
-    ctx.ellipse(foot.x + H * 0.08, foot.y + H * 0.04, H * 0.22, H * 0.1, 0.15, 0, Math.PI * 2);
+    ctx.ellipse(foot.x + H * 0.08, foot.y + H * 0.04, H * 0.22 * LIMB, H * 0.1 * LIMB, 0.15, 0, Math.PI * 2);
     ctx.fill();
   };
 
@@ -882,10 +887,10 @@ function drawHumanoid(
   ctx.ellipse(0, collarY + H * 0.16, H * 0.22, H * 0.09, 0, 0, Math.PI);
   ctx.fill();
 
-  fillCapsule(ctx, sleeveL, H * 0.14, elbowL, H * 0.125, skin, { start: false });
-  fillCapsule(ctx, elbowL, H * 0.125, handL, H * 0.1, skin);
-  fillCapsule(ctx, sleeveR, H * 0.14, elbowR, H * 0.125, skin, { start: false });
-  fillCapsule(ctx, elbowR, H * 0.125, handR, H * 0.1, skin);
+  fillCapsule(ctx, sleeveL, H * 0.14 * LIMB, elbowL, H * 0.125 * LIMB, skin, { start: false });
+  fillCapsule(ctx, elbowL, H * 0.125 * LIMB, handL, H * 0.1 * LIMB, skin);
+  fillCapsule(ctx, sleeveR, H * 0.14 * LIMB, elbowR, H * 0.125 * LIMB, skin, { start: false });
+  fillCapsule(ctx, elbowR, H * 0.125 * LIMB, handR, H * 0.1 * LIMB, skin);
 
   if (style.glove) {
     drawGlove(ctx, handL, H, style.glove, style.gloveLine ?? shadeHex(style.glove, -0.35), -1);
@@ -893,10 +898,10 @@ function drawHumanoid(
   } else {
     ctx.fillStyle = skin;
     ctx.beginPath();
-    ctx.ellipse(handL.x, handL.y, H * 0.11, H * 0.14, -0.2, 0, Math.PI * 2);
+    ctx.ellipse(handL.x, handL.y, H * 0.11 * LIMB, H * 0.14 * LIMB, -0.2, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
-    ctx.ellipse(handR.x, handR.y, H * 0.11, H * 0.14, 0.2, 0, Math.PI * 2);
+    ctx.ellipse(handR.x, handR.y, H * 0.11 * LIMB, H * 0.14 * LIMB, 0.2, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -956,8 +961,12 @@ export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose:
   const sinA = Math.sin(ang);
   const localHx = wx * cosA + wy * sinA;
   const localHy = -wx * sinA + wy * cosA;
-  const gloveL = { x: localHx - H * 0.32, y: localHy };
-  const gloveR = { x: localHx + H * 0.36, y: localHy + H * 0.18 };
+  const gloveL = standing
+    ? { x: -H * 1.18, y: -H * 1.62 }
+    : { x: localHx - H * 0.32, y: localHy };
+  const gloveR = standing
+    ? { x: H * 1.24, y: -H * 1.42 }
+    : { x: localHx + H * 0.36, y: localHy + H * 0.18 };
 
   ctx.save();
   ctx.translate(hips.x, hips.y);
