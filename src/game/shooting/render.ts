@@ -677,35 +677,38 @@ function drawAthleteHead(
   ctx.stroke();
 }
 
+/** Horizontal build so a 1.88 m keeper has ~0.50 m shoulders (4–6% of the goal face). */
+const BODY_X = 1.48;
+
 function traceJersey(ctx: CanvasRenderingContext2D, H: number, collarY: number, hemY: number) {
   const neck = H * 0.24;
-  const shoulderX = H * 0.72;
+  const shoulderX = H * 0.72 * BODY_X;
   const shoulderY = collarY + H * 0.52;
-  const sleeveHemX = H * 0.66;
+  const sleeveHemX = H * 0.66 * BODY_X;
   const sleeveHemY = collarY + H * 0.88;
-  const armpitX = H * 0.5;
+  const armpitX = H * 0.5 * BODY_X;
   const armpitY = collarY + H * 1.02;
-  const hemX = H * 0.5;
+  const hemX = H * 0.5 * BODY_X;
   ctx.beginPath();
   ctx.moveTo(-neck, collarY + H * 0.08);
   ctx.quadraticCurveTo(0, collarY + H * 0.18, neck, collarY + H * 0.08);
-  ctx.quadraticCurveTo(H * 0.4, collarY + H * 0.16, shoulderX, shoulderY);
-  ctx.quadraticCurveTo(shoulderX + H * 0.05, sleeveHemY - H * 0.08, sleeveHemX, sleeveHemY);
+  ctx.quadraticCurveTo(H * 0.4 * BODY_X, collarY + H * 0.16, shoulderX, shoulderY);
+  ctx.quadraticCurveTo(shoulderX + H * 0.05 * BODY_X, sleeveHemY - H * 0.08, sleeveHemX, sleeveHemY);
   ctx.lineTo(armpitX, armpitY);
-  ctx.quadraticCurveTo(hemX + H * 0.04, (armpitY + hemY) * 0.55, hemX, hemY);
+  ctx.quadraticCurveTo(hemX + H * 0.04 * BODY_X, (armpitY + hemY) * 0.55, hemX, hemY);
   ctx.lineTo(-hemX, hemY);
-  ctx.quadraticCurveTo(-hemX - H * 0.04, (armpitY + hemY) * 0.55, -armpitX, armpitY);
+  ctx.quadraticCurveTo(-hemX - H * 0.04 * BODY_X, (armpitY + hemY) * 0.55, -armpitX, armpitY);
   ctx.lineTo(-sleeveHemX, sleeveHemY);
-  ctx.quadraticCurveTo(-shoulderX - H * 0.05, sleeveHemY - H * 0.08, -shoulderX, shoulderY);
-  ctx.quadraticCurveTo(-H * 0.4, collarY + H * 0.16, -neck, collarY + H * 0.08);
+  ctx.quadraticCurveTo(-shoulderX - H * 0.05 * BODY_X, sleeveHemY - H * 0.08, -shoulderX, shoulderY);
+  ctx.quadraticCurveTo(-H * 0.4 * BODY_X, collarY + H * 0.16, -neck, collarY + H * 0.08);
   ctx.closePath();
 }
 
 function traceShorts(ctx: CanvasRenderingContext2D, H: number) {
   const top = -H * 0.1;
   const bot = H * 0.88;
-  const topW = H * 0.5;
-  const botW = H * 0.56;
+  const topW = H * 0.5 * BODY_X;
+  const botW = H * 0.56 * BODY_X;
   ctx.beginPath();
   ctx.moveTo(-topW, top);
   ctx.lineTo(topW, top);
@@ -775,11 +778,11 @@ function drawHumanoid(
   const hemY = -H * 0.08;
   const head = { x: 0, y: -H * 3.22 };
   const footY = H * 4;
-  const stanceW = stance === 'ready' ? 0.52 : 0.36;
-  const footL = { x: -H * stanceW + walk * H * 0.28, y: footY };
-  const footR = { x: H * stanceW - walk * H * 0.28, y: footY };
-  const hipL = { x: -H * 0.28, y: H * 0.06 };
-  const hipR = { x: H * 0.28, y: H * 0.06 };
+  const stanceW = (stance === 'ready' ? 0.52 : 0.36) * BODY_X;
+  const footL = { x: -H * stanceW + walk * H * 0.28 * BODY_X, y: footY };
+  const footR = { x: H * stanceW - walk * H * 0.28 * BODY_X, y: footY };
+  const hipL = { x: -H * 0.28 * BODY_X, y: H * 0.06 };
+  const hipR = { x: H * 0.28 * BODY_X, y: H * 0.06 };
   const kneeL = {
     x: hipL.x * 0.45 + footL.x * 0.55,
     y: H * (stance === 'ready' ? 1.88 : 2.02),
@@ -788,22 +791,22 @@ function drawHumanoid(
     x: hipR.x * 0.45 + footR.x * 0.55,
     y: H * (stance === 'ready' ? 1.88 : 2.02),
   };
-  const sleeveL = { x: -H * 0.58, y: collarY + H * 0.82 };
-  const sleeveR = { x: H * 0.58, y: collarY + H * 0.82 };
+  const sleeveL = { x: -H * 0.58 * BODY_X, y: collarY + H * 0.82 };
+  const sleeveR = { x: H * 0.58 * BODY_X, y: collarY + H * 0.82 };
   const handL = hands?.left ?? {
-    x: -H * 0.52 - walk * H * 0.1,
+    x: -H * 0.52 * BODY_X - walk * H * 0.1 * BODY_X,
     y: H * 0.18 + Math.max(0, -walk) * H * 0.04,
   };
   const handR = hands?.right ?? {
-    x: H * 0.52 + walk * H * 0.1,
+    x: H * 0.52 * BODY_X + walk * H * 0.1 * BODY_X,
     y: H * 0.18 + Math.max(0, walk) * H * 0.04,
   };
   const elbowL = {
-    x: (sleeveL.x + handL.x) * 0.5 - (hands ? 0 : H * 0.14),
+    x: (sleeveL.x + handL.x) * 0.5 - (hands ? 0 : H * 0.14 * BODY_X),
     y: (sleeveL.y + handL.y) * 0.58,
   };
   const elbowR = {
-    x: (sleeveR.x + handR.x) * 0.5 + (hands ? 0 : H * 0.14),
+    x: (sleeveR.x + handR.x) * 0.5 + (hands ? 0 : H * 0.14 * BODY_X),
     y: (sleeveR.y + handR.y) * 0.58,
   };
 
@@ -925,13 +928,20 @@ function drawHumanoid(
 
 export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose: KeeperPose) {
   const H = (FIFA.keeperHeight / FIFA.goalHeight) * view.goal.heightPx / 8;
-  const hips = goalToPixel(pose.pos, view);
+  const collisionHips = goalToPixel(pose.pos, view);
   const groundY = view.goal.botY;
   const dir = pose.direction;
   const layout = clamp(pose.layout, 0, 1);
   const ang = keeperDiveAngle(dir, layout);
+  // Idle collision hips sit at aim y=0.28 so saves stay where they were; the
+  // standing sprite is lifted onto the goal line so a 1.88 m keeper actually
+  // occupies ~77% of the 2.44 m posts (and ~4–6% of the goal face).
+  const standing = dir === 0 && layout < 0.12;
+  const hips = standing
+    ? { x: collisionHips.x, y: groundY - 4 * H }
+    : collisionHips;
 
-  const shadowW = H * (1.15 + layout * 2.4);
+  const shadowW = H * (1.15 * BODY_X + layout * 2.4);
   ctx.save();
   ctx.beginPath();
   ctx.ellipse(hips.x, groundY + H * 0.1, shadowW, H * 0.28, 0, 0, Math.PI * 2);
@@ -940,8 +950,8 @@ export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose:
   ctx.restore();
 
   const handPx = goalToPixel(pose.hand, view);
-  const wx = handPx.x - hips.x;
-  const wy = handPx.y - hips.y;
+  const wx = handPx.x - collisionHips.x;
+  const wy = handPx.y - collisionHips.y;
   const cosA = Math.cos(ang);
   const sinA = Math.sin(ang);
   const localHx = wx * cosA + wy * sinA;
