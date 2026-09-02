@@ -33,26 +33,64 @@ export const AIM_Y_OVERSHOOT = 1.15;
 export const MIN_TRAVEL_MS = 260;
 export const MAX_TRAVEL_MS = 1080;
 
+/** Swipe power at or above this counts as a thunderbolt / piledriver. */
+export const THUNDERBOLT_POWER = 1.4;
+/** A thunderbolt from this close is too fast to dive; the keeper can only flinch.
+ * From farther out they always throw themselves, even if the ball is already in. */
+export const CLOSE_THUNDERBOLT_YARDS = 16;
+export const CLOSE_THUNDERBOLT_M = CLOSE_THUNDERBOLT_YARDS * 0.9144;
 /** How many ms it takes the keeper to cover one normalized unit of dive distance. */
 export const KEEPER_DIVE_MS_PER_UNIT = 300;
 
-/** Trajectory arc height (as a fraction of canvas height) at min vs max power -
- * soft/finesse shots loop more, powerful drives fly flatter and faster. */
-export const MAX_ARC_HEIGHT_RATIO = 0.17;
-export const MIN_ARC_HEIGHT_RATIO = 0.045;
+/** Max |x| the keeper's hips travel, in normalized goal space (posts at ±1).
+ * Feet trail the other way, so hips sit behind the gloves on a dive. */
+export const KEEPER_DIVE_MAX_X = 0.78;
+
+/** 0-based columns that stay on their feet and catch. On a 16-wide grid
+ * counted 1–16 from the left post, that is squares 7, 8 and 9 — the
+ * geometric centre. Every other square, including 4–6 and 13–14, is a dive. */
+export const PLANTED_SAVE_COL_MIN = 6;
+export const PLANTED_SAVE_COL_MAX = 8;
+
+/** Radians of body rotation at full layout. Positive dir (right) rotates
+ * clockwise: head and both arms go right, legs trail left. */
+export const DIVE_LAYOUT_RAD = 1.48;
+
+/** Standing hip height in normalized goal space (0 = ground, 1 = bar). */
+export const KEEPER_STAND_Y = 0.28;
+
+/**
+ * On-target shots are resolved against a 16-across × 5-down grid painted on
+ * the goal mouth. Each square has its own save chance: the dead-centre square
+ * is where the keeper is strongest, the two top-corner squares are where they
+ * are weakest.
+ */
+export const SAVE_GRID_COLS = 16;
+export const SAVE_GRID_ROWS = 5;
+/** Probability the keeper holds a shot aimed at the centre square. */
+export const SAVE_CHANCE_CENTER = 0.9;
+/** Probability the keeper holds a shot aimed at a top-corner square. */
+export const SAVE_CHANCE_TOP_CORNER = 0.16;
+
+/** Trajectory loft as a fraction of the ball-to-goal screen distance.
+ * Kept modest so a soft placed shot doesn't balloon over the bar. */
+export const MAX_ARC_ALONG_PATH = 0.18;
+export const MIN_ARC_ALONG_PATH = 0.04;
 
 /** How much a swipe's path has to bow away from a straight line (as a
- * fraction of the swipe's own length) to register as full (+-1) curl. */
-export const CURL_BOW_SENSITIVITY = 0.12;
+ * fraction of the swipe's own length) to register as full (+-1) curl.
+ * A gentle arch while drawing toward a corner should stay a slight bend,
+ * not a full banana. */
+export const CURL_BOW_SENSITIVITY = 0.32;
 
 /** How far a fully-curled shot's flight path bends sideways, as a fraction
  * of canvas width. */
-export const MAX_BEND_RATIO = 0.24;
+export const MAX_BEND_RATIO = 0.055;
 
 export const DEFAULT_DIFFICULTY: ShotDifficulty = {
-  baseNoise: 0.075,
-  powerNoisePenalty: 0.22,
-  curlNoisePenalty: 0.05,
+  baseNoise: 0.04,
+  powerNoisePenalty: 0.16,
+  curlNoisePenalty: 0.03,
   keeperReach: 0.3,
   powerReachPenalty: 0.55,
   keeperReactionMs: 250,

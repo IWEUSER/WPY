@@ -22,22 +22,47 @@ export interface SwipeGesture {
    * strike. 0 (or omitted) means a straight, uncurled strike.
    */
   curl?: number;
+  /** Screen-space ball position; when set with endX/endY/canvas, aim is a ray toward the goal. */
+  ballX?: number;
+  ballY?: number;
+  endX?: number;
+  endY?: number;
+  canvasW?: number;
+  canvasH?: number;
+  /** World distance from the ball to the goal line, in metres. */
+  distanceM?: number;
 }
 
 export type ShotZoneX = 'far-left' | 'left' | 'center' | 'right' | 'far-right';
 export type ShotZoneY = 'low' | 'mid' | 'high';
 
-export type ShotOutcomeKind = 'goal' | 'saved' | 'post' | 'wide' | 'over';
+export type ShotOutcomeKind = 'goal' | 'saved' | 'post' | 'wide' | 'over' | 'blocked';
 
 export interface KeeperDive {
-  /** Where the keeper dives to, in the same normalized space as AimPoint. */
+  /** Where the keeper's hips travel to. Always the correct side; |x| stays inside the posts. */
   target: AimPoint;
+  /** Glove position. On a save this is the landing square so the keeper covers the ball. */
+  hand: AimPoint;
   /** Reaction delay before the dive itself begins, in milliseconds. */
   reactionMs: number;
   /** How long the dive takes to complete (including reaction), in milliseconds. */
   diveDurationMs: number;
   /** Effective reach radius once fully stretched, in normalized units. */
   reach: number;
+  /** -1 = left, 0 = standing (centre), 1 = right. Open play always matches the shot; penalties may guess wrong or stay. */
+  direction: -1 | 0 | 1;
+  /** 0 = upright, 1 = fully stretched toward the ball. */
+  stretch: number;
+  /** 0 = standing, 1 = body laid out horizontal (low/wide dives). */
+  layout: number;
+  /** 0 = sprawled on the ground, 1 = leaping up toward the bar. */
+  elevation: number;
+}
+
+/** One cell of the 16×5 goalmouth save grid. Col 0 is the left post, row 0 is the ground. */
+export interface SaveCell {
+  col: number;
+  row: number;
 }
 
 export interface ShotResult {
@@ -53,6 +78,10 @@ export interface ShotResult {
   keeperDive: KeeperDive;
   /** 0-1, how close the keeper's reach came to the ball; for UI/feedback. */
   saveMargin: number;
+  /** Penalty only: the side the keeper committed to before the kick. */
+  penaltyCommit?: -1 | 0 | 1;
+  /** The 16×5 goalmouth cell the shot arrived in, when the shot was on target. */
+  saveCell?: SaveCell;
 }
 
 export interface ShotDifficulty {

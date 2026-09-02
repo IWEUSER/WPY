@@ -1,0 +1,255 @@
+import type { ShotResult } from '../shooting/types';
+import type { SeasonCalendar } from './calendar';
+import type { ClubTier } from './data/clubs';
+import type { ContinentalCupId, InternationalTournamentId } from './data/competitions';
+import type { NationalTeamState } from './international';
+import type { SeasonStandings } from './matchEngine';
+import type { LiveMatch, SeasonSimState } from './seasonSim';
+import type { PendingTransfer } from './transfers';
+import type { WpyResult } from './wpy';
+
+export type PlayerRole = 'reserve' | 'first-team' | 'loan';
+
+/**
+ * Tracks the escalating "miss games -> get dropped" rule:
+ * - You get an allowance of consecutive games to score in.
+ * - Score at any point in the window and everything resets to a fresh
+ *   3-game allowance.
+ * - Fail the whole window and you're dropped for a number of games, then
+ *   return with a *shorter* allowance next time (3 -> 2 -> 1, then it stays
+ *   at 1) while the ban itself gets *longer* each time you fail again
+ *   (1 -> 1 -> 2 -> 3 -> 4 -> ...).
+ */
+export interface AvailabilityState {
+  /** 0 = fresh 3-game allowance, 1 = 2-game allowance, 2+ = 1-game allowance. */
+  phase: number;
+  /** Scoreless games so far within the current allowance window. */
+  windowFails: number;
+  /** Games still left to serve before the player is picked again. */
+  bannedGamesRemaining: number;
+}
+
+export interface MatchRecord {
+  matchNumber: number;
+  played: boolean;
+  scored: boolean | null;
+}
+
+export type ContinentalStatKey = ContinentalCupId | 'super-cup';
+
+export interface ContinentalSeasonStat {
+  cup: ContinentalStatKey;
+  games: number;
+  goals: number;
+}
+
+export type QualifyingSeasonOutcome = 'none' | 'ongoing' | 'qualified' | 'failed';
+
+export type TournamentSeasonOutcome =
+  | 'none'
+  | 'did-not-qualify'
+  | 'ongoing'
+  | 'group'
+  | 'round-of-32'
+  | 'round-of-16'
+  | 'quarter-final'
+  | 'semi-final'
+  | 'final'
+  | 'champion';
+
+export interface InternationalSeasonRecord {
+  tournament: InternationalTournamentId | null;
+  qualifyingGames: number;
+  qualifyingGoals: number;
+  qualifyingOutcome: QualifyingSeasonOutcome;
+  finalsGames: number;
+  finalsGoals: number;
+  /** Furthest round reached this season, or champion / did-not-qualify / none. */
+  tournamentOutcome: TournamentSeasonOutcome;
+  playerOfTheTournament: boolean;
+  topGoalscorer: boolean;
+  /** Injury kept the player out of at least one end-of-season tournament match. */
+  injuryMissedFinals?: boolean;
+}
+
+export interface SeasonRecord {
+  seasonNumber: number;
+  clubId: string;
+  role: PlayerRole;
+  matches: MatchRecord[];
+  goals: number;
+  gamesPlayed: number;
+  /** Set once the season is finalized - whether the ratio requirement was met. */
+  ratioMet: boolean | null;
+  /** Age during this season. */
+  age: number;
+  /** Goals in league (or reserve) fixtures only - used by the golden boot. */
+  leagueGoals: number;
+  /** League appearances this season (includes domestic playoffs). */
+  leagueGames?: number;
+  /** Domestic cup appearances and goals this season. */
+  cupGames?: number;
+  cupGoals?: number;
+  /** League + domestic cup appearances this season. */
+  domesticGames?: number;
+  domesticGoals?: number;
+  /** Club continental competitions this season. */
+  continentalStats?: ContinentalSeasonStat[];
+  trophies: string[];
+  topGoalscorer: boolean;
+  playerOfTheYear: boolean;
+  wonWpy: boolean;
+  topGoalscorerReason?: string | null;
+  playerOfTheYearReason?: string | null;
+  wpyReason?: string | null;
+  /** Weekly wage × 52 for this season. */
+  earnings?: number;
+  /** One-off seasonal boot / shirt deal. */
+  sponsorship?: number;
+  /** League this season was played in (may differ after promotion). */
+  league?: string;
+  /** Qualifying + tournament outcome for this season’s international campaign. */
+  international?: InternationalSeasonRecord;
+}
+
+export interface TrialState {
+  shots: ShotResult[];
+  goals: number;
+  offeredClubIds: string[];
+}
+
+export type OpeningKind = 'youth-tournament' | 'club-trial';
+
+export interface OpeningGroupRow {
+  id: string;
+  points: number;
+  gd: number;
+}
+
+export interface OpeningCampaign {
+  kind: OpeningKind;
+  calendar: SeasonCalendar;
+  fixtureIndex: number;
+  goals: number;
+  gamesPlayed: number;
+  youthName: string;
+  groupOpponents: string[];
+  groupOthers: OpeningGroupRow[];
+  playerGroup: OpeningGroupRow;
+  qualified: boolean | null;
+  eliminated: boolean;
+  reachedSemi: boolean;
+  usedOpponentIds: string[];
+  trialClubId: string | null;
+  trialTier: ClubTier | null;
+  rejectedClubIds: string[];
+  /** Goals scored at the U16 tournament. Kept after the club trial starts. */
+  youthGoals: number;
+}
+
+export type CareerStart =
+  | 'youth'
+  | 'favourite-trial'
+  | 'favourite-reserve'
+  | 'favourite-first-team';
+
+export type CareerPhase =
+  | 'menu'
+  | 'trial'
+  | 'club-offer'
+  | 'opening-brief'
+  | 'nationality-choice'
+  | 'club-choice'
+  | 'hub'
+  | 'match'
+  | 'season-summary'
+  | 'transfer-choice'
+  | 'career'
+  | 'career-end'
+  | 'match-result';
+
+export interface CareerState {
+  phase: CareerPhase;
+  /** How this career opened. Null on older saves and a fresh menu. */
+  careerStart: CareerStart | null;
+  age: number;
+  seasonNumber: number;
+  clubId: string | null;
+  parentClubId: string | null;
+  role: PlayerRole;
+  /** Seasons spent at the current club (0 = this is the grace-period season). */
+  seasonsAtCurrentClub: number;
+  trial: TrialState | null;
+  openingCampaign: OpeningCampaign | null;
+  availability: AvailabilityState;
+  currentSeason: SeasonRecord | null;
+  seasonHistory: SeasonRecord[];
+  careerGoals: number;
+  careerGames: number;
+  /** Set when a loan/sale/transfer decision needs the player to pick a club. */
+  pendingTransfer: PendingTransfer | null;
+  /** Chosen international nationality — picked before the U16 tournament.
+   * Call-ups later use goal ratio + club level. */
+  nationality: string | null;
+  /** Caps, goals, and the same miss-streak drop rule as club football, scoped
+   * to the national team. Null until a nationality is chosen. */
+  nationalTeam: NationalTeamState | null;
+  /** This season's fixture list. The reserve year is league-only (no cups
+   * or continentals). First-team years add cups and internationals. */
+  seasonCalendar: SeasonCalendar | null;
+  /** Live league table + European stage for season 2+. Null in Season 1. */
+  seasonStandings: SeasonStandings | null;
+  seasonSim: SeasonSimState | null;
+  liveMatch: LiveMatch | null;
+  /** 1 per appearance (club or country), capped at 50, for the WPY form clause. */
+  formWindow: number[];
+  wpyResult: WpyResult | null;
+  lastMatchSummary: string | null;
+  lastMatchResult: LastMatchResult | null;
+  weeklyWage: number;
+  careerEarnings: number;
+  contractYears: number;
+  contractYearsRemaining: number;
+  /** League the current club is competing in (top flight after a promotion). */
+  clubLeague: string | null;
+  /**
+   * First-team years still on the parent deal while the player is out on a
+   * later-career loan. Null on the first youth/reserve loan (recall then
+   * signs a new 5-year deal). Restored when they return; a later loan does
+   * not reset the contract.
+   */
+  homeContractYearsRemaining: number | null;
+  /** Sponsorship paid at the start of the current season. */
+  seasonSponsorship: number;
+  /** Upcoming club/country fixtures the player will sit out through injury. */
+  injuryGamesRemaining: number;
+  previousContinentalChampion: ContinentalCupId | null;
+  previousChampionClubId: string | null;
+  /**
+   * Continental cup the current club earned for the season about to start.
+   * Null means no European/AFC campaign. Undefined in older saves falls back
+   * to the club's typical tier status.
+   */
+  qualifiedContinentalCup?: ContinentalCupId | null;
+  /**
+   * First half of a split qualifying campaign (season 3 → season 4).
+   * Null outside that window.
+   */
+  intlQualifying: IntlQualifyingCarry | null;
+}
+
+export interface LastMatchResult {
+  summary: string;
+  isFinal: boolean;
+  won: boolean;
+  trophyName: string | null;
+  afterPhase: 'hub' | 'season-summary' | 'match' | 'opening-brief' | 'club-offer' | 'transfer-choice';
+}
+
+export interface IntlQualifyingCarry {
+  tournament: InternationalTournamentId;
+  points: number;
+  played: number;
+  /** Qualifier opponents already faced in this split campaign. */
+  opponentIds?: string[];
+}
