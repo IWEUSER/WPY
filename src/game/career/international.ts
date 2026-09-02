@@ -4,7 +4,7 @@ import { clubsInCountry, type ClubTier } from './data/clubs';
 import { fifaRank } from './data/fifaRankings';
 import { NATIONS, getNation, type Nation } from './data/nations';
 import { VALUE_FORM_MIN_GAMES } from './playerValue';
-import type { AvailabilityState, InternationalSeasonRecord } from './types';
+import type { AvailabilityState, InternationalSeasonRecord, SeasonRecord } from './types';
 
 export type { Nation };
 export { NATIONS, getNation };
@@ -241,7 +241,7 @@ export function snapshotInternationalOutcomes(
   } else if (sim?.internationalStage === 'failed-qualifying') {
     qualifyingOutcome = 'failed';
   } else if (sim?.internationalPhase === 'qualifiers') {
-    qualifyingOutcome = 'ongoing';
+    qualifyingOutcome = 'none';
   } else if (rec.qualifyingGames > 0) {
     if (
       sim?.nationQualified ||
@@ -272,6 +272,21 @@ export function snapshotInternationalOutcomes(
   }
 
   return { ...rec, tournament, qualifyingOutcome, tournamentOutcome };
+}
+
+/** When a later season decides qualify/fail, stamp that onto earlier same-tournament cards. */
+export function patchPriorQualifyingOutcomes(
+  history: SeasonRecord[],
+  tournament: InternationalTournamentId | null | undefined,
+  outcome: InternationalSeasonRecord['qualifyingOutcome'],
+): SeasonRecord[] {
+  if (!tournament || (outcome !== 'qualified' && outcome !== 'failed')) return history;
+  return history.map((season) => {
+    const intl = season.international;
+    if (!intl || intl.tournament !== tournament || intl.qualifyingGames <= 0) return season;
+    if (intl.qualifyingOutcome === 'qualified' || intl.qualifyingOutcome === 'failed') return season;
+    return { ...season, international: { ...intl, qualifyingOutcome: outcome } };
+  });
 }
 
 function isTournamentOutcome(

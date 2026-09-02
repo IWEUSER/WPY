@@ -219,33 +219,39 @@ function SeasonCard({ season }: { season: SeasonRecord & { inProgress?: boolean 
 
   return (
     <article className={DATA_CARD} style={club ? { borderLeft: `4px solid ${club.color}` } : undefined}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-wide text-white/40">
-            {displaySeasonLabel(season.seasonNumber, { role: season.role, careerStart })}
-            {season.inProgress ? ' · in progress' : ''}
-            {' · '}
-            Age {season.age}
-          </p>
-          <h2 className="text-lg font-extrabold">{seasonClubName(season)}</h2>
-          <p className="text-xs text-white/50">
-            {seasonLeagueLabel(season)} · {ROLE_LABEL[season.role] ?? season.role}
-          </p>
+      <div className="grid grid-cols-[1fr_auto_auto] items-start gap-x-4">
+        <p className="text-xs uppercase tracking-wide text-white/40">
+          {displaySeasonLabel(season.seasonNumber, { role: season.role, careerStart })}
+          {season.inProgress ? ' · in progress' : ''}
+          {' · '}
+          Age {season.age}
+        </p>
+        <p className="text-right text-[10px] uppercase tracking-wide text-white/40">Games</p>
+        <p className="text-right text-[10px] uppercase tracking-wide text-white/40">Goals</p>
+        <div className="col-span-3 mt-1 flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-extrabold">{seasonClubName(season)}</h2>
+            <p className="text-xs text-white/50">
+              {seasonLeagueLabel(season)} · {ROLE_LABEL[season.role] ?? season.role}
+            </p>
+          </div>
+          {season.wonWpy && (
+            <span className="shrink-0 rounded-full bg-amber-400/20 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-200">
+              WPY
+            </span>
+          )}
         </div>
-        {season.wonWpy && (
-          <span className="shrink-0 rounded-full bg-amber-400/20 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-200">
-            WPY
-          </span>
-        )}
       </div>
 
       <ClubCompetitionTable
+        showHeader={false}
         split={seasonDomesticSplit(season)}
         continental={season.continentalStats ?? []}
       />
       {season.international && (
         <div className="mt-2">
           <InternationalSeasonBlock
+            showHeader={false}
             title={formatInternationalSeason(season.international)?.name ?? 'International'}
             record={season.international}
           />

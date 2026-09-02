@@ -7,7 +7,7 @@ export const BARCELONA_ANCHOR_VALUE = 200_000_000;
 const ANCHOR_STRENGTH = 91;
 const ANCHOR_RATIO = 0.9;
 
-const TOP_LEAGUES = new Set(['Premier League', 'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1']);
+export const TOP_LEAGUES = new Set(['Premier League', 'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1']);
 
 /**
  * How much a league's goals-per-game counts toward market value.

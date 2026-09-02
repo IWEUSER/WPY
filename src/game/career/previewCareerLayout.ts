@@ -308,6 +308,8 @@ export function applyCareerLayoutPreview(): void {
     }
     calendar.internationalTournament = 'world-cup';
     sim.internationalTournament = 'world-cup';
+    sim.internationalStage = sim.internationalStage === 'friendly' ? 'group' : sim.internationalStage;
+    sim.internationalSelected = true;
   } else if (preview === 'match-intl-ko') {
     const idx = calendar.fixtures.findIndex((f) => f.kind === 'international');
     if (idx >= 0) matchFixtureIndex = idx;

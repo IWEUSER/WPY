@@ -174,6 +174,8 @@ const SHORTS: Record<string, string> = {
   france: '#002395',
   argentina: '#000000',
   portugal: '#006600',
+  'northern-ireland': '#FFFFFF',
+  'republic-of-ireland': '#FFFFFF',
 };
 
 const SOCKS: Record<string, string> = {

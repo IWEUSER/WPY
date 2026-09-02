@@ -525,6 +525,7 @@ export default function ShootingGame({
           plain: plainPitch,
           quality: look.pitchQuality,
           seed: look.groundName ?? look.scale,
+          stripes: Boolean(look.pitchStripes),
         });
         drawGoal(ctx, view);
 
@@ -539,9 +540,9 @@ export default function ShootingGame({
           anim.ballRadius = ballRadiusNear(view);
           const devPose = readDevKeeperPose();
           const devCell = readDevPoseCell();
-          drawKeeper(ctx, view, devPose ?? anim.keeperPose);
+          drawKeeper(ctx, view, devPose ?? anim.keeperPose, { longSleeves: look.showSun === false });
           if (anim.defender) {
-            drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit, anim.defender.stride, anim.defender.skinTone, anim.defender.hairColor);
+            drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit, anim.defender.stride, anim.defender.skinTone, anim.defender.hairColor, look.showSun === false);
           }
           if (anim.phase === 'dragging' && anim.dragStart && anim.dragPoints.length > 1) {
             // Show the actual curved path being swiped, not just a straight
@@ -618,9 +619,9 @@ export default function ShootingGame({
           };
 
           drawTrail(ctx, anim.ballTrail);
-          drawKeeper(ctx, view, anim.keeperPose);
+          drawKeeper(ctx, view, anim.keeperPose, { longSleeves: look.showSun === false });
           if (anim.defender) {
-            drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit, anim.defender.stride, anim.defender.skinTone, anim.defender.hairColor);
+            drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit, anim.defender.stride, anim.defender.skinTone, anim.defender.hairColor, look.showSun === false);
           }
           drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
 
@@ -657,9 +658,9 @@ export default function ShootingGame({
             finishShot(result);
           }
         } else if (anim.phase === 'result' && anim.result) {
-          drawKeeper(ctx, view, anim.keeperPose);
+          drawKeeper(ctx, view, anim.keeperPose, { longSleeves: look.showSun === false });
           if (anim.defender) {
-            drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit, anim.defender.stride, anim.defender.skinTone, anim.defender.hairColor);
+            drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit, anim.defender.stride, anim.defender.skinTone, anim.defender.hairColor, look.showSun === false);
           }
           drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
           if (now - anim.resultAtMs > RESULT_HOLD_MS) {

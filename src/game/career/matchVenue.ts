@@ -7,6 +7,7 @@ import type { Nation } from './data/nations';
 import type { KitScheme } from '../shooting/kitPalette';
 import { stadiumScaleFromCapacity, pitchQualityFromStrength, type StadiumAppearance } from '../shooting/stadium';
 import { groundForClub, groundForClubTrial, groundForCupFinal, groundForInternationalTournament, groundForNationRank, groundForYouthTournament, UNLISTED_GROUND, type ClubGround } from '../shooting/grounds';
+import { TOP_LEAGUES } from './playerValue';
 
 const GENERIC_OPPONENT: KitScheme = { primary: '#1D4ED8', pattern: 'solid' };
 
@@ -23,6 +24,7 @@ function appearanceFromGround(
     unique: ground.unique,
     groundName: ground.name,
     pitchQuality: base.pitchQuality ?? pitchQualityFromStrength(strength, ground.capacity),
+    pitchStripes: base.pitchStripes ?? false,
   };
 }
 
@@ -73,6 +75,19 @@ export function resolveMatchStadium(args: {
             ? UNLISTED_GROUND
             : groundForClub(groundClub?.id);
 
+  const youthOrTrial = openingKind === 'youth-tournament' || openingKind === 'club-trial';
+  const stripes = (() => {
+    if (youthOrTrial) return false;
+    if (ground.tiers <= 1) return false;
+    if (isInternational) {
+      const rankedId = intlTournament ? (nation?.id ?? '') : (groundNationId ?? nation?.id ?? '');
+      const rank = fifaRank(rankedId);
+      return rank > 0 && rank <= 50;
+    }
+    const league = groundClub?.league ?? club?.league;
+    return Boolean(league && TOP_LEAGUES.has(league));
+  })();
+
   return appearanceFromGround(ground, {
     isHome: neutral ? true : isHome,
     night: fixture ? fixtureIsNight(fixture) : false,
@@ -86,11 +101,13 @@ export function resolveMatchStadium(args: {
     opponentShorts: opponent.shorts,
     opponentSocks: opponent.socks,
     opponentPattern: opponent.pattern,
+    opponentSleeves: opponent.sleeves,
     awayShare: fixture ? fixtureCrowdAwayShare(fixture) : 0.2,
     crowdFill: openingKind === 'youth-tournament' ? 'sparse' : openingKind === 'club-trial' ? 'empty' : 'full',
-    pitchQuality: openingKind === 'youth-tournament' || openingKind === 'club-trial'
+    pitchQuality: youthOrTrial
       ? 'worn'
       : pitchQualityFromStrength(groundClub?.strength, ground.capacity),
+    pitchStripes: stripes,
   }, groundClub?.strength);
 }
 
@@ -109,6 +126,7 @@ export function trialStadium(nation?: Nation): StadiumAppearance {
     awayShare: 0.22,
     bowl: false,
     pitchQuality: 'worn',
+    pitchStripes: false,
   };
 }
 
@@ -127,6 +145,7 @@ export function reserveStadium(club?: Club): StadiumAppearance {
     awayShare: 0.22,
     crowdFill: 'sparse',
     pitchQuality: 'worn',
+    pitchStripes: false,
   });
 }
 
@@ -151,10 +170,10 @@ export function resolveCareerStadium(args: {
     !clubFinal &&
     !international
   ) {
-    return { ...resolveMatchStadium({ ...args, openingKind: 'club-trial' }), crowdFill: 'sparse', pitchQuality: 'worn' };
+    return { ...resolveMatchStadium({ ...args, openingKind: 'club-trial' }), crowdFill: 'sparse', pitchQuality: 'worn', pitchStripes: false };
   }
   if (args.role === 'reserve') {
-    return { ...resolveMatchStadium(args), crowdFill: 'sparse', pitchQuality: 'worn' };
+    return { ...resolveMatchStadium(args), crowdFill: 'sparse', pitchQuality: 'worn', pitchStripes: false };
   }
   return resolveMatchStadium(args);
 }

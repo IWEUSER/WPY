@@ -43,6 +43,7 @@ export interface StadiumAppearance {
   /** Opposition knee-high socks. */
   opponentSocks?: string;
   opponentPattern?: ShirtPattern;
+  opponentSleeves?: string;
   /** 0–1 share of seats given to away fans. */
   awayShare?: number;
   /** Coarse shortcut when capacity/tiers are omitted (`?scale=`). */
@@ -61,6 +62,8 @@ export interface StadiumAppearance {
   showSun?: boolean;
   /** Playing surface: elite clubs are lush, lower clubs are worn. */
   pitchQuality?: PitchQuality;
+  /** Full-width mowing stripes. Off on lower pitches, youth, and weaker nations. */
+  pitchStripes?: boolean;
 }
 
 export type CrowdFill = 'full' | 'sparse' | 'empty';
@@ -132,6 +135,7 @@ export const DEFAULT_STADIUM: StadiumAppearance = {
   unique: 'camp-nou',
   groundName: 'Camp Nou',
   pitchQuality: 'elite',
+  pitchStripes: true,
 };
 
 export function defenderKitFromStadium(stadium: StadiumAppearance): DefenderKit {
@@ -141,6 +145,7 @@ export function defenderKitFromStadium(stadium: StadiumAppearance): DefenderKit 
     shorts: stadium.opponentShorts,
     socks: stadium.opponentSocks,
     pattern: stadium.opponentPattern,
+    sleeves: stadium.opponentSleeves,
   });
 }
 

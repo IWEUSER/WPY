@@ -9,6 +9,7 @@ import type { SeasonStandings } from '../matchEngine';
 import { displaySeasonLabel } from '../seasonDisplay';
 import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
 import { conferenceTable, fixtureTitle, internationalRoundLabel, nextPlayableFixture, type SeasonSimState } from '../seasonSim';
+import { groupPosition, sortGroupTable } from '../internationalTable';
 import { requiredGoalRatio } from '../transfers';
 import { useCareerStore } from '../store';
 import { DATA_CARD, DATA_INSET } from './dataUi';
@@ -219,6 +220,8 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
             sim={seasonSim}
             caps={nationalTeam?.caps ?? 0}
             intlGoals={nationalTeam?.goals ?? 0}
+            dropped={Boolean(nationalTeam && !isAvailable(nationalTeam.availability))}
+            selected={Boolean(seasonSim?.internationalSelected)}
           />
         )}
 
@@ -302,6 +305,8 @@ function InternationalCard({
   sim,
   caps,
   intlGoals,
+  dropped,
+  selected,
 }: {
   nationId: string;
   nationName: string;
@@ -310,6 +315,8 @@ function InternationalCard({
   sim: SeasonSimState | null;
   caps: number;
   intlGoals: number;
+  dropped: boolean;
+  selected: boolean;
 }) {
   const bar = selectionRatioForNation(nationId);
   const clubOk = clubEligibleForNationalTeam(clubTier);
@@ -317,9 +324,12 @@ function InternationalCard({
   const tournamentName = sim?.internationalTournament
     ? INTERNATIONAL_TOURNAMENTS[sim.internationalTournament].name
     : null;
+  const group = sim?.internationalGroup;
+  const pos = group ? groupPosition(group, nationId) : 0;
   const campaignLine = (() => {
     if (!clubOk) return `Call-ups are for players at a higher club level.`;
-    if (!sim?.internationalSelected || !tournamentName) return null;
+    if (!sim || !selected || !tournamentName) return `Not selected for ${nationName} this window.`;
+    if (dropped) return `Dropped for this ${tournamentName} match.`;
     if (sim.internationalStage === 'qualifying') {
       const carried = sim.qualifierCarryPlayed > 0 ? ` (plus ${sim.qualifierCarryPoints} pts carried)` : '';
       return `Qualifying for the ${tournamentName}: ${sim.qualifierPoints} pts from ${sim.qualifierPlayed}/${sim.qualifierTarget}${carried}.`;
@@ -332,8 +342,12 @@ function InternationalCard({
     }
     if (sim.internationalStage === 'champion') return `Won the ${tournamentName}.`;
     if (sim.internationalStage === 'eliminated') return `Out of the ${tournamentName}.`;
+    if (sim.internationalStage === 'friendly') {
+      return `${tournamentName} friendlies before the tournament.`;
+    }
     if (sim.internationalStage === 'group') {
-      return `${tournamentName} group: ${sim.groupPoints} pts from ${sim.groupPlayed} games.`;
+      const place = pos > 0 ? ` · ${pos}${ordinal(pos)} in group ${group?.letter ?? ''}` : '';
+      return `${tournamentName} group: ${sim.groupPoints} pts from ${sim.groupPlayed} games${place}.`;
     }
     return `Playing at the ${tournamentName}${sim.internationalStage ? ` — ${internationalRoundLabel(sim.internationalStage as never)}` : ''}.`;
   })();
@@ -348,11 +362,33 @@ function InternationalCard({
 
   return (
     <div className={DATA_CARD}>
-      <p className="text-xs uppercase tracking-wide text-white/40">{nationName} call-up</p>
+      <p className="text-xs uppercase tracking-wide text-white/40">{nationName} {tournamentName ? `· ${tournamentName}` : 'call-up'}</p>
       <p className={`mt-1 text-sm font-semibold ${inForm ? 'text-emerald-300' : 'text-white/80'}`}>
         {statusLine}
       </p>
       {campaignLine && <p className="mt-1 text-xs text-emerald-200/80">{campaignLine}</p>}
+      {group && (sim?.internationalStage === 'group' || sim?.internationalStage === 'friendly' || (sim?.internationalStage && !['qualifying', 'not-selected', 'failed-qualifying', 'qualified'].includes(sim.internationalStage))) && (
+        <table className="mt-3 w-full border-collapse text-left text-xs">
+          <thead>
+            <tr className="text-[10px] uppercase tracking-wide text-white/40">
+              <th className="pb-1 font-medium">Group {group.letter}</th>
+              <th className="pb-1 text-right font-medium">P</th>
+              <th className="pb-1 text-right font-medium">GD</th>
+              <th className="pb-1 text-right font-medium">Pts</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortGroupTable(group.rows).map((row, i) => (
+              <tr key={row.nationId} className={row.nationId === nationId ? 'font-semibold text-white' : 'text-white/70'}>
+                <td className="py-0.5 pr-2">{i + 1}. {row.name}</td>
+                <td className="py-0.5 text-right tabular-nums">{row.played}</td>
+                <td className="py-0.5 text-right tabular-nums">{row.goalsFor - row.goalsAgainst}</td>
+                <td className="py-0.5 text-right tabular-nums">{row.points}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
       {caps > 0 && (
         <p className="mt-1 text-xs text-white/60">
           {caps} cap{caps === 1 ? '' : 's'} · {intlGoals} international goal{intlGoals === 1 ? '' : 's'}
@@ -360,6 +396,15 @@ function InternationalCard({
       )}
     </div>
   );
+}
+
+function ordinal(n: number): string {
+  const v = n % 100;
+  if (v >= 11 && v <= 13) return 'th';
+  if (n % 10 === 1) return 'st';
+  if (n % 10 === 2) return 'nd';
+  if (n % 10 === 3) return 'rd';
+  return 'th';
 }
 
 function SeasonCompetitions({ calendar }: { calendar: SeasonCalendar | null }) {

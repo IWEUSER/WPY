@@ -166,14 +166,6 @@ export default function SeasonSummaryScreen() {
         </div>
       )}
 
-      {season.international?.injuryMissedFinals && (season.international.tournament || seasonSim?.internationalTournament) && (
-        <div className={`w-full max-w-sm ${DATA_INSET} text-sm text-white/60`}>
-          Missed at least one {(season.international.tournament ?? seasonSim?.internationalTournament)
-            ? INTERNATIONAL_TOURNAMENTS[(season.international.tournament ?? seasonSim!.internationalTournament)!].name
-            : 'tournament'} match through injury.
-        </div>
-      )}
-
       {wpyResult && (
         <div
           className={`w-full max-w-sm rounded-2xl border px-4 py-3 text-sm ${
