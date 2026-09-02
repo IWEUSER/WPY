@@ -27,6 +27,7 @@ import { groundForClub } from './grounds';
 import { normalizeHex } from './kitPalette';
 import { getClub } from '../career/data/clubs';
 import { clubKit } from '../career/data/clubKits';
+import { TOP_LEAGUES } from '../career/playerValue';
 import {
   advanceDefender,
   ballHasReachedDefender,
@@ -170,8 +171,11 @@ function readDevStadium(): StadiumAppearance | null {
     && tiersRaw == null
   ) return null;
   const isHome = homeParam !== '0' && homeParam !== 'away' && homeParam !== 'false';
-  const playerColor = normalizeHex(homeColorRaw, DEFAULT_STADIUM.homeColor);
-  const opponentColor = normalizeHex(awayColorRaw, DEFAULT_STADIUM.awayColor);
+  const club = clubId ? getClub(clubId) : undefined;
+  const playerKit = club ? clubKit(club) : null;
+  const opponentKit = opponentId ? clubKit(getClub(opponentId)) : null;
+  const playerColor = normalizeHex(homeColorRaw, playerKit?.primary ?? DEFAULT_STADIUM.homeColor);
+  const opponentColor = normalizeHex(awayColorRaw, opponentKit?.primary ?? DEFAULT_STADIUM.awayColor);
   const night = q.get('night') === '1' || q.get('night') === 'true';
   const scale = scaleRaw === 'local' || scaleRaw === 'strong' || scaleRaw === 'elite' ? scaleRaw : undefined;
   const fromClub = clubId ? groundForClub(clubId) : null;
@@ -183,24 +187,30 @@ function readDevStadium(): StadiumAppearance | null {
   const standTiers = (tiersN === 1 || tiersN === 2 || tiersN === 3 || tiersN === 4 || tiersN === 5)
     ? tiersN
     : ground?.tiers;
-  const opponentKit = opponentId ? clubKit(getClub(opponentId)) : null;
+  const league = club?.league;
+  const pitchStripes = Boolean(league && TOP_LEAGUES.has(league) && (ground?.tiers ?? 2) > 1);
   return {
     isHome,
     night,
+    showSun: !night,
     homeColor: isHome ? playerColor : opponentColor,
+    homeSecondary: isHome ? playerKit?.secondary : opponentKit?.secondary,
     awayColor: isHome ? opponentColor : playerColor,
+    awaySecondary: isHome ? opponentKit?.secondary : playerKit?.secondary,
     opponentColor: opponentKit?.primary ?? opponentColor,
     opponentSecondary: opponentKit?.secondary,
     opponentShorts: opponentKit?.shorts,
     opponentSocks: opponentKit?.socks,
     opponentPattern: opponentKit?.pattern,
+    opponentSleeves: opponentKit?.sleeves,
     awayShare: 0.2,
     scale,
     capacity,
     standTiers,
     unique: ground?.unique,
     groundName: ground?.name,
-    pitchQuality: pitchQualityFromStrength(clubId ? getClub(clubId)?.strength : undefined, capacity),
+    pitchQuality: pitchQualityFromStrength(club?.strength, capacity),
+    pitchStripes,
   };
 }
 
