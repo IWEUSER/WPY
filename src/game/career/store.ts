@@ -42,6 +42,7 @@ import { buildSeasonStandings } from './matchEngine';
 import { isFinalFixture, isInternationalTournamentFixture } from './calendar';
 import {
   canWinLeague,
+  buildInternationalGroup,
   hydrateSeason,
   remainingPlayableCount,
   reassignLeagueHomeAway,
@@ -1558,11 +1559,11 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 24,
+      version: 25,
       migrate: (persisted) => {
         const state = persisted as Partial<CareerState>;
         const sim = state.seasonSim;
-        const padSeason = (season: SeasonRecord, index: number): SeasonRecord => ({
+        const padSeason = (season: SeasonRecord, index: number, archived = false): SeasonRecord => ({
           ...season,
           age: season.age ?? (state.age ?? 16) - Math.max(0, (state.seasonHistory?.length ?? 0) - index),
           leagueGoals: season.leagueGoals ?? season.goals,
@@ -1578,9 +1579,17 @@ export const useCareerStore = create<CareerStore>()(
           wonWpy: season.wonWpy ?? false,
           sponsorship: season.sponsorship ?? 0,
           league: season.league,
-          international: season.international ?? emptyInternationalSeason(null),
+          international: season.international
+            ? {
+                ...season.international,
+                qualifyingOutcome:
+                  archived && season.international.qualifyingOutcome === 'ongoing'
+                    ? 'none'
+                    : season.international.qualifyingOutcome,
+              }
+            : emptyInternationalSeason(null),
         });
-        const seasonHistory = (state.seasonHistory ?? []).map(padSeason);
+        const seasonHistory = (state.seasonHistory ?? []).map((season, index) => padSeason(season, index, true));
         const currentSeason = state.currentSeason
           ? padSeason(state.currentSeason, state.seasonHistory?.length ?? 0)
           : null;
@@ -1642,6 +1651,18 @@ export const useCareerStore = create<CareerStore>()(
                 leaguesCupGroupPoints: sim.leaguesCupGroupPoints ?? 0,
                 superCupStage: sim.superCupStage ?? 'not-entered',
                 internationalReached: sim.internationalReached ?? null,
+                internationalGroup: sim.internationalGroup ?? (
+                  state.seasonCalendar && (sim.nationId ?? state.nationality) && sim.internationalTournament
+                    ? buildInternationalGroup(
+                        sim.nationId ?? state.nationality!,
+                        sim.internationalTournament,
+                        state.seasonCalendar,
+                        state.seasonNumber ?? 1,
+                      )
+                    : null
+                ),
+                friendlyPlayed: sim.friendlyPlayed ?? 0,
+                knockoutGamesScored: sim.knockoutGamesScored ?? 0,
               }
             : null,
           liveMatch: state.liveMatch ?? null,

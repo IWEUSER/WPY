@@ -373,7 +373,7 @@ function internationalGroupOpponentIds(
   return fallback;
 }
 
-function buildInternationalGroup(
+export function buildInternationalGroup(
   nationId: string,
   tournament: InternationalTournamentId,
   calendar: SeasonCalendar,

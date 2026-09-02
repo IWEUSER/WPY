@@ -1,4 +1,5 @@
 import { calendarDomesticCup, calendarIncludesInternational, currentCalendarWeek, fixtureVenueLabel, type SeasonCalendar } from '../calendar';
+import { clubKit } from '../data/clubKits';
 import { getClub, leagueMatchWeeks } from '../data/clubs';
 import { conferenceLabel, leagueDisplayName, mlsConferenceOf } from '../data/leagueFormat';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
@@ -8,7 +9,7 @@ import { clubEligibleForNationalTeam, callUpRatio, getNation, isSelectedForNatio
 import type { SeasonStandings } from '../matchEngine';
 import { displaySeasonLabel } from '../seasonDisplay';
 import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
-import { conferenceTable, fixtureTitle, internationalRoundLabel, nextPlayableFixture, type SeasonSimState } from '../seasonSim';
+import { buildInternationalGroup, conferenceTable, fixtureTitle, internationalRoundLabel, nextPlayableFixture, type SeasonSimState } from '../seasonSim';
 import { groupPosition, sortGroupTable } from '../internationalTable';
 import { requiredGoalRatio } from '../transfers';
 import { useCareerStore } from '../store';
@@ -51,6 +52,19 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const parentClub = role === 'loan' && parentClubId ? getClub(parentClubId) : undefined;
   const nation = nationality ? getNation(nationality) : undefined;
   if (!club || !season) return null;
+  const kit = clubKit(club);
+  const seasonSimWithGroup = (() => {
+    if (!seasonSim) return seasonSim;
+    if (seasonSim.internationalGroup) return seasonSim;
+    if (!seasonCalendar || !seasonSim.nationId || !seasonSim.internationalTournament) return seasonSim;
+    const internationalGroup = buildInternationalGroup(
+      seasonSim.nationId,
+      seasonSim.internationalTournament,
+      seasonCalendar,
+      seasonNumber,
+    );
+    return internationalGroup ? { ...seasonSim, internationalGroup } : seasonSim;
+  })();
 
   const played = season.gamesPlayed;
   const goals = season.goals;
@@ -93,7 +107,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         </div>
       </div>
 
-      <div className={DATA_CARD} style={{ borderLeft: `4px solid ${club.color}` }}>
+      <div className={DATA_CARD} style={{ borderLeft: `4px solid ${kit.primary}` }}>
         <p className="text-xs uppercase tracking-wide text-white/40">
           {displaySeasonLabel(seasonNumber, { role, careerStart })} · {ROLE_LABEL[role]}
           {` · Week ${week} of ${totalWeeks}`}
@@ -217,11 +231,11 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
             nationName={nation.name}
             clubTier={club.tier}
             careerRatio={callUpRatio({ season, careerGoals, careerGames })}
-            sim={seasonSim}
+            sim={seasonSimWithGroup}
             caps={nationalTeam?.caps ?? 0}
             intlGoals={nationalTeam?.goals ?? 0}
             dropped={Boolean(nationalTeam && !isAvailable(nationalTeam.availability))}
-            selected={Boolean(seasonSim?.internationalSelected)}
+            selected={Boolean(seasonSimWithGroup?.internationalSelected)}
           />
         )}
 
