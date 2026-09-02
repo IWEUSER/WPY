@@ -45,6 +45,7 @@ import { missedChanceWinFactor, simulateClubMatch, simulateLeagueSeason } from '
 import { aggregateContinental, aggregateDomesticSplit, recordClubAppearanceStats, seasonDomesticSplit } from '../src/game/career/seasonStats';
 import { leaguePhaseOpponents } from '../src/game/career/continentalDraw';
 import { canWinLeague, fixtureTitle, hydrateSeason, leagueFixtureIsHome, nextPlayableFixture, pickTitleRival, remainingPlayableCount, resolveFixture, shouldSkipFixture } from '../src/game/career/seasonSim';
+import { nationCanProgressKnockout, nationCanWinMajor } from '../src/game/career/internationalTable';
 import {
   applyTrialMatch,
   applyYouthMatch,
@@ -162,6 +163,8 @@ const expectedWc = [
   'qualifier',
   'qualifier',
   'qualifier',
+  'friendly',
+  'friendly',
   'group',
   'group',
   'group',
@@ -172,7 +175,7 @@ const expectedWc = [
   'final',
 ];
 if (s2Rounds.join() !== expectedWc.join()) {
-  console.error('season 2 must play five World Cup qualifiers then a 32-team World Cup');
+  console.error('season 2 must play five World Cup qualifiers, two friendlies, then a 32-team World Cup');
   process.exitCode = 1;
 }
 if (calendar.internationalTournament !== 'world-cup' || calendar.internationalPhase !== 'qualifiers-and-tournament') {
@@ -208,11 +211,11 @@ if (restWeeks.length !== INTERNATIONAL_BREAK_WEEKS || (euroFinalWeek != null && 
   process.exitCode = 1;
 }
 if (tournamentWeeks.length !== tournamentWeekCount('world-cup')) {
-  console.error('World Cup finals must occupy 5 weeks');
+  console.error('World Cup finals must occupy a week per friendly, group game, and knockout round');
   process.exitCode = 1;
 }
 if (calendar.totalWeeks !== leagueWeeks + 1 + 1 + INTERNATIONAL_BREAK_WEEKS + tournamentWeekCount('world-cup')) {
-  console.error(`La Liga World Cup season must be ${leagueWeeks + 1 + 1 + INTERNATIONAL_BREAK_WEEKS + 5} weeks`);
+  console.error(`La Liga World Cup season must be ${leagueWeeks + 1 + 1 + INTERNATIONAL_BREAK_WEEKS + tournamentWeekCount('world-cup')} weeks`);
   process.exitCode = 1;
 }
 if (lateKnockout.length > 0) {
@@ -568,9 +571,8 @@ const nationsCalendar = buildSeasonCalendar({
 const nationsRounds = nationsCalendar.fixtures.filter((f) => f.kind === 'international').map((f) => f.internationalRound);
 console.log('season 3 international rounds', nationsRounds);
 const expectedNations = [
-  'group',
-  'group',
-  'group',
+  'friendly',
+  'friendly',
   'group',
   'group',
   'group',
@@ -579,7 +581,7 @@ const expectedNations = [
   'final',
 ];
 if (nationsRounds.join() !== expectedNations.join()) {
-  console.error('season 3 must schedule six Nations League group games then QF/SF/final');
+  console.error('season 3 must schedule two friendlies, three Nations League group games, then QF/SF/final');
   process.exitCode = 1;
 }
 const [qfWeek, sfWeek, finalWeek] = nationsLeagueKnockoutWeeks(38);
@@ -607,6 +609,8 @@ const euroFinalsCalendar = buildSeasonCalendar({
 const euroFinalsRounds = euroFinalsCalendar.fixtures.filter((f) => f.kind === 'international').map((f) => f.internationalRound);
 console.log('season 4 international rounds', euroFinalsRounds);
 const expectedEuro = [
+  'friendly',
+  'friendly',
   'group',
   'group',
   'group',
@@ -616,12 +620,12 @@ const expectedEuro = [
   'final',
 ];
 if (euroFinalsRounds.join() !== expectedEuro.join()) {
-  console.error('season 4 must play the Euros with no qualifying — 3 group games and a last-16 knockout');
+  console.error('season 4 must play the Euros with two friendlies, 3 group games and a last-16 knockout');
   process.exitCode = 1;
 }
 const euroFinalsWeeks = [...new Set(euroFinalsCalendar.fixtures.filter((f) => f.kind === 'international' && f.internationalRound !== 'qualifier').map((f) => f.week))];
 if (euroFinalsWeeks.length !== tournamentWeekCount('euro')) {
-  console.error('non-World Cup tournaments must occupy 4 weeks');
+  console.error('non-World Cup tournaments must occupy a week per friendly, group game, and knockout round');
   process.exitCode = 1;
 }
 if (euroFinalsRounds.includes('round-of-32')) {
@@ -643,24 +647,32 @@ if (euroFinalsRounds.includes('round-of-32')) {
   const wcTournament = wcIntl.filter((f) => f.internationalRound !== 'qualifier');
   const nationsTournament = nationsCalendar.fixtures.filter((f) => f.kind === 'international');
   const euroTournament = euroFinalsCalendar.fixtures.filter((f) => f.kind === 'international');
+  const wcFinals = wcTournament.filter((f) => f.internationalRound !== 'friendly');
+  const nationsFinals = nationsTournament.filter((f) => f.internationalRound !== 'friendly');
+  const euroFinals = euroTournament.filter((f) => f.internationalRound !== 'friendly');
+  const friendlies = [...wcTournament, ...nationsTournament, ...euroTournament].filter((f) => f.internationalRound === 'friendly');
   console.log(
     'venues WC quals',
     wcQuals.map((f) => fixtureVenueLabel(f)),
     'WC finals',
-    wcTournament.map((f) => fixtureVenueLabel(f)),
+    wcFinals.map((f) => fixtureVenueLabel(f)),
     'Nations',
-    nationsTournament.map((f) => fixtureVenueLabel(f)),
+    nationsFinals.map((f) => fixtureVenueLabel(f)),
     'Euro',
-    euroTournament.map((f) => fixtureVenueLabel(f)),
+    euroFinals.map((f) => fixtureVenueLabel(f)),
   );
   if (wcQuals.length === 0 || wcQuals.some((f) => fixtureIsNeutral(f) || fixtureCrowdAwayShare(f) !== 0.2)) {
     console.error('World Cup qualifiers must stay home/away with a home crowd');
     process.exitCode = 1;
   }
+  if (friendlies.some((f) => fixtureIsNeutral(f))) {
+    console.error('pre-tournament friendlies must stay home or away');
+    process.exitCode = 1;
+  }
   if (
-    wcTournament.some((f) => fixtureVenueLabel(f) !== 'Neutral' || fixtureCrowdAwayShare(f) !== 0.5)
-    || nationsTournament.some((f) => fixtureVenueLabel(f) !== 'Neutral' || fixtureCrowdAwayShare(f) !== 0.5)
-    || euroTournament.some((f) => fixtureVenueLabel(f) !== 'Neutral' || fixtureCrowdAwayShare(f) !== 0.5)
+    wcFinals.some((f) => fixtureVenueLabel(f) !== 'Neutral' || fixtureCrowdAwayShare(f) !== 0.5)
+    || nationsFinals.some((f) => fixtureVenueLabel(f) !== 'Neutral' || fixtureCrowdAwayShare(f) !== 0.5)
+    || euroFinals.some((f) => fixtureVenueLabel(f) !== 'Neutral' || fixtureCrowdAwayShare(f) !== 0.5)
   ) {
     console.error('World Cup, Nations League and Euro matches must be Neutral with a 50/50 country crowd');
     process.exitCode = 1;
@@ -835,12 +847,12 @@ if (madridClub) {
   const s3Groups = s3Intl.filter((f) => f.internationalRound === 'group');
   const s3Ko = s3Intl.filter((f) => f.internationalRound === 'quarter-final' || f.internationalRound === 'semi-final' || f.internationalRound === 'final');
   console.log('S3', s3.sim.internationalTournament, s3.sim.internationalStage, 'group', s3Groups.length, 'ko', s3Ko.map((f) => f.week));
-  if (s3.sim.internationalTournament !== 'nations-league' || s3.sim.internationalStage !== 'group') {
-    console.error('season 3 must start in the Nations League group stage');
+  if (s3.sim.internationalTournament !== 'nations-league' || (s3.sim.internationalStage !== 'group' && s3.sim.internationalStage !== 'friendly')) {
+    console.error('season 3 must start in the Nations League friendlies or group stage');
     process.exitCode = 1;
   }
-  if (s3Groups.length !== 6 || s3Ko.length !== 3) {
-    console.error('season 3 must schedule 6 group games and QF/SF/final');
+  if (s3Groups.length !== 3 || s3Ko.length !== 3) {
+    console.error('season 3 must schedule 3 group games and QF/SF/final');
     process.exitCode = 1;
   }
   if (s3Intl.some((f) => f.internationalRound === 'qualifier')) {
@@ -873,8 +885,8 @@ if (madridClub) {
     console.error('season 4 must be the Euros with no qualifying campaign');
     process.exitCode = 1;
   }
-  if (s4Quals.length !== 0 || s4.sim.qualifierTarget !== 0 || s4.sim.internationalStage !== 'group') {
-    console.error('season 4 must start at the tournament group stage with zero qualifiers');
+  if (s4Quals.length !== 0 || s4.sim.qualifierTarget !== 0 || (s4.sim.internationalStage !== 'group' && s4.sim.internationalStage !== 'friendly')) {
+    console.error('season 4 must start at the tournament friendlies or group stage with zero qualifiers');
     process.exitCode = 1;
   }
 
@@ -2521,8 +2533,8 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     'Liga MX in Leagues Cup',
     leaguesMx.length,
   );
-  if (mlsCal.totalWeeks > 48 || leagueMatchWeeks('MLS', lafc) > 26) {
-    console.error('an MLS season must not run past 48 weeks or 26 league weeks');
+  if (mlsCal.totalWeeks > 56 || leagueMatchWeeks('MLS', lafc) > 26) {
+    console.error('an MLS season must not run past 56 weeks or 26 league weeks');
     process.exitCode = 1;
   }
   if ((mlsKinds.playoff ?? 0) < 4 || (mlsKinds['leagues-cup'] ?? 0) < 4) {
@@ -2556,8 +2568,8 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
   const saudiCups = saudiCal.fixtures.filter((f) => f.continentalCup === 'acle' || f.domesticCup === 'kings-cup' || f.kind === 'super-cup');
   const acleOpp = saudiCal.fixtures.find((f) => f.kind === 'continental-group' && f.opponentId && getClub(f.opponentId)?.country !== 'Saudi Arabia');
   console.log('Saudi weeks', saudiCal.totalWeeks, 'kinds', saudiKinds, 'ACLE away', acleOpp?.opponentLabel);
-  if (saudiCal.totalWeeks > 48) {
-    console.error('a Saudi season must not run past 48 weeks');
+  if (saudiCal.totalWeeks > 56) {
+    console.error('a Saudi season must not run past 56 weeks');
     process.exitCode = 1;
   }
   if (!saudiCal.fixtures.some((f) => f.domesticCup === 'kings-cup')) {
@@ -3096,8 +3108,8 @@ console.log('\n--- Five unique qualifying opponents, not a repeating draw ---');
     .filter((f) => f.kind === 'international' && f.internationalRound === 'qualifier' && f.opponentId)
     .map((f) => f.opponentId as string);
   console.log('S3 Nations group', s3Group, 'S4 quals', s4Quals);
-  if (s3Group.length !== 6) {
-    console.error('Nations League group must list six opponents');
+  if (s3Group.length !== 3) {
+    console.error('Nations League group must list three opponents');
     process.exitCode = 1;
   }
   if (s4Quals.length !== 0) {
@@ -3312,8 +3324,12 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
   const sevilla = kitFromScheme(clubKit(getClub('sevilla')));
   const tottenham = kitFromScheme(clubKit(getClub('tottenham')));
   const arsenal = kitFromScheme(clubKit(getClub('arsenal')));
-  if (luminance(sevilla.socks) < 0.8 || luminance(arsenal.socks) < 0.8) {
-    console.error('Sevilla and Arsenal wear white home socks');
+  if (luminance(arsenal.socks) < 0.8) {
+    console.error('Arsenal must wear white home socks');
+    process.exitCode = 1;
+  }
+  if (luminance(sevilla.socks) > 0.25) {
+    console.error('Sevilla must wear black home socks');
     process.exitCode = 1;
   }
   if (luminance(tottenham.socks) > 0.25) {
@@ -4088,11 +4104,95 @@ console.log('\n--- Kits, cup nights, FA Cup semis, sun, World Cup copy, African 
     console.error('a Championship side must play on a worn pitch');
     process.exitCode = 1;
   }
+  if (elitePitchLook.pitchStripes !== true || lutonLook.pitchStripes !== false || youthPitchLook.pitchStripes !== false || reservePitchLook.pitchStripes !== false) {
+    console.error('only top-flight pitches get full-width mowing stripes');
+    process.exitCode = 1;
+  }
+  const swedenPitch = resolveMatchStadium({
+    nation: getNation('sweden'),
+    fixture: { week: 40, kind: 'international', isDecisive: false, internationalRound: 'group', opponentId: 'norway' },
+  });
+  const andorraPitch = resolveMatchStadium({
+    nation: getNation('luxembourg'),
+    fixture: { week: 40, kind: 'international', isDecisive: false, internationalRound: 'qualifier', opponentId: 'latvia' },
+  });
+  if (swedenPitch.pitchStripes !== true || andorraPitch.pitchStripes !== false) {
+    console.error('nations outside the FIFA top 50 must not have striped grass');
+    process.exitCode = 1;
+  }
+
+  const arsenalKit = clubKit(getClub('arsenal'));
+  const psgKit = clubKit(getClub('psg'));
+  const villaKit = clubKit(getClub('aston-villa'));
+  const sevillaKit = clubKit(getClub('sevilla'));
+  const niKit = nationKit('northern-ireland');
+  const irlKit = nationKit('republic-of-ireland');
+  if (arsenalKit.sleeves !== '#FFFFFF' || psgKit.primary !== '#DA001C' || psgKit.sleeves !== '#004170') {
+    console.error('Arsenal need white sleeves and PSG a red shirt with blue sleeves');
+    process.exitCode = 1;
+  }
+  if (villaKit.shorts !== '#FFFFFF' || villaKit.socks !== '#95BFE5' || sevillaKit.socks !== '#000000') {
+    console.error('Villa shorts/socks and Sevilla black socks are wrong');
+    process.exitCode = 1;
+  }
+  if (niKit.shorts !== '#FFFFFF' || irlKit.shorts !== '#FFFFFF') {
+    console.error('Northern Ireland and Ireland must wear white shorts');
+    process.exitCode = 1;
+  }
+
+  const uclTitle = fixtureTitle(
+    { week: 12, kind: 'continental-group', isDecisive: false, continentalCup: 'ucl', opponentLabel: 'Bayern Munich' },
+  );
+  if (!uclTitle.includes('Champions League')) {
+    console.error('continental fixtures must include the tournament name');
+    process.exitCode = 1;
+  }
+
+  const fourYear = resolveSeasonTransition({
+    season: { ...dummySeason, clubId: 'barcelona', goals: 30, gamesPlayed: 38 },
+    role: 'first-team',
+    clubId: 'barcelona',
+    parentClubId: 'barcelona',
+    seasonsAtCurrentClub: 1,
+    age: 21,
+    careerGoals: 80,
+    careerGames: 100,
+    nationality: 'spain',
+    loansUsed: 0,
+    seasonHistory: [{ ...dummySeason, seasonNumber: 2, clubId: 'barcelona', goals: 40, gamesPlayed: 50 }],
+    contractYearsRemaining: 4,
+  });
+  const fourYearPerm = (fourYear.pendingTransfer?.offers ?? []).filter((o) => o.move === 'permanent');
+  if (fourYearPerm.length > 0 && fourYearPerm.some((o) => o.fee <= 0)) {
+    console.error('permanent offers with years remaining on the deal must not be free');
+    process.exitCode = 1;
+  }
+
+  if (nationCanWinMajor('france', 0) !== true || nationCanWinMajor('belgium', 2) !== false || nationCanWinMajor('belgium', 3) !== true) {
+    console.error('major-tournament win rules must allow top 5 freely and top 20 only with 3 knockout scores');
+    process.exitCode = 1;
+  }
+  if (nationCanProgressKnockout('france', false, 'round-of-16') !== true || nationCanProgressKnockout('belgium', false, 'quarter-final') !== false) {
+    console.error('only top-5 sides may progress early knockouts without a player goal');
+    process.exitCode = 1;
+  }
+
+  const nlSpain = hydrateSeason({ seasonNumber: 3, club: getClub('real-madrid')!, careerGoalRatio: 0.8, nationId: 'spain' });
+  const nlGroupIds = nlSpain.calendar.fixtures.filter((f) => f.internationalRound === 'group').map((f) => f.opponentId).sort();
+  if (nlGroupIds.join() !== ['croatia', 'czechia', 'england'].sort().join() || !nlSpain.sim.internationalGroup) {
+    console.error('Spain must play the fixed Nations League group C and have a live table');
+    process.exitCode = 1;
+  }
+  const euroOut = hydrateSeason({ seasonNumber: 4, club: getClub('real-madrid')!, careerGoalRatio: 0.8, nationId: 'san-marino' });
+  if (euroOut.sim.internationalSelected || euroOut.calendar.fixtures.some((f) => f.kind === 'international')) {
+    console.error('nations outside Euro groups A–H must not play the Euros');
+    process.exitCode = 1;
+  }
 
   let nlMiss = 0;
   for (let i = 0; i < 20; i++) {
     const drawn = tournamentOpponents('spain', 'nations-league');
-    const group = drawn.slice(0, 6);
+    const group = drawn.slice(0, 3);
     if (
       group.some((n) => getNation(n.id)?.confederation !== 'UEFA')
       || group.some((n) => Math.abs(fifaRank(n.id) - fifaRank('spain')) > 35)

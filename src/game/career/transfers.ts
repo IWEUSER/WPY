@@ -407,7 +407,7 @@ function offerTerms(
   return clubs.map((club) => ({
     clubId: club.id,
     move,
-    fee: move === 'loan' ? 0 : clubTransferBudget(club) >= fee ? fee : 0,
+    fee: move === 'loan' ? 0 : fee,
     weeklyWage: weeklyWageForClub(club, value),
     contractYears: years,
   }));

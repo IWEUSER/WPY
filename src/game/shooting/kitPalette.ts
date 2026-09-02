@@ -9,6 +9,8 @@ export interface DefenderKit {
   socks: string;
   stripe?: string;
   pattern: ShirtPattern;
+  /** Contrasting sleeve fabric. Falls back to the shirt. */
+  sleeves?: string;
 }
 
 export interface KitScheme {
@@ -19,6 +21,8 @@ export interface KitScheme {
   /** Knee-high sock colour. Falls back to shorts, then the shirt. */
   socks?: string;
   pattern?: ShirtPattern;
+  /** Sleeve fabric when it differs from the shirt (Arsenal white, PSG navy). */
+  sleeves?: string;
 }
 
 export function parseHex(hex: string): { r: number; g: number; b: number } {
@@ -83,13 +87,14 @@ export function defaultSocksForShirt(primary: string, shorts?: string): string {
   return primary;
 }
 
-export function kitFromColor(hex: string, secondary?: string, extras?: Pick<KitScheme, 'shorts' | 'socks' | 'pattern'>): DefenderKit {
+export function kitFromColor(hex: string, secondary?: string, extras?: Pick<KitScheme, 'shorts' | 'socks' | 'pattern' | 'sleeves'>): DefenderKit {
   return kitFromScheme({
     primary: hex,
     secondary,
     shorts: extras?.shorts,
     socks: extras?.socks,
     pattern: extras?.pattern,
+    sleeves: extras?.sleeves,
   });
 }
 
@@ -107,6 +112,7 @@ export function kitFromScheme(scheme: KitScheme): DefenderKit {
     socks,
     stripe: pattern !== 'solid' ? scheme.secondary : undefined,
     pattern,
+    sleeves: scheme.sleeves,
   };
 }
 

@@ -9,6 +9,7 @@ import { hydrateSeason } from './seasonSim';
 import { useCareerStore } from './store';
 import { resolveSeasonTransition, type PendingTransfer } from './transfers';
 import type { OpeningCampaign, SeasonRecord } from './types';
+import { createGroupState } from './internationalTable';
 
 function season(partial: SeasonRecord): SeasonRecord {
   return partial;
@@ -102,7 +103,7 @@ export function applyCareerLayoutPreview(): void {
         tournament: 'euro',
         qualifyingGames: 5,
         qualifyingGoals: 3,
-        qualifyingOutcome: 'ongoing',
+        qualifyingOutcome: 'none',
         finalsGames: 0,
         finalsGoals: 0,
         tournamentOutcome: 'none',
@@ -209,14 +210,14 @@ export function applyCareerLayoutPreview(): void {
   ];
 
   const preview = new URLSearchParams(window.location.search).get('preview-career');
-  const previewClubId = preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : 'real-madrid';
+  const previewClubId = preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : preview === 'match-psg' ? 'psg' : 'real-madrid';
   const club = getClub(previewClubId);
   if (!club) return;
   const { calendar, sim } = hydrateSeason({
     seasonNumber: 4,
     club,
     careerGoalRatio: 0.78,
-    nationId: preview === 'mls' ? 'united-states' : preview === 'saudi' ? 'saudi-arabia' : 'spain',
+    nationId: preview === 'mls' ? 'united-states' : preview === 'saudi' ? 'saudi-arabia' : preview === 'match-psg' ? 'france' : 'spain',
   });
   const reserveSeason = preview === 'reserve'
     ? hydrateSeason({
@@ -301,13 +302,16 @@ export function applyCareerLayoutPreview(): void {
     if (idx >= 0) {
       const fx = calendar.fixtures[idx];
       fx.kind = 'international';
-      fx.internationalRound = fx.internationalRound && fx.internationalRound !== 'qualifier' ? fx.internationalRound : 'group';
-      fx.opponentId = 'italy';
-      fx.opponentLabel = 'Italy';
+      fx.internationalRound = 'group';
+      fx.opponentId = 'germany';
+      fx.opponentLabel = 'Germany';
       sim.fixtureIndex = idx;
     }
     calendar.internationalTournament = 'world-cup';
     sim.internationalTournament = 'world-cup';
+    sim.internationalStage = 'group';
+    sim.internationalSelected = true;
+    sim.internationalGroup = createGroupState('B', ['spain', 'germany', 'brazil', 'serbia']);
   } else if (preview === 'match-intl-ko') {
     const idx = calendar.fixtures.findIndex((f) => f.kind === 'international');
     if (idx >= 0) matchFixtureIndex = idx;

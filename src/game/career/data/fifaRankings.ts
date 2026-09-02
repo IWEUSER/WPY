@@ -229,8 +229,8 @@ export function tournamentKnockoutRounds(tournament: InternationalTournamentId):
   return ['round-of-16', 'quarter-final', 'semi-final', 'final'];
 }
 
-export function tournamentGroupGames(tournament?: InternationalTournamentId | null): number {
-  return tournament === 'nations-league' ? 6 : 3;
+export function tournamentGroupGames(_tournament?: InternationalTournamentId | null): number {
+  return 3;
 }
 
 /** Six-game Nations League groups need more points than a three-game World Cup group. */

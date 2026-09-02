@@ -64,6 +64,7 @@ export interface CalendarFixture {
   superCupStage?: SuperCupStage;
   internationalRound?:
     | 'qualifier'
+    | 'friendly'
     | 'group'
     | 'round-of-32'
     | 'round-of-16'
@@ -84,7 +85,13 @@ export interface SeasonCalendar {
 
 /** World Cup, continental championship, and Nations League ties — not qualifiers. */
 export function isInternationalTournamentFixture(fixture: CalendarFixture): boolean {
-  return fixture.kind === 'international' && fixture.internationalRound != null && fixture.internationalRound !== 'qualifier';
+  const round = fixture.internationalRound;
+  return (
+    fixture.kind === 'international'
+    && round != null
+    && round !== 'qualifier'
+    && round !== 'friendly'
+  );
 }
 
 /** Domestic and European one-off finals at the large club-final stadium. */
@@ -234,12 +241,17 @@ const KIND_ORDER: Record<FixtureKind, number> = {
   rest: 10,
 };
 
+export const INTERNATIONAL_FRIENDLIES = 2;
+
 /** Empty weeks between the last club match and the national tournament. */
 export const INTERNATIONAL_BREAK_WEEKS = 3;
 
 export function tournamentWeekCount(tournament: InternationalTournamentId | null | undefined): number {
-  if (!tournament) return 0;
-  return tournament === 'world-cup' ? 5 : 4;
+  if (!tournament || tournament === 'nations-league') return 0;
+  const friendlies = INTERNATIONAL_FRIENDLIES;
+  const groups = tournamentGroupGames(tournament);
+  const knockout = tournamentKnockoutRounds(tournament).length;
+  return friendlies + groups + knockout;
 }
 
 /**
@@ -387,9 +399,18 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
   }
 
   if (intlLive && campaign.phase === 'nations-league' && campaign.tournament) {
+    for (let i = 0; i < INTERNATIONAL_FRIENDLIES; i++) {
+      const week = Math.max(1, Math.min(leagueMatchWeeks, Math.round((0.03 + i * 0.05) * leagueMatchWeeks)));
+      fixtures.push({
+        week,
+        kind: 'international',
+        isDecisive: false,
+        internationalRound: 'friendly',
+      });
+    }
     const groupCount = tournamentGroupGames(campaign.tournament);
     for (let i = 0; i < groupCount; i++) {
-      const fraction = 0.08 + (i / Math.max(1, groupCount - 1)) * 0.62;
+      const fraction = 0.12 + (i / Math.max(1, groupCount - 1)) * 0.5;
       const week = Math.max(1, Math.min(leagueMatchWeeks, Math.round(fraction * leagueMatchWeeks)));
       fixtures.push({
         week,
@@ -470,7 +491,12 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
       { length: tournamentGroupGames(campaign.tournament) },
       () => 'group',
     );
+    const friendlyRounds: CalendarFixture['internationalRound'][] = Array.from(
+      { length: INTERNATIONAL_FRIENDLIES },
+      () => 'friendly',
+    );
     const rounds: CalendarFixture['internationalRound'][] = [
+      ...friendlyRounds,
       ...groupRounds,
       ...tournamentKnockoutRounds(campaign.tournament),
     ];

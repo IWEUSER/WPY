@@ -20,23 +20,27 @@ export default function StatsTable({
   footer,
   footerNote,
   alwaysShowRows = false,
+  showHeader = true,
 }: {
   rows: StatsTableRow[];
   footer?: StatsTableRow;
   footerNote?: string;
   alwaysShowRows?: boolean;
+  showHeader?: boolean;
 }) {
   const visible = alwaysShowRows ? rows : rows.filter((row) => row.games > 0 || row.goals > 0);
   if (visible.length === 0 && !footer) return null;
   return (
     <table className="mt-2 w-full border-collapse text-left text-sm">
-      <thead>
-        <tr className="text-[10px] uppercase tracking-wide text-white/40">
-          <th className="pb-1 pr-3 font-medium"> </th>
-          <th className="pb-1 text-right font-medium">Games</th>
-          <th className="pb-1 text-right font-medium">Goals</th>
-        </tr>
-      </thead>
+      {showHeader && (
+        <thead>
+          <tr className="text-[10px] uppercase tracking-wide text-white/40">
+            <th className="pb-1 pr-3 font-medium"> </th>
+            <th className="pb-1 text-right font-medium">Games</th>
+            <th className="pb-1 text-right font-medium">Goals</th>
+          </tr>
+        </thead>
+      )}
       <tbody>
         {visible.map((row) => (
           <tr key={row.label} className="text-white/80">
@@ -71,10 +75,12 @@ export function ClubCompetitionTable({
   split,
   continental = [],
   alwaysShowEuropean = false,
+  showHeader = true,
 }: {
   split: DomesticSplit;
   continental?: ContinentalSeasonStat[];
   alwaysShowEuropean?: boolean;
+  showHeader?: boolean;
 }) {
   const euroRows = continental.map((row) => ({
     label: continentalLabel(row.cup),
@@ -95,6 +101,7 @@ export function ClubCompetitionTable({
   return (
     <StatsTable
       alwaysShowRows
+      showHeader={showHeader}
       rows={rows}
       footer={{ label: 'Total', games: totalGames, goals: totalGoals }}
       footerNote={`Ratio ${ratio.toFixed(2)}`}
@@ -118,9 +125,11 @@ export function DomesticStatsTable({ split }: { split: DomesticSplit }) {
 export function InternationalSeasonBlock({
   title,
   record,
+  showHeader = true,
 }: {
   title: string;
   record: InternationalSeasonRecord | undefined | null;
+  showHeader?: boolean;
 }) {
   const line = formatInternationalSeason(record);
   if (!line || !record) return null;
@@ -130,6 +139,7 @@ export function InternationalSeasonBlock({
     <div>
       <p className="font-semibold text-white/90">{title}</p>
       <StatsTable
+        showHeader={showHeader}
         rows={[
           { label: qNote ? `Qualifying · ${qNote}` : 'Qualifying', games: record.qualifyingGames, goals: record.qualifyingGoals },
           { label: tNote ? `Tournament · ${tNote}` : 'Tournament', games: record.finalsGames, goals: record.finalsGoals },

@@ -200,7 +200,7 @@ export function internationalCalendarSeason(
  * International campaign years (first-team Season 1, not the reserve year):
  *  - Season 1, 5, 9…: World Cup qualifying — the player can be selected.
  *  - Season 2, 6, 10…: five more World Cup qualifiers, then the World Cup.
- *  - Season 3, 7, 11…: Nations League (six in-season group games; knockout
+ *  - Season 3, 7, 11…: Nations League (three in-season group games; knockout
  *    around week 30).
  *  - Season 4, 8, 12…: no qualifying; continental tournament after the club
  *    season (Euros / Copa / AFCON / …).

@@ -172,7 +172,7 @@ const CLUB_SEED: Club[] = [
   { id: 'darmstadt', name: 'Darmstadt 98', country: 'Germany', league: '2. Bundesliga', tier: 5, strength: 52, color: '#004B9E', reserveGoalRatio: 0.25, firstTeamGoalRatio: 0.22 },
 
   // France - Ligue 1
-  { id: 'psg', name: 'Paris Saint-Germain', country: 'France', league: 'Ligue 1', tier: 1, strength: 93, color: '#004170', reserveGoalRatio: 0.65, firstTeamGoalRatio: 0.5 },
+  { id: 'psg', name: 'Paris Saint-Germain', country: 'France', league: 'Ligue 1', tier: 1, strength: 93, color: '#DA001C', reserveGoalRatio: 0.65, firstTeamGoalRatio: 0.5 },
   { id: 'monaco', name: 'Monaco', country: 'France', league: 'Ligue 1', tier: 1, strength: 82, color: '#E51A22', reserveGoalRatio: 0.65, firstTeamGoalRatio: 0.5 },
   { id: 'lille', name: 'Lille', country: 'France', league: 'Ligue 1', tier: 2, strength: 80, color: '#E01D2B', reserveGoalRatio: 0.55, firstTeamGoalRatio: 0.42 },
   { id: 'marseille', name: 'Marseille', country: 'France', league: 'Ligue 1', tier: 2, strength: 79, color: '#2FA0DA', reserveGoalRatio: 0.55, firstTeamGoalRatio: 0.42 },

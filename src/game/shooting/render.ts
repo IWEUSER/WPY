@@ -173,6 +173,7 @@ export function drawPitch(ctx: CanvasRenderingContext2D, view: PitchView, time: 
   plain?: boolean;
   quality?: PitchQuality;
   seed?: string;
+  stripes?: boolean;
 }) {
   const { w, h } = view;
   const { halfW, botY } = view.goal;
@@ -222,17 +223,19 @@ export function drawPitch(ctx: CanvasRenderingContext2D, view: PitchView, time: 
   const stripeCount = quality === 'worn' ? 7 : 9;
   const stripeLight = quality === 'elite' ? 'rgba(255,255,255,0.055)' : quality === 'worn' ? 'rgba(255,255,255,0.018)' : 'rgba(255,255,255,0.035)';
   const stripeDark = quality === 'elite' ? 'rgba(0,0,0,0.045)' : quality === 'worn' ? 'rgba(40,24,8,0.08)' : 'rgba(0,0,0,0.03)';
-  for (let i = 0; i < stripeCount; i++) {
-    const t0 = i / stripeCount;
-    const t1 = (i + 1) / stripeCount;
-    ctx.beginPath();
-    ctx.moveTo(lerp(0, w, t0), h);
-    ctx.lineTo(lerp(0, w, t1), h);
-    ctx.lineTo(lerp(w * 0.38, w * 0.62, t1), vanishY);
-    ctx.lineTo(lerp(w * 0.38, w * 0.62, t0), vanishY);
-    ctx.closePath();
-    ctx.fillStyle = i % 2 === 0 ? stripeLight : stripeDark;
-    ctx.fill();
+  if (opts?.stripes) {
+    for (let i = 0; i < stripeCount; i++) {
+      const t0 = i / stripeCount;
+      const t1 = (i + 1) / stripeCount;
+      ctx.beginPath();
+      ctx.moveTo(lerp(0, w, t0), h);
+      ctx.lineTo(lerp(0, w, t1), h);
+      ctx.lineTo(lerp(0, w, t1), vanishY);
+      ctx.lineTo(lerp(0, w, t0), vanishY);
+      ctx.closePath();
+      ctx.fillStyle = i % 2 === 0 ? stripeLight : stripeDark;
+      ctx.fill();
+    }
   }
 
   if (quality === 'tired' || quality === 'worn') {
@@ -805,6 +808,10 @@ interface HumanoidStyle {
   pattern?: DefenderKit['pattern'];
   glove?: string;
   gloveLine?: string;
+  /** Sleeve fabric when it differs from the shirt. */
+  sleeves?: string;
+  /** Winter / no-sun: fabric to the wrist, hands stay skin. */
+  longSleeves?: boolean;
 }
 
 /**
@@ -938,6 +945,28 @@ function drawHumanoid(
   fillCapsule(ctx, sleeveR, H * 0.14 * LIMB, elbowR, H * 0.125 * LIMB, skin, { start: false });
   fillCapsule(ctx, elbowR, H * 0.125 * LIMB, handR, H * 0.1 * LIMB, skin);
 
+  const sleeveTint = style.sleeves ?? style.shirt;
+  const sleeveCuff = (sleeve: FigPt, elbow: FigPt, hand: FigPt): FigPt => {
+    if (style.longSleeves) {
+      return {
+        x: elbow.x * 0.18 + hand.x * 0.82,
+        y: elbow.y * 0.18 + hand.y * 0.82,
+      };
+    }
+    return {
+      x: sleeve.x * 0.28 + elbow.x * 0.72,
+      y: sleeve.y * 0.28 + elbow.y * 0.72,
+    };
+  };
+  const cuffL = sleeveCuff(sleeveL, elbowL, handL);
+  const cuffR = sleeveCuff(sleeveR, elbowR, handR);
+  fillCapsule(ctx, sleeveL, H * 0.155 * LIMB, style.longSleeves ? elbowL : cuffL, H * 0.13 * LIMB, sleeveTint, { start: false });
+  fillCapsule(ctx, sleeveR, H * 0.155 * LIMB, style.longSleeves ? elbowR : cuffR, H * 0.13 * LIMB, sleeveTint, { start: false });
+  if (style.longSleeves) {
+    fillCapsule(ctx, elbowL, H * 0.13 * LIMB, cuffL, H * 0.105 * LIMB, sleeveTint);
+    fillCapsule(ctx, elbowR, H * 0.13 * LIMB, cuffR, H * 0.105 * LIMB, sleeveTint);
+  }
+
   if (style.glove) {
     drawGlove(ctx, handL, H, style.glove, style.gloveLine ?? shadeHex(style.glove, -0.35), -1);
     drawGlove(ctx, handR, H, style.glove, style.gloveLine ?? shadeHex(style.glove, -0.35), 1);
@@ -977,7 +1006,12 @@ function drawHumanoid(
   drawAthleteHead(ctx, head.x, head.y, H, skin, style.hair);
 }
 
-export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose: KeeperPose) {
+export function drawKeeper(
+  ctx: CanvasRenderingContext2D,
+  view: PitchView,
+  pose: KeeperPose,
+  kit?: { longSleeves?: boolean; sleeves?: string },
+) {
   const H = (FIFA.keeperHeight / FIFA.goalHeight) * view.goal.heightPx / 8;
   const collisionHips = goalToPixel(pose.pos, view);
   const groundY = view.goal.botY;
@@ -1043,6 +1077,8 @@ export function drawKeeper(ctx: CanvasRenderingContext2D, view: PitchView, pose:
       boot: '#181818',
       glove: pose.beaten ? '#4b5563' : '#22c55e',
       gloveLine: pose.beaten ? '#1f2937' : '#166534',
+      sleeves: kit?.sleeves,
+      longSleeves: Boolean(kit?.longSleeves),
     },
     0,
     { left: gloveL, right: gloveR },
@@ -1061,6 +1097,7 @@ export function drawDefender(
   stride = 0,
   skinTone?: string,
   hairColor?: string,
+  longSleeves = false,
 ) {
   const meterPx = view.halfWidthPx(1, worldZ);
   const feet = worldToScreen(view, worldX, worldZ);
@@ -1090,6 +1127,8 @@ export function drawDefender(
       boot: '#1a1a1a',
       stripe: kit?.stripe,
       pattern: kit?.pattern ?? 'solid',
+      sleeves: kit?.sleeves,
+      longSleeves,
     },
     stride,
     undefined,

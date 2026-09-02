@@ -112,7 +112,6 @@ export function qualifyingOutcomeLabel(
 ): string | null {
   if (outcome === 'qualified') return 'qualified';
   if (outcome === 'failed') return 'did not qualify';
-  if (outcome === 'ongoing') return 'in progress';
   return null;
 }
 
