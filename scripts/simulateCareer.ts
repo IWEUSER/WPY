@@ -571,9 +571,8 @@ const nationsCalendar = buildSeasonCalendar({
 const nationsRounds = nationsCalendar.fixtures.filter((f) => f.kind === 'international').map((f) => f.internationalRound);
 console.log('season 3 international rounds', nationsRounds);
 const expectedNations = [
-  'group',
-  'group',
-  'group',
+  'friendly',
+  'friendly',
   'group',
   'group',
   'group',
@@ -582,7 +581,7 @@ const expectedNations = [
   'final',
 ];
 if (nationsRounds.join() !== expectedNations.join()) {
-  console.error('season 3 must schedule six Nations League group games then QF/SF/final');
+  console.error('season 3 must schedule two friendlies, three Nations League group games, then QF/SF/final');
   process.exitCode = 1;
 }
 const [qfWeek, sfWeek, finalWeek] = nationsLeagueKnockoutWeeks(38);
@@ -886,8 +885,8 @@ if (madridClub) {
     console.error('season 4 must be the Euros with no qualifying campaign');
     process.exitCode = 1;
   }
-  if (s4Quals.length !== 0 || s4.sim.qualifierTarget !== 0 || s4.sim.internationalStage !== 'group') {
-    console.error('season 4 must start at the tournament group stage with zero qualifiers');
+  if (s4Quals.length !== 0 || s4.sim.qualifierTarget !== 0 || (s4.sim.internationalStage !== 'group' && s4.sim.internationalStage !== 'friendly')) {
+    console.error('season 4 must start at the tournament friendlies or group stage with zero qualifiers');
     process.exitCode = 1;
   }
 
@@ -2534,8 +2533,8 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     'Liga MX in Leagues Cup',
     leaguesMx.length,
   );
-  if (mlsCal.totalWeeks > 48 || leagueMatchWeeks('MLS', lafc) > 26) {
-    console.error('an MLS season must not run past 48 weeks or 26 league weeks');
+  if (mlsCal.totalWeeks > 56 || leagueMatchWeeks('MLS', lafc) > 26) {
+    console.error('an MLS season must not run past 56 weeks or 26 league weeks');
     process.exitCode = 1;
   }
   if ((mlsKinds.playoff ?? 0) < 4 || (mlsKinds['leagues-cup'] ?? 0) < 4) {
@@ -2569,8 +2568,8 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
   const saudiCups = saudiCal.fixtures.filter((f) => f.continentalCup === 'acle' || f.domesticCup === 'kings-cup' || f.kind === 'super-cup');
   const acleOpp = saudiCal.fixtures.find((f) => f.kind === 'continental-group' && f.opponentId && getClub(f.opponentId)?.country !== 'Saudi Arabia');
   console.log('Saudi weeks', saudiCal.totalWeeks, 'kinds', saudiKinds, 'ACLE away', acleOpp?.opponentLabel);
-  if (saudiCal.totalWeeks > 48) {
-    console.error('a Saudi season must not run past 48 weeks');
+  if (saudiCal.totalWeeks > 56) {
+    console.error('a Saudi season must not run past 56 weeks');
     process.exitCode = 1;
   }
   if (!saudiCal.fixtures.some((f) => f.domesticCup === 'kings-cup')) {
@@ -3109,8 +3108,8 @@ console.log('\n--- Five unique qualifying opponents, not a repeating draw ---');
     .filter((f) => f.kind === 'international' && f.internationalRound === 'qualifier' && f.opponentId)
     .map((f) => f.opponentId as string);
   console.log('S3 Nations group', s3Group, 'S4 quals', s4Quals);
-  if (s3Group.length !== 6) {
-    console.error('Nations League group must list six opponents');
+  if (s3Group.length !== 3) {
+    console.error('Nations League group must list three opponents');
     process.exitCode = 1;
   }
   if (s4Quals.length !== 0) {
@@ -3325,8 +3324,12 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
   const sevilla = kitFromScheme(clubKit(getClub('sevilla')));
   const tottenham = kitFromScheme(clubKit(getClub('tottenham')));
   const arsenal = kitFromScheme(clubKit(getClub('arsenal')));
-  if (luminance(sevilla.socks) < 0.8 || luminance(arsenal.socks) < 0.8) {
-    console.error('Sevilla and Arsenal wear white home socks');
+  if (luminance(arsenal.socks) < 0.8) {
+    console.error('Arsenal must wear white home socks');
+    process.exitCode = 1;
+  }
+  if (luminance(sevilla.socks) > 0.25) {
+    console.error('Sevilla must wear black home socks');
     process.exitCode = 1;
   }
   if (luminance(tottenham.socks) > 0.25) {

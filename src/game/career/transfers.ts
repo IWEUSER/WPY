@@ -250,10 +250,7 @@ function pickPermanentClubs(
     pool = [...pool, ...affordable(((qualityTier + 1) as ClubTier))];
   }
   if (pool.length === 0) {
-    for (let t = (qualityTier + 1) as ClubTier; t <= 5; t = (t + 1) as ClubTier) {
-      pool = [...pool, ...affordable(t)];
-      if (pool.length >= TRANSFER_OFFER_COUNT) break;
-    }
+    pool = tierPool(qualityTier, excludeIds);
   }
   const extraHome = nearbyTierClubs(qualityTier, excludeIds).filter(
     (c) => clubTransferBudget(c) >= fee && c.tier >= qualityTier,
