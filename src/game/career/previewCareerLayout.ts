@@ -656,6 +656,8 @@ export function applyCareerLayoutPreview(): void {
           ? 'match'
         : preview === 'record'
         ? 'career'
+        : preview === 'club-choice'
+        ? 'club-choice'
         : preview === 'transfer' || preview === 'expired' || preview === 'renew' || preview === 'championship-transfer' || isReserveLoansPreview
           ? 'transfer-choice'
           : preview === 'reserve-promo'
@@ -680,7 +682,7 @@ export function applyCareerLayoutPreview(): void {
       ? { shots: [], goals: 6, offeredClubIds: ['real-madrid', 'barcelona', 'atletico-madrid'] }
       : null,
     openingCampaign,
-    careerStart: isTrialRetryPreview || isTrialOffersPreview ? 'favourite-trial' : isYouthPreview || isTrialPreview || isClubTrialPreview ? 'youth' : 'favourite-first-team',
+    careerStart: isTrialRetryPreview || isTrialOffersPreview || preview === 'club-choice' ? 'favourite-trial' : isYouthPreview || isTrialPreview || isClubTrialPreview ? 'youth' : 'favourite-first-team',
     seasonsAtCurrentClub: preview === 'end' ? 10 : promoteSummary ? 1 : 3,
     nationality: preview === 'mls' ? 'united-states' : preview === 'saudi' ? 'saudi-arabia' : preview === 'championship-transfer' ? 'england' : 'spain',
     nationalTeam,
