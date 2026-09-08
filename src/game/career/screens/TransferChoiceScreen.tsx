@@ -9,6 +9,7 @@ const KIND_LABEL: Record<string, string> = {
   'promotion-offer': 'Transfer offers',
   'loan-or-transfer': 'Loan and transfer offers',
   'end-of-season': 'Transfer window',
+  'trial-offers': 'Transfer offers',
 };
 
 function OfferCard({

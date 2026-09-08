@@ -12,7 +12,7 @@ const FAVOURITE_OPTIONS: {
   {
     kind: 'favourite-trial',
     title: 'Trial',
-    detail: 'Three academy games with empty stands. Hit the reserve ratio to sign a 2-year deal.',
+    detail: 'Three academy games. Miss and you get two more trials at the same level. Fail all three and clubs bid from your best ratio. You can still move later, including toward this club.',
   },
   {
     kind: 'favourite-reserve',

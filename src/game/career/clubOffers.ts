@@ -5,7 +5,7 @@ import { shuffle } from './util';
 /**
  * Picks `count` clubs, guaranteeing `minFromCountry` of them come from
  * `country` when that country has clubs in the game. Never fills from a
- * stronger (lower-number) tier than the preferred pool.
+ * different tier than the preferred pool.
  */
 export function pickClubsBiasedToCountry(
   preferred: Club[],
@@ -16,22 +16,22 @@ export function pickClubsBiasedToCountry(
 ): Club[] {
   const homeCountry = country && CLUBS.some((c) => c.country === country && c.playable !== false) ? country : null;
   const hintTier = preferred[0]?.tier ?? extraHome[0]?.tier ?? 5;
-  const sameOrWorse = (club: Club) => club.tier >= hintTier;
+  const sameTier = (club: Club) => club.tier === hintTier;
   if (!homeCountry || minFromCountry <= 0) {
     const pool = preferred.length >= count
       ? preferred
       : [...preferred, ...nearbyTierClubs(hintTier)];
-    return uniqueById(shuffle(pool.filter(sameOrWorse))).slice(0, count);
+    return uniqueById(shuffle(pool.filter(sameTier))).slice(0, count);
   }
 
-  const homePreferred = preferred.filter((c) => c.country === homeCountry && sameOrWorse(c));
-  const homeExtra = extraHome.filter((c) => c.country === homeCountry && sameOrWorse(c));
+  const homePreferred = preferred.filter((c) => c.country === homeCountry && sameTier(c));
+  const homeExtra = extraHome.filter((c) => c.country === homeCountry && sameTier(c));
   const homeNeeded = Math.min(minFromCountry, count, uniqueById([...homePreferred, ...homeExtra]).length);
   const homePicks = uniqueById([...shuffle(homePreferred), ...shuffle(homeExtra)]).slice(0, homeNeeded);
   const taken = new Set(homePicks.map((c) => c.id));
   const remaining = count - homePicks.length;
 
-  const awayPool = preferred.filter((c) => c.country !== homeCountry && !taken.has(c.id) && sameOrWorse(c));
+  const awayPool = preferred.filter((c) => c.country !== homeCountry && !taken.has(c.id) && sameTier(c));
   const awayFallback = nearbyTierClubs(hintTier, [...taken]).filter((c) => c.country !== homeCountry);
   const awayPicks = uniqueById([...shuffle(awayPool), ...shuffle(awayFallback)]).slice(0, remaining);
   awayPicks.forEach((c) => taken.add(c.id));
@@ -53,13 +53,9 @@ export function clubsForNationality(nationId: string | null | undefined): Club[]
   return country ? clubsInCountry(country) : [];
 }
 
-/** Same tier, then one step weaker. Never a better (lower-number) tier. */
+/** Clubs at this exact transfer band. Windows never mix levels. */
 export function nearbyTierClubs(tier: ClubTier, excludeIds: string[] = []): Club[] {
-  const sameOrWorse = CLUBS.filter(
-    (c) => c.playable !== false && !excludeIds.includes(c.id) && c.tier >= tier && c.tier <= Math.min(5, tier + 1),
-  );
-  if (sameOrWorse.length > 0) return sameOrWorse;
-  return CLUBS.filter((c) => c.playable !== false && !excludeIds.includes(c.id) && c.tier >= tier);
+  return CLUBS.filter((c) => c.playable !== false && !excludeIds.includes(c.id) && c.tier === tier);
 }
 
 function uniqueById(clubs: Club[]): Club[] {
@@ -74,7 +70,5 @@ function uniqueById(clubs: Club[]): Club[] {
 }
 
 export function tierPool(tier: ClubTier, excludeIds: string[] = []): Club[] {
-  let pool = clubsByTier(tier).filter((c) => !excludeIds.includes(c.id));
-  if (pool.length === 0) pool = nearbyTierClubs(tier, excludeIds);
-  return pool;
+  return clubsByTier(tier).filter((c) => !excludeIds.includes(c.id));
 }

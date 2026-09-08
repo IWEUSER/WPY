@@ -3,7 +3,7 @@ import { MLS_CONFERENCE_SIZE, MLS_REGULAR_SEASON_WEEKS, mlsConferenceOf } from '
 /**
  * The football pyramid this career mode plays out across: major European
  * leagues plus Saudi Arabia and MLS, each at its real division size.
- * Tiers 1 (elite) through 5 (smallest) exist so the trial and transfer
+ * Tiers 1 (elite) through 5 (lower level) exist so the trial and transfer
  * logic has real headroom.
  *
  * `strength` (roughly 50–95) drives match simulation. Tier still decides
@@ -21,8 +21,8 @@ export const TIER_LABEL: Record<ClubTier, string> = {
   1: 'Elite',
   2: 'Strong',
   3: 'Mid-table',
-  4: 'Lower league',
-  5: 'Smallest club in the game',
+  4: 'Medium',
+  5: 'Lower level',
 };
 
 export const SECOND_DIVISIONS = new Set([

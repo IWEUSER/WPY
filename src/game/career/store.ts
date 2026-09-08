@@ -62,14 +62,14 @@ import {
   beginFavouriteClubTrial,
   clubTrialComplete,
   createYouthCampaign,
+  failClubTrial,
   openingMatchSummary,
-  rejectAndDropTrial,
   resolveOpeningMatch,
   youthTournamentComplete,
   youthTrophyName,
 } from './openingFlow';
 import { getNation } from './international';
-import { countLoanSpells, forcedLoanPending, requiredGoalRatio, resolveSeasonTransition } from './transfers';
+import { countLoanSpells, requiredGoalRatio, resolveSeasonTransition, trialFailTransferPending } from './transfers';
 import { evaluateWpy } from './wpy';
 import type { ShotResult } from '../shooting/types';
 import type { CareerStart, CareerState, MatchRecord, PlayerRole, SeasonRecord } from './types';
@@ -450,27 +450,11 @@ function finishOpeningMatch(state: CareerState): Partial<CareerState> {
       phase: 'match-result',
     };
   }
-  if (state.careerStart === 'favourite-trial' && club) {
-    const pending = forcedLoanPending({
-      clubId: club.id,
-      nationality: nationId,
-      age: STARTING_AGE,
-      seasonNumber: 2,
-      ratio: next.gamesPlayed > 0 ? next.goals / next.gamesPlayed : 0,
-    });
+  const failed = failClubTrial(next, state.nationality);
+  if (!failed.exhausted) {
     return {
-      openingCampaign: next,
-      clubId: club.id,
-      parentClubId: club.id,
-      role: 'reserve',
-      seasonNumber: 1,
-      age: STARTING_AGE,
-      seasonsAtCurrentClub: 0,
-      weeklyWage: RESERVE_WEEKLY_WAGE,
-      contractYears: FIRST_CONTRACT_YEARS,
-      contractYearsRemaining: FIRST_CONTRACT_YEARS,
-      pendingTransfer: pending,
-      trial: { shots: [], goals: next.goals, offeredClubIds: [club.id] },
+      openingCampaign: failed.opening,
+      seasonCalendar: failed.opening.calendar,
       liveMatch: null,
       lastMatchSummary: summary,
       lastMatchResult: {
@@ -483,10 +467,17 @@ function finishOpeningMatch(state: CareerState): Partial<CareerState> {
       phase: 'match-result',
     };
   }
-  const dropped = rejectAndDropTrial(next, state.nationality);
+  const pending = trialFailTransferPending({
+    bestRatio: failed.opening.bestTrialRatio ?? 0,
+    nationality: nationId,
+    excludeIds: failed.opening.rejectedClubIds,
+  });
   return {
-    openingCampaign: dropped,
-    seasonCalendar: dropped.calendar,
+    openingCampaign: failed.opening,
+    clubId: next.trialClubId ?? state.clubId,
+    parentClubId: next.trialClubId ?? state.parentClubId ?? next.trialClubId,
+    pendingTransfer: pending,
+    trial: { shots: [], goals: next.goals, offeredClubIds: pending.clubIds },
     liveMatch: null,
     lastMatchSummary: summary,
     lastMatchResult: {
@@ -920,16 +911,10 @@ export const useCareerStore = create<CareerStore>()(
       startOpeningTrial: () =>
         set((state) => {
           if (state.phase !== 'opening-brief' || !state.openingCampaign || !state.nationality) return {};
-          if (state.pendingTransfer && state.careerStart === 'favourite-trial') {
+          if (state.pendingTransfer) {
             return {
               openingCampaign: null,
               trial: null,
-              seasonNumber: 2,
-              age: STARTING_AGE + 1,
-              weeklyWage: RESERVE_WEEKLY_WAGE,
-              contractYears: FIRST_CONTRACT_YEARS,
-              contractYearsRemaining: 1,
-              role: 'reserve' as const,
               phase: 'transfer-choice',
             };
           }
@@ -1404,7 +1389,12 @@ export const useCareerStore = create<CareerStore>()(
       resolveTransferChoice: (clubId) =>
         set((state) => {
           const pending = state.pendingTransfer;
-          if (!pending || !state.clubId || !state.parentClubId) return state;
+          if (!pending) return state;
+          if (pending.kind === 'trial-offers') {
+            if (!clubId) return state;
+            return beginSignedCareer(clubId, 'reserve', state.nationality, state.careerStart);
+          }
+          if (!state.clubId || !state.parentClubId) return state;
 
           if (clubId === null) {
             const stay = pending.stay ?? {
@@ -1559,7 +1549,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 25,
+      version: 26,
       migrate: (persisted) => {
         const state = persisted as Partial<CareerState>;
         const sim = state.seasonSim;
@@ -1596,7 +1586,13 @@ export const useCareerStore = create<CareerStore>()(
         const totals = recountCareerTotals(seasonHistory, currentSeason);
         return {
           ...state,
-          openingCampaign: state.openingCampaign ?? null,
+          openingCampaign: state.openingCampaign
+            ? {
+                ...state.openingCampaign,
+                bestTrialRatio: state.openingCampaign.bestTrialRatio ?? 0,
+                rejectedClubIds: state.openingCampaign.rejectedClubIds ?? [],
+              }
+            : null,
           careerStart: state.careerStart ?? null,
           nationality: state.nationality ?? null,
           nationalTeam: state.nationalTeam

@@ -143,6 +143,8 @@ export interface OpeningCampaign {
   trialClubId: string | null;
   trialTier: ClubTier | null;
   rejectedClubIds: string[];
+  /** Best goals/games across completed 3-game trials at this level. */
+  bestTrialRatio: number;
   /** Goals scored at the U16 tournament. Kept after the club trial starts. */
   youthGoals: number;
 }

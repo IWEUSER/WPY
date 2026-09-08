@@ -1,4 +1,4 @@
-import { CLUBS, clubsInCountry, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, promotionTarget, SECOND_DIVISIONS, type Club, type ClubTier } from './data/clubs';
+import { CLUBS, clubsInCountry, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, promotionTarget, SECOND_DIVISIONS, TIER_LABEL, type Club, type ClubTier } from './data/clubs';
 import { countryForNationality, pickClubsBiasedToCountry, nearbyTierClubs, tierPool } from './clubOffers';
 import { shuffle } from './util';
 import {
@@ -25,7 +25,7 @@ export const MAX_CONSECUTIVE_LOANS = 2;
 export const MAX_LOAN_SPELLS = MAX_CONSECUTIVE_LOANS;
 
 /** Maps a goals-per-game ratio onto the club tier it's good enough for.
- * Calibrated against the 0.75 (elite) → 0.25 (smallest) first-team bars. */
+ * Calibrated against the 0.75 (elite) → 0.25 (lower level) first-team bars. */
 export function tierForRatio(ratio: number): ClubTier {
   if (ratio >= goalRatioFromStrength(90)) return 1;
   if (ratio >= goalRatioFromStrength(81)) return 2;
@@ -77,10 +77,10 @@ export function offerFormRatio(params: {
   return formAdjustedRatio(careerRatio, lastRatio);
 }
 
-function sameOrWorseInCountry(tier: ClubTier, country: string | null, excludeIds: string[]): Club[] {
+function sameTierInCountry(tier: ClubTier, country: string | null, excludeIds: string[]): Club[] {
   if (!country) return nearbyTierClubs(tier, excludeIds);
   return clubsInCountry(country).filter(
-    (c) => !excludeIds.includes(c.id) && c.playable !== false && c.tier >= tier,
+    (c) => !excludeIds.includes(c.id) && c.playable !== false && c.tier === tier,
   );
 }
 
@@ -93,7 +93,7 @@ function pickClubsFromTier(
 ): Club[] {
   const preferred = tierPool(tier, excludeIds);
   const country = countryForNationality(nationality);
-  const extraHome = sameOrWorseInCountry(tier, country, excludeIds);
+  const extraHome = sameTierInCountry(tier, country, excludeIds);
   const minHome = country && extraHome.length > 0 ? Math.min(minFromCountry, count) : 0;
   return pickClubsBiasedToCountry(preferred, count, country, minHome, extraHome);
 }
@@ -148,12 +148,6 @@ export function pickLoanClubsForMiss(
   }
   const world = CLUBS.filter((c) => c.playable !== false && c.tier === tier && !seen.has(c.id));
   picked.push(...takeShuffled(world, count - picked.length, seen));
-  if (picked.length < count) {
-    const worse = CLUBS.filter((c) => c.playable !== false && c.tier > tier && !seen.has(c.id)).sort(
-      (a, b) => a.tier - b.tier,
-    );
-    picked.push(...takeShuffled(worse, count - picked.length, seen));
-  }
   return picked.slice(0, count);
 }
 
@@ -235,25 +229,16 @@ function pickPermanentClubs(
     return pickClubsBiasedToCountry(megas, Math.min(TRANSFER_OFFER_COUNT, megas.length), country, 0);
   }
   if (fee <= 0) {
-    const primary = pickClubsFromTier(qualityTier, 3, excludeIds, nationality);
-    const wider = Math.min(5, (qualityTier + 1) as ClubTier) as ClubTier;
-    if (wider === qualityTier) {
-      return pickClubsFromTier(qualityTier, TRANSFER_OFFER_COUNT, excludeIds, nationality);
-    }
-    const extra = pickClubsFromTier(wider, 3, [...excludeIds, ...primary.map((c) => c.id)], nationality);
-    return [...primary, ...extra].slice(0, TRANSFER_OFFER_COUNT);
+    return pickClubsFromTier(qualityTier, TRANSFER_OFFER_COUNT, excludeIds, nationality);
   }
   const affordable = (tier: ClubTier) =>
     tierPool(tier, excludeIds).filter((c) => clubTransferBudget(c) >= fee);
   let pool = affordable(qualityTier);
-  if (pool.length < TRANSFER_OFFER_COUNT && qualityTier < 5) {
-    pool = [...pool, ...affordable(((qualityTier + 1) as ClubTier))];
-  }
   if (pool.length === 0) {
     pool = tierPool(qualityTier, excludeIds);
   }
   const extraHome = nearbyTierClubs(qualityTier, excludeIds).filter(
-    (c) => clubTransferBudget(c) >= fee && c.tier >= qualityTier,
+    (c) => clubTransferBudget(c) >= fee,
   );
   const minHome = country && pool.some((c) => c.country === country) ? 1 : 0;
   return pickClubsBiasedToCountry(
@@ -265,7 +250,7 @@ function pickPermanentClubs(
   );
 }
 
-export type TransferKind = 'loan' | 'sold' | 'promotion-offer' | 'loan-or-transfer' | 'end-of-season';
+export type TransferKind = 'loan' | 'sold' | 'promotion-offer' | 'loan-or-transfer' | 'end-of-season' | 'trial-offers';
 
 export interface ClubOfferTerms {
   clubId: string;
@@ -857,7 +842,35 @@ function withTwilightMlsOffers(
   return next;
 }
 
-/** Forced loan after missing a trial or reserve ratio. Sequential — no permanent offers yet. */
+/** After three failed looks at one level, clubs at the best-ratio band offer a reserve deal. */
+export function trialFailTransferPending(params: {
+  bestRatio: number;
+  nationality: string | null;
+  excludeIds?: string[];
+}): PendingTransfer {
+  const tier = tierForRatio(params.bestRatio);
+  const clubs = pickClubsFromTier(
+    tier,
+    TRANSFER_OFFER_COUNT,
+    params.excludeIds ?? [],
+    params.nationality,
+  );
+  const band = TIER_LABEL[tier].toLowerCase();
+  return pendingFromOffers(
+    'trial-offers',
+    `Your best trial ratio was ${params.bestRatio.toFixed(2)}. ${band} clubs want to sign you on a 2-year reserve deal.`,
+    clubs.map((club) => ({
+      clubId: club.id,
+      move: 'permanent' as const,
+      fee: 0,
+      weeklyWage: RESERVE_WEEKLY_WAGE,
+      contractYears: FIRST_CONTRACT_YEARS,
+    })),
+    false,
+  );
+}
+
+/** Forced loan after missing a reserve ratio. Sequential — no permanent offers yet. */
 export function forcedLoanPending(params: {
   clubId: string;
   nationality: string | null;

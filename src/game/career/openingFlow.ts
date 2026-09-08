@@ -5,8 +5,8 @@ import { nationStrength } from './data/fifaRankings';
 import { fixtureIsHome, type CalendarFixture } from './calendar';
 import {
   buildClubTrialCalendar,
-  nextTrialTier,
   pickTrialClub,
+  TRIALS_AT_LEVEL,
   tierForYouthGoals,
 } from './trial';
 import {
@@ -42,6 +42,7 @@ export function createYouthCampaign(nationId: string, rng: () => number = Math.r
     trialClubId: null,
     trialTier: null,
     rejectedClubIds: [],
+    bestTrialRatio: 0,
     youthGoals: 0,
   };
 }
@@ -158,16 +159,20 @@ export function youthTournamentComplete(campaign: OpeningCampaign): boolean {
 export function assignOpeningTrialClub(
   campaign: OpeningCampaign,
   nationality: string | null,
+  options?: { sameTierOnly?: boolean },
 ): OpeningCampaign {
   const trialTier = campaign.trialTier ?? tierForYouthGoals(campaign.youthGoals || campaign.goals);
   const existing = campaign.trialClubId ? getClub(campaign.trialClubId) : undefined;
   const reuse = existing && !campaign.rejectedClubIds.includes(existing.id);
-  const club = reuse ? existing : pickTrialClub(trialTier, nationality, campaign.rejectedClubIds);
+  const club = reuse
+    ? existing
+    : pickTrialClub(trialTier, nationality, campaign.rejectedClubIds, options?.sameTierOnly);
   return {
     ...campaign,
     youthGoals: campaign.youthGoals || campaign.goals,
     trialClubId: club.id,
     trialTier: club.tier,
+    bestTrialRatio: campaign.bestTrialRatio ?? 0,
   };
 }
 
@@ -190,6 +195,7 @@ export function beginFavouriteClubTrial(club: Club): OpeningCampaign {
     trialClubId: club.id,
     trialTier: club.tier,
     rejectedClubIds: [],
+    bestTrialRatio: 0,
     youthGoals: 0,
   };
 }
@@ -198,16 +204,18 @@ export function beginClubTrial(
   campaign: OpeningCampaign,
   nationality: string | null,
   tier?: ClubTier,
+  options?: { sameTierOnly?: boolean },
 ): OpeningCampaign {
   const assigned = assignOpeningTrialClub(
     tier != null && tier !== campaign.trialTier
       ? { ...campaign, trialClubId: null, trialTier: tier }
       : campaign,
     nationality,
+    options,
   );
   const club =
     getClub(assigned.trialClubId ?? '') ??
-    pickTrialClub(assigned.trialTier ?? 5, nationality, assigned.rejectedClubIds);
+    pickTrialClub(assigned.trialTier ?? 5, nationality, assigned.rejectedClubIds, options?.sameTierOnly);
   return {
     ...assigned,
     kind: 'club-trial',
@@ -217,6 +225,7 @@ export function beginClubTrial(
     gamesPlayed: 0,
     trialClubId: club.id,
     trialTier: club.tier,
+    bestTrialRatio: assigned.bestTrialRatio ?? 0,
     eliminated: false,
   };
 }
@@ -234,16 +243,49 @@ export function clubTrialComplete(campaign: OpeningCampaign): boolean {
   return campaign.kind === 'club-trial' && campaign.fixtureIndex >= campaign.calendar.fixtures.length;
 }
 
-export function rejectAndDropTrial(campaign: OpeningCampaign, nationality: string | null): OpeningCampaign {
-  const rejected = campaign.trialClubId
-    ? [...campaign.rejectedClubIds, campaign.trialClubId]
-    : campaign.rejectedClubIds;
-  const nextTier = nextTrialTier(campaign.trialTier ?? 5);
-  return beginClubTrial(
-    { ...campaign, rejectedClubIds: rejected, trialClubId: null, trialTier: nextTier },
+export function trialRatioFromCampaign(campaign: OpeningCampaign): number {
+  return campaign.gamesPlayed > 0 ? campaign.goals / campaign.gamesPlayed : 0;
+}
+
+/**
+ * Record a failed 3-game look. If looks remain at this level, start another
+ * club at the same tier. After three misses, the caller should open offers
+ * from `bestTrialRatio`.
+ */
+export function failClubTrial(
+  campaign: OpeningCampaign,
+  nationality: string | null,
+): { opening: OpeningCampaign; exhausted: boolean } {
+  const ratio = trialRatioFromCampaign(campaign);
+  const lastClubId = campaign.trialClubId;
+  const rejected = lastClubId ? [...campaign.rejectedClubIds, lastClubId] : campaign.rejectedClubIds;
+  const recorded: OpeningCampaign = {
+    ...campaign,
+    rejectedClubIds: rejected,
+    bestTrialRatio: Math.max(campaign.bestTrialRatio ?? 0, ratio),
+  };
+  if (rejected.length >= TRIALS_AT_LEVEL) {
+    return { opening: recorded, exhausted: true };
+  }
+  const next = beginClubTrial(
+    { ...recorded, trialClubId: null },
     nationality,
-    nextTier,
+    recorded.trialTier ?? 5,
+    { sameTierOnly: true },
   );
+  if (
+    !next.trialClubId
+    || rejected.includes(next.trialClubId)
+    || (recorded.trialTier != null && next.trialTier !== recorded.trialTier)
+  ) {
+    return { opening: recorded, exhausted: true };
+  }
+  return { opening: next, exhausted: false };
+}
+
+/** @deprecated Use failClubTrial. Kept so older tests still compile. */
+export function rejectAndDropTrial(campaign: OpeningCampaign, nationality: string | null): OpeningCampaign {
+  return failClubTrial(campaign, nationality).opening;
 }
 
 export function openingMatchSummary(

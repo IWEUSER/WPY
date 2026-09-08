@@ -21,13 +21,18 @@ export function tierForTrial(goals: number): ClubTier {
   return tierForYouthGoals(goals);
 }
 
+/** Three looks at one level, then ratio-based transfer offers. */
+export const TRIALS_AT_LEVEL = 3;
+
 export function pickTrialClub(
   tier: ClubTier,
   nationality?: string | null,
   excludeIds: string[] = [],
+  sameTierOnly = false,
 ): Club {
   const taken = new Set(excludeIds);
-  for (let step = 0; step <= 5 - tier; step++) {
+  const maxStep = sameTierOnly ? 0 : 5 - tier;
+  for (let step = 0; step <= maxStep; step++) {
     const candidateTier = (tier + step) as ClubTier;
     const pool = clubsByTier(candidateTier).filter((c) => !taken.has(c.id));
     if (pool.length === 0) continue;
@@ -36,6 +41,10 @@ export function pickTrialClub(
     const picks = pickClubsBiasedToCountry(home.length ? home : pool, 1, country, home.length ? 1 : 0);
     if (picks[0]) return picks[0];
   }
+  const leftover = CLUBS.find(
+    (c) => c.playable !== false && !taken.has(c.id) && (!sameTierOnly || c.tier === tier),
+  );
+  if (leftover) return leftover;
   return CLUBS.find((c) => c.playable !== false && !taken.has(c.id)) ?? CLUBS[0];
 }
 
