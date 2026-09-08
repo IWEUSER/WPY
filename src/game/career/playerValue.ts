@@ -15,7 +15,7 @@ export const TOP_LEAGUES = new Set(['Premier League', 'La Liga', 'Serie A', 'Bun
  */
 export function leagueValueWeight(league: string): number {
   if (TOP_LEAGUES.has(league)) return 1;
-  if (league === 'Saudi Pro League') return 0.42;
+  if (league === 'Saudi Pro League') return 0.24;
   if (SECOND_DIVISIONS.has(league)) return 0.4;
   if (league === 'Liga MX') return 0.32;
   if (league === 'MLS') return 0.22;
@@ -92,6 +92,8 @@ export function contractValueFactor(yearsRemaining: number): number {
 /** Only these sides can fund a €200m+ transfer. */
 export const MEGA_CLUB_IDS = new Set(['psg', 'real-madrid', 'man-city']);
 export const MEGA_TRANSFER_FEE = 180_000_000;
+/** Elite clubs do not buy below this market value. */
+export const ELITE_TRANSFER_VALUE_FLOOR = 50_000_000;
 
 export function clubTransferBudget(club: Club): number {
   if (MEGA_CLUB_IDS.has(club.id)) return 260_000_000;
@@ -207,7 +209,7 @@ export function youngDivisionStarFloor(params: {
   let base = 8_000_000;
   if (TOP_LEAGUES.has(params.league)) base = 80_000_000;
   else if (SECOND_DIVISIONS.has(params.league)) base = 36_000_000;
-  else if (params.league === 'Saudi Pro League') base = 18_000_000;
+  else if (params.league === 'Saudi Pro League') base = 10_000_000;
   else if (params.league === 'Liga MX' || params.league === 'MLS') base = 14_000_000;
   return Math.max(100_000, Math.round((base * ageValueFactor(params.age)) / 100_000) * 100_000);
 }

@@ -31,7 +31,7 @@ export type FixtureKind =
   | 'international'
   | 'rest';
 
-export type PlayoffRound = 'first-round' | 'conference-semi' | 'conference-final' | 'mls-cup';
+export type PlayoffRound = 'wild-card' | 'first-round' | 'conference-semi' | 'conference-final' | 'mls-cup';
 export type LeaguesCupStage = 'group' | 'quarter-final' | 'semi-final' | 'final';
 export type SuperCupStage = 'semi-final' | 'final';
 
@@ -466,7 +466,7 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
     });
   }
   if (includePlayoffs) {
-    const rounds: PlayoffRound[] = ['first-round', 'conference-semi', 'conference-final', 'mls-cup'];
+    const rounds: PlayoffRound[] = ['wild-card', 'first-round', 'conference-semi', 'conference-final', 'mls-cup'];
     for (const playoffRound of rounds) {
       fixtures.push({
         week: ++week,

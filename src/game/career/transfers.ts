@@ -6,6 +6,7 @@ import {
   consecutiveSeasonsBelow,
   DEFAULT_CONTRACT_YEARS,
   FIRST_CONTRACT_YEARS,
+  ELITE_TRANSFER_VALUE_FLOOR,
   MEGA_CLUB_IDS,
   MEGA_TRANSFER_FEE,
   formAdjustedRatio,
@@ -49,6 +50,9 @@ export function offerTierFromStanding(params: {
   const last = params.ratio ?? params.careerRatio;
   let tier = Math.max(tierForRatio(last), tierForRatio(params.careerRatio)) as ClubTier;
   if (params.blockElite) tier = Math.max(tier, 2) as ClubTier;
+  if ((params.marketValue ?? Number.POSITIVE_INFINITY) < ELITE_TRANSFER_VALUE_FLOOR) {
+    tier = Math.max(tier, 2) as ClubTier;
+  }
   return tier;
 }
 
@@ -213,6 +217,9 @@ function pickPermanentClubs(
   fromLeague?: string | null,
   marketValue?: number,
 ): Club[] {
+  if (qualityTier === 1 && (marketValue ?? 0) < ELITE_TRANSFER_VALUE_FLOOR) {
+    qualityTier = 2;
+  }
   if (fromLeague && SECOND_DIVISIONS.has(fromLeague)) {
     const local = pickSecondDivisionClubs(
       fromLeague,
@@ -594,6 +601,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
         offerTierFromStanding({
           ratio,
           careerRatio: careerGames > 0 ? careerGoals / careerGames : ratio,
+          marketValue: value,
           blockElite,
         }),
         false,
@@ -612,6 +620,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     const saleTier = offerTierFromStanding({
       ratio: formRatio,
       careerRatio: formRatio,
+      marketValue: value,
       blockElite,
     });
     const transfers = pickPermanentClubs(saleTier, fee, exclude, nationality, blockElite, club.league, value);
@@ -662,7 +671,12 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
   const ratioMet = ratio >= threshold;
   const graceActive = seasonsAtCurrentClub === 0 && params.careerStart !== 'favourite-first-team';
   const formRatio = offerFormRatio({ lastSeason: season, careerGoals, careerGames });
-  const ratioTier = offerTierFromStanding({ ratio: formRatio, careerRatio: formRatio, blockElite });
+  const ratioTier = offerTierFromStanding({
+    ratio: formRatio,
+    careerRatio: formRatio,
+    marketValue: value,
+    blockElite,
+  });
 
   if (promoted) {
     return parallelTransfers(

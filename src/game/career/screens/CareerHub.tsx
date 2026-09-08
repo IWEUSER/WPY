@@ -259,7 +259,10 @@ function StandingsCard({
   sim: SeasonSimState | null;
 }) {
   const conference = conferenceTable(standings.league, clubId);
-  const us = (conference.length > 0 && mlsConferenceOf(clubId) ? conference : standings.league).find((r) => r.clubId === clubId);
+  const inMls = Boolean(mlsConferenceOf(clubId));
+  const conferenceRow = inMls ? conference.find((r) => r.clubId === clubId) : undefined;
+  const overall = standings.league.find((r) => r.clubId === clubId);
+  const us = conferenceRow ?? overall;
   const europe = standings.europeanStanding;
   const stageLabel: Record<string, string> = {
     group: 'Group stage',
@@ -270,7 +273,19 @@ function StandingsCard({
     eliminated: 'Eliminated',
     champion: 'Champions',
     'not-entered': '—',
+    pending: '—',
   };
+  const cupHeadline = europe
+    ? { stage: stageLabel[europe.stage] ?? europe.stage, name: CONTINENTAL_CUPS[europe.cup].name }
+    : sim?.leaguesCupStage && sim.leaguesCupStage !== 'not-entered'
+      ? { stage: stageLabel[sim.leaguesCupStage] ?? sim.leaguesCupStage, name: 'Leagues Cup' }
+      : cupName && cupStage && cupStage !== 'not-entered'
+        ? { stage: stageLabel[cupStage] ?? cupStage, name: cupName }
+        : { stage: '—', name: 'Cup' };
+  const extraCup =
+    cupName && cupStage && cupStage !== 'not-entered' && cupHeadline.name !== cupName
+      ? `${cupName}: ${stageLabel[cupStage] ?? cupStage}`
+      : null;
 
   return (
     <div className={DATA_CARD}>
@@ -279,8 +294,13 @@ function StandingsCard({
         <div>
           <p className="text-2xl font-extrabold">{us && us.played > 0 ? `${us.position}` : '—'}</p>
           <p className="text-[10px] uppercase tracking-wide text-white/40">
-            {mlsConferenceOf(clubId) ? conferenceLabel(mlsConferenceOf(clubId)) : 'League position'}
+            {inMls ? conferenceLabel(mlsConferenceOf(clubId)) : 'League position'}
           </p>
+          {inMls && overall && overall.played > 0 && (
+            <p className="mt-1 text-xs text-white/50">
+              {overall.position}{ordinal(overall.position)} overall
+            </p>
+          )}
           {us && (
             <p className="mt-1 text-xs text-white/50">
               {us.points} pts · {us.played} played
@@ -288,25 +308,11 @@ function StandingsCard({
           )}
         </div>
         <div>
-          <p className="text-lg font-bold leading-tight">
-            {europe ? stageLabel[europe.stage] : sim?.leaguesCupStage && sim.leaguesCupStage !== 'not-entered'
-              ? stageLabel[sim.leaguesCupStage] ?? sim.leaguesCupStage
-              : '—'}
-          </p>
-          <p className="text-[10px] uppercase tracking-wide text-white/40">
-            {europe
-              ? CONTINENTAL_CUPS[europe.cup].name
-              : sim?.leaguesCupStage && sim.leaguesCupStage !== 'not-entered'
-                ? 'Leagues Cup'
-                : 'Continental'}
-          </p>
+          <p className="text-lg font-bold leading-tight">{cupHeadline.stage}</p>
+          <p className="text-[10px] uppercase tracking-wide text-white/40">{cupHeadline.name}</p>
+          {extraCup && <p className="mt-1 text-xs text-white/50">{extraCup}</p>}
         </div>
       </div>
-      {cupName && cupStage && cupStage !== 'not-entered' && (
-        <p className="mt-3 text-xs text-white/50">
-          {cupName}: {stageLabel[cupStage] ?? cupStage}
-        </p>
-      )}
     </div>
   );
 }
@@ -381,7 +387,12 @@ function InternationalCard({
         {statusLine}
       </p>
       {campaignLine && <p className="mt-1 text-xs text-emerald-200/80">{campaignLine}</p>}
-      {group && (sim?.internationalStage === 'group' || sim?.internationalStage === 'friendly' || (sim?.internationalStage && !['qualifying', 'not-selected', 'failed-qualifying', 'qualified'].includes(sim.internationalStage))) && (
+      {group && pos > 0 && (
+        <p className="mt-1 text-xs text-white/60">
+          Group {group.letter} · {pos}{ordinal(pos)}
+        </p>
+      )}
+      {group && sim?.internationalStage && !['qualifying', 'not-selected', 'failed-qualifying'].includes(sim.internationalStage) && (
         <table className="mt-3 w-full border-collapse text-left text-xs">
           <thead>
             <tr className="text-[10px] uppercase tracking-wide text-white/40">
@@ -430,7 +441,12 @@ function SeasonCompetitions({ calendar }: { calendar: SeasonCalendar | null }) {
   );
   const international = calendarIncludesInternational(calendar);
   const domesticCup = calendarDomesticCup(calendar);
-  if (cupIds.size === 0 && !international && !domesticCup) return null;
+  const hasLeaguesCup = calendar.fixtures.some((f) => f.kind === 'leagues-cup');
+  const hasPlayoffs = calendar.fixtures.some((f) => f.kind === 'playoff');
+  const hasSuperCup = calendar.fixtures.some((f) => f.kind === 'super-cup');
+  if (cupIds.size === 0 && !international && !domesticCup && !hasLeaguesCup && !hasPlayoffs && !hasSuperCup) {
+    return null;
+  }
   const internationalLabel = international
     ? calendar.internationalPhase === 'qualifiers'
       ? `${INTERNATIONAL_TOURNAMENTS[international].name} qualifying`
@@ -444,17 +460,17 @@ function SeasonCompetitions({ calendar }: { calendar: SeasonCalendar | null }) {
           {DOMESTIC_CUPS[domesticCup].name}
         </span>
       )}
-      {calendar.fixtures.some((f) => f.kind === 'leagues-cup') && (
+      {hasLeaguesCup && (
         <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/70">
           Leagues Cup
         </span>
       )}
-      {calendar.fixtures.some((f) => f.kind === 'playoff') && (
+      {hasPlayoffs && (
         <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/70">
           MLS Cup Playoffs
         </span>
       )}
-      {calendar.fixtures.some((f) => f.kind === 'super-cup') && (
+      {hasSuperCup && (
         <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/70">
           Super Cup
         </span>

@@ -2,7 +2,8 @@ import { createAvailability } from './availabilityEngine';
 import { fixtureIsNight } from './calendar';
 import { getClub } from './data/clubs';
 import { createNationalTeamState, recordInternationalAppearance } from './international';
-import { buildSeasonStandings } from './matchEngine';
+import { mlsConferenceOf } from './data/leagueFormat';
+import { buildSeasonStandings, rankLeagueTable } from './matchEngine';
 import { newContractYears, playerMarketValueFromSeasons, weeklyWageForClub } from './playerValue';
 import { applyTrialMatch, assignOpeningTrialClub, beginClubTrial, beginFavouriteClubTrial, createYouthCampaign, failClubTrial } from './openingFlow';
 import { hydrateSeason } from './seasonSim';
@@ -219,6 +220,21 @@ export function applyCareerLayoutPreview(): void {
     careerGoalRatio: 0.78,
     nationId: preview === 'mls' ? 'united-states' : preview === 'saudi' ? 'saudi-arabia' : preview === 'match-psg' ? 'france' : 'spain',
   });
+  if (preview === 'mls') {
+    sim.leagueTable = rankLeagueTable(
+      sim.leagueTable.map((row, i) => {
+        if (row.clubId === 'lafc') {
+          return { ...row, played: 18, won: 10, drawn: 4, lost: 4, goalsFor: 32, goalsAgainst: 16, points: 34 };
+        }
+        const west = mlsConferenceOf(row.clubId) === 'west';
+        const pts = Math.max(6, (west ? 38 : 36) - i * 2);
+        return { ...row, played: 18, won: 6, drawn: 4, lost: 8, goalsFor: 22, goalsAgainst: 20, points: pts };
+      }),
+    );
+    sim.leaguesCupStage = 'quarter-final';
+    sim.domesticCup = 'us-open-cup';
+    sim.domesticCupStage = 'semi-final';
+  }
   const reserveSeason = preview === 'reserve'
     ? hydrateSeason({
         seasonNumber: 1,
@@ -774,8 +790,10 @@ export function applyCareerLayoutPreview(): void {
               domesticGoals: 21,
               continentalStats: [],
               trophies: ['Championship'],
-              topGoalscorer: true,
+              topGoalscorer: false,
               playerOfTheYear: true,
+              topGoalscorerReason: 'Golden boot target in Championship is 20 league goals; you scored 20, but another striker took the golden boot.',
+              playerOfTheYearReason: 'Won Championship and scored 20 league goals (bar 14).',
               wonWpy: false,
               earnings: 1_200_000,
               sponsorship: 0,

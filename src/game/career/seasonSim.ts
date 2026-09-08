@@ -14,7 +14,11 @@ import {
   qualifiesForSaudiSuperCup,
   type Club,
 } from './data/clubs';
-import { mlsConferenceOf } from './data/leagueFormat';
+import {
+  MLS_REGULAR_SEASON_WEEKS,
+  mlsConferenceOf,
+  playoffOpeningForPosition,
+} from './data/leagueFormat';
 import {
   campaignSchedulesInternational,
   clubContinentalCup,
@@ -126,7 +130,7 @@ export interface SeasonSimState {
   titleRivalId: string | null;
   rivalHomeOutcome: ClubMatchResult['outcome'] | null;
   rivalAwayOutcome: ClubMatchResult['outcome'] | null;
-  playoffStage: PlayoffRound | 'eliminated' | 'champion' | 'not-qualified' | null;
+  playoffStage: PlayoffRound | 'pending' | 'eliminated' | 'champion' | 'not-qualified' | null;
   leaguesCupStage: LeaguesCupStage | 'eliminated' | 'champion' | 'not-entered';
   leaguesCupGroupPlayed: number;
   leaguesCupGroupPoints: number;
@@ -241,6 +245,8 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
     includeDomesticCup: !leagueOnly,
     includeSuperCup: Boolean(!leagueOnly && includeSuperCup && cup && clubConfederation === 'UEFA'),
     includePlayoffs: !leagueOnly && isMls,
+    // Every MLS first-team season, including the first after a transfer in.
+    // Liga MX sides fill the group; reserve years stay league-only.
     includeLeaguesCup: !leagueOnly && isMls,
     includeSaudiSuperCup: saudiSuper,
     league,
@@ -302,7 +308,7 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
       titleRivalId: titleRival?.id ?? null,
       rivalHomeOutcome: null,
       rivalAwayOutcome: null,
-      playoffStage: !leagueOnly && isMls ? 'first-round' : null,
+      playoffStage: !leagueOnly && isMls ? 'pending' : null,
       leaguesCupStage: !leagueOnly && isMls ? 'group' : 'not-entered',
       leaguesCupGroupPlayed: 0,
       leaguesCupGroupPoints: 0,
@@ -715,7 +721,13 @@ export function shouldSkipFixture(fixture: CalendarFixture, sim: SeasonSimState)
   }
 
   if (fixture.kind === 'playoff') {
-    if (sim.playoffStage == null || sim.playoffStage === 'eliminated' || sim.playoffStage === 'champion' || sim.playoffStage === 'not-qualified') {
+    if (
+      sim.playoffStage == null
+      || sim.playoffStage === 'pending'
+      || sim.playoffStage === 'eliminated'
+      || sim.playoffStage === 'champion'
+      || sim.playoffStage === 'not-qualified'
+    ) {
       return true;
     }
     return fixture.playoffRound !== sim.playoffStage;
@@ -804,6 +816,7 @@ export function applyPlayoffResult(
 ): SeasonSimState {
   if (fixture.kind !== 'playoff' || !fixture.playoffRound) return sim;
   if (result.outcome !== 'win') return { ...sim, playoffStage: 'eliminated' };
+  if (fixture.playoffRound === 'wild-card') return { ...sim, playoffStage: 'first-round' };
   if (fixture.playoffRound === 'first-round') return { ...sim, playoffStage: 'conference-semi' };
   if (fixture.playoffRound === 'conference-semi') return { ...sim, playoffStage: 'conference-final' };
   if (fixture.playoffRound === 'conference-final') return { ...sim, playoffStage: 'mls-cup' };
@@ -815,13 +828,13 @@ export function applyPlayoffResult(
 }
 
 function maybeOpenPlayoffs(sim: SeasonSimState, clubId: string): SeasonSimState {
-  if (sim.playoffStage !== 'first-round') return sim;
+  if (sim.playoffStage !== 'pending' && sim.playoffStage !== 'first-round') return sim;
   const table = conferenceTable(sim.leagueTable, clubId);
   const us = table.find((r) => r.clubId === clubId);
-  if (!us || us.played < 26) return sim;
-  if (us.position > 6) return { ...sim, playoffStage: 'not-qualified' };
-  if (us.position <= 2) return { ...sim, playoffStage: 'conference-semi' };
-  return sim;
+  if (!us || us.played < MLS_REGULAR_SEASON_WEEKS) return sim;
+  const opening = playoffOpeningForPosition(us.position);
+  if (opening === 'not-qualified') return { ...sim, playoffStage: 'not-qualified' };
+  return { ...sim, playoffStage: opening };
 }
 
 export function applyDomesticCupResult(
@@ -1088,7 +1101,8 @@ export function fixtureTitle(
     return `Leagues Cup ${stage}${vs}`;
   }
   if (fixture.kind === 'playoff') {
-    if (fixture.playoffRound === 'first-round') return `Playoffs${vs}`;
+    if (fixture.playoffRound === 'wild-card') return `Playoff wild card${vs}`;
+    if (fixture.playoffRound === 'first-round') return `Playoff first round${vs}`;
     if (fixture.playoffRound === 'conference-semi') return `Conference semi-final${vs}`;
     if (fixture.playoffRound === 'conference-final') return `Conference final${vs}`;
     if (fixture.playoffRound === 'mls-cup') return `MLS Cup${vs}`;

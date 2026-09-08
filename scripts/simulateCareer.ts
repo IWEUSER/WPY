@@ -12,7 +12,8 @@ import {
   meanChancesFromStrength,
 } from '../src/game/career/chanceEngine';
 import { assignClubTier, CLUBS, clubsForSeason, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, leagueMatchWeeks, playableClubsGroupedByLeague, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
-import { consecutivePoorFactor, contractValueFactor, FIRST_CONTRACT_YEARS, formAdjustedRatio, isSeason1ValueLocked, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, playerMarketValue, playerMarketValueFromSeasons, seasonalSponsorship, tierForMarketValue, transferFeeFromValue, weeklyWageForClub, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
+import { playoffGamesFromOpening, playoffOpeningForPosition } from '../src/game/career/data/leagueFormat';
+import { consecutivePoorFactor, contractValueFactor, ELITE_TRANSFER_VALUE_FLOOR, FIRST_CONTRACT_YEARS, formAdjustedRatio, isSeason1ValueLocked, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, playerMarketValue, playerMarketValueFromSeasons, seasonalSponsorship, tierForMarketValue, transferFeeFromValue, weeklyWageForClub, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { nationKit } from '../src/game/career/data/nationColours';
 import { reserveStadium, resolveCareerStadium, resolveMatchStadium, trialStadium } from '../src/game/career/matchVenue';
@@ -1954,6 +1955,78 @@ if (barca && hilal && lafc) {
     console.error('a €900k player must not attract Strong or Elite transfer offers');
     process.exitCode = 1;
   }
+  const hotButCheap = offerTierFromStanding({
+    ratio: 1.2,
+    careerRatio: 1.2,
+    marketValue: 20_000_000,
+  });
+  console.log('€20m / 1.2 offer tier', hotButCheap, 'elite floor', ELITE_TRANSFER_VALUE_FLOOR);
+  if (hotButCheap < 2) {
+    console.error('elite clubs must not bid below €50m market value');
+    process.exitCode = 1;
+  }
+  const richEnough = offerTierFromStanding({
+    ratio: 1.2,
+    careerRatio: 1.2,
+    marketValue: 55_000_000,
+  });
+  if (richEnough > 1) {
+    console.error('a €55m player with a 1.2 ratio should still attract elite clubs');
+    process.exitCode = 1;
+  }
+  if (lafc && hilal && barca) {
+    const mlsHot = playerMarketValueFromSeasons({
+      age: 18,
+      careerGoals: 36,
+      careerGames: 30,
+      seasons: [{ ...dummySeason, seasonNumber: 2, clubId: 'lafc', league: 'MLS', goals: 36, gamesPlayed: 30, role: 'first-team' }],
+      fallbackClub: lafc,
+    });
+    const saudiHot = playerMarketValueFromSeasons({
+      age: 18,
+      careerGoals: 34,
+      careerGames: 33,
+      seasons: [{ ...dummySeason, seasonNumber: 2, clubId: 'al-hilal', league: 'Saudi Pro League', goals: 34, gamesPlayed: 33, role: 'first-team' }],
+      fallbackClub: hilal,
+    });
+    const ligaHot = playerMarketValueFromSeasons({
+      age: 18,
+      careerGoals: 34,
+      careerGames: 33,
+      seasons: [{ ...dummySeason, seasonNumber: 2, clubId: 'real-madrid', league: 'La Liga', goals: 34, gamesPlayed: 33, role: 'first-team' }],
+      fallbackClub: barca,
+    });
+    console.log('value MLS 1.2', mlsHot, 'Saudi 1.02', saudiHot, 'La Liga 1.02', ligaHot);
+    if (saudiHot >= 32_000_000) {
+      console.error('a first Saudi season at 1.02 must not reach European-star money');
+      process.exitCode = 1;
+    }
+    if (saudiHot >= ligaHot * 0.35) {
+      console.error('Saudi market value must sit well below the same ratio in a top European league');
+      process.exitCode = 1;
+    }
+    const mlsOffers = resolveSeasonTransition({
+      season: { ...dummySeason, seasonNumber: 2, clubId: 'lafc', league: 'MLS', goals: 36, gamesPlayed: 30, role: 'first-team' },
+      role: 'first-team',
+      clubId: 'lafc',
+      parentClubId: 'lafc',
+      seasonsAtCurrentClub: 1,
+      age: 18,
+      careerGoals: 36,
+      careerGames: 30,
+      nationality: 'spain',
+      loansUsed: 0,
+      seasonHistory: [],
+      contractYearsRemaining: 2,
+      careerStart: 'favourite-first-team',
+    });
+    const eliteBids = (mlsOffers.pendingTransfer?.offers ?? []).filter((o) => getClub(o.clubId)?.tier === 1);
+    console.log('MLS 1.2 transfer elite bids', eliteBids.length, 'value', mlsHot);
+    if (mlsHot < ELITE_TRANSFER_VALUE_FLOOR && eliteBids.length > 0) {
+      console.error('a sub-€50m MLS season must not produce elite transfer offers');
+      process.exitCode = 1;
+    }
+  }
   const cheapSale = resolveSeasonTransition({
     season: { ...dummySeason, clubId: 'barcelona', goals: 8, gamesPlayed: 38 },
     role: 'first-team',
@@ -2693,8 +2766,57 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     console.error('an MLS season must not run past 56 weeks or 26 league weeks');
     process.exitCode = 1;
   }
-  if ((mlsKinds.playoff ?? 0) < 4 || (mlsKinds['leagues-cup'] ?? 0) < 4) {
-    console.error('MLS must schedule playoffs and Leagues Cup');
+  if ((mlsKinds.playoff ?? 0) < 5 || (mlsKinds['leagues-cup'] ?? 0) < 4) {
+    console.error('MLS must schedule playoffs (wild card through MLS Cup) and Leagues Cup');
+    process.exitCode = 1;
+  }
+  const firstMlsSeason = hydrateSeason({
+    seasonNumber: 1,
+    club: lafc,
+    careerGoalRatio: 0.6,
+    nationId: 'spain',
+    careerStart: 'favourite-first-team',
+  });
+  const firstMlsLeagues = firstMlsSeason.calendar.fixtures.filter((f) => f.kind === 'leagues-cup');
+  const firstMlsMx = firstMlsLeagues.filter((f) => getClub(f.opponentId ?? '')?.league === 'Liga MX');
+  console.log('first MLS season after arriving: Leagues Cup', firstMlsLeagues.length, 'Liga MX', firstMlsMx.length);
+  if (firstMlsLeagues.length < 4 || firstMlsMx.length < 1) {
+    console.error('the first MLS season after moving in must still play Leagues Cup against Liga MX');
+    process.exitCode = 1;
+  }
+  const toronto = getClub('toronto');
+  if (toronto) {
+    const { calendar: canCal } = hydrateSeason({
+      seasonNumber: 1,
+      club: toronto,
+      careerGoalRatio: 0.55,
+      nationId: 'canada',
+    });
+    if (!canCal.fixtures.some((f) => f.kind === 'leagues-cup')) {
+      console.error('a Canadian MLS club must play Leagues Cup in its first season');
+      process.exitCode = 1;
+    }
+  }
+  const playoffPath = [1, 4, 5, 6, 7].map((pos) => ({
+    pos,
+    open: playoffOpeningForPosition(pos),
+    games: playoffGamesFromOpening(playoffOpeningForPosition(pos)),
+  }));
+  console.log('MLS playoff path', playoffPath);
+  if (playoffOpeningForPosition(1) !== 'first-round' || playoffOpeningForPosition(4) !== 'first-round') {
+    console.error('conference seeds 1–4 must play the first round (no bye)');
+    process.exitCode = 1;
+  }
+  if (playoffOpeningForPosition(5) !== 'wild-card' || playoffOpeningForPosition(6) !== 'wild-card') {
+    console.error('conference seeds 5–6 must play a wild-card game');
+    process.exitCode = 1;
+  }
+  if (playoffOpeningForPosition(7) !== 'not-qualified' || playoffGamesFromOpening('not-qualified') !== 0) {
+    console.error('7th in conference must miss the playoffs');
+    process.exitCode = 1;
+  }
+  if (playoffGamesFromOpening('first-round') !== 4 || playoffGamesFromOpening('wild-card') !== 5) {
+    console.error('MLS playoff length must be 4 games from the first round and 5 from the wild card');
     process.exitCode = 1;
   }
   if (leaguesMx.length < 1) {

@@ -307,6 +307,8 @@ function attachSeasonAwards(state: CareerState): { season: SeasonRecord; wpyResu
         topGoalscorer: false,
         playerOfTheYear: false,
         wonWpy: false,
+        topGoalscorerReason: 'Reserve seasons do not contest domestic awards.',
+        playerOfTheYearReason: 'Reserve seasons do not contest domestic awards.',
       },
       wpyResult: null,
     };

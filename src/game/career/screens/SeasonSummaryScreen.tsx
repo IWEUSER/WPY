@@ -80,8 +80,6 @@ export default function SeasonSummaryScreen() {
   if (seasonSim?.honours.domesticCup) {
     honours.push(`Won the ${DOMESTIC_CUPS[seasonSim.honours.domesticCup].name}`);
   }
-  if (season.topGoalscorer) honours.push('Top goalscorer');
-  if (season.playerOfTheYear) honours.push('Player of the Year');
   if (season.international?.playerOfTheTournament && season.international.tournament) {
     honours.push(
       `${INTERNATIONAL_TOURNAMENTS[season.international.tournament].name} Player of the Tournament`,
@@ -165,6 +163,31 @@ export default function SeasonSummaryScreen() {
           {missedTournament}
         </div>
       )}
+
+      <div className="flex w-full max-w-sm flex-col gap-3">
+        <div
+          className={`rounded-2xl border px-4 py-3 text-sm ${
+            season.playerOfTheYear
+              ? 'border-emerald-300/25 bg-emerald-500/10 text-emerald-200'
+              : 'border-white/16 bg-[#0c1410] text-white/60'
+          }`}
+        >
+          <p className="text-xs uppercase tracking-wide text-white/40">Domestic player of the season</p>
+          <p className="mt-1 font-semibold">{season.playerOfTheYear ? 'You won it.' : 'Not this season.'}</p>
+          {season.playerOfTheYearReason && <p className="mt-1 text-xs">{season.playerOfTheYearReason}</p>}
+        </div>
+        <div
+          className={`rounded-2xl border px-4 py-3 text-sm ${
+            season.topGoalscorer
+              ? 'border-emerald-300/25 bg-emerald-500/10 text-emerald-200'
+              : 'border-white/16 bg-[#0c1410] text-white/60'
+          }`}
+        >
+          <p className="text-xs uppercase tracking-wide text-white/40">Domestic top goalscorer</p>
+          <p className="mt-1 font-semibold">{season.topGoalscorer ? 'You won it.' : 'Not this season.'}</p>
+          {season.topGoalscorerReason && <p className="mt-1 text-xs">{season.topGoalscorerReason}</p>}
+        </div>
+      </div>
 
       {wpyResult && (
         <div

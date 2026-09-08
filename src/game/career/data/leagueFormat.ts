@@ -38,7 +38,26 @@ export const MLS_WEST = new Set([
 export const MLS_CONFERENCE_SIZE = 10;
 /** Home-and-away in conference (18) plus 8 interconference games. */
 export const MLS_REGULAR_SEASON_WEEKS = 26;
+/** Top six in each conference reach the playoffs. */
 export const MLS_PLAYOFF_SPOTS = 6;
+/** Seeds 5–6 play a single wild-card; 1–4 go straight to the first round. */
+export const MLS_PLAYOFF_WILDCARD_FROM = 5;
+
+export type MlsPlayoffOpening = 'wild-card' | 'first-round' | 'not-qualified';
+
+/** How the MLS bracket opens from conference position (10-team conference). */
+export function playoffOpeningForPosition(position: number): MlsPlayoffOpening {
+  if (position < 1 || position > MLS_PLAYOFF_SPOTS) return 'not-qualified';
+  if (position >= MLS_PLAYOFF_WILDCARD_FROM) return 'wild-card';
+  return 'first-round';
+}
+
+/** Games left if the player wins every remaining tie from this opening. */
+export function playoffGamesFromOpening(opening: MlsPlayoffOpening): number {
+  if (opening === 'not-qualified') return 0;
+  if (opening === 'wild-card') return 5;
+  return 4;
+}
 
 export function mlsConferenceOf(id: string): MlsConference | null {
   if (MLS_EAST.has(id)) return 'east';
