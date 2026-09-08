@@ -227,7 +227,7 @@ export function applyCareerLayoutPreview(): void {
           return { ...row, played: 18, won: 10, drawn: 4, lost: 4, goalsFor: 32, goalsAgainst: 16, points: 34 };
         }
         const west = mlsConferenceOf(row.clubId) === 'west';
-        const pts = Math.max(6, (west ? 38 : 36) - i * 2);
+        const pts = west ? Math.max(8, 30 - i) : Math.max(22, 50 - i);
         return { ...row, played: 18, won: 6, drawn: 4, lost: 8, goalsFor: 22, goalsAgainst: 20, points: pts };
       }),
     );
