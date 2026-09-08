@@ -4,10 +4,10 @@ import { getClub } from './data/clubs';
 import { createNationalTeamState, recordInternationalAppearance } from './international';
 import { buildSeasonStandings } from './matchEngine';
 import { newContractYears, playerMarketValueFromSeasons, weeklyWageForClub } from './playerValue';
-import { assignOpeningTrialClub, beginClubTrial, createYouthCampaign } from './openingFlow';
+import { applyTrialMatch, assignOpeningTrialClub, beginClubTrial, beginFavouriteClubTrial, createYouthCampaign, failClubTrial } from './openingFlow';
 import { hydrateSeason } from './seasonSim';
 import { useCareerStore } from './store';
-import { resolveSeasonTransition, type PendingTransfer } from './transfers';
+import { resolveSeasonTransition, trialFailTransferPending, type PendingTransfer } from './transfers';
 import type { OpeningCampaign, SeasonRecord } from './types';
 import { createGroupState } from './internationalTable';
 
@@ -232,6 +232,9 @@ export function applyCareerLayoutPreview(): void {
   const isTrialPreview = preview === 'trial';
   const isYouthPreview = preview === 'youth';
   const isClubTrialPreview = preview === 'club-trial';
+  const isTrialRetryPreview = preview === 'trial-retry';
+  const isTrialOffersPreview = preview === 'trial-offers';
+  const isReserveLoansPreview = preview === 'reserve-loans';
   const openingNationId = preview === 'mls' ? 'united-states' : preview === 'saudi' ? 'saudi-arabia' : 'spain';
   let openingCampaign: OpeningCampaign | null = null;
   if (isYouthPreview || isTrialPreview || isClubTrialPreview || preview === 'club-offer') {
@@ -240,6 +243,29 @@ export function applyCareerLayoutPreview(): void {
     if (isYouthPreview) openingCampaign = youth;
     else if (isTrialPreview) openingCampaign = assignOpeningTrialClub(scored, openingNationId);
     else openingCampaign = beginClubTrial(scored, openingNationId, 2);
+  } else if (isTrialRetryPreview || isTrialOffersPreview) {
+    const madrid = getClub('real-madrid');
+    if (madrid) {
+      let look = beginFavouriteClubTrial(madrid);
+      look = applyTrialMatch(look, 0);
+      look = applyTrialMatch(look, 0);
+      look = applyTrialMatch(look, 0);
+      const first = failClubTrial(look, 'spain');
+      if (isTrialRetryPreview || first.exhausted) {
+        openingCampaign = first.opening;
+      } else {
+        let second = first.opening;
+        second = applyTrialMatch(second, 0);
+        second = applyTrialMatch(second, 0);
+        second = applyTrialMatch(second, 0);
+        const two = failClubTrial(second, 'spain');
+        let third = two.opening;
+        third = applyTrialMatch(third, 0);
+        third = applyTrialMatch(third, 0);
+        third = applyTrialMatch(third, 0);
+        openingCampaign = failClubTrial(third, 'spain').opening;
+      }
+    }
   }
   const isReservePreview = preview === 'reserve';
   const isMatchPreview = preview === 'match' || preview === 'match-away' || preview === 'match-local'
@@ -513,6 +539,44 @@ export function applyCareerLayoutPreview(): void {
           clubLeague: 'Championship',
         })
       : null;
+  const reserveLoansPreview =
+    preview === 'reserve-loans'
+      ? resolveSeasonTransition({
+          season: season({
+            seasonNumber: 1,
+            clubId: 'real-madrid',
+            role: 'reserve',
+            matches: [],
+            goals: 2,
+            gamesPlayed: 38,
+            ratioMet: false,
+            age: 16,
+            leagueGoals: 2,
+            trophies: [],
+            topGoalscorer: false,
+            playerOfTheYear: false,
+            wonWpy: false,
+          }),
+          role: 'reserve',
+          clubId: 'real-madrid',
+          parentClubId: 'real-madrid',
+          seasonsAtCurrentClub: 0,
+          age: 16,
+          careerGoals: 0,
+          careerGames: 0,
+          nationality: 'spain',
+          loansUsed: 0,
+          contractYearsRemaining: 2,
+        })
+      : null;
+  const trialOffersPreview =
+    preview === 'trial-offers' && openingCampaign
+      ? trialFailTransferPending({
+          bestRatio: openingCampaign.bestTrialRatio ?? 0,
+          nationality: 'spain',
+          excludeIds: openingCampaign.rejectedClubIds,
+        })
+      : null;
   const pendingTransfer: PendingTransfer | null =
     preview === 'renew'
       ? renewalPreview?.pendingTransfer ?? null
@@ -520,6 +584,10 @@ export function applyCareerLayoutPreview(): void {
       ? reservePromo?.pendingTransfer ?? null
       : preview === 'championship-transfer'
       ? champTransferPreview?.pendingTransfer ?? null
+      : preview === 'trial-offers'
+      ? trialOffersPreview
+      : isReserveLoansPreview
+      ? reserveLoansPreview?.pendingTransfer ?? null
       : preview === 'expired'
       ? {
           kind: 'end-of-season',
@@ -582,13 +650,13 @@ export function applyCareerLayoutPreview(): void {
 
   useCareerStore.setState({
     phase:
-      isTrialPreview
+      isTrialPreview || isTrialRetryPreview || isTrialOffersPreview
         ? 'opening-brief'
         : isYouthPreview || isClubTrialPreview
           ? 'match'
         : preview === 'record'
         ? 'career'
-        : preview === 'transfer' || preview === 'expired' || preview === 'renew' || preview === 'championship-transfer'
+        : preview === 'transfer' || preview === 'expired' || preview === 'renew' || preview === 'championship-transfer' || isReserveLoansPreview
           ? 'transfer-choice'
           : preview === 'reserve-promo'
             ? 'season-summary'
@@ -612,6 +680,7 @@ export function applyCareerLayoutPreview(): void {
       ? { shots: [], goals: 6, offeredClubIds: ['real-madrid', 'barcelona', 'atletico-madrid'] }
       : null,
     openingCampaign,
+    careerStart: isTrialRetryPreview || isTrialOffersPreview ? 'favourite-trial' : isYouthPreview || isTrialPreview || isClubTrialPreview ? 'youth' : 'favourite-first-team',
     seasonsAtCurrentClub: preview === 'end' ? 10 : promoteSummary ? 1 : 3,
     nationality: preview === 'mls' ? 'united-states' : preview === 'saudi' ? 'saudi-arabia' : preview === 'championship-transfer' ? 'england' : 'spain',
     nationalTeam,

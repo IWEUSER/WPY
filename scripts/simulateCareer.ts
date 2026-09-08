@@ -1248,9 +1248,9 @@ if ((blankOffers.offers ?? []).some((o) => (getClub(o.clubId)?.tier ?? 1) !== 5)
   console.error('a 0.00 trial ratio must only attract lower-level clubs');
   process.exitCode = 1;
 }
-const madrid = getClub('real-madrid');
-if (madrid) {
-  let favourite = beginFavouriteClubTrial(madrid);
+const favouriteClub = getClub('real-madrid');
+if (favouriteClub) {
+  let favourite = beginFavouriteClubTrial(favouriteClub);
   favourite = applyTrialMatch(favourite, 0);
   favourite = applyTrialMatch(favourite, 0);
   favourite = applyTrialMatch(favourite, 0);
@@ -1259,7 +1259,7 @@ if (madrid) {
   if (
     favRetry.exhausted
     || favRetry.opening.trialClubId === 'real-madrid'
-    || favRetry.opening.trialTier !== madrid.tier
+    || favRetry.opening.trialTier !== favouriteClub.tier
   ) {
     console.error('missing a favourite-club trial must offer two more looks at the same level, not a forced loan');
     process.exitCode = 1;
