@@ -143,8 +143,14 @@ export interface OpeningCampaign {
   trialClubId: string | null;
   trialTier: ClubTier | null;
   rejectedClubIds: string[];
-  /** Best goals/games across completed 3-game trials at this level. */
+  /** Best goals/games across completed 3-game trials. */
   bestTrialRatio: number;
+  /** First trial band — after three misses the player drops one level. */
+  openingTier: ClubTier | null;
+  /** Country of the original favourite club, or the youth nationality country. */
+  originCountry: string | null;
+  /** Favourite club the player first trialled at, when that path was used. */
+  originClubId: string | null;
   /** Goals scored at the U16 tournament. Kept after the club trial starts. */
   youthGoals: number;
 }

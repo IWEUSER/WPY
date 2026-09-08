@@ -471,6 +471,8 @@ function finishOpeningMatch(state: CareerState): Partial<CareerState> {
     bestRatio: failed.opening.bestTrialRatio ?? 0,
     nationality: nationId,
     excludeIds: failed.opening.rejectedClubIds,
+    homeCountry: failed.opening.originCountry,
+    minFromCountry: 4,
   });
   return {
     openingCampaign: failed.opening,
@@ -1549,7 +1551,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 26,
+      version: 27,
       migrate: (persisted) => {
         const state = persisted as Partial<CareerState>;
         const sim = state.seasonSim;
@@ -1591,6 +1593,9 @@ export const useCareerStore = create<CareerStore>()(
                 ...state.openingCampaign,
                 bestTrialRatio: state.openingCampaign.bestTrialRatio ?? 0,
                 rejectedClubIds: state.openingCampaign.rejectedClubIds ?? [],
+                openingTier: state.openingCampaign.openingTier ?? state.openingCampaign.trialTier ?? null,
+                originCountry: state.openingCampaign.originCountry ?? null,
+                originClubId: state.openingCampaign.originClubId ?? null,
               }
             : null,
           careerStart: state.careerStart ?? null,

@@ -222,7 +222,7 @@ export function drawPitch(ctx: CanvasRenderingContext2D, view: PitchView, time: 
 
   const stripeCount = quality === 'worn' ? 7 : 9;
   const stripeLight = quality === 'elite' ? 'rgba(255,255,255,0.055)' : quality === 'worn' ? 'rgba(255,255,255,0.018)' : 'rgba(255,255,255,0.035)';
-  const stripeDark = quality === 'elite' ? 'rgba(0,0,0,0.045)' : quality === 'worn' ? 'rgba(40,24,8,0.08)' : 'rgba(0,0,0,0.03)';
+  const stripeDark = quality === 'elite' ? 'rgba(0,0,0,0.045)' : 'rgba(0,0,0,0.03)';
   if (opts?.stripes) {
     for (let i = 0; i < stripeCount; i++) {
       const t0 = i / stripeCount;
@@ -234,23 +234,6 @@ export function drawPitch(ctx: CanvasRenderingContext2D, view: PitchView, time: 
       ctx.lineTo(lerp(0, w, t0), vanishY);
       ctx.closePath();
       ctx.fillStyle = i % 2 === 0 ? stripeLight : stripeDark;
-      ctx.fill();
-    }
-  }
-
-  if (quality === 'tired' || quality === 'worn') {
-    const rng = mulberry32(hashKey(opts?.seed ?? `pitch-${quality}`));
-    const patches = quality === 'worn' ? 9 : 4;
-    for (let i = 0; i < patches; i++) {
-      const px = w * (0.12 + rng() * 0.76);
-      const py = grassTop + (h - grassTop) * (0.18 + rng() * 0.72);
-      const rx = w * (0.04 + rng() * (quality === 'worn' ? 0.09 : 0.05));
-      const ry = rx * (0.35 + rng() * 0.3);
-      ctx.beginPath();
-      ctx.ellipse(px, py, rx, ry, rng() * 0.6 - 0.3, 0, Math.PI * 2);
-      ctx.fillStyle = quality === 'worn'
-        ? `rgba(${90 + rng() * 40 | 0},${70 + rng() * 30 | 0},${28 + rng() * 18 | 0},${(0.22 + rng() * 0.22).toFixed(3)})`
-        : `rgba(70,90,40,${(0.12 + rng() * 0.12).toFixed(3)})`;
       ctx.fill();
     }
   }
@@ -1189,24 +1172,4 @@ export function drawTrail(ctx: CanvasRenderingContext2D, points: { x: number; y:
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
-}
-
-function hashKey(key: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < key.length; i++) {
-    h ^= key.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
-function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
 }

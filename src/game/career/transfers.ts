@@ -90,9 +90,10 @@ function pickClubsFromTier(
   excludeIds: string[],
   nationality?: string | null,
   minFromCountry = 1,
+  homeCountry?: string | null,
 ): Club[] {
   const preferred = tierPool(tier, excludeIds);
-  const country = countryForNationality(nationality);
+  const country = homeCountry ?? countryForNationality(nationality);
   const extraHome = sameTierInCountry(tier, country, excludeIds);
   const minHome = country && extraHome.length > 0 ? Math.min(minFromCountry, count) : 0;
   return pickClubsBiasedToCountry(preferred, count, country, minHome, extraHome);
@@ -659,7 +660,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
   // role === 'first-team'
   const threshold = club.firstTeamGoalRatio;
   const ratioMet = ratio >= threshold;
-  const graceActive = seasonsAtCurrentClub === 0;
+  const graceActive = seasonsAtCurrentClub === 0 && params.careerStart !== 'favourite-first-team';
   const formRatio = offerFormRatio({ lastSeason: season, careerGoals, careerGames });
   const ratioTier = offerTierFromStanding({ ratio: formRatio, careerRatio: formRatio, blockElite });
 
@@ -842,11 +843,13 @@ function withTwilightMlsOffers(
   return next;
 }
 
-/** After three failed looks at one level, clubs at the best-ratio band offer a reserve deal. */
+/** After both trial bands fail, clubs at the best-ratio band offer a reserve deal. */
 export function trialFailTransferPending(params: {
   bestRatio: number;
   nationality: string | null;
   excludeIds?: string[];
+  homeCountry?: string | null;
+  minFromCountry?: number;
 }): PendingTransfer {
   const tier = tierForRatio(params.bestRatio);
   const clubs = pickClubsFromTier(
@@ -854,6 +857,8 @@ export function trialFailTransferPending(params: {
     TRANSFER_OFFER_COUNT,
     params.excludeIds ?? [],
     params.nationality,
+    params.minFromCountry ?? 4,
+    params.homeCountry,
   );
   const band = TIER_LABEL[tier].toLowerCase();
   return pendingFromOffers(

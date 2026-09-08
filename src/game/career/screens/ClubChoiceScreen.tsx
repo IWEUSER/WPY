@@ -5,7 +5,7 @@ import { useCareerStore } from '../store';
 const PATH_COPY: Record<string, { title: string; detail: string }> = {
   'favourite-trial': {
     title: 'Pick your club',
-    detail: 'Three academy games. Hit this club’s reserve ratio to sign. Miss and you get two more looks at the same level, then clubs bid from your best ratio. A later move back here is possible, not guaranteed.',
+    detail: 'Three academy games. Hit this club’s reserve ratio to sign. Miss three looks at this level and you trial one level down, with two clubs from this country when possible.',
   },
   'favourite-reserve': {
     title: 'Pick your club',

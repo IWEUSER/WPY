@@ -3,6 +3,7 @@ import { getNation } from '../international';
 import { fixtureTitle } from '../seasonSim';
 import { fixtureVenueLabel } from '../calendar';
 import { trialRatioRequired, TRIALS_AT_LEVEL } from '../trial';
+import { rejectedIdsAtTier } from '../openingFlow';
 import { useCareerStore } from '../store';
 
 export default function OpeningStatusScreen() {
@@ -36,8 +37,8 @@ export default function OpeningStatusScreen() {
       <div className="rounded-2xl bg-white/5 p-4" style={club ? { borderLeft: `4px solid ${club.color}` } : undefined}>
         <p className="text-xs uppercase tracking-wide text-white/40">
           {youth ? opening.youthName : `${club?.name ?? 'Club'} trial`}
-          {!youth && opening.rejectedClubIds.length < TRIALS_AT_LEVEL
-            ? ` · Look ${opening.rejectedClubIds.length + 1} of ${TRIALS_AT_LEVEL}`
+          {!youth && club
+            ? ` · Look ${rejectedIdsAtTier(opening, club.tier).length + 1} of ${TRIALS_AT_LEVEL}`
             : ''}
         </p>
         <h1 className="font-display text-2xl font-bold">

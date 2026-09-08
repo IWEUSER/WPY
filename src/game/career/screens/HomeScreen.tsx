@@ -12,7 +12,7 @@ const FAVOURITE_OPTIONS: {
   {
     kind: 'favourite-trial',
     title: 'Trial',
-    detail: 'Three academy games. Miss and you get two more trials at the same level. Fail all three and clubs bid from your best ratio. You can still move later, including toward this club.',
+    detail: 'Three academy games. Miss all three at this level and you get three more one level down. Fail those and clubs bid from your best ratio.',
   },
   {
     kind: 'favourite-reserve',
@@ -82,10 +82,10 @@ export default function HomeScreen({ onPractice }: { onPractice: () => void }) {
             <button
               type="button"
               onClick={() => setFavouriteOpen((open) => !open)}
-              className="rounded-2xl bg-white/12 px-6 py-4 text-lg font-bold text-white backdrop-blur transition active:scale-[0.98]"
+              className="rounded-2xl bg-sky-500/25 px-6 py-4 text-lg font-bold text-white ring-1 ring-sky-300/30 backdrop-blur transition active:scale-[0.98]"
             >
               Play for your favourite club
-              <span className="mt-1 block text-xs font-medium text-white/65">
+              <span className="mt-1 block text-xs font-medium text-white/70">
                 Skip the youth tournament and join any club
               </span>
             </button>
@@ -108,7 +108,7 @@ export default function HomeScreen({ onPractice }: { onPractice: () => void }) {
         <button
           type="button"
           onClick={onPractice}
-          className="rounded-2xl bg-white/10 px-6 py-4 text-base font-semibold text-white/90 backdrop-blur transition active:scale-[0.98]"
+          className="rounded-2xl bg-white/8 px-6 py-3 text-sm font-semibold text-white/75 backdrop-blur transition active:scale-[0.98]"
         >
           Free Practice
         </button>

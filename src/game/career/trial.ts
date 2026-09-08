@@ -21,28 +21,46 @@ export function tierForTrial(goals: number): ClubTier {
   return tierForYouthGoals(goals);
 }
 
-/** Three looks at one level, then ratio-based transfer offers. */
+/** Three looks at one level. Fail the first band and drop one level for three more. */
 export const TRIALS_AT_LEVEL = 3;
+/** After two bands (six looks) the player gets transfer offers. */
+export const TRIAL_LEVEL_ROUNDS = 2;
+/** Second-round trials prefer this many clubs from the original favourite country. */
+export const TRIAL_HOME_LOOKS = 2;
+
+export type TrialPickOptions = {
+  sameTierOnly?: boolean;
+  preferCountry?: string | null;
+  requireHome?: boolean;
+};
+
+function trialPickOptions(opts?: boolean | TrialPickOptions): TrialPickOptions {
+  if (opts == null) return {};
+  if (typeof opts === 'boolean') return { sameTierOnly: opts };
+  return opts;
+}
 
 export function pickTrialClub(
   tier: ClubTier,
   nationality?: string | null,
   excludeIds: string[] = [],
-  sameTierOnly = false,
+  opts: boolean | TrialPickOptions = false,
 ): Club {
+  const options = trialPickOptions(opts);
   const taken = new Set(excludeIds);
-  const maxStep = sameTierOnly ? 0 : 5 - tier;
+  const maxStep = options.sameTierOnly ? 0 : 5 - tier;
+  const preferCountry = options.preferCountry ?? countryForNationality(nationality);
   for (let step = 0; step <= maxStep; step++) {
     const candidateTier = (tier + step) as ClubTier;
     const pool = clubsByTier(candidateTier).filter((c) => !taken.has(c.id));
     if (pool.length === 0) continue;
-    const country = countryForNationality(nationality);
-    const home = country ? pool.filter((c) => c.country === country) : [];
-    const picks = pickClubsBiasedToCountry(home.length ? home : pool, 1, country, home.length ? 1 : 0);
+    const home = preferCountry ? pool.filter((c) => c.country === preferCountry) : [];
+    if (options.requireHome && home[0]) return home[Math.floor(Math.random() * home.length)] ?? home[0];
+    const picks = pickClubsBiasedToCountry(home.length ? home : pool, 1, preferCountry, home.length ? 1 : 0);
     if (picks[0]) return picks[0];
   }
   const leftover = CLUBS.find(
-    (c) => c.playable !== false && !taken.has(c.id) && (!sameTierOnly || c.tier === tier),
+    (c) => c.playable !== false && !taken.has(c.id) && (!options.sameTierOnly || c.tier === tier),
   );
   if (leftover) return leftover;
   return CLUBS.find((c) => c.playable !== false && !taken.has(c.id)) ?? CLUBS[0];

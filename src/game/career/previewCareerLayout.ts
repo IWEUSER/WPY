@@ -243,27 +243,27 @@ export function applyCareerLayoutPreview(): void {
     if (isYouthPreview) openingCampaign = youth;
     else if (isTrialPreview) openingCampaign = assignOpeningTrialClub(scored, openingNationId);
     else openingCampaign = beginClubTrial(scored, openingNationId, 2);
-  } else if (isTrialRetryPreview || isTrialOffersPreview) {
+  } else if (isTrialRetryPreview || isTrialOffersPreview || preview === 'trial-drop') {
     const madrid = getClub('real-madrid');
     if (madrid) {
       let look = beginFavouriteClubTrial(madrid);
-      look = applyTrialMatch(look, 0);
-      look = applyTrialMatch(look, 0);
-      look = applyTrialMatch(look, 0);
-      const first = failClubTrial(look, 'spain');
+      const failBlank = () => {
+        look = applyTrialMatch(look, 0);
+        look = applyTrialMatch(look, 0);
+        look = applyTrialMatch(look, 0);
+        const result = failClubTrial(look, 'spain');
+        look = result.opening;
+        return result;
+      };
+      const first = failBlank();
       if (isTrialRetryPreview || first.exhausted) {
         openingCampaign = first.opening;
+      } else if (preview === 'trial-drop') {
+        failBlank();
+        openingCampaign = failBlank().opening;
       } else {
-        let second = first.opening;
-        second = applyTrialMatch(second, 0);
-        second = applyTrialMatch(second, 0);
-        second = applyTrialMatch(second, 0);
-        const two = failClubTrial(second, 'spain');
-        let third = two.opening;
-        third = applyTrialMatch(third, 0);
-        third = applyTrialMatch(third, 0);
-        third = applyTrialMatch(third, 0);
-        openingCampaign = failClubTrial(third, 'spain').opening;
+        for (let i = 0; i < 5; i++) failBlank();
+        openingCampaign = look;
       }
     }
   }
@@ -569,12 +569,45 @@ export function applyCareerLayoutPreview(): void {
           contractYearsRemaining: 2,
         })
       : null;
+  const firstTeamMissPreview =
+    preview === 'first-team-miss'
+      ? resolveSeasonTransition({
+          season: season({
+            seasonNumber: 1,
+            clubId: 'real-madrid',
+            role: 'first-team',
+            matches: [],
+            goals: 8,
+            gamesPlayed: 38,
+            ratioMet: false,
+            age: 17,
+            leagueGoals: 8,
+            trophies: [],
+            topGoalscorer: false,
+            playerOfTheYear: false,
+            wonWpy: false,
+          }),
+          role: 'first-team',
+          clubId: 'real-madrid',
+          parentClubId: 'real-madrid',
+          seasonsAtCurrentClub: 0,
+          age: 17,
+          careerGoals: 8,
+          careerGames: 38,
+          nationality: 'spain',
+          loansUsed: 0,
+          contractYearsRemaining: 2,
+          careerStart: 'favourite-first-team',
+        })
+      : null;
   const trialOffersPreview =
     preview === 'trial-offers' && openingCampaign
       ? trialFailTransferPending({
           bestRatio: openingCampaign.bestTrialRatio ?? 0,
           nationality: 'spain',
           excludeIds: openingCampaign.rejectedClubIds,
+          homeCountry: openingCampaign.originCountry ?? 'Spain',
+          minFromCountry: 4,
         })
       : null;
   const pendingTransfer: PendingTransfer | null =
@@ -588,6 +621,8 @@ export function applyCareerLayoutPreview(): void {
       ? trialOffersPreview
       : isReserveLoansPreview
       ? reserveLoansPreview?.pendingTransfer ?? null
+      : preview === 'first-team-miss'
+      ? firstTeamMissPreview?.pendingTransfer ?? null
       : preview === 'expired'
       ? {
           kind: 'end-of-season',
@@ -650,7 +685,7 @@ export function applyCareerLayoutPreview(): void {
 
   useCareerStore.setState({
     phase:
-      isTrialPreview || isTrialRetryPreview || isTrialOffersPreview
+      isTrialPreview || isTrialRetryPreview || isTrialOffersPreview || preview === 'trial-drop'
         ? 'opening-brief'
         : isYouthPreview || isClubTrialPreview
           ? 'match'
@@ -658,7 +693,7 @@ export function applyCareerLayoutPreview(): void {
         ? 'career'
         : preview === 'club-choice'
         ? 'club-choice'
-        : preview === 'transfer' || preview === 'expired' || preview === 'renew' || preview === 'championship-transfer' || isReserveLoansPreview
+        : preview === 'transfer' || preview === 'expired' || preview === 'renew' || preview === 'championship-transfer' || isReserveLoansPreview || preview === 'first-team-miss'
           ? 'transfer-choice'
           : preview === 'reserve-promo'
             ? 'season-summary'
@@ -682,7 +717,7 @@ export function applyCareerLayoutPreview(): void {
       ? { shots: [], goals: 6, offeredClubIds: ['real-madrid', 'barcelona', 'atletico-madrid'] }
       : null,
     openingCampaign,
-    careerStart: isTrialRetryPreview || isTrialOffersPreview || preview === 'club-choice' ? 'favourite-trial' : isYouthPreview || isTrialPreview || isClubTrialPreview ? 'youth' : 'favourite-first-team',
+    careerStart: isTrialRetryPreview || isTrialOffersPreview || preview === 'trial-drop' || preview === 'club-choice' ? 'favourite-trial' : isYouthPreview || isTrialPreview || isClubTrialPreview ? 'youth' : 'favourite-first-team',
     seasonsAtCurrentClub: preview === 'end' ? 10 : promoteSummary ? 1 : 3,
     nationality: preview === 'mls' ? 'united-states' : preview === 'saudi' ? 'saudi-arabia' : preview === 'championship-transfer' ? 'england' : 'spain',
     nationalTeam,
