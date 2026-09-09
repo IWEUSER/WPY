@@ -765,7 +765,7 @@ export function applyCareerLayoutPreview(): void {
                   ? 'match'
                   : 'hub',
     age: isTrialPreview || isYouthPreview || isClubTrialPreview || isReservePreview ? 16 : preview === 'end' ? 36 : preview === 'championship-transfer' ? 20 : promoteSummary ? 22 : 19,
-    seasonNumber: isTrialPreview || isYouthPreview || isClubTrialPreview || isReservePreview ? 1 : preview === 'end' ? 21 : promoteSummary ? 6 : 4,
+    seasonNumber: isTrialPreview || isYouthPreview || isClubTrialPreview || isReservePreview || preview === 'hub-qualifying' ? 1 : preview === 'end' ? 21 : promoteSummary ? 6 : 4,
     clubId: isYouthPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : preview === 'match-psg' ? 'psg' : preview === 'championship-transfer' || promoteSummary ? 'leicester' : 'real-madrid',
     parentClubId: isYouthPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : preview === 'match-psg' ? 'psg' : preview === 'championship-transfer' || promoteSummary ? 'leicester' : 'real-madrid',
     role: isReservePreview || isTrialPreview || isYouthPreview || isClubTrialPreview ? 'reserve' : 'first-team',
