@@ -29,7 +29,6 @@ export default function OpeningBriefScreen() {
   const bestRatio = opening?.bestTrialRatio ?? trialRatio;
   const offerTier = tierForRatio(bestRatio);
   const offerBand = TIER_LABEL[offerTier].toLowerCase();
-  const homeLabel = opening?.originCountry ?? nation?.name;
 
   return (
     <div className="flex h-full w-full flex-col items-center gap-6 overflow-y-auto px-6 py-[max(1.5rem,env(safe-area-inset-top))] text-center text-white">
@@ -39,7 +38,7 @@ export default function OpeningBriefScreen() {
             ? opening?.youthName ?? 'Youth Championship'
             : offersReady
               ? 'Trials complete'
-              : `Look ${lookNumber} of ${TRIALS_AT_LEVEL}${club ? ` · ${TIER_LABEL[club.tier]}` : ''}`}
+              : `Trial ${lookNumber} of ${TRIALS_AT_LEVEL}${club ? ` · ${TIER_LABEL[club.tier]}` : ''}`}
         </p>
         <h1 className="font-display text-2xl font-bold">
           {afterYouth
@@ -50,12 +49,12 @@ export default function OpeningBriefScreen() {
         </h1>
         <p className="mt-2 max-w-sm text-sm text-white/60">
           {afterYouth
-            ? `${nation?.name ?? 'You'} played ${youthGames} ${youthGames === 1 ? 'game' : 'games'} at the ${opening?.youthName}. Scouts from ${club ? TIER_LABEL[club.tier].toLowerCase() : 'the next'} clubs were watching. Miss three looks at this level and you drop one level for three more trials.`
+            ? `${nation?.name ?? 'You'} played ${youthGames} ${youthGames === 1 ? 'game' : 'games'} at the ${opening?.youthName}. Scouts from ${club ? TIER_LABEL[club.tier].toLowerCase() : 'the next'} clubs were watching. Miss three trials at this level and you drop one level for three more trials.`
             : offersReady
-              ? `Your best trial ratio was ${bestRatio.toFixed(2)}. ${TIER_LABEL[offerTier]} clubs want to sign you${homeLabel ? `, with as many as possible from ${homeLabel}` : ''}.`
+              ? `Your best trial ratio was ${bestRatio.toFixed(2)}. ${TIER_LABEL[offerTier]} clubs want to sign you.`
               : steppedDown
-                ? `No club at that level signed you. Three looks now at ${TIER_LABEL[club!.tier].toLowerCase()} clubs, with ${homeLabel ? `${homeLabel} sides first` : 'home clubs first'} where possible.`
-                : `You did not hit the goal ratio they needed. This is look ${lookNumber} of ${TRIALS_AT_LEVEL} at this level. Fail all three and you trial one level down.`}
+                ? `No club at that level signed you.`
+                : `You did not hit the goal ratio they needed. This is trial ${lookNumber} of ${TRIALS_AT_LEVEL} at this level. Fail all three and you trial one level down.`}
         </p>
       </div>
 
@@ -85,8 +84,7 @@ export default function OpeningBriefScreen() {
         <div className="w-full max-w-sm rounded-2xl bg-white/5 p-4 text-left">
           <p className="text-xs uppercase tracking-wide text-white/40">What happens next</p>
           <p className="mt-2 text-sm text-white/70">
-            Offers come from {offerBand} clubs only — the band your best ratio earned. Four come from
-            {homeLabel ? ` ${homeLabel}` : ' your original country'} when that band has them. You sign a
+            Offers come from {offerBand} clubs only — the band your best ratio earned. You sign a
             2-year reserve deal at €1,000 a week.
           </p>
         </div>

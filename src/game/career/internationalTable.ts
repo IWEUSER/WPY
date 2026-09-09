@@ -18,6 +18,7 @@ export interface IntlGroupState {
   letter: string;
   teamIds: string[];
   rows: IntlTableRow[];
+  kind?: 'qualifying' | 'finals';
 }
 
 function emptyRow(nationId: string): IntlTableRow {
@@ -34,11 +35,16 @@ function emptyRow(nationId: string): IntlTableRow {
   };
 }
 
-export function createGroupState(letter: string, teamIds: string[]): IntlGroupState {
+export function createGroupState(
+  letter: string,
+  teamIds: string[],
+  kind: IntlGroupState['kind'] = 'finals',
+): IntlGroupState {
   return {
     letter,
     teamIds: [...teamIds],
     rows: teamIds.map(emptyRow),
+    kind,
   };
 }
 

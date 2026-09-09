@@ -9,7 +9,7 @@ import { clubEligibleForNationalTeam, callUpRatio, getNation, isSelectedForNatio
 import type { SeasonStandings } from '../matchEngine';
 import { displaySeasonLabel } from '../seasonDisplay';
 import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
-import { buildInternationalGroup, conferenceTable, fixtureTitle, internationalRoundLabel, nextPlayableFixture, type SeasonSimState } from '../seasonSim';
+import { conferenceTable, ensureInternationalGroup, fixtureTitle, internationalRoundLabel, nextPlayableFixture, type SeasonSimState } from '../seasonSim';
 import { groupPosition, sortGroupTable } from '../internationalTable';
 import { requiredGoalRatio } from '../transfers';
 import { useCareerStore } from '../store';
@@ -53,18 +53,9 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const nation = nationality ? getNation(nationality) : undefined;
   if (!club || !season) return null;
   const kit = clubKit(club);
-  const seasonSimWithGroup = (() => {
-    if (!seasonSim) return seasonSim;
-    if (seasonSim.internationalGroup) return seasonSim;
-    if (!seasonCalendar || !seasonSim.nationId || !seasonSim.internationalTournament) return seasonSim;
-    const internationalGroup = buildInternationalGroup(
-      seasonSim.nationId,
-      seasonSim.internationalTournament,
-      seasonCalendar,
-      seasonNumber,
-    );
-    return internationalGroup ? { ...seasonSim, internationalGroup } : seasonSim;
-  })();
+  const seasonSimWithGroup = seasonSim
+    ? ensureInternationalGroup(seasonSim, seasonCalendar, seasonNumber)
+    : seasonSim;
 
   const played = season.gamesPlayed;
   const goals = season.goals;
@@ -389,17 +380,17 @@ function InternationalCard({
       {campaignLine && <p className="mt-1 text-xs text-emerald-200/80">{campaignLine}</p>}
       {group && pos > 0 && (
         <p className="mt-1 text-xs text-white/60">
-          Group {group.letter} · {pos}{ordinal(pos)}
+          {group.kind === 'qualifying' ? 'Qualifying' : `Group ${group.letter}`} · {pos}{ordinal(pos)}
         </p>
       )}
-      {group && sim?.internationalStage && !['qualifying', 'not-selected', 'failed-qualifying'].includes(sim.internationalStage) && (
-        <table className="mt-3 w-full border-collapse text-left text-xs">
+      {group && sim?.internationalStage && sim.internationalStage !== 'not-selected' && (
+        <table className="mt-3 w-full table-fixed border-collapse text-left text-xs">
           <thead>
             <tr className="text-[10px] uppercase tracking-wide text-white/40">
-              <th className="pb-1 font-medium">Group {group.letter}</th>
-              <th className="pb-1 text-right font-medium">P</th>
-              <th className="pb-1 text-right font-medium">GD</th>
-              <th className="pb-1 text-right font-medium">Pts</th>
+              <th className="pb-1 font-medium">{group.kind === 'qualifying' ? 'Qualifying' : `Group ${group.letter}`}</th>
+              <th className="w-10 pb-1 text-right font-medium">P</th>
+              <th className="w-10 pb-1 text-right font-medium">GD</th>
+              <th className="w-10 pb-1 text-right font-medium">Pts</th>
             </tr>
           </thead>
           <tbody>
@@ -444,6 +435,9 @@ function SeasonCompetitions({ calendar }: { calendar: SeasonCalendar | null }) {
   const hasLeaguesCup = calendar.fixtures.some((f) => f.kind === 'leagues-cup');
   const hasPlayoffs = calendar.fixtures.some((f) => f.kind === 'playoff');
   const hasSuperCup = calendar.fixtures.some((f) => f.kind === 'super-cup');
+  const superCupLabel =
+    calendar.fixtures.find((f) => f.kind === 'super-cup' && f.domesticSuperCup)?.domesticSuperCupName
+    ?? (hasSuperCup ? 'Super Cup' : null);
   if (cupIds.size === 0 && !international && !domesticCup && !hasLeaguesCup && !hasPlayoffs && !hasSuperCup) {
     return null;
   }
@@ -470,9 +464,9 @@ function SeasonCompetitions({ calendar }: { calendar: SeasonCalendar | null }) {
           MLS Cup Playoffs
         </span>
       )}
-      {hasSuperCup && (
+      {superCupLabel && (
         <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/70">
-          Super Cup
+          {superCupLabel}
         </span>
       )}
       {[...cupIds].map((id) => (

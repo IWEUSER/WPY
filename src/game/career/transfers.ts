@@ -174,13 +174,17 @@ function pickSecondDivisionClubs(
   qualityTier: ClubTier,
 ): Club[] {
   const seen = new Set<string>(excludeIds);
-  const sameAll = clubsInLeague(fromLeague).filter((c) => !seen.has(c.id) && c.playable !== false);
+  const sameAll = clubsInLeague(fromLeague).filter(
+    (c) => !seen.has(c.id) && c.playable !== false && c.tier === qualityTier,
+  );
   const sameAfford = sameAll.filter((c) => canPayFee(c, fee));
   const higherLeague = promotionTarget(fromLeague);
   const valueTier = tierForMarketValue(marketValue);
   const minHigher = (blockElite ? Math.max(2, valueTier) : valueTier) as ClubTier;
   const higherAll = higherLeague
-    ? clubsInLeague(higherLeague).filter((c) => !seen.has(c.id) && c.playable !== false)
+    ? clubsInLeague(higherLeague).filter(
+        (c) => !seen.has(c.id) && c.playable !== false && c.tier === qualityTier,
+      )
     : [];
   const higherAtBand = higherAll.filter((c) => canPayFee(c, fee) && c.tier >= minHigher);
   const stepUpTier = minHigher > 1 ? ((minHigher - 1) as ClubTier) : null;
@@ -228,8 +232,12 @@ function pickPermanentClubs(
       marketValue ?? 0,
       blockElite,
       qualityTier,
-    );
-    if (local.length > 0) return local;
+    ).filter((c) => c.tier === qualityTier);
+    if (local.length >= TRANSFER_OFFER_COUNT) return local.slice(0, TRANSFER_OFFER_COUNT);
+    if (local.length > 0) {
+      const fill = pickClubsFromTier(qualityTier, TRANSFER_OFFER_COUNT, [...excludeIds, ...local.map((c) => c.id)], nationality);
+      return [...local, ...fill].slice(0, TRANSFER_OFFER_COUNT);
+    }
   }
   const country = countryForNationality(nationality);
   if (fee >= MEGA_TRANSFER_FEE && !blockElite && qualityTier === 1) {

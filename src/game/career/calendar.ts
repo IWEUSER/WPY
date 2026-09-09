@@ -62,6 +62,9 @@ export interface CalendarFixture {
   playoffRound?: PlayoffRound;
   leaguesCupStage?: LeaguesCupStage;
   superCupStage?: SuperCupStage;
+  /** One-off domestic super cup (Community Shield / Supercopa / …). */
+  domesticSuperCup?: boolean;
+  domesticSuperCupName?: string;
   internationalRound?:
     | 'qualifier'
     | 'friendly'
@@ -210,6 +213,9 @@ export interface BuildCalendarParams {
   includeLeaguesCup?: boolean;
   /** Saudi four-team Super Cup (semi-final + final). */
   includeSaudiSuperCup?: boolean;
+  /** Previous-season league winners vs cup winners. */
+  includeDomesticSuperCup?: boolean;
+  domesticSuperCupName?: string;
   league?: string;
   /** Override the club-tier default so last season's table can place the club. */
   continentalCup?: ContinentalCupId | null;
@@ -276,6 +282,8 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
     includePlayoffs = false,
     includeLeaguesCup = false,
     includeSaudiSuperCup = false,
+    includeDomesticSuperCup = false,
+    domesticSuperCupName,
   } = params;
   const cup =
     params.continentalCup !== undefined
@@ -302,12 +310,23 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
     }
   }
 
-  if (includeSaudiSuperCup) {
-    fixtures.push({ week: 1, kind: 'super-cup', superCupStage: 'semi-final', isDecisive: false });
-    fixtures.push({ week: 2, kind: 'super-cup', superCupStage: 'final', isDecisive: false, neutral: true });
-  } else if (cup && includeSuperCup) {
+  if (includeDomesticSuperCup) {
     fixtures.push({
       week: 1,
+      kind: 'super-cup',
+      domesticSuperCup: true,
+      domesticSuperCupName,
+      isDecisive: false,
+      neutral: true,
+    });
+  }
+  if (includeSaudiSuperCup) {
+    const saudiWeek = includeDomesticSuperCup ? 2 : 1;
+    fixtures.push({ week: saudiWeek, kind: 'super-cup', superCupStage: 'semi-final', isDecisive: false });
+    fixtures.push({ week: saudiWeek + 1, kind: 'super-cup', superCupStage: 'final', isDecisive: false, neutral: true });
+  } else if (cup && includeSuperCup) {
+    fixtures.push({
+      week: includeDomesticSuperCup ? 2 : 1,
       kind: 'super-cup',
       continentalCup: cup,
       superCupStage: 'final',

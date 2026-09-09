@@ -75,6 +75,7 @@ import {
   type LeagueStanding,
 } from './matchEngine';
 import { shuffle } from './util';
+import { describeDrawSettledOnPenalties, settleDrawOnPenalties } from './penalties';
 
 export type InternationalStage =
   | 'not-selected'
@@ -97,6 +98,7 @@ export interface SeasonHonours {
   leagueChampion: boolean;
   continentalChampion: ContinentalCupId | null;
   superCup: boolean;
+  domesticSuperCup: string | null;
   internationalChampion: InternationalTournamentId | null;
   domesticCup: DomesticCupId | null;
 }
@@ -135,6 +137,7 @@ export interface SeasonSimState {
   leaguesCupGroupPlayed: number;
   leaguesCupGroupPoints: number;
   superCupStage: SuperCupStage | 'eliminated' | 'champion' | 'not-entered';
+  domesticSuperCupStage: SuperCupStage | 'eliminated' | 'champion' | 'not-entered';
   /** Furthest international round played this season (set when going out or winning). */
   internationalReached: InternationalStage | null;
   /** Live group table for the player's World Cup / Euros / Nations League group. */
@@ -156,9 +159,18 @@ export interface HydrateSeasonParams {
   /** First-team career ratio. Trial and the reserve year are excluded. */
   careerGoalRatio: number;
   nationId: string | null;
-  qualifierCarry?: { tournament: InternationalTournamentId; points: number; played: number } | null;
+  qualifierCarry?: {
+    tournament: InternationalTournamentId;
+    points: number;
+    played: number;
+    opponentIds?: string[];
+    group?: IntlGroupState;
+  } | null;
   includeSuperCup?: boolean;
   superCupOpponentId?: string;
+  includeDomesticSuperCup?: boolean;
+  domesticSuperCupOpponentId?: string;
+  domesticSuperCupName?: string;
   /** League the club is actually playing in (top flight after promotion). */
   league?: string;
   /** Last season's table / defending title. Undefined falls back to club tier. */
@@ -182,6 +194,7 @@ export function emptyHonours(): SeasonHonours {
     leagueChampion: false,
     continentalChampion: null,
     superCup: false,
+    domesticSuperCup: null,
     internationalChampion: null,
     domesticCup: null,
   };
@@ -200,6 +213,7 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
       : clubContinentalCup(club);
   const isMls = league === 'MLS';
   const saudiSuper = !leagueOnly && league === 'Saudi Pro League' && qualifiesForSaudiSuperCup(club);
+  const domesticSuper = Boolean(!leagueOnly && params.includeDomesticSuperCup && params.domesticSuperCupName);
   const intlSeason = internationalCalendarSeason(seasonNumber, {
     leagueOnly,
     careerStart: params.careerStart,
@@ -249,6 +263,8 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
     // Liga MX sides fill the group; reserve years stay league-only.
     includeLeaguesCup: !leagueOnly && isMls,
     includeSaudiSuperCup: saudiSuper,
+    includeDomesticSuperCup: domesticSuper,
+    domesticSuperCupName: domesticSuper ? params.domesticSuperCupName : undefined,
     league,
     continentalCup: cup,
     internationalSeasonNumber: intlSeason,
@@ -261,6 +277,7 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
     tournament,
     campaign.qualifierGames,
     superCupOpponentId,
+    params.domesticSuperCupOpponentId,
     league,
     params.excludeQualifierIds,
     params.rng,
@@ -273,8 +290,9 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
   const domesticCup = calendar.domesticCup ?? null;
   const hasFriendlies = calendar.fixtures.some((f) => f.internationalRound === 'friendly');
   const titleRival = pickTitleRival(club, league);
+  const carryGroup = carryMatches ? qualifierCarry?.group ?? null : null;
   const internationalGroup = nationId && tournament && internationalSelected
-    ? buildInternationalGroup(nationId, tournament, calendar, seasonNumber)
+    ? (carryGroup ?? buildInternationalGroup(nationId, tournament, calendar, seasonNumber, startsAtTournament ? 'finals' : 'qualifying'))
     : null;
 
   return {
@@ -312,7 +330,8 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
       leaguesCupStage: !leagueOnly && isMls ? 'group' : 'not-entered',
       leaguesCupGroupPlayed: 0,
       leaguesCupGroupPoints: 0,
-      superCupStage: saudiSuper ? 'semi-final' : 'not-entered',
+      superCupStage: saudiSuper ? 'semi-final' : (includeSuperCup && cup && clubConfederation === 'UEFA' ? 'final' : 'not-entered'),
+      domesticSuperCupStage: domesticSuper ? 'final' : 'not-entered',
       internationalReached: null,
       internationalGroup,
       friendlyPlayed: 0,
@@ -384,17 +403,75 @@ export function buildInternationalGroup(
   tournament: InternationalTournamentId,
   calendar: SeasonCalendar,
   seasonNumber: number,
+  prefer: 'qualifying' | 'finals' | 'auto' = 'auto',
 ): IntlGroupState | null {
-  const groupOpp = calendar.fixtures
-    .filter((f) => f.kind === 'international' && f.internationalRound === 'group' && f.opponentId)
-    .map((f) => f.opponentId!)
-    .filter((id, i, arr) => arr.indexOf(id) === i);
+  const uniqueIds = (round: NonNullable<CalendarFixture['internationalRound']>) =>
+    calendar.fixtures
+      .filter((f) => f.kind === 'international' && f.internationalRound === round && f.opponentId)
+      .map((f) => f.opponentId!)
+      .filter((id, i, arr) => arr.indexOf(id) === i);
+  const groupOpp = uniqueIds('group');
+  const qualOpp = uniqueIds('qualifier');
+  const useQualifying =
+    prefer === 'qualifying' || (prefer === 'auto' && groupOpp.length === 0 && qualOpp.length > 0);
+  if (useQualifying && qualOpp.length > 0) {
+    const teams = [nationId, ...qualOpp];
+    return simulateRestOfGroup(
+      createGroupState('Q', teams, 'qualifying'),
+      nationId,
+      `${seasonNumber}-${tournament}-qualifying`,
+    );
+  }
   if (groupOpp.length === 0) return null;
   let letter = 'A';
   if (tournament === 'nations-league') letter = nationsLeagueGroupLetter(nationId) ?? 'A';
   else if (tournament === 'euro') letter = euroGroupForNation(nationId, seasonNumber)?.letter ?? 'A';
   const teams = [nationId, ...groupOpp];
-  return simulateRestOfGroup(createGroupState(letter, teams), nationId, `${seasonNumber}-${tournament}-${letter}`);
+  return simulateRestOfGroup(
+    createGroupState(letter, teams, 'finals'),
+    nationId,
+    `${seasonNumber}-${tournament}-${letter}`,
+  );
+}
+
+export function internationalGroupPrefer(
+  stage: InternationalStage | null | undefined,
+): 'qualifying' | 'finals' | 'auto' {
+  if (stage === 'qualifying' || stage === 'failed-qualifying') return 'qualifying';
+  if (!stage || stage === 'not-selected' || stage === 'qualified') return 'auto';
+  return 'finals';
+}
+
+function groupMatchesPrefer(
+  group: IntlGroupState | null | undefined,
+  prefer: 'qualifying' | 'finals' | 'auto',
+): boolean {
+  if (!group) return false;
+  if (prefer === 'auto') return true;
+  if (prefer === 'qualifying') return group.kind === 'qualifying';
+  return group.kind !== 'qualifying';
+}
+
+/**
+ * Existing saves often have no table, or a finals group left over while still
+ * qualifying. Rebuild from the calendar so a restart still shows the right one.
+ */
+export function ensureInternationalGroup(
+  sim: SeasonSimState,
+  calendar: SeasonCalendar | null | undefined,
+  seasonNumber: number,
+): SeasonSimState {
+  if (!calendar || !sim.nationId || !sim.internationalTournament) return sim;
+  const prefer = internationalGroupPrefer(sim.internationalStage);
+  if (groupMatchesPrefer(sim.internationalGroup, prefer)) return sim;
+  const internationalGroup = buildInternationalGroup(
+    sim.nationId,
+    sim.internationalTournament,
+    calendar,
+    seasonNumber,
+    prefer,
+  );
+  return internationalGroup ? { ...sim, internationalGroup } : sim;
 }
 
 export function syncInternationalCalendar(calendar: SeasonCalendar, sim: SeasonSimState): SeasonCalendar {
@@ -428,6 +505,7 @@ function assignOpponentsAndChances(
   tournament: InternationalTournamentId | null,
   qualifierGames: number,
   superCupOpponentId?: string,
+  domesticSuperCupOpponentId?: string,
   league?: string,
   excludeQualifierIds?: string[],
   rng: () => number = Math.random,
@@ -509,7 +587,8 @@ function assignOpponentsAndChances(
     } else if (f.kind === 'super-cup') {
       const saudiOpp = saudiSuperRivals[superI % Math.max(1, saudiSuperRivals.length)];
       if (f.superCupStage) superI += 1;
-      const opp = (superCupOpponentId ? getClub(superCupOpponentId) : undefined)
+      const assignedId = f.domesticSuperCup ? domesticSuperCupOpponentId : superCupOpponentId;
+      const opp = (assignedId ? getClub(assignedId) : undefined)
         ?? (saudiSuperRivals.length > 0 && f.superCupStage ? saudiOpp : undefined)
         ?? (euroRivals[0] ? getClub(euroRivals[0]) : undefined);
       if (opp) {
@@ -705,12 +784,12 @@ export function remainingPlayableCount(calendar: SeasonCalendar, sim: SeasonSimS
 export function shouldSkipFixture(fixture: CalendarFixture, sim: SeasonSimState): boolean {
   if (fixture.kind === 'rest') return true;
   if (fixture.kind === 'super-cup') {
-    if (sim.superCupStage === 'not-entered' || sim.superCupStage === 'eliminated' || sim.superCupStage === 'champion') {
-      return fixture.superCupStage !== undefined;
+    if (fixture.domesticSuperCup) {
+      return (sim.domesticSuperCupStage ?? 'not-entered') !== 'final';
     }
-    if (fixture.superCupStage) {
-      return fixture.superCupStage !== sim.superCupStage;
-    }
+    const stage = sim.superCupStage;
+    if (stage === 'not-entered' || stage === 'eliminated' || stage === 'champion') return true;
+    if (fixture.superCupStage) return fixture.superCupStage !== stage;
     return false;
   }
 
@@ -867,6 +946,15 @@ export function applyEuropeanResult(
   const next = { ...sim, europeanStanding: { ...sim.europeanStanding } };
 
   if (fixture.kind === 'super-cup') {
+    if (fixture.domesticSuperCup) {
+      if (result.outcome === 'win') {
+        next.domesticSuperCupStage = 'champion';
+        next.honours = { ...next.honours, domesticSuperCup: fixture.domesticSuperCupName ?? 'Super Cup' };
+      } else {
+        next.domesticSuperCupStage = 'eliminated';
+      }
+      return next;
+    }
     if (fixture.superCupStage === 'semi-final') {
       next.superCupStage = result.outcome === 'win' ? 'final' : 'eliminated';
       return next;
@@ -982,6 +1070,16 @@ export function applyInternationalResult(
     next.qualifierPlayed += 1;
     if (outcome === 'win') next.qualifierPoints += 3;
     else if (outcome === 'draw') next.qualifierPoints += 1;
+    if (next.internationalGroup?.kind === 'qualifying' && next.nationId && fixture.opponentId) {
+      next.internationalGroup = applyPlayerGroupResult(
+        next.internationalGroup,
+        next.nationId,
+        fixture.opponentId,
+        scoreFor,
+        scoreAgainst,
+        fixture.isHome !== false,
+      );
+    }
     if (next.qualifierPlayed >= next.qualifierTarget && next.nationId && next.internationalTournament) {
       if (next.internationalPhase === 'qualifiers') {
         return next;
@@ -994,6 +1092,9 @@ export function applyInternationalResult(
       );
       next.nationQualified = qualified;
       next.internationalStage = qualified ? 'friendly' : 'failed-qualifying';
+      if (qualified && next.internationalGroup?.kind === 'qualifying') {
+        next.internationalGroup = null;
+      }
     }
     return next;
   }
@@ -1113,8 +1214,9 @@ export function fixtureTitle(
     return `${cupName} ${cupRoundLabel(fixture.domesticCupStage)}${vs}`;
   }
   if (fixture.kind === 'super-cup') {
-    if (fixture.superCupStage === 'semi-final') return `Super Cup semi-final${vs}`;
-    return `Super Cup${vs}`;
+    const name = fixture.domesticSuperCupName ?? (fixture.domesticSuperCup ? 'Super Cup' : 'Super Cup');
+    if (fixture.superCupStage === 'semi-final') return `${name} semi-final${vs}`;
+    return `${name}${vs}`;
   }
   if (fixture.kind === 'continental-group') {
     const cup = fixture.continentalCup ? CONTINENTAL_CUPS[fixture.continentalCup].name : 'Europe';
@@ -1159,7 +1261,9 @@ export function trophyNameForFixture(
   if (fixture.kind === 'continental-final' && fixture.continentalCup) {
     return CONTINENTAL_CUPS[fixture.continentalCup].name;
   }
-  if (fixture.kind === 'super-cup' && (fixture.superCupStage === 'final' || !fixture.superCupStage)) return 'Super Cup';
+  if (fixture.kind === 'super-cup' && (fixture.superCupStage === 'final' || !fixture.superCupStage)) {
+    return fixture.domesticSuperCupName ?? 'Super Cup';
+  }
   if (fixture.kind === 'leagues-cup' && fixture.leaguesCupStage === 'final') return 'Leagues Cup';
   if (fixture.kind === 'playoff' && fixture.playoffRound === 'mls-cup') return 'MLS Cup';
   if (fixture.kind === 'domestic-cup' && fixture.domesticCupStage === 'final' && fixture.domesticCup) {
@@ -1171,36 +1275,64 @@ export function trophyNameForFixture(
   return null;
 }
 
-function settleOnPens(
-  result: ClubMatchResult,
-  us: number,
-  them: number,
-  rng: () => number,
-): ClubMatchResult {
-  if (result.outcome !== 'draw') return result;
-  const pWinPens = 1 / (1 + 10 ** ((them - us) / 18));
-  const won = rng() < pWinPens;
-  return won
-    ? { scoreFor: result.scoreFor + 1, scoreAgainst: result.scoreAgainst, outcome: 'win' }
-    : { scoreFor: result.scoreFor, scoreAgainst: result.scoreAgainst + 1, outcome: 'loss' };
+function isOneOffKnockout(fixture: CalendarFixture): boolean {
+  if (fixture.kind === 'domestic-cup') return true;
+  if (fixture.kind === 'playoff') return true;
+  if (fixture.kind === 'continental-final') return true;
+  if (fixture.kind === 'super-cup') return true;
+  if (fixture.kind === 'leagues-cup' && fixture.leaguesCupStage && fixture.leaguesCupStage !== 'group') return true;
+  if (fixture.kind === 'international') {
+    const round = fixture.internationalRound;
+    return (
+      round === 'round-of-32' ||
+      round === 'round-of-16' ||
+      round === 'quarter-final' ||
+      round === 'semi-final' ||
+      round === 'third-place' ||
+      round === 'final'
+    );
+  }
+  return false;
 }
 
-function settleCupIfDrawn(
-  result: ClubMatchResult,
-  playerClub: Club,
-  opponent: Club | undefined,
-  rng: () => number,
-): ClubMatchResult {
-  return settleOnPens(result, playerClub.strength, opponent?.strength ?? 70, rng);
-}
-
-function settleNationIfDrawn(
-  result: ClubMatchResult,
-  us: number,
-  them: number,
-  rng: () => number,
-): ClubMatchResult {
-  return settleOnPens(result, us, them, rng);
+function knockoutProgressNote(
+  fixture: CalendarFixture,
+  won: boolean,
+  tournament: InternationalTournamentId | null,
+): string | null {
+  if (fixture.kind === 'international' && fixture.internationalRound === 'final') {
+    return won ? 'won the tournament' : 'finished as runners-up';
+  }
+  if (fixture.kind === 'international' && fixture.internationalRound === 'third-place') {
+    return won ? 'won the third-place match' : 'finished fourth';
+  }
+  if (fixture.kind === 'international') {
+    const round = fixture.internationalRound;
+    if (
+      round === 'round-of-32' ||
+      round === 'round-of-16' ||
+      round === 'quarter-final' ||
+      round === 'semi-final'
+    ) {
+      if (!won) return 'out of the tournament';
+      const next = nextKnockoutStage(round, tournament);
+      if (next === 'champion') return 'through to the final';
+      return `through to the ${internationalRoundLabel(next as CalendarFixture['internationalRound']).toLowerCase()}`;
+    }
+  }
+  if (fixture.kind === 'domestic-cup' && fixture.domesticCupStage && fixture.domesticCupStage !== 'final') {
+    const following = nextCupStage(fixture.domesticCupStage);
+    const label = following === 'quarter-final' || following === 'semi-final' || following === 'final'
+      ? cupRoundLabel(following)
+      : 'next round';
+    return won ? `through to the ${label.toLowerCase()}` : 'out of the cup';
+  }
+  if (fixture.kind === 'domestic-cup' && fixture.domesticCupStage === 'final') {
+    return won ? null : 'lost the final';
+  }
+  return won ? null : fixture.kind === 'playoff' || fixture.kind === 'leagues-cup' || fixture.kind === 'super-cup'
+    ? 'out'
+    : null;
 }
 
 export function resolveFixture(
@@ -1241,27 +1373,10 @@ export function resolveFixture(
     result = { scoreFor: result.scoreAgainst, scoreAgainst: result.scoreAgainst, outcome: 'draw' };
   }
 
-  if (
-    fixture.kind === 'domestic-cup' ||
-    fixture.kind === 'leagues-cup' ||
-    fixture.kind === 'playoff' ||
-    fixture.kind === 'continental-final' ||
-    fixture.kind === 'super-cup'
-  ) {
-    result = settleCupIfDrawn(result, playerClub, clubOpp, rng);
-  }
-  if (
-    isInternational &&
-    fixture.internationalRound &&
-    fixture.internationalRound !== 'qualifier' &&
-    fixture.internationalRound !== 'group'
-  ) {
-    const us = sim.nationId ? nationStrength(sim.nationId) : 70;
-    const them = fixture.opponentId ? nationStrength(fixture.opponentId) : 70;
-    result = settleNationIfDrawn(result, us, them, rng);
-  }
-
   result = applyPlayerGoalsFloor(result, playerGoals);
+  if (isOneOffKnockout(fixture)) {
+    result = settleDrawOnPenalties(result, scored, rng);
+  }
 
   let next = { ...sim };
   if (fixture.kind === 'league' && fixture.opponentId) {
@@ -1286,10 +1401,17 @@ export function resolveFixture(
   }
 
   const playerNationName = sim.nationId ? getNation(sim.nationId)?.name : undefined;
-  const verb = result.outcome === 'win' ? 'Won' : result.outcome === 'draw' ? 'Drew' : 'Lost';
+  const pens = describeDrawSettledOnPenalties(result, result.scoreFor, result.scoreAgainst);
+  const verb = result.penalties ? null : result.outcome === 'win' ? 'Won' : result.outcome === 'draw' ? 'Drew' : 'Lost';
   const score = `${result.scoreFor}\u2013${result.scoreAgainst}`;
-  const summary = isInternational && playerNationName && fixture.opponentLabel
-    ? `${playerNationName} ${verb.toLowerCase()} ${score} vs ${fixture.opponentLabel}`
-    : `${verb} ${score}${fixture.opponentLabel ? ` vs ${fixture.opponentLabel}` : ''}`;
+  let summary = pens
+    ? isInternational && playerNationName && fixture.opponentLabel
+      ? `${playerNationName} ${pens} vs ${fixture.opponentLabel}`
+      : `You ${pens}${fixture.opponentLabel ? ` vs ${fixture.opponentLabel}` : ''}`
+    : isInternational && playerNationName && fixture.opponentLabel
+      ? `${playerNationName} ${verb!.toLowerCase()} ${score} vs ${fixture.opponentLabel}`
+      : `${verb} ${score}${fixture.opponentLabel ? ` vs ${fixture.opponentLabel}` : ''}`;
+  const progress = knockoutProgressNote(fixture, result.outcome === 'win', sim.internationalTournament);
+  if (progress) summary = `${summary} · ${progress}`;
   return { sim: next, result, summary };
 }

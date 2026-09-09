@@ -10,7 +10,7 @@ import { hydrateSeason } from './seasonSim';
 import { useCareerStore } from './store';
 import { resolveSeasonTransition, trialFailTransferPending, type PendingTransfer } from './transfers';
 import type { OpeningCampaign, SeasonRecord } from './types';
-import { createGroupState } from './internationalTable';
+import { applyPlayerGroupResult, createGroupState, simulateRestOfGroup } from './internationalTable';
 
 function season(partial: SeasonRecord): SeasonRecord {
   return partial;
@@ -354,6 +354,36 @@ export function applyCareerLayoutPreview(): void {
     sim.internationalStage = 'group';
     sim.internationalSelected = true;
     sim.internationalGroup = createGroupState('B', ['spain', 'germany', 'brazil', 'serbia']);
+  } else if (preview === 'hub-qualifying') {
+    const idx = calendar.fixtures.findIndex((f) => f.kind === 'international');
+    if (idx >= 0) sim.fixtureIndex = idx;
+    calendar.internationalTournament = 'world-cup';
+    sim.internationalTournament = 'world-cup';
+    sim.internationalPhase = 'qualifiers';
+    sim.internationalStage = 'qualifying';
+    sim.internationalSelected = true;
+    sim.qualifierPlayed = 2;
+    sim.qualifierTarget = 5;
+    sim.qualifierPoints = 4;
+    sim.internationalGroup = applyPlayerGroupResult(
+      applyPlayerGroupResult(
+        simulateRestOfGroup(
+          createGroupState('Q', ['spain', 'scotland', 'norway', 'georgia', 'cyprus'], 'qualifying'),
+          'spain',
+          'preview-qualifying',
+        ),
+        'spain',
+        'scotland',
+        2,
+        1,
+        true,
+      ),
+      'spain',
+      'norway',
+      1,
+      1,
+      false,
+    );
   } else if (preview === 'match-intl-ko') {
     const idx = calendar.fixtures.findIndex((f) => f.kind === 'international');
     if (idx >= 0) matchFixtureIndex = idx;
@@ -715,7 +745,7 @@ export function applyCareerLayoutPreview(): void {
             ? 'season-summary'
           : preview === 'club-offer'
             ? 'club-offer'
-          : preview === 'result'
+          : preview === 'result' || preview === 'result-pens'
             ? 'match-result'
             : preview === 'end'
               ? 'career-end'
@@ -792,8 +822,8 @@ export function applyCareerLayoutPreview(): void {
               trophies: ['Championship'],
               topGoalscorer: false,
               playerOfTheYear: true,
-              topGoalscorerReason: 'Golden boot target in Championship is 20 league goals; you scored 20, but another striker took the golden boot.',
-              playerOfTheYearReason: 'Won Championship and scored 20 league goals (bar 14).',
+              topGoalscorerReason: '20 league goals in Championship, but another striker took the golden boot.',
+              playerOfTheYearReason: 'Won Championship Player of the Year with 20 league goals.',
               wonWpy: false,
               earnings: 1_200_000,
               sponsorship: 0,
@@ -837,12 +867,16 @@ export function applyCareerLayoutPreview(): void {
               topGoalscorer: false,
             },
           }),
-    lastMatchSummary: 'Spain won 2–0 vs Italy · 2 goals from 2 chances',
+    lastMatchSummary: preview === 'result-pens'
+      ? 'Spain drew 1–1 vs France (won 5–4 on penalties) · through to the quarter-finals · 1 goal from 2 chances'
+      : 'Spain won 2–0 vs Italy · 2 goals from 2 chances',
     lastMatchResult: {
-      summary: 'Spain won 2–0 vs Italy · 2 goals from 2 chances',
-      isFinal: true,
+      summary: preview === 'result-pens'
+        ? 'Spain drew 1–1 vs France (won 5–4 on penalties) · through to the quarter-finals · 1 goal from 2 chances'
+        : 'Spain won 2–0 vs Italy · 2 goals from 2 chances',
+      isFinal: preview !== 'result-pens',
       won: true,
-      trophyName: 'European Championship',
+      trophyName: preview === 'result-pens' ? null : 'European Championship',
       afterPhase: 'season-summary',
     },
     weeklyWage: preview === 'end' ? 40_000 : promoteSummary && leicester ? weeklyWageForClub(leicester, value, 'Championship') : 140_000,

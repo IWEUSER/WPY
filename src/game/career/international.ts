@@ -42,11 +42,26 @@ export function emptyCompetitionRecord(
   return { tournament, qualifyingGames: 0, qualifyingGoals: 0, finalsGames: 0, finalsGoals: 0 };
 }
 
+export function isInternationalFinalsRound(
+  round: string | null | undefined,
+): boolean {
+  return (
+    round === 'group' ||
+    round === 'round-of-32' ||
+    round === 'round-of-16' ||
+    round === 'quarter-final' ||
+    round === 'semi-final' ||
+    round === 'third-place' ||
+    round === 'final'
+  );
+}
+
 export function recordInternationalAppearance(
   team: NationalTeamState,
   tournament: InternationalCompetitionRecord['tournament'] | null,
   isQualifier: boolean,
   goals: number,
+  isFinals = !isQualifier,
 ): NationalTeamState {
   if (!tournament) {
     return { ...team, caps: team.caps + 1, goals: team.goals + goals };
@@ -56,7 +71,7 @@ export function recordInternationalAppearance(
   if (isQualifier) {
     row.qualifyingGames += 1;
     row.qualifyingGoals += goals;
-  } else {
+  } else if (isFinals) {
     row.finalsGames += 1;
     row.finalsGoals += goals;
   }
@@ -179,6 +194,7 @@ export function bumpInternationalSeason(
   tournament: InternationalTournamentId | null,
   isQualifier: boolean,
   goals: number,
+  isFinals = !isQualifier,
 ): InternationalSeasonRecord {
   const next: InternationalSeasonRecord = rec
     ? { ...rec, tournament: rec.tournament ?? tournament }
@@ -186,7 +202,7 @@ export function bumpInternationalSeason(
   if (isQualifier) {
     next.qualifyingGames += 1;
     next.qualifyingGoals += goals;
-  } else {
+  } else if (isFinals) {
     next.finalsGames += 1;
     next.finalsGoals += goals;
   }
