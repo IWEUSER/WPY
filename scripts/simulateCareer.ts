@@ -47,7 +47,7 @@ import { aggregateContinental, aggregateDomesticSplit, recordClubAppearanceStats
 import { leaguePhaseOpponents } from '../src/game/career/continentalDraw';
 import { settleDrawOnPenalties } from '../src/game/career/penalties';
 import { planDomesticSuperCup } from '../src/game/career/domesticSuperCup';
-import { canWinLeague, fixtureTitle, hydrateSeason, leagueFixtureIsHome, nextPlayableFixture, pickTitleRival, remainingPlayableCount, resolveFixture, shouldSkipFixture } from '../src/game/career/seasonSim';
+import { canWinLeague, ensureInternationalGroup, fixtureTitle, hydrateSeason, leagueFixtureIsHome, nextPlayableFixture, pickTitleRival, remainingPlayableCount, resolveFixture, shouldSkipFixture } from '../src/game/career/seasonSim';
 import { nationCanProgressKnockout, nationCanWinMajor } from '../src/game/career/internationalTable';
 import {
   applyTrialMatch,
@@ -915,6 +915,35 @@ if (madridClub) {
   }
   if (youthFirst.sim.internationalGroup?.kind !== 'qualifying' || (youthFirst.sim.internationalGroup?.rows.length ?? 0) < 4) {
     console.error('World Cup qualifying must show a qualifying table');
+    process.exitCode = 1;
+  }
+  const mixedWc = hydrateSeason({
+    seasonNumber: 2,
+    club: madridClub,
+    careerGoalRatio: 0.8,
+    nationId: 'spain',
+  });
+  const strippedGroup = ensureInternationalGroup(
+    { ...mixedWc.sim, internationalGroup: null, internationalStage: 'qualifying' },
+    mixedWc.calendar,
+    2,
+  );
+  const wrongKind = ensureInternationalGroup(
+    {
+      ...mixedWc.sim,
+      internationalStage: 'qualifying',
+      internationalGroup: {
+        letter: 'A',
+        kind: 'finals',
+        teamIds: ['spain', 'germany', 'brazil', 'serbia'],
+        rows: [],
+      },
+    },
+    mixedWc.calendar,
+    2,
+  );
+  if (strippedGroup.internationalGroup?.kind !== 'qualifying' || wrongKind.internationalGroup?.kind !== 'qualifying') {
+    console.error('existing saves must rebuild a qualifying table after restart, not the World Cup finals group');
     process.exitCode = 1;
   }
   const friendlyRec = bumpInternationalSeason(undefined, 'world-cup', false, 1, false);

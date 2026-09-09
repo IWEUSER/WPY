@@ -44,7 +44,7 @@ import { buildSeasonStandings } from './matchEngine';
 import { isFinalFixture, isInternationalTournamentFixture } from './calendar';
 import {
   canWinLeague,
-  buildInternationalGroup,
+  ensureInternationalGroup,
   hydrateSeason,
   remainingPlayableCount,
   reassignLeagueHomeAway,
@@ -1621,7 +1621,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 27,
+      version: 28,
       migrate: (persisted) => {
         const state = persisted as Partial<CareerState>;
         const sim = state.seasonSim;
@@ -1693,51 +1693,46 @@ export const useCareerStore = create<CareerStore>()(
               }
             : null,
           seasonSim: sim
-            ? {
-                ...sim,
-                domesticCup: sim.domesticCup ?? null,
-                domesticCupStage: sim.domesticCupStage ?? 'not-entered',
-                internationalPhase: sim.internationalPhase ?? 'none',
-                nationId: sim.nationId ?? state.nationality ?? null,
-                qualifierPoints: sim.qualifierPoints ?? 0,
-                qualifierPlayed: sim.qualifierPlayed ?? 0,
-                qualifierTarget: sim.qualifierTarget ?? 0,
-                qualifierCarryPoints: sim.qualifierCarryPoints ?? 0,
-                qualifierCarryPlayed: sim.qualifierCarryPlayed ?? 0,
-                groupPoints: sim.groupPoints ?? 0,
-                groupPlayed: sim.groupPlayed ?? 0,
-                nationQualified: sim.nationQualified ?? false,
-                honours: {
-                  leagueChampion: sim.honours?.leagueChampion ?? false,
-                  continentalChampion: sim.honours?.continentalChampion ?? null,
-                  superCup: sim.honours?.superCup ?? false,
-                  domesticSuperCup: sim.honours?.domesticSuperCup ?? null,
-                  internationalChampion: sim.honours?.internationalChampion ?? null,
-                  domesticCup: sim.honours?.domesticCup ?? null,
+            ? ensureInternationalGroup(
+                {
+                  ...sim,
+                  domesticCup: sim.domesticCup ?? null,
+                  domesticCupStage: sim.domesticCupStage ?? 'not-entered',
+                  internationalPhase: sim.internationalPhase ?? 'none',
+                  nationId: sim.nationId ?? state.nationality ?? null,
+                  qualifierPoints: sim.qualifierPoints ?? 0,
+                  qualifierPlayed: sim.qualifierPlayed ?? 0,
+                  qualifierTarget: sim.qualifierTarget ?? 0,
+                  qualifierCarryPoints: sim.qualifierCarryPoints ?? 0,
+                  qualifierCarryPlayed: sim.qualifierCarryPlayed ?? 0,
+                  groupPoints: sim.groupPoints ?? 0,
+                  groupPlayed: sim.groupPlayed ?? 0,
+                  nationQualified: sim.nationQualified ?? false,
+                  honours: {
+                    leagueChampion: sim.honours?.leagueChampion ?? false,
+                    continentalChampion: sim.honours?.continentalChampion ?? null,
+                    superCup: sim.honours?.superCup ?? false,
+                    domesticSuperCup: sim.honours?.domesticSuperCup ?? null,
+                    internationalChampion: sim.honours?.internationalChampion ?? null,
+                    domesticCup: sim.honours?.domesticCup ?? null,
+                  },
+                  titleRivalId: sim.titleRivalId ?? null,
+                  rivalHomeOutcome: sim.rivalHomeOutcome ?? null,
+                  rivalAwayOutcome: sim.rivalAwayOutcome ?? null,
+                  playoffStage: sim.playoffStage ?? null,
+                  leaguesCupStage: sim.leaguesCupStage ?? 'not-entered',
+                  leaguesCupGroupPlayed: sim.leaguesCupGroupPlayed ?? 0,
+                  leaguesCupGroupPoints: sim.leaguesCupGroupPoints ?? 0,
+                  superCupStage: sim.superCupStage ?? 'not-entered',
+                  domesticSuperCupStage: sim.domesticSuperCupStage ?? 'not-entered',
+                  internationalReached: sim.internationalReached ?? null,
+                  internationalGroup: sim.internationalGroup ?? null,
+                  friendlyPlayed: sim.friendlyPlayed ?? 0,
+                  knockoutGamesScored: sim.knockoutGamesScored ?? 0,
                 },
-                titleRivalId: sim.titleRivalId ?? null,
-                rivalHomeOutcome: sim.rivalHomeOutcome ?? null,
-                rivalAwayOutcome: sim.rivalAwayOutcome ?? null,
-                playoffStage: sim.playoffStage ?? null,
-                leaguesCupStage: sim.leaguesCupStage ?? 'not-entered',
-                leaguesCupGroupPlayed: sim.leaguesCupGroupPlayed ?? 0,
-                leaguesCupGroupPoints: sim.leaguesCupGroupPoints ?? 0,
-                superCupStage: sim.superCupStage ?? 'not-entered',
-                domesticSuperCupStage: sim.domesticSuperCupStage ?? 'not-entered',
-                internationalReached: sim.internationalReached ?? null,
-                internationalGroup: sim.internationalGroup ?? (
-                  state.seasonCalendar && (sim.nationId ?? state.nationality) && sim.internationalTournament
-                    ? buildInternationalGroup(
-                        sim.nationId ?? state.nationality!,
-                        sim.internationalTournament,
-                        state.seasonCalendar,
-                        state.seasonNumber ?? 1,
-                      )
-                    : null
-                ),
-                friendlyPlayed: sim.friendlyPlayed ?? 0,
-                knockoutGamesScored: sim.knockoutGamesScored ?? 0,
-              }
+                state.seasonCalendar,
+                state.seasonNumber ?? 1,
+              )
             : null,
           liveMatch: state.liveMatch ?? null,
           formWindow: (state.seasonNumber ?? 1) < 2 ? [] : (state.formWindow ?? []),

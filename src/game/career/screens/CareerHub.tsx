@@ -9,7 +9,7 @@ import { clubEligibleForNationalTeam, callUpRatio, getNation, isSelectedForNatio
 import type { SeasonStandings } from '../matchEngine';
 import { displaySeasonLabel } from '../seasonDisplay';
 import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
-import { buildInternationalGroup, conferenceTable, fixtureTitle, internationalRoundLabel, nextPlayableFixture, type SeasonSimState } from '../seasonSim';
+import { conferenceTable, ensureInternationalGroup, fixtureTitle, internationalRoundLabel, nextPlayableFixture, type SeasonSimState } from '../seasonSim';
 import { groupPosition, sortGroupTable } from '../internationalTable';
 import { requiredGoalRatio } from '../transfers';
 import { useCareerStore } from '../store';
@@ -53,18 +53,9 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const nation = nationality ? getNation(nationality) : undefined;
   if (!club || !season) return null;
   const kit = clubKit(club);
-  const seasonSimWithGroup = (() => {
-    if (!seasonSim) return seasonSim;
-    if (seasonSim.internationalGroup) return seasonSim;
-    if (!seasonCalendar || !seasonSim.nationId || !seasonSim.internationalTournament) return seasonSim;
-    const internationalGroup = buildInternationalGroup(
-      seasonSim.nationId,
-      seasonSim.internationalTournament,
-      seasonCalendar,
-      seasonNumber,
-    );
-    return internationalGroup ? { ...seasonSim, internationalGroup } : seasonSim;
-  })();
+  const seasonSimWithGroup = seasonSim
+    ? ensureInternationalGroup(seasonSim, seasonCalendar, seasonNumber)
+    : seasonSim;
 
   const played = season.gamesPlayed;
   const goals = season.goals;

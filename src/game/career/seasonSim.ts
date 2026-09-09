@@ -434,6 +434,46 @@ export function buildInternationalGroup(
   );
 }
 
+export function internationalGroupPrefer(
+  stage: InternationalStage | null | undefined,
+): 'qualifying' | 'finals' | 'auto' {
+  if (stage === 'qualifying' || stage === 'failed-qualifying') return 'qualifying';
+  if (!stage || stage === 'not-selected' || stage === 'qualified') return 'auto';
+  return 'finals';
+}
+
+function groupMatchesPrefer(
+  group: IntlGroupState | null | undefined,
+  prefer: 'qualifying' | 'finals' | 'auto',
+): boolean {
+  if (!group) return false;
+  if (prefer === 'auto') return true;
+  if (prefer === 'qualifying') return group.kind === 'qualifying';
+  return group.kind !== 'qualifying';
+}
+
+/**
+ * Existing saves often have no table, or a finals group left over while still
+ * qualifying. Rebuild from the calendar so a restart still shows the right one.
+ */
+export function ensureInternationalGroup(
+  sim: SeasonSimState,
+  calendar: SeasonCalendar | null | undefined,
+  seasonNumber: number,
+): SeasonSimState {
+  if (!calendar || !sim.nationId || !sim.internationalTournament) return sim;
+  const prefer = internationalGroupPrefer(sim.internationalStage);
+  if (groupMatchesPrefer(sim.internationalGroup, prefer)) return sim;
+  const internationalGroup = buildInternationalGroup(
+    sim.nationId,
+    sim.internationalTournament,
+    calendar,
+    seasonNumber,
+    prefer,
+  );
+  return internationalGroup ? { ...sim, internationalGroup } : sim;
+}
+
 export function syncInternationalCalendar(calendar: SeasonCalendar, sim: SeasonSimState): SeasonCalendar {
   if (
     sim.internationalTournament !== 'nations-league'
