@@ -8,6 +8,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: false,
       includeAssets: ['favicon.png', 'apple-touch-icon.png'],
       manifest: {
         id: '/',
@@ -29,6 +30,9 @@ export default defineConfig({
         // Precache the app shell so it launches instantly (and works offline)
         // once installed to a home screen.
         globPatterns: ['**/*.{js,css,html,png,svg,ico}'],
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
       },
     }),
   ],
