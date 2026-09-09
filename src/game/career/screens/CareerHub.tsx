@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { calendarDomesticCup, calendarIncludesInternational, currentCalendarWeek, fixtureVenueLabel, type SeasonCalendar } from '../calendar';
 import { clubKit } from '../data/clubKits';
 import { getClub, leagueMatchWeeks } from '../data/clubs';
@@ -56,6 +57,10 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const seasonSimWithGroup = seasonSim
     ? ensureInternationalGroup(seasonSim, seasonCalendar, seasonNumber)
     : seasonSim;
+  useEffect(() => {
+    if (!seasonSimWithGroup || seasonSimWithGroup === seasonSim) return;
+    useCareerStore.setState({ seasonSim: seasonSimWithGroup });
+  }, [seasonSim, seasonSimWithGroup]);
 
   const played = season.gamesPlayed;
   const goals = season.goals;
