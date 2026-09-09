@@ -217,10 +217,11 @@ export function applyCareerLayoutPreview(): void {
   const club = getClub(previewClubId);
   if (!club) return;
   const { calendar, sim } = hydrateSeason({
-    seasonNumber: 4,
+    seasonNumber: preview === 'hub-qualifying' ? 1 : 4,
     club,
     careerGoalRatio: 0.78,
     nationId: preview === 'mls' ? 'united-states' : preview === 'saudi' ? 'saudi-arabia' : preview === 'match-psg' ? 'france' : 'spain',
+    careerStart: preview === 'hub-qualifying' ? 'favourite-first-team' : undefined,
   });
   if (preview === 'mls') {
     sim.leagueTable = rankLeagueTable(
