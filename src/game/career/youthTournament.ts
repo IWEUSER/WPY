@@ -1,7 +1,7 @@
 import type { CalendarFixture, SeasonCalendar } from './calendar';
 import type { Confederation } from './data/competitions';
 import { getNation } from './data/nations';
-import { fifaRank, nationStrength, nationsInConfederation } from './data/fifaRankings';
+import { fifaRank, knockoutRankCap, nationStrength, nationsInConfederation, pickMixedRankOpponents } from './data/fifaRankings';
 import { chancesForLeagueMatch } from './chanceEngine';
 import { simulateClubMatch } from './matchEngine';
 
@@ -30,44 +30,30 @@ export function youthTournamentForNation(nationId: string): { id: string; name: 
   return { ...YOUTH_TOURNAMENTS[confederation], confederation };
 }
 
-function shuffleIds(ids: string[], rng: () => number): string[] {
-  const copy = [...ids];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
+function youthNationPool(nationId: string, cap?: number) {
+  const nation = getNation(nationId);
+  const confederation = nation?.confederation ?? 'UEFA';
+  const all = nationsInConfederation(confederation).filter((n) => n.id !== nationId);
+  const capped = cap != null ? all.filter((n) => fifaRank(n.id) <= cap) : all;
+  return capped.length >= 4 ? capped : all;
 }
 
 export function pickYouthGroupOpponents(nationId: string, rng: () => number = Math.random): string[] {
-  const nation = getNation(nationId);
-  const confederation = nation?.confederation ?? 'UEFA';
-  const pool = nationsInConfederation(confederation).filter((n) => n.id !== nationId).map((n) => n.id);
-  const mixed = shuffleIds(pool, rng);
-  const high = mixed.filter((id) => fifaRank(id) <= 40);
-  const rest = mixed.filter((id) => fifaRank(id) > 40);
-  const picks: string[] = [];
-  if (high.length) picks.push(high[0]);
-  if (rest.length) picks.push(rest[0]);
-  for (const id of mixed) {
-    if (picks.length >= 3) break;
-    if (!picks.includes(id)) picks.push(id);
-  }
-  return picks.slice(0, 3);
+  const pool = youthNationPool(nationId, 32);
+  return pickMixedRankOpponents(nationId, 3, pool, { rng }).map((n) => n.id);
 }
 
 export function pickYouthKnockoutOpponent(
   nationId: string,
   usedIds: string[],
   rng: () => number = Math.random,
+  round: YouthKnockoutRound = 'round-of-16',
 ): string {
-  const nation = getNation(nationId);
-  const confederation = nation?.confederation ?? 'UEFA';
-  const used = new Set([nationId, ...usedIds]);
-  const pool = nationsInConfederation(confederation).filter((n) => !used.has(n.id)).map((n) => n.id);
-  const fallback = nationsInConfederation(confederation).filter((n) => n.id !== nationId).map((n) => n.id);
-  const source = pool.length > 0 ? pool : fallback;
-  return shuffleIds(source, rng)[0] ?? 'italy';
+  const cap = knockoutRankCap(round === 'third-place' ? 'semi-final' : round);
+  const pool = youthNationPool(nationId, cap);
+  const unused = pool.filter((n) => !usedIds.includes(n.id));
+  const source = unused.length > 0 ? unused : pool;
+  return pickMixedRankOpponents(nationId, 1, source, { rng })[0]?.id ?? 'italy';
 }
 
 function youthFixture(

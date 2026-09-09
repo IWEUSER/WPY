@@ -38,7 +38,7 @@ export default function OpeningStatusScreen() {
         <p className="text-xs uppercase tracking-wide text-white/40">
           {youth ? opening.youthName : `${club?.name ?? 'Club'} trial`}
           {!youth && club
-            ? ` · Look ${rejectedIdsAtTier(opening, club.tier).length + 1} of ${TRIALS_AT_LEVEL}`
+            ? ` · Trial ${rejectedIdsAtTier(opening, club.tier).length + 1} of ${TRIALS_AT_LEVEL}`
             : ''}
         </p>
         <h1 className="font-display text-2xl font-bold">

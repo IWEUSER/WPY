@@ -41,10 +41,12 @@ import { clubContinentalCup, internationalCalendarSeason, internationalCampaignF
 import { cupFromLeaguePosition, continentalQualificationForNextSeason } from '../src/game/career/europeanQualification';
 import { fifaRank, knockoutRankCap, nationsInConfederation, tournamentOpponents, worldCupKnockoutRankCap } from '../src/game/career/data/fifaRankings';
 import { countsTowardCareerRecord, displaySeasonLabel, displaySeasonNumber } from '../src/game/career/seasonDisplay';
-import { callUpRatio, isSelectedForNationalTeam, markInjuryMissedFinals, selectionRatioForNation } from '../src/game/career/international';
+import { bumpInternationalSeason, callUpRatio, isInternationalFinalsRound, isSelectedForNationalTeam, markInjuryMissedFinals, selectionRatioForNation } from '../src/game/career/international';
 import { missedChanceWinFactor, simulateClubMatch, simulateLeagueSeason } from '../src/game/career/matchEngine';
 import { aggregateContinental, aggregateDomesticSplit, recordClubAppearanceStats, seasonDomesticSplit } from '../src/game/career/seasonStats';
 import { leaguePhaseOpponents } from '../src/game/career/continentalDraw';
+import { settleDrawOnPenalties } from '../src/game/career/penalties';
+import { planDomesticSuperCup } from '../src/game/career/domesticSuperCup';
 import { canWinLeague, fixtureTitle, hydrateSeason, leagueFixtureIsHome, nextPlayableFixture, pickTitleRival, remainingPlayableCount, resolveFixture, shouldSkipFixture } from '../src/game/career/seasonSim';
 import { nationCanProgressKnockout, nationCanWinMajor } from '../src/game/career/internationalTable';
 import {
@@ -67,7 +69,7 @@ import {
   trialContractWon,
   TRIALS_AT_LEVEL,
 } from '../src/game/career/trial';
-import { nextYouthKnockoutRound, youthMaxGames } from '../src/game/career/youthTournament';
+import { nextYouthKnockoutRound, pickYouthGroupOpponents, pickYouthKnockoutOpponent, youthMaxGames } from '../src/game/career/youthTournament';
 import { consecutiveLoanSpells, LOAN_OFFER_COUNT, TRANSFER_OFFER_COUNT, offerFormRatio, offerTierFromStanding, pickLoanClubsForMiss, requiredGoalRatio, resolveSeasonTransition, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, trialFailTransferPending, tierForRatio } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
 import {
@@ -75,7 +77,6 @@ import {
   evaluateTopGoalscorer,
   goldenBootTarget,
   goldenBootWinChance,
-  playerOfTheYearGoalTarget,
 } from '../src/game/career/domesticAwards';
 import {
   evaluateInternationalTournamentAwards,
@@ -344,67 +345,74 @@ console.log(
   }),
 );
 
-console.log('\n--- Domestic awards: golden boot target + randomiser, POTY needs the league ---');
-const plTarget = goldenBootTarget('Premier League');
-const plPoty = playerOfTheYearGoalTarget('Premier League');
-console.log(`Premier League golden boot ${plTarget}, POTY bar ${plPoty}`);
-if (plTarget !== 25 || plPoty >= plTarget || plPoty < 16) {
-  console.error('Premier League golden boot must start at 25, with POTY below that');
-  process.exitCode = 1;
-}
-const below = Array.from({ length: 80 }, () => evaluateTopGoalscorer(22, 'Premier League').won);
-if (below.some(Boolean)) {
-  console.error('22 Premier League goals must never win the golden boot');
-  process.exitCode = 1;
-}
-const exactTrials = 2000;
-let exactWins = 0;
-for (let i = 0; i < exactTrials; i++) {
-  if (evaluateTopGoalscorer(plTarget, 'Premier League').won) exactWins += 1;
-}
-const exactRate = exactWins / exactTrials;
-console.log(`exactly ${plTarget} goals won ${exactWins}/${exactTrials} = ${(exactRate * 100).toFixed(1)}% (expect ~${(goldenBootWinChance(plTarget, plTarget) * 100).toFixed(0)}%)`);
-if (exactRate < 0.4 || exactRate > 0.6) {
-  console.error('25 Premier League goals must be a medium-chance golden boot, not a lock');
-  process.exitCode = 1;
-}
-let thirtyWins = 0;
-for (let i = 0; i < exactTrials; i++) {
-  if (evaluateTopGoalscorer(30, 'Premier League').won) thirtyWins += 1;
-}
-const thirtyRate = thirtyWins / exactTrials;
-let thirtyOneWins = 0;
-for (let i = 0; i < exactTrials; i++) {
-  if (evaluateTopGoalscorer(31, 'Premier League').won) thirtyOneWins += 1;
-}
-console.log(`30 PL goals ${(thirtyRate * 100).toFixed(1)}%, 31 ${(thirtyOneWins / exactTrials * 100).toFixed(1)}%`);
-if (thirtyRate < 0.78 || thirtyOneWins / exactTrials <= thirtyRate) {
-  console.error('30 Premier League goals should be likely, and 31 even likelier');
-  process.exitCode = 1;
-}
-const noTitle = evaluatePlayerOfTheYear({ leagueChampion: false, leagueGoals: 30, league: 'Premier League' });
-const titleLow = evaluatePlayerOfTheYear({ leagueChampion: true, leagueGoals: plPoty - 1, league: 'Premier League' });
-const titleHigh = evaluatePlayerOfTheYear({ leagueChampion: true, leagueGoals: plPoty, league: 'Premier League' });
-console.log('POTY no title', noTitle.won, 'title but low goals', titleLow.won, 'title + bar', titleHigh.won);
-if (noTitle.won || titleLow.won || !titleHigh.won) {
-  console.error('Player of the Year needs the league title and the lower goal bar');
-  process.exitCode = 1;
-}
-const lowerLeagues = ['Championship', 'La Liga 2', 'Serie B', '2. Bundesliga', 'Ligue 2'];
-for (const league of lowerLeagues) {
-  const target = goldenBootTarget(league);
-  if (target !== 20) {
-    console.error(`${league} golden boot must be 20, not ${target}`);
+console.log('\n--- Domestic awards: 20-goal golden boot table in every league ---');
+{
+  const leagues = ['Premier League', 'La Liga', 'Serie A', 'Championship', 'La Liga 2'];
+  for (const league of leagues) {
+    if (goldenBootTarget(league) !== 20) {
+      console.error(`${league} golden boot must start at 20, not ${goldenBootTarget(league)}`);
+      process.exitCode = 1;
+    }
+    if (evaluateTopGoalscorer(16, league, () => 0).won || evaluateTopGoalscorer(19, league, () => 0).won) {
+      console.error(`${league} must never award the golden boot below 20 goals`);
+      process.exitCode = 1;
+    }
+  }
+  const expected: Record<number, number> = {
+    20: 0.2, 21: 0.25, 22: 0.3, 23: 0.4, 24: 0.5, 25: 0.6, 26: 0.7, 27: 0.8, 28: 0.9, 29: 0.95, 30: 0.99,
+  };
+  for (const [goals, chance] of Object.entries(expected)) {
+    if (goldenBootWinChance(Number(goals)) !== chance) {
+      console.error(`${goals} goals must be ${chance} golden-boot chance, got ${goldenBootWinChance(Number(goals))}`);
+      process.exitCode = 1;
+    }
+  }
+  const trials = 2000;
+  let twenty = 0;
+  for (let i = 0; i < trials; i++) {
+    if (evaluateTopGoalscorer(20, 'La Liga').won) twenty += 1;
+  }
+  const twentyRate = twenty / trials;
+  console.log(`La Liga 20 goals ${(twentyRate * 100).toFixed(1)}% (expect ~20%)`);
+  if (twentyRate < 0.12 || twentyRate > 0.28) {
+    console.error('20 league goals must be about a 20% golden boot, same in every league');
     process.exitCode = 1;
   }
-  if (evaluateTopGoalscorer(17, league, () => 0).won || evaluateTopGoalscorer(19, league, () => 0).won) {
-    console.error(`${league} must never award the golden boot below 20 goals`);
+  const sixteenCopy = evaluateTopGoalscorer(16, 'La Liga', () => 0);
+  if (sixteenCopy.reason.toLowerCase().includes('target') || sixteenCopy.reason.includes('16 at')) {
+    console.error('golden boot copy must not publish a target');
     process.exitCode = 1;
   }
-}
-if (playerOfTheYearGoalTarget('Championship') !== 14) {
-  console.error('Championship Player of the Year should sit at 14 (70% of 20)');
-  process.exitCode = 1;
+  const potyNoTitle = evaluatePlayerOfTheYear({
+    leagueChampion: false,
+    leagueGoals: 24,
+    league: 'La Liga',
+    topGoalscorer: true,
+    rng: () => 0,
+  });
+  const potyNoTitleNever = evaluatePlayerOfTheYear({
+    leagueChampion: false,
+    leagueGoals: 24,
+    league: 'La Liga',
+    topGoalscorer: true,
+    rng: () => 0.99,
+  });
+  const potyLow = evaluatePlayerOfTheYear({
+    leagueChampion: true,
+    leagueGoals: 8,
+    league: 'La Liga',
+    topGoalscorer: false,
+    rng: () => 0,
+  });
+  console.log('POTY top scorer no title', potyNoTitle.won, potyNoTitleNever.won, 'low goals title', potyLow.won);
+  if (!potyNoTitle.won || potyNoTitleNever.won || potyLow.won) {
+    console.error('Player of the Year must be a chance roll, including for top scorers who did not win the league');
+    process.exitCode = 1;
+  }
+  if (potyNoTitle.reason.toLowerCase().includes('requires winning') || potyNoTitle.reason.toLowerCase().includes('bar ')) {
+    console.error('Player of the Year copy must not use a hard title rule or bar');
+    process.exitCode = 1;
+  }
 }
 
 console.log('\n--- Club match engine: better teams win more often, never always ---');
@@ -905,6 +913,39 @@ if (madridClub) {
     console.error('youth-path first-team Season 1 must be World Cup qualifying, not the tournament');
     process.exitCode = 1;
   }
+  if (youthFirst.sim.internationalGroup?.kind !== 'qualifying' || (youthFirst.sim.internationalGroup?.rows.length ?? 0) < 4) {
+    console.error('World Cup qualifying must show a qualifying table');
+    process.exitCode = 1;
+  }
+  const friendlyRec = bumpInternationalSeason(undefined, 'world-cup', false, 1, false);
+  if (friendlyRec.finalsGames !== 0 || !isInternationalFinalsRound('round-of-16') || isInternationalFinalsRound('friendly')) {
+    console.error('friendlies must not count as World Cup tournament games');
+    process.exitCode = 1;
+  }
+  const shield = planDomesticSuperCup({
+    nextClub: madridClub,
+    previousClubId: madridClub.id,
+    wonLeague: true,
+    wonCup: false,
+    previousLeague: 'La Liga',
+  });
+  if (!shield.include || shield.name !== 'Supercopa de España') {
+    console.error('La Liga title winners must play the Supercopa de España');
+    process.exitCode = 1;
+  }
+  const withShield = hydrateSeason({
+    seasonNumber: 3,
+    club: madridClub,
+    careerGoalRatio: 0.8,
+    nationId: 'spain',
+    includeDomesticSuperCup: true,
+    domesticSuperCupName: shield.name,
+    domesticSuperCupOpponentId: shield.opponentId,
+  });
+  if (!withShield.calendar.fixtures.some((f) => f.domesticSuperCup && f.domesticSuperCupName === 'Supercopa de España')) {
+    console.error('domestic super cups must be scheduled at the start of the next season');
+    process.exitCode = 1;
+  }
 
   const favFirst = hydrateSeason({
     seasonNumber: 1,
@@ -1151,6 +1192,41 @@ if (path.qualified) {
   }
 }
 
+{
+  const weak = new Set<string>();
+  for (let i = 0; i < 40; i++) {
+    const rng = () => (i * 17 + 3) % 1000 / 1000;
+    pickYouthGroupOpponents('spain', rng).forEach((id) => weak.add(id));
+    pickYouthKnockoutOpponent('spain', [], rng, 'round-of-16');
+    for (const round of ['round-of-16', 'quarter-final', 'semi-final', 'final'] as const) {
+      weak.add(pickYouthKnockoutOpponent('spain', ['france'], () => (i * 13 + round.length) % 97 / 97, round));
+    }
+  }
+  if (weak.has('gibraltar')) {
+    console.error('youth championships must not draw Gibraltar into groups or knockouts');
+    process.exitCode = 1;
+  }
+}
+
+{
+  const scoredWins = Array.from({ length: 400 }, () =>
+    settleDrawOnPenalties({ scoreFor: 1, scoreAgainst: 1, outcome: 'draw' }, true, Math.random).outcome === 'win',
+  ).filter(Boolean).length;
+  const missedWins = Array.from({ length: 400 }, () =>
+    settleDrawOnPenalties({ scoreFor: 1, scoreAgainst: 1, outcome: 'draw' }, false, Math.random).outcome === 'win',
+  ).filter(Boolean).length;
+  console.log('knockout pens scored/missed win rates', scoredWins / 400, missedWins / 400);
+  if (scoredWins / 400 < 0.7 || scoredWins / 400 > 0.9 || missedWins / 400 < 0.1 || missedWins / 400 > 0.3) {
+    console.error('knockout penalties must be 80% if the player scored and 20% if they missed');
+    process.exitCode = 1;
+  }
+  const settled = settleDrawOnPenalties({ scoreFor: 2, scoreAgainst: 2, outcome: 'draw' }, true, () => 0);
+  if (settled.scoreFor !== 2 || settled.scoreAgainst !== 2 || !settled.penalties?.won) {
+    console.error('penalties must keep the 90-minute score and mark who went through');
+    process.exitCode = 1;
+  }
+}
+
 const assigned = assignOpeningTrialClub({ ...path, goals: 7, youthGoals: 7 }, 'germany');
 if (!assigned.trialClubId || assigned.trialTier !== 1) {
   console.error('7 U16 goals must earn an elite trial');
@@ -1381,6 +1457,35 @@ if (saleLoans !== LOAN_OFFER_COUNT || salePerms.length !== TRANSFER_OFFER_COUNT)
 if (saleTiers.some((tier) => tier < 5) || salePerms.some((o) => o.clubId === 'west-ham')) {
   console.error('a 0.08 ratio must only attract lower-level clubs, never West Ham or a higher band');
   process.exitCode = 1;
+}
+
+{
+  const loanSale = resolveSeasonTransition({
+    season: {
+      ...dummySeason,
+      clubId: 'luton',
+      role: 'loan',
+      goals: 4,
+      gamesPlayed: 24,
+      leagueGoals: 4,
+    },
+    role: 'loan',
+    clubId: 'luton',
+    parentClubId: 'real-madrid',
+    seasonsAtCurrentClub: 1,
+    age: 19,
+    careerGoals: 8,
+    careerGames: 48,
+    nationality: 'spain',
+    loansUsed: 2,
+  });
+  const saleOffers = (loanSale.pendingTransfer?.offers ?? []).filter((o) => o.move === 'permanent');
+  const saleOfferTiers = [...new Set(saleOffers.map((o) => getClub(o.clubId)?.tier))];
+  console.log('reserve-path two-loan sale tiers', saleOfferTiers, loanSale.pendingTransfer?.kind);
+  if (loanSale.pendingTransfer?.kind !== 'sold' || saleOfferTiers.length !== 1) {
+    console.error('after two failed loans the sale window must stay on one ratio-earned band');
+    process.exitCode = 1;
+  }
 }
 
 console.log('\n--- Global club hierarchy: MLS never elite, Saudi above MLS ---');
@@ -2472,17 +2577,14 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
       (o) => o.move === 'permanent' && !o.renewal && o.clubId !== 'leicester',
     );
     const champLeagues = champPerms.map((o) => getClub(o.clubId)?.league);
-    console.log('Championship star offers', champPerms.length, champLeagues);
+    const champTiers = [...new Set(champPerms.map((o) => getClub(o.clubId)?.tier))];
+    console.log('Championship star offers', champPerms.length, champLeagues, 'tiers', champTiers);
     if (champPerms.length !== TRANSFER_OFFER_COUNT) {
       console.error('Championship transfer windows must table six permanent offers');
       process.exitCode = 1;
     }
-    if (champLeagues.some((league) => league !== 'Championship' && league !== 'Premier League')) {
-      console.error('a Championship player must only be offered Championship or Premier League clubs');
-      process.exitCode = 1;
-    }
-    if (!champLeagues.includes('Premier League')) {
-      console.error('a Championship golden-boot star must attract Premier League bids');
+    if (champTiers.length !== 1) {
+      console.error('Championship transfer windows must stay on one ratio-earned band');
       process.exitCode = 1;
     }
     const champModest = resolveSeasonTransition({
@@ -3504,36 +3606,48 @@ console.log('\n--- World Cup and continental tournament awards ---');
     internationalAwardWinChance('world-cup', 8) !== 0.9 ||
     internationalAwardWinChance('world-cup', 9) !== 0.9
   ) {
-    console.error('World Cup award chances must be 6/50, 7/75, 8+/90');
+    console.error('World Cup golden-boot chances must be 6/50, 7/75, 8+/90');
     process.exitCode = 1;
   }
-  if (
-    internationalAwardWinChance('euro', 4) !== 0 ||
-    internationalAwardWinChance('euro', 5) !== 0.5 ||
-    internationalAwardWinChance('euro', 6) !== 0.75 ||
-    internationalAwardWinChance('euro', 7) !== 0.9
-  ) {
-    console.error('continental award chances must be 5/50, 6/75, 7+/90');
+  const r16 = evaluateInternationalTournamentAwards({
+    tournament: 'world-cup',
+    finalsGoals: 11,
+    tournamentOutcome: 'round-of-16',
+    rng: () => 0,
+  });
+  const champion = evaluateInternationalTournamentAwards({
+    tournament: 'world-cup',
+    finalsGoals: 4,
+    tournamentOutcome: 'champion',
+    rng: () => 0,
+  });
+  const losingFinal = evaluateInternationalTournamentAwards({
+    tournament: 'world-cup',
+    finalsGoals: 8,
+    tournamentOutcome: 'final',
+    rng: () => 0,
+  });
+  let roll = 0;
+  const losingFinalMiss = evaluateInternationalTournamentAwards({
+    tournament: 'world-cup',
+    finalsGoals: 8,
+    tournamentOutcome: 'final',
+    rng: () => {
+      roll += 1;
+      return roll === 1 ? 0 : 0.99;
+    },
+  });
+  console.log('POTT r16/champion/losing final', r16.playerOfTheTournament, champion.playerOfTheTournament, losingFinal.playerOfTheTournament);
+  if (r16.playerOfTheTournament) {
+    console.error('Player of the Tournament must not be awarded after a last-16 exit');
     process.exitCode = 1;
   }
-  const always = evaluateInternationalTournamentAwards({
-    tournament: 'world-cup',
-    finalsGoals: 8,
-    rng: () => 0,
-  });
-  const never = evaluateInternationalTournamentAwards({
-    tournament: 'world-cup',
-    finalsGoals: 8,
-    rng: () => 0.99,
-  });
-  const below = evaluateInternationalTournamentAwards({
-    tournament: 'world-cup',
-    finalsGoals: 5,
-    rng: () => 0,
-  });
-  console.log('award rolls always/never/below', always, never, below);
-  if (!always.playerOfTheTournament || !always.topGoalscorer || never.playerOfTheTournament || never.topGoalscorer || below.playerOfTheTournament) {
-    console.error('tournament awards must roll independently against the chance table');
+  if (!champion.playerOfTheTournament) {
+    console.error('a World Cup winner must be eligible for Player of the Tournament');
+    process.exitCode = 1;
+  }
+  if (!losingFinal.topGoalscorer || !losingFinal.playerOfTheTournament || losingFinalMiss.playerOfTheTournament) {
+    console.error('a losing finalist who won the golden boot with 8 goals must roll a 50% Player of the Tournament chance');
     process.exitCode = 1;
   }
   const line = formatInternationalSeason({

@@ -260,4 +260,6 @@ export interface IntlQualifyingCarry {
   played: number;
   /** Qualifier opponents already faced in this split campaign. */
   opponentIds?: string[];
+  /** Live qualifying table carried into the second half of a split campaign. */
+  group?: import('./internationalTable').IntlGroupState;
 }

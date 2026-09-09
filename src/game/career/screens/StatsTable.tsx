@@ -31,7 +31,12 @@ export default function StatsTable({
   const visible = alwaysShowRows ? rows : rows.filter((row) => row.games > 0 || row.goals > 0);
   if (visible.length === 0 && !footer) return null;
   return (
-    <table className="mt-2 w-full border-collapse text-left text-sm">
+    <table className="mt-2 w-full table-fixed border-collapse text-left text-sm">
+      <colgroup>
+        <col />
+        <col className="w-[4.75rem]" />
+        <col className="w-[4.75rem]" />
+      </colgroup>
       {showHeader && (
         <thead>
           <tr className="text-[10px] uppercase tracking-wide text-white/40">

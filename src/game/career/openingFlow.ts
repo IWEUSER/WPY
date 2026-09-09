@@ -1,9 +1,10 @@
 import type { ClubMatchResult } from './matchEngine';
-import { simulateClubMatch } from './matchEngine';
+import { applyPlayerGoalsFloor, simulateClubMatch } from './matchEngine';
 import { getClub, type Club, type ClubTier } from './data/clubs';
 import { nationStrength } from './data/fifaRankings';
 import { fixtureIsHome, type CalendarFixture } from './calendar';
 import { countryForNationality } from './clubOffers';
+import { describeDrawSettledOnPenalties, settleDrawOnPenalties } from './penalties';
 import {
   buildClubTrialCalendar,
   nextTrialTier,
@@ -70,25 +71,39 @@ export function resolveOpeningMatch(
 ): ClubMatchResult {
   const isHome = fixtureIsHome(fixture);
   const chances = fixture.playerChances;
+  let result: ClubMatchResult;
   if (fixture.kind === 'international') {
     const us = nationId ? nationStrength(nationId) : 70;
     const them = fixture.opponentId ? nationStrength(fixture.opponentId) : 70;
-    return simulateClubMatch({ clubStrength: us, opponentStrength: them, isHome }, rng, playerGoals, chances);
+    result = simulateClubMatch({ clubStrength: us, opponentStrength: them, isHome }, rng, playerGoals, chances);
+  } else {
+    const club = trialClubId ? getClub(trialClubId) : undefined;
+    const opponent = fixture.opponentId ? getClub(fixture.opponentId) : undefined;
+    result = simulateClubMatch(
+      {
+        clubStrength: club?.strength ?? 70,
+        opponentStrength: opponent?.strength ?? 70,
+        clubTier: club?.tier,
+        opponentTier: opponent?.tier,
+        isHome,
+      },
+      rng,
+      playerGoals,
+      chances,
+    );
   }
-  const club = trialClubId ? getClub(trialClubId) : undefined;
-  const opponent = fixture.opponentId ? getClub(fixture.opponentId) : undefined;
-  return simulateClubMatch(
-    {
-      clubStrength: club?.strength ?? 70,
-      opponentStrength: opponent?.strength ?? 70,
-      clubTier: club?.tier,
-      opponentTier: opponent?.tier,
-      isHome,
-    },
-    rng,
-    playerGoals,
-    chances,
-  );
+  result = applyPlayerGoalsFloor(result, playerGoals);
+  const round = fixture.internationalRound;
+  const knockout =
+    fixture.kind === 'international' &&
+    round != null &&
+    round !== 'group' &&
+    round !== 'qualifier' &&
+    round !== 'friendly';
+  if (knockout) {
+    result = settleDrawOnPenalties(result, playerGoals > 0, rng);
+  }
+  return result;
 }
 
 export function applyYouthMatch(
@@ -124,7 +139,7 @@ export function applyYouthMatch(
     if (!qualified) {
       return { ...next, qualified: false, eliminated: true };
     }
-    const opponentId = pickYouthKnockoutOpponent(nationId, next.usedOpponentIds, rng);
+    const opponentId = pickYouthKnockoutOpponent(nationId, next.usedOpponentIds, rng, 'round-of-16');
     const ko = youthKnockoutFixture(nationId, opponentId, 'round-of-16', next.calendar.totalWeeks + 1);
     return {
       ...next,
@@ -143,7 +158,7 @@ export function applyYouthMatch(
   if (following === 'done') {
     return { ...next, eliminated: true };
   }
-  const opponentId = pickYouthKnockoutOpponent(nationId, next.usedOpponentIds, rng);
+  const opponentId = pickYouthKnockoutOpponent(nationId, next.usedOpponentIds, rng, following);
   const ko = youthKnockoutFixture(nationId, opponentId, following, next.calendar.totalWeeks + 1);
   return {
     ...next,
@@ -345,6 +360,8 @@ export function openingMatchSummary(
 ): string {
   const us = playerNationName && fixture.kind === 'international' ? playerNationName : 'You';
   const them = fixture.opponentLabel ?? 'Opposition';
+  const pens = describeDrawSettledOnPenalties(result, result.scoreFor, result.scoreAgainst);
+  if (pens) return `${us} ${pens} vs ${them}`;
   const verb = result.outcome === 'win' ? 'won' : result.outcome === 'draw' ? 'drew' : 'lost';
   return `${us} ${verb} ${result.scoreFor}–${result.scoreAgainst} vs ${them}`;
 }

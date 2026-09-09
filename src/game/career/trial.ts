@@ -21,9 +21,9 @@ export function tierForTrial(goals: number): ClubTier {
   return tierForYouthGoals(goals);
 }
 
-/** Three looks at one level. Fail the first band and drop one level for three more. */
+/** Three trials at one level. Fail the first band and drop one level for three more. */
 export const TRIALS_AT_LEVEL = 3;
-/** After two bands (six looks) the player gets transfer offers. */
+/** After two bands (six trials) the player gets transfer offers. */
 export const TRIAL_LEVEL_ROUNDS = 2;
 /** Second-round trials prefer this many clubs from the original favourite country. */
 export const TRIAL_HOME_LOOKS = 2;

@@ -5,6 +5,7 @@ import { rollInjuryAbsence } from './injury';
 import { recordClubAppearanceStats } from './seasonStats';
 import { FORM_WINDOW_GAMES, RETIREMENT_AGE, SEASON_LENGTH, STARTING_AGE } from './constants';
 import { planSuperCup } from './continentalDraw';
+import { planDomesticSuperCup } from './domesticSuperCup';
 import { getClub, leagueMatchWeeks } from './data/clubs';
 import { clubContinentalCup, internationalCalendarSeason, isInternationalFinalsSeason, type ContinentalCupId } from './data/competitions';
 import { continentalQualificationForNextSeason } from './europeanQualification';
@@ -27,6 +28,7 @@ import { countsTowardCareerRecord } from './seasonDisplay';
 import { trophyLabels } from './honoursDisplay';
 import {
   bumpInternationalSeason,
+  isInternationalFinalsRound,
   callUpRatio,
   createNationalTeamState,
   emptyInternationalSeason,
@@ -50,6 +52,7 @@ import {
   shouldSkipFixture,
   syncInternationalCalendar,
   trophyNameForFixture,
+  internationalRoundLabel,
   type LiveMatch,
   type SeasonSimState,
 } from './seasonSim';
@@ -175,6 +178,7 @@ function startSimulatedSeason(
     excludeQualifierIds?: string[];
     leagueOnly?: boolean;
     careerStart?: CareerStart | null;
+    domesticSuperCup?: { include: boolean; opponentId?: string; name?: string };
   },
 ): Pick<
   CareerState,
@@ -239,6 +243,9 @@ function startSimulatedSeason(
     qualifierCarry,
     includeSuperCup: leagueOnly ? false : superCup?.include,
     superCupOpponentId: leagueOnly ? undefined : superCup?.opponentId,
+    includeDomesticSuperCup: leagueOnly ? false : extras?.domesticSuperCup?.include,
+    domesticSuperCupOpponentId: leagueOnly ? undefined : extras?.domesticSuperCup?.opponentId,
+    domesticSuperCupName: leagueOnly ? undefined : extras?.domesticSuperCup?.name,
     league: league ?? club.league,
     continentalCup: leagueOnly ? null : extras?.continentalCup,
     excludeQualifierIds: leagueOnly ? undefined : extras?.excludeQualifierIds,
@@ -322,6 +329,7 @@ function attachSeasonAwards(state: CareerState): { season: SeasonRecord; wpyResu
     leagueChampion: sim?.honours.leagueChampion ?? false,
     leagueGoals: season.leagueGoals,
     league,
+    topGoalscorer: boot.won,
   });
   const international = snapshotInternationalOutcomes(
     season.international ?? emptyInternationalSeason(sim?.internationalTournament ?? null),
@@ -332,6 +340,7 @@ function attachSeasonAwards(state: CareerState): { season: SeasonRecord; wpyResu
     ? evaluateInternationalTournamentAwards({
         tournament: international.tournament!,
         finalsGoals: international.finalsGoals,
+        tournamentOutcome: international.tournamentOutcome,
       })
     : { playerOfTheTournament: false, topGoalscorer: false, chance: 0 };
   return {
@@ -382,15 +391,28 @@ function finishOpeningMatch(state: CareerState): Partial<CareerState> {
     const next = applyYouthMatch(campaign, fixture, result, live.goals, nationId);
     const done = youthTournamentComplete(next);
     const trophyName = youthTrophyName(next, fixture, result.outcome === 'win');
+    const nextRound = next.calendar.fixtures[next.fixtureIndex];
+    let youthSummary = summary;
+    if (fixture.internationalRound === 'group' && next.qualified && nextRound) {
+      youthSummary = `${summary} · through to the ${internationalRoundLabel(nextRound.internationalRound).toLowerCase()}`;
+    } else if (fixture.internationalRound === 'group' && next.eliminated) {
+      youthSummary = `${summary} · did not get out of the group`;
+    } else if (fixture.internationalRound && fixture.internationalRound !== 'group') {
+      if (next.eliminated || (done && result.outcome !== 'win' && fixture.internationalRound !== 'final')) {
+        youthSummary = `${summary} · ${nationName ?? 'You'} are out`;
+      } else if (nextRound && !done) {
+        youthSummary = `${summary} · through to the ${internationalRoundLabel(nextRound.internationalRound).toLowerCase()}`;
+      }
+    }
     if (done) {
       const assigned = assignOpeningTrialClub(next, nationId);
       return {
         openingCampaign: assigned,
         seasonCalendar: assigned.calendar,
         liveMatch: null,
-        lastMatchSummary: summary,
+        lastMatchSummary: youthSummary,
         lastMatchResult: {
-          summary,
+          summary: youthSummary,
           isFinal: fixture.internationalRound === 'final',
           won: result.outcome === 'win',
           trophyName,
@@ -403,9 +425,9 @@ function finishOpeningMatch(state: CareerState): Partial<CareerState> {
       openingCampaign: next,
       seasonCalendar: next.calendar,
       liveMatch: null,
-      lastMatchSummary: summary,
+      lastMatchSummary: youthSummary,
       lastMatchResult: {
-        summary,
+        summary: youthSummary,
         isFinal: fixture.internationalRound === 'final',
         won: result.outcome === 'win',
         trophyName,
@@ -556,7 +578,25 @@ function nextQualifyingCarry(
     points: sim.qualifierPoints + sim.qualifierCarryPoints,
     played: sim.qualifierPlayed + sim.qualifierCarryPlayed,
     opponentIds,
+    group: sim.internationalGroup?.kind === 'qualifying' ? sim.internationalGroup : undefined,
   };
+}
+
+function nextDomesticSuperCup(
+  nextClub: ReturnType<typeof getClub>,
+  previousClubId: string | null,
+  sim: CareerState['seasonSim'],
+  league: string | null | undefined,
+  role: PlayerRole,
+): { include: boolean; opponentId?: string; name?: string } {
+  if (!nextClub || role === 'reserve') return { include: false };
+  return planDomesticSuperCup({
+    nextClub,
+    previousClubId,
+    wonLeague: sim?.honours.leagueChampion ?? false,
+    wonCup: Boolean(sim?.honours.domesticCup),
+    previousLeague: league,
+  });
 }
 
 function recountCareerTotals(history: SeasonRecord[], current: SeasonRecord | null | undefined) {
@@ -811,6 +851,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
           sim.internationalTournament,
           fixture.internationalRound === 'qualifier',
           0,
+          isInternationalFinalsRound(fixture.internationalRound),
         );
         season = {
           ...season,
@@ -819,6 +860,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
             sim.internationalTournament,
             fixture.internationalRound === 'qualifier',
             0,
+            isInternationalFinalsRound(fixture.internationalRound),
           ),
         };
       }
@@ -1112,6 +1154,7 @@ export const useCareerStore = create<CareerStore>()(
                 sim.internationalTournament,
                 fixture.internationalRound === 'qualifier',
                 live.goals,
+                isInternationalFinalsRound(fixture.internationalRound),
               ),
               availability: applyMatchResult(nationalTeam.availability, scored),
             };
@@ -1127,6 +1170,7 @@ export const useCareerStore = create<CareerStore>()(
                   sim.internationalTournament,
                   fixture.internationalRound === 'qualifier',
                   live.goals,
+                  isInternationalFinalsRound(fixture.internationalRound),
                 ),
               }
             : updatedSeason;
@@ -1326,6 +1370,13 @@ export const useCareerStore = create<CareerStore>()(
                   previousCup: previousContinentalChampion,
                 })
               : { include: false };
+            const domesticSuperCup = nextDomesticSuperCup(
+              nextClub,
+              state.clubId,
+              state.seasonSim,
+              state.clubLeague ?? club?.league,
+              role,
+            );
             const dealYears = transition.immediate.contractYearsRemaining;
             const nextCup =
               clubId === state.clubId
@@ -1371,6 +1422,7 @@ export const useCareerStore = create<CareerStore>()(
                   continentalCup: nextCup,
                   excludeQualifierIds: qualifierExcludeIds(nationalTeam, intlQualifying?.opponentIds),
                   careerStart: state.careerStart,
+                  domesticSuperCup,
                 },
               ),
             };
@@ -1417,6 +1469,13 @@ export const useCareerStore = create<CareerStore>()(
                   previousCup: state.previousContinentalChampion,
                 })
               : { include: false };
+            const domesticSuperCup = nextDomesticSuperCup(
+              nextClub,
+              state.clubId,
+              state.seasonSim,
+              stay.clubLeague ?? state.clubLeague ?? nextClub?.league,
+              stay.role,
+            );
             const stayCup = state.qualifiedContinentalCup ?? (nextClub ? clubContinentalCup(nextClub) : null);
             return {
               pendingTransfer: null,
@@ -1448,6 +1507,7 @@ export const useCareerStore = create<CareerStore>()(
                   continentalCup: stayCup,
                   excludeQualifierIds: qualifierExcludeIds(state.nationalTeam, state.intlQualifying?.opponentIds),
                   careerStart: state.careerStart,
+                  domesticSuperCup,
                 },
               ),
             };
@@ -1473,6 +1533,13 @@ export const useCareerStore = create<CareerStore>()(
                 previousCup: state.previousContinentalChampion,
               })
             : { include: false };
+          const domesticSuperCup = nextDomesticSuperCup(
+            nextClub,
+            state.clubId,
+            state.seasonSim,
+            state.clubLeague ?? nextClub?.league,
+            role,
+          );
           const dealYears = takeLoan
             ? (offer?.contractYears && offer.contractYears > 0
               ? offer.contractYears
@@ -1535,6 +1602,7 @@ export const useCareerStore = create<CareerStore>()(
                 continentalCup: nextCup,
                 excludeQualifierIds: qualifierExcludeIds(state.nationalTeam, state.intlQualifying?.opponentIds),
                 careerStart: state.careerStart,
+                domesticSuperCup,
               },
             ),
           };
@@ -1621,6 +1689,7 @@ export const useCareerStore = create<CareerStore>()(
             ? {
                 ...state.intlQualifying,
                 opponentIds: state.intlQualifying.opponentIds ?? [],
+                group: state.intlQualifying.group,
               }
             : null,
           seasonSim: sim
@@ -1642,6 +1711,7 @@ export const useCareerStore = create<CareerStore>()(
                   leagueChampion: sim.honours?.leagueChampion ?? false,
                   continentalChampion: sim.honours?.continentalChampion ?? null,
                   superCup: sim.honours?.superCup ?? false,
+                  domesticSuperCup: sim.honours?.domesticSuperCup ?? null,
                   internationalChampion: sim.honours?.internationalChampion ?? null,
                   domesticCup: sim.honours?.domesticCup ?? null,
                 },
@@ -1653,6 +1723,7 @@ export const useCareerStore = create<CareerStore>()(
                 leaguesCupGroupPlayed: sim.leaguesCupGroupPlayed ?? 0,
                 leaguesCupGroupPoints: sim.leaguesCupGroupPoints ?? 0,
                 superCupStage: sim.superCupStage ?? 'not-entered',
+                domesticSuperCupStage: sim.domesticSuperCupStage ?? 'not-entered',
                 internationalReached: sim.internationalReached ?? null,
                 internationalGroup: sim.internationalGroup ?? (
                   state.seasonCalendar && (sim.nationId ?? state.nationality) && sim.internationalTournament

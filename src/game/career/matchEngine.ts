@@ -26,6 +26,8 @@ export interface ClubMatchResult {
   scoreFor: number;
   scoreAgainst: number;
   outcome: 'win' | 'draw' | 'loss';
+  /** Set when a knockout draw was settled from the spot. 90-minute scores stay. */
+  penalties?: { won: boolean; for: number; against: number };
 }
 
 /** Typical squad quality when a caller only knows tier. */
@@ -110,10 +112,12 @@ export function simulateClubMatch(
 /** The printed scoreline can never be below the goals the player actually scored. */
 export function applyPlayerGoalsFloor(result: ClubMatchResult, playerGoals: number): ClubMatchResult {
   if (playerGoals <= 0 || result.scoreFor >= playerGoals) {
+    if (result.penalties) return result;
     return { ...result, outcome: outcomeOf(result.scoreFor, result.scoreAgainst) };
   }
   const scoreFor = playerGoals;
   const scoreAgainst = result.scoreAgainst;
+  if (result.penalties) return { ...result, scoreFor, scoreAgainst };
   return { scoreFor, scoreAgainst, outcome: outcomeOf(scoreFor, scoreAgainst) };
 }
 
