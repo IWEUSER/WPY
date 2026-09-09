@@ -53,7 +53,7 @@ export default function OpeningBriefScreen() {
             : offersReady
               ? `Your best trial ratio was ${bestRatio.toFixed(2)}. ${TIER_LABEL[offerTier]} clubs want to sign you.`
               : steppedDown
-                ? `No club at that level signed you. Three trials now at ${TIER_LABEL[club!.tier].toLowerCase()} clubs.`
+                ? `No club at that level signed you.`
                 : `You did not hit the goal ratio they needed. This is trial ${lookNumber} of ${TRIALS_AT_LEVEL} at this level. Fail all three and you trial one level down.`}
         </p>
       </div>
