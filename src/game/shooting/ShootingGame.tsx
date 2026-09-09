@@ -214,8 +214,12 @@ function readDevStadium(): StadiumAppearance | null {
   };
 }
 
-function nextChance(clubStrength?: number, skinPalette: SkinPalette = 'any'): ChanceSetup {
-  const forcePenalty = readDevPenalty();
+function nextChance(
+  clubStrength?: number,
+  skinPalette: SkinPalette = 'any',
+  allowPenalties = true,
+): ChanceSetup {
+  const forcePenalty = allowPenalties && readDevPenalty();
   const forceDistance = readDevDistance();
   return rollChanceSetup({
     clubStrength,
@@ -223,6 +227,7 @@ function nextChance(clubStrength?: number, skinPalette: SkinPalette = 'any'): Ch
     forceDistanceM: forcePenalty ? undefined : (forceDistance ?? undefined),
     disableDefender: readDevDefenderOff(),
     skinPalette,
+    allowPenalties,
   });
 }
 
@@ -294,6 +299,8 @@ export interface ShootingGameProps {
   stadium?: StadiumAppearance;
   /** Skin palette for the opposition keeper and defender. */
   opponentSkinPalette?: SkinPalette;
+  /** When false, every chance is open play (club trials). */
+  allowPenalties?: boolean;
 }
 
 export default function ShootingGame({
@@ -308,6 +315,7 @@ export default function ShootingGame({
   clubStrength,
   stadium,
   opponentSkinPalette = 'any',
+  allowPenalties = true,
 }: ShootingGameProps = {}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -318,7 +326,7 @@ export default function ShootingGame({
   const [stats, setStats] = useState<ShotStats>({ shots: 0, goals: 0, streak: 0, bestStreak: 0 });
   const [muted, setMuted] = useState(false);
 
-  const [initialChance] = useState(() => nextChance(clubStrength, opponentSkinPalette));
+  const [initialChance] = useState(() => nextChance(clubStrength, opponentSkinPalette, allowPenalties));
   const [ballHintX, setBallHintX] = useState(initialChance.ballStartXRatio);
   const [chanceKind, setChanceKind] = useState<ChanceKind>(initialChance.kind);
 
@@ -333,6 +341,8 @@ export default function ShootingGame({
   clubStrengthRef.current = clubStrength;
   const skinPaletteRef = useRef(opponentSkinPalette);
   skinPaletteRef.current = opponentSkinPalette;
+  const allowPenaltiesRef = useRef(allowPenalties);
+  allowPenaltiesRef.current = allowPenalties;
   const stadiumRef = useRef<StadiumAppearance>(stadium ?? readDevStadium() ?? DEFAULT_STADIUM);
   stadiumRef.current = stadium ?? readDevStadium() ?? DEFAULT_STADIUM;
 
@@ -395,7 +405,7 @@ export default function ShootingGame({
 
   const resetForNextShot = useCallback(() => {
     const { w, h } = sizeRef.current;
-    const chance = nextChance(clubStrengthRef.current, skinPaletteRef.current);
+    const chance = nextChance(clubStrengthRef.current, skinPaletteRef.current, allowPenaltiesRef.current);
     const view = createPitchView(w, h, chance.distanceM);
     const start = ballStartPixel(view, chance.ballStartXRatio);
     const anim = animRef.current;

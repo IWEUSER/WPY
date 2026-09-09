@@ -168,25 +168,37 @@ export default function SeasonSummaryScreen() {
       <div className="flex w-full max-w-sm flex-col gap-3">
         <div
           className={`rounded-2xl border px-4 py-3 text-sm ${
-            season.playerOfTheYear
+            season.playerOfTheYear || season.topGoalscorer
               ? 'border-emerald-300/25 bg-emerald-500/10 text-emerald-200'
               : 'border-white/16 bg-[#0c1410] text-white/60'
           }`}
         >
-          <p className="text-xs uppercase tracking-wide text-white/40">Domestic player of the season</p>
-          <p className="mt-1 font-semibold">{season.playerOfTheYear ? 'You won it.' : 'Not this season.'}</p>
+          <p className="text-xs uppercase tracking-wide text-white/40">Domestic awards</p>
+          <p className="mt-1 font-semibold">
+            {season.playerOfTheYear || season.topGoalscorer
+              ? [
+                  season.playerOfTheYear ? 'Player of the Year' : null,
+                  season.topGoalscorer ? 'Top goalscorer' : null,
+                ].filter(Boolean).join(' · ')
+              : 'Not this season.'}
+          </p>
           {season.playerOfTheYearReason && <p className="mt-1 text-xs">{season.playerOfTheYearReason}</p>}
+          {season.topGoalscorerReason && <p className="mt-1 text-xs">{season.topGoalscorerReason}</p>}
         </div>
         <div
           className={`rounded-2xl border px-4 py-3 text-sm ${
-            season.topGoalscorer
+            season.clubPlayerOfTheTournament
               ? 'border-emerald-300/25 bg-emerald-500/10 text-emerald-200'
               : 'border-white/16 bg-[#0c1410] text-white/60'
           }`}
         >
-          <p className="text-xs uppercase tracking-wide text-white/40">Domestic top goalscorer</p>
-          <p className="mt-1 font-semibold">{season.topGoalscorer ? 'You won it.' : 'Not this season.'}</p>
-          {season.topGoalscorerReason && <p className="mt-1 text-xs">{season.topGoalscorerReason}</p>}
+          <p className="text-xs uppercase tracking-wide text-white/40">Club international</p>
+          <p className="mt-1 font-semibold">
+            {season.clubPlayerOfTheTournament ? 'Player of the Tournament.' : 'Not this season.'}
+          </p>
+          {season.clubPlayerOfTheTournamentReason && (
+            <p className="mt-1 text-xs">{season.clubPlayerOfTheTournamentReason}</p>
+          )}
         </div>
       </div>
 

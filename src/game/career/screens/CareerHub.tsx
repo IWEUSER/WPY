@@ -69,12 +69,14 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const threshold = requiredGoalRatio(role, club, parentClub);
   const ratioProgress = Math.min(1, threshold > 0 ? ratio / threshold : 0);
   const injured = (injuryGamesRemaining ?? 0) > 0;
-  const available = isAvailable(availability) && !injured;
+  const nextFixture = seasonCalendar && seasonSim ? nextPlayableFixture(seasonCalendar, seasonSim) : undefined;
+  const nextIsInternational = nextFixture?.kind === 'international';
+  const squadAvailability = nextIsInternational && nationalTeam ? nationalTeam.availability : availability;
+  const available = isAvailable(squadAvailability) && !injured;
   const week = seasonCalendar && seasonSim
     ? currentCalendarWeek(seasonCalendar, seasonSim.fixtureIndex)
     : season.matches.length + 1;
   const totalWeeks = seasonCalendar?.totalWeeks ?? leagueMatchWeeks(club.league);
-  const nextFixture = seasonCalendar && seasonSim ? nextPlayableFixture(seasonCalendar, seasonSim) : undefined;
   const marketValue = playerMarketValueFromSeasons({
     age,
     careerGoals,
@@ -166,7 +168,11 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
           available ? 'bg-emerald-500/15 text-emerald-300' : 'bg-red-500/15 text-red-300'
         }`}
       >
-        {injured ? describeInjury(injuryGamesRemaining) : describeAvailability(availability)}
+        {injured
+          ? describeInjury(injuryGamesRemaining)
+          : nextIsInternational
+            ? describeAvailability(squadAvailability)
+            : describeAvailability(availability)}
       </div>
 
       {week > 0 && (

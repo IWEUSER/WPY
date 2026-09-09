@@ -282,14 +282,16 @@ export interface RollChanceOptions {
   forceDistanceM?: number;
   disableDefender?: boolean;
   skinPalette?: SkinPalette;
+  allowPenalties?: boolean;
 }
 
 export function rollChanceSetup(options: RollChanceOptions = {}): ChanceSetup {
   const rng = options.rng ?? Math.random;
   const clubStrength = options.clubStrength ?? 70;
-  const takePenalty = Boolean(options.forcePenalty) || (
+  const allowPenalties = options.allowPenalties !== false;
+  const takePenalty = allowPenalties && (Boolean(options.forcePenalty) || (
     options.forceDistanceM === undefined && rollIsPenalty(clubStrength, rng)
-  );
+  ));
 
   if (takePenalty) {
     return {

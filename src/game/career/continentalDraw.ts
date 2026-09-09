@@ -71,11 +71,22 @@ export function newClubWonEuropeanSuperCup(club: Club, rng: () => number = Math.
   return rng() < p;
 }
 
-export function pickSuperCupOpponent(club: Club, wonCup: ContinentalCupId): Club | undefined {
+export function pickSuperCupOpponent(
+  club: Club,
+  wonCup: ContinentalCupId,
+  rng: () => number = Math.random,
+  excludeId?: string | null,
+): Club | undefined {
   const other: ContinentalCupId = wonCup === 'ucl' ? 'uel' : 'ucl';
   const pool = clubsInCup(other).filter((c) => c.id !== club.id);
   const ranked = [...pool].sort((a, b) => b.strength - a.strength);
-  return ranked[0] ?? getClub(club.id === 'real-madrid' ? 'bayern' : 'real-madrid');
+  const top = ranked.slice(0, 5);
+  const varied = top.filter((c) => c.id !== excludeId);
+  const pickFrom = varied.length > 0 ? varied : top;
+  if (pickFrom.length === 0) {
+    return ranked[0] ?? getClub(club.id === 'real-madrid' ? 'bayern' : 'real-madrid');
+  }
+  return pickFrom[Math.floor(rng() * pickFrom.length)];
 }
 
 export function planSuperCup(params: {
@@ -83,6 +94,7 @@ export function planSuperCup(params: {
   previousClubId: string | null;
   previousCup: ContinentalCupId | null;
   rng?: () => number;
+  excludeOpponentId?: string | null;
 }): { include: boolean; opponentId?: string } {
   const { nextClub, previousClubId, previousCup, rng = Math.random } = params;
   if (confederationForCountry(nextClub.country) !== 'UEFA') return { include: false };
@@ -95,7 +107,7 @@ export function planSuperCup(params: {
   if (!stayedAndWon && !transferredAndNewClubWon) return { include: false };
   const cup: ContinentalCupId =
     stayedAndWon && previousCup ? previousCup : nextClub.tier === 1 ? 'ucl' : 'uel';
-  return { include: true, opponentId: pickSuperCupOpponent(nextClub, cup)?.id };
+  return { include: true, opponentId: pickSuperCupOpponent(nextClub, cup, rng, params.excludeOpponentId)?.id };
 }
 
 export { UEFA_CUPS };

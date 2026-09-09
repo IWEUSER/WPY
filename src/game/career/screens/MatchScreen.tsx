@@ -90,6 +90,7 @@ export default function MatchScreen() {
       hideStatsBar
       maxShots={chances}
       clubStrength={club?.strength}
+      allowPenalties={opening?.kind !== 'club-trial'}
       stadium={stadium}
       opponentSkinPalette={appearanceRegionForNation(opponentNation)}
       onShotResolved={(result) => {

@@ -10,7 +10,7 @@ import { hydrateSeason } from './seasonSim';
 import { useCareerStore } from './store';
 import { resolveSeasonTransition, trialFailTransferPending, type PendingTransfer } from './transfers';
 import type { OpeningCampaign, SeasonRecord } from './types';
-import { applyPlayerGroupResult, createGroupState, simulateRestOfGroup } from './internationalTable';
+import { applyPlayerGroupResult, createGroupState, simulateNpcRoundAfterPlayerMatch } from './internationalTable';
 
 function season(partial: SeasonRecord): SeasonRecord {
   return partial;
@@ -60,6 +60,8 @@ export function applyCareerLayoutPreview(): void {
       trophies: ['La Liga', 'Copa del Rey', 'Champions League'],
       topGoalscorer: true,
       playerOfTheYear: true,
+      clubPlayerOfTheTournament: false,
+      clubPlayerOfTheTournamentReason: 'Won the Champions League but scored 0.31 goals per game in it.',
       wonWpy: true,
       wpyReason: 'Elite goal ratio plus winning the Champions League.',
       earnings: 7_280_000,
@@ -367,11 +369,7 @@ export function applyCareerLayoutPreview(): void {
     sim.qualifierPoints = 4;
     sim.internationalGroup = applyPlayerGroupResult(
       applyPlayerGroupResult(
-        simulateRestOfGroup(
-          createGroupState('Q', ['spain', 'scotland', 'norway', 'georgia', 'cyprus'], 'qualifying'),
-          'spain',
-          'preview-qualifying',
-        ),
+        createGroupState('Q', ['spain', 'scotland', 'norway', 'georgia', 'cyprus', 'israel'], 'qualifying'),
         'spain',
         'scotland',
         2,
@@ -383,6 +381,17 @@ export function applyCareerLayoutPreview(): void {
       1,
       1,
       false,
+    );
+    sim.internationalGroup = simulateNpcRoundAfterPlayerMatch(
+      simulateNpcRoundAfterPlayerMatch(
+        sim.internationalGroup,
+        'spain',
+        'scotland',
+        'preview-qualifying-1',
+      ),
+      'spain',
+      'norway',
+      'preview-qualifying-2',
     );
   } else if (preview === 'match-intl-ko') {
     const idx = calendar.fixtures.findIndex((f) => f.kind === 'international');
@@ -822,6 +831,8 @@ export function applyCareerLayoutPreview(): void {
               trophies: ['Championship'],
               topGoalscorer: false,
               playerOfTheYear: true,
+              clubPlayerOfTheTournament: false,
+              clubPlayerOfTheTournamentReason: 'Win the continental tournament at 0.7 goals per game to take Player of the Tournament.',
               topGoalscorerReason: '20 league goals in Championship, but another striker took the golden boot.',
               playerOfTheYearReason: 'Won Championship Player of the Year with 20 league goals.',
               wonWpy: false,

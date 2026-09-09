@@ -22,6 +22,7 @@ export default function TrialScreen() {
       progressLabel={`Shot ${Math.min(shotsTaken + 1, TRIAL_SHOTS)}/${TRIAL_SHOTS} \u00b7 ${goals} scored`}
       hideStatsBar
       maxShots={TRIAL_SHOTS}
+      allowPenalties={false}
       stadium={trialStadium(nation)}
       onShotResolved={recordTrialShot}
       onComplete={finishTrial}

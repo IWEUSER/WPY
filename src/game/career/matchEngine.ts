@@ -88,10 +88,11 @@ export function simulateClubMatch(
   else if (roll < pWin + pDraw) outcome = 'draw';
   else outcome = 'loss';
 
-  const attack = 1.05 + 0.035 * Math.max(-12, Math.min(12, diff / 3));
-  const defence = 1.05 - 0.035 * Math.max(-12, Math.min(12, diff / 3));
-  let scoreFor = poisson(Math.max(0.35, attack), rng);
-  let scoreAgainst = poisson(Math.max(0.35, defence), rng);
+  const eliteClash = Math.min(us, them) >= 86 && Math.abs(us - them) <= 10;
+  const attack = (eliteClash ? 0.78 : 1.05) + 0.035 * Math.max(-12, Math.min(12, diff / 3));
+  const defence = (eliteClash ? 0.78 : 1.05) - 0.035 * Math.max(-12, Math.min(12, diff / 3));
+  let scoreFor = poisson(Math.max(0.28, attack), rng);
+  let scoreAgainst = poisson(Math.max(0.28, defence), rng);
   if (outcome === 'win' && scoreFor <= scoreAgainst) scoreFor = scoreAgainst + 1 + (rng() < 0.35 ? 1 : 0);
   if (outcome === 'loss' && scoreAgainst <= scoreFor) scoreAgainst = scoreFor + 1 + (rng() < 0.35 ? 1 : 0);
   if (outcome === 'draw') {
@@ -101,10 +102,23 @@ export function simulateClubMatch(
   }
   scoreFor = scoreFor + Math.max(0, playerGoals);
   scoreAgainst = Math.min(6, scoreAgainst);
+  if (eliteClash) {
+    scoreFor = Math.min(scoreFor, Math.max(playerGoals, 4));
+    scoreAgainst = Math.min(scoreAgainst, 3);
+    if (scoreFor + scoreAgainst > 6) {
+      scoreAgainst = Math.max(0, 6 - scoreFor);
+    }
+  }
   if (playerGoals > 0 && scoreFor <= scoreAgainst && outcome !== 'draw') {
     // A player goal can still turn a simulated loss into a draw/win - teammates aren't the whole story.
     const attempt = scoreAgainst + (rng() < 0.55 ? 1 : 0);
     scoreFor = Math.max(scoreFor, attempt);
+    if (eliteClash) {
+      scoreFor = Math.min(scoreFor, Math.max(playerGoals, 4));
+      if (scoreFor + scoreAgainst > 6) {
+        scoreAgainst = Math.max(0, 6 - scoreFor);
+      }
+    }
   }
   return applyPlayerGoalsFloor({ scoreFor, scoreAgainst, outcome: outcomeOf(scoreFor, scoreAgainst) }, playerGoals);
 }
