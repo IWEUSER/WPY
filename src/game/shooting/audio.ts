@@ -98,6 +98,11 @@ export function playMiss(): void {
   tone(180, 0.28, { type: 'sine', startGain: 0.15, freqEnd: 70 });
 }
 
+export function playBlock(): void {
+  noiseBurst(0.12, { startGain: 0.28, filterFreq: 700 });
+  tone(110, 0.14, { type: 'triangle', startGain: 0.2, freqEnd: 55 });
+}
+
 export function playWhistle(): void {
   tone(1800, 0.5, { type: 'square', startGain: 0.12, freqEnd: 1500 });
 }

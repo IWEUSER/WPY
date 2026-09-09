@@ -1,0 +1,179 @@
+import { fixtureCrowdAwayShare, fixtureIsHome, fixtureIsNight, fixtureShowsSun, isClubFinalNeutral, isInternationalTournamentFixture, type CalendarFixture } from './calendar';
+import { getClub, type Club } from './data/clubs';
+import { clubKit } from './data/clubKits';
+import { nationKitOrFallback } from './data/nationColours';
+import { fifaRank } from './data/fifaRankings';
+import type { Nation } from './data/nations';
+import type { KitScheme } from '../shooting/kitPalette';
+import { stadiumScaleFromCapacity, pitchQualityFromStrength, type StadiumAppearance } from '../shooting/stadium';
+import { groundForClub, groundForClubTrial, groundForCupFinal, groundForInternationalTournament, groundForNationRank, groundForYouthTournament, UNLISTED_GROUND, type ClubGround } from '../shooting/grounds';
+import { TOP_LEAGUES } from './playerValue';
+
+const GENERIC_OPPONENT: KitScheme = { primary: '#1D4ED8', pattern: 'solid' };
+
+function appearanceFromGround(
+  ground: ClubGround,
+  base: Omit<StadiumAppearance, 'capacity' | 'standTiers' | 'unique' | 'groundName' | 'scale'>,
+  strength?: number,
+): StadiumAppearance {
+  return {
+    ...base,
+    scale: stadiumScaleFromCapacity(ground.capacity),
+    capacity: ground.capacity,
+    standTiers: ground.tiers,
+    unique: ground.unique,
+    groundName: ground.name,
+    pitchQuality: base.pitchQuality ?? pitchQualityFromStrength(strength, ground.capacity),
+    pitchStripes: base.pitchStripes ?? false,
+  };
+}
+
+/**
+ * Home/away stadium look for a live match: majority crowd is the side
+ * whose ground it is; the defender always wears the opponent's kit.
+ * Stand height follows that club's real capacity; decks follow the table.
+ */
+export function resolveMatchStadium(args: {
+  fixture?: CalendarFixture;
+  club?: Club;
+  nation?: Nation;
+  openingKind?: 'youth-tournament' | 'club-trial' | null;
+}): StadiumAppearance {
+  const { fixture, club, nation, openingKind } = args;
+  const isInternational = fixture?.kind === 'international';
+  const clubFinal = fixture ? isClubFinalNeutral(fixture) : false;
+  const intlTournament = fixture ? isInternationalTournamentFixture(fixture) : false;
+  const neutral = clubFinal || intlTournament;
+  const isHome = fixture ? fixtureIsHome(fixture) : true;
+
+  const player: KitScheme = isInternational
+    ? nationKitOrFallback(nation?.id)
+    : clubKit(club);
+  const opponent: KitScheme = isInternational
+    ? nationKitOrFallback(fixture?.opponentId)
+    : clubKit(fixture?.opponentId ? getClub(fixture.opponentId) : undefined);
+
+  const home = neutral || isHome ? player : opponent;
+  const away = neutral || isHome ? opponent : player;
+  const groundClub = isInternational || neutral
+    ? undefined
+    : (isHome ? club : (fixture?.opponentId ? getClub(fixture.opponentId) : undefined));
+  const groundNationId = isInternational
+    ? (isHome ? nation?.id : fixture?.opponentId)
+    : undefined;
+          const ground = openingKind === 'youth-tournament'
+    ? groundForYouthTournament()
+    : openingKind === 'club-trial'
+      ? groundForClubTrial()
+    : clubFinal
+      ? groundForCupFinal()
+      : intlTournament
+        ? groundForInternationalTournament()
+        : isInternational
+          ? groundForNationRank(fifaRank(groundNationId ?? ''))
+          : groundClub?.league === 'Ligue 2' || groundClub?.league === 'Serie B'
+            ? UNLISTED_GROUND
+            : groundForClub(groundClub?.id);
+
+  const youthOrTrial = openingKind === 'youth-tournament' || openingKind === 'club-trial';
+  const stripes = (() => {
+    if (youthOrTrial) return false;
+    if (ground.tiers <= 1) return false;
+    if (isInternational) {
+      const rankedId = intlTournament ? (nation?.id ?? '') : (groundNationId ?? nation?.id ?? '');
+      const rank = fifaRank(rankedId);
+      return rank > 0 && rank <= 50;
+    }
+    const league = groundClub?.league ?? club?.league;
+    return Boolean(league && TOP_LEAGUES.has(league));
+  })();
+
+  return appearanceFromGround(ground, {
+    isHome: neutral ? true : isHome,
+    night: fixture ? fixtureIsNight(fixture) : false,
+    showSun: fixture ? fixtureShowsSun(fixture) : true,
+    homeColor: home.primary,
+    homeSecondary: home.secondary,
+    awayColor: away.primary,
+    awaySecondary: away.secondary,
+    opponentColor: opponent.primary,
+    opponentSecondary: opponent.secondary,
+    opponentShorts: opponent.shorts,
+    opponentSocks: opponent.socks,
+    opponentPattern: opponent.pattern,
+    opponentSleeves: opponent.sleeves,
+    awayShare: fixture ? fixtureCrowdAwayShare(fixture) : 0.2,
+    crowdFill: openingKind === 'youth-tournament' ? 'sparse' : openingKind === 'club-trial' ? 'empty' : 'full',
+    pitchQuality: youthOrTrial
+      ? 'worn'
+      : pitchQualityFromStrength(groundClub?.strength, ground.capacity),
+    pitchStripes: stripes,
+  }, groundClub?.strength);
+}
+
+/** Scout trial: the original open pitch, no stadium bowl. */
+export function trialStadium(nation?: Nation): StadiumAppearance {
+  const home = nationKitOrFallback(nation?.id);
+  return {
+    isHome: true,
+    night: false,
+    showSun: true,
+    homeColor: home.primary,
+    homeSecondary: home.secondary,
+    awayColor: GENERIC_OPPONENT.primary,
+    opponentColor: GENERIC_OPPONENT.primary,
+    opponentPattern: 'solid',
+    awayShare: 0.22,
+    bowl: false,
+    pitchQuality: 'worn',
+    pitchStripes: false,
+  };
+}
+
+/** Reserve-year matches use the generic municipal bowl, not a first-team ground. */
+export function reserveStadium(club?: Club): StadiumAppearance {
+  const home = clubKit(club);
+  return appearanceFromGround(UNLISTED_GROUND, {
+    isHome: true,
+    night: false,
+    showSun: true,
+    homeColor: home.primary,
+    homeSecondary: home.secondary,
+    awayColor: GENERIC_OPPONENT.primary,
+    opponentColor: GENERIC_OPPONENT.primary,
+    opponentPattern: 'solid',
+    awayShare: 0.22,
+    crowdFill: 'sparse',
+    pitchQuality: 'worn',
+    pitchStripes: false,
+  });
+}
+
+export function resolveCareerStadium(args: {
+  fixture?: CalendarFixture;
+  club?: Club;
+  nation?: Nation;
+  seasonNumber?: number;
+  role?: 'reserve' | 'first-team' | 'loan';
+  openingKind?: 'youth-tournament' | 'club-trial' | null;
+  careerStart?: 'youth' | 'favourite-trial' | 'favourite-reserve' | 'favourite-first-team' | null;
+}): StadiumAppearance {
+  if (args.openingKind === 'youth-tournament' || args.openingKind === 'club-trial') {
+    return resolveMatchStadium({ ...args, openingKind: args.openingKind });
+  }
+  const fixture = args.fixture;
+  const clubFinal = fixture ? isClubFinalNeutral(fixture) : false;
+  const international = fixture?.kind === 'international';
+  if (
+    args.careerStart === 'favourite-reserve' &&
+    args.role === 'reserve' &&
+    !clubFinal &&
+    !international
+  ) {
+    return { ...resolveMatchStadium({ ...args, openingKind: 'club-trial' }), crowdFill: 'sparse', pitchQuality: 'worn', pitchStripes: false };
+  }
+  if (args.role === 'reserve') {
+    return { ...resolveMatchStadium(args), crowdFill: 'sparse', pitchQuality: 'worn', pitchStripes: false };
+  }
+  return resolveMatchStadium(args);
+}

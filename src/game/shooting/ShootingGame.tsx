@@ -1,9 +1,45 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as audio from './audio';
-import { MAX_ARC_HEIGHT_RATIO, MAX_BEND_RATIO, MIN_ARC_HEIGHT_RATIO } from './constants';
-import { computeSwipeCurl, isValidSwipe, resolveShot } from './shotEngine';
-import { ballStartPixel, drawBall, drawGoal, drawKeeper, drawPitch, drawTrail, goalToPixel, type KeeperPose } from './render';
-import type { AimPoint, ShotOutcomeKind, ShotResult, SwipeGesture } from './types';
+import { MAX_ARC_ALONG_PATH, MAX_BEND_RATIO, MIN_ARC_ALONG_PATH, DEFAULT_DIFFICULTY } from './constants';
+import { cellCenter, computeKeeperDive, computeSwipeCurl, isValidSwipe, resolveShot } from './shotEngine';
+import {
+  BALL_SCREEN_Y,
+  ballRadiusAtGoal,
+  ballRadiusNear,
+  ballStartPixel,
+  createPitchView,
+  drawBall,
+  drawDefender,
+  drawGoal,
+  drawKeeper,
+  drawPitch,
+  drawTrail,
+  goalToPixel,
+  idleKeeperPose,
+  pickPlayerLook,
+  pickPlayerSkin,
+  worldToScreen,
+  type KeeperPose,
+  type SkinPalette,
+} from './render';
+import { drawStadium, DEFAULT_STADIUM, defenderKitFromStadium, pitchQualityFromStrength, profileFromScale, type StadiumAppearance } from './stadium';
+import { groundForClub } from './grounds';
+import { normalizeHex } from './kitPalette';
+import { getClub } from '../career/data/clubs';
+import { clubKit } from '../career/data/clubKits';
+import { TOP_LEAGUES } from '../career/playerValue';
+import {
+  advanceDefender,
+  ballHasReachedDefender,
+  defenderBlocksBall,
+  defenderScreenBody,
+  shotLineHitsDefender,
+  rollChanceSetup,
+  type ChanceKind,
+  type ChanceSetup,
+  type DefenderPose,
+} from './chanceSetup';
+import type { ShotOutcomeKind, ShotResult, SwipeGesture } from './types';
 import StatsBar, { type ShotStats } from './StatsBar';
 
 type Phase = 'idle' | 'dragging' | 'shooting' | 'result';
@@ -28,11 +64,16 @@ interface AnimState {
   resultAtMs: number;
   shakeMagnitude: number;
   shakeUntilMs: number;
+  /** Horizontal spawn of the idle ball, as a fraction of canvas width. */
+  ballStartXRatio: number;
+  /** Metres from the ball to the goal line. */
+  shotDistanceM: number;
+  chanceKind: ChanceKind;
+  defender: DefenderPose | null;
+  lastTickMs: number;
 }
 
 const RESULT_HOLD_MS = 1500;
-const BASE_BALL_RADIUS_RATIO = 0.028;
-const FAR_BALL_RADIUS_RATIO = 0.011;
 const SHAKE_DURATION_MS = 280;
 const MAX_DRAG_POINTS = 400;
 
@@ -42,6 +83,7 @@ const OUTCOME_LABEL: Record<ShotOutcomeKind, string> = {
   post: 'OFF THE WOODWORK',
   wide: 'WIDE',
   over: 'OVER THE BAR',
+  blocked: 'BLOCKED',
 };
 
 const OUTCOME_COLOR: Record<ShotOutcomeKind, string> = {
@@ -50,6 +92,7 @@ const OUTCOME_COLOR: Record<ShotOutcomeKind, string> = {
   post: '#fbbf24',
   wide: '#f87171',
   over: '#f87171',
+  blocked: '#fb923c',
 };
 
 /** Describes how hard the shot was struck, for on-screen feedback. */
@@ -73,11 +116,199 @@ function curlStyleLabel(result: ShotResult): string | null {
   return `Curled ${dir} \u2014 ${boot}`;
 }
 
-function makeIdleKeeper(): KeeperPose {
-  return { pos: { x: 0, y: 0 }, stretch: 0, direction: 0, beaten: false };
+function readDevDistance(): number | null {
+  if (!import.meta.env.DEV) return null;
+  const raw = new URLSearchParams(window.location.search).get('distance');
+  const n = raw ? Number(raw) : NaN;
+  return Number.isFinite(n) ? n : null;
 }
 
-export default function ShootingGame() {
+function readDevPower(): number | null {
+  if (!import.meta.env.DEV) return null;
+  const raw = new URLSearchParams(window.location.search).get('power');
+  const n = raw ? Number(raw) : NaN;
+  return Number.isFinite(n) ? n : null;
+}
+
+function readDevPenalty(): boolean {
+  if (!import.meta.env.DEV) return false;
+  const raw = new URLSearchParams(window.location.search).get('penalty');
+  return raw === '1' || raw === 'true';
+}
+
+function readDevDefenderOff(): boolean {
+  if (!import.meta.env.DEV) return false;
+  const raw = new URLSearchParams(window.location.search).get('defender');
+  return raw === 'off' || raw === '0';
+}
+
+function readDevAutoblock(): boolean {
+  if (!import.meta.env.DEV) return false;
+  const raw = new URLSearchParams(window.location.search).get('autoblock');
+  return raw === '1' || raw === 'true';
+}
+
+function readDevStadium(): StadiumAppearance | null {
+  if (!import.meta.env.DEV) return null;
+  const q = new URLSearchParams(window.location.search);
+  const homeParam = q.get('home');
+  const homeColorRaw = q.get('homeColor');
+  const awayColorRaw = q.get('awayColor');
+  const clubId = q.get('club');
+  const opponentId = q.get('opponent');
+  const scaleRaw = q.get('scale');
+  const capacityRaw = q.get('capacity');
+  const tiersRaw = q.get('tiers');
+  if (
+    homeParam == null
+    && !homeColorRaw
+    && !awayColorRaw
+    && q.get('night') == null
+    && scaleRaw == null
+    && clubId == null
+    && opponentId == null
+    && capacityRaw == null
+    && tiersRaw == null
+  ) return null;
+  const isHome = homeParam !== '0' && homeParam !== 'away' && homeParam !== 'false';
+  const club = clubId ? getClub(clubId) : undefined;
+  const playerKit = club ? clubKit(club) : null;
+  const opponentKit = opponentId ? clubKit(getClub(opponentId)) : null;
+  const playerColor = normalizeHex(homeColorRaw, playerKit?.primary ?? DEFAULT_STADIUM.homeColor);
+  const opponentColor = normalizeHex(awayColorRaw, opponentKit?.primary ?? DEFAULT_STADIUM.awayColor);
+  const night = q.get('night') === '1' || q.get('night') === 'true';
+  const scale = scaleRaw === 'local' || scaleRaw === 'strong' || scaleRaw === 'elite' ? scaleRaw : undefined;
+  const fromClub = clubId ? groundForClub(clubId) : null;
+  const fromScale = scale ? profileFromScale(scale) : null;
+  const ground = fromClub ?? fromScale;
+  const capacityN = capacityRaw ? Number(capacityRaw) : NaN;
+  const tiersN = tiersRaw ? Number(tiersRaw) : NaN;
+  const capacity = Number.isFinite(capacityN) ? capacityN : ground?.capacity;
+  const standTiers = (tiersN === 1 || tiersN === 2 || tiersN === 3 || tiersN === 4 || tiersN === 5)
+    ? tiersN
+    : ground?.tiers;
+  const league = club?.league;
+  const pitchStripes = Boolean(league && TOP_LEAGUES.has(league) && (ground?.tiers ?? 2) > 1);
+  return {
+    isHome,
+    night,
+    showSun: !night,
+    homeColor: isHome ? playerColor : opponentColor,
+    homeSecondary: isHome ? playerKit?.secondary : opponentKit?.secondary,
+    awayColor: isHome ? opponentColor : playerColor,
+    awaySecondary: isHome ? opponentKit?.secondary : playerKit?.secondary,
+    opponentColor: opponentKit?.primary ?? opponentColor,
+    opponentSecondary: opponentKit?.secondary,
+    opponentShorts: opponentKit?.shorts,
+    opponentSocks: opponentKit?.socks,
+    opponentPattern: opponentKit?.pattern,
+    opponentSleeves: opponentKit?.sleeves,
+    awayShare: 0.2,
+    scale,
+    capacity,
+    standTiers,
+    unique: ground?.unique,
+    groundName: ground?.name,
+    pitchQuality: pitchQualityFromStrength(club?.strength, capacity),
+    pitchStripes,
+  };
+}
+
+function nextChance(clubStrength?: number, skinPalette: SkinPalette = 'any'): ChanceSetup {
+  const forcePenalty = readDevPenalty();
+  const forceDistance = readDevDistance();
+  return rollChanceSetup({
+    clubStrength,
+    forcePenalty,
+    forceDistanceM: forcePenalty ? undefined : (forceDistance ?? undefined),
+    disableDefender: readDevDefenderOff(),
+    skinPalette,
+  });
+}
+
+/** DEV-only: ?pose=col,row,save|miss freezes the keeper in that square's motion.
+ * Optional &distance=&power= apply thunderbolt range so a close rocket miss
+ * shows the flinch rather than a full dive. */
+function readDevKeeperPose(): KeeperPose | null {
+  if (!import.meta.env.DEV) return null;
+  const raw = new URLSearchParams(window.location.search).get('pose');
+  if (!raw) return null;
+  const [c, r, kind] = raw.split(',');
+  const col = Number(c);
+  const row = Number(r);
+  if (!Number.isInteger(col) || !Number.isInteger(row) || col < 0 || col > 15 || row < 0 || row > 4) return null;
+  const saved = kind !== 'miss';
+  const cell = { col, row };
+  const square = cellCenter(cell);
+  const distanceM = readDevDistance() ?? 18;
+  const power = readDevPower() ?? 1;
+  const dive = computeKeeperDive(square, cell, saved, DEFAULT_DIFFICULTY, undefined, { power, distanceM });
+  return {
+    pos: dive.target,
+    stretch: dive.stretch,
+    direction: dive.direction,
+    layout: dive.layout,
+    elevation: dive.elevation,
+    hand: dive.hand,
+    beaten: !saved,
+    skinTone: pickPlayerSkin(col * 17 + row * 5),
+    hairColor: pickPlayerLook(col * 17 + row * 5).hair,
+  };
+}
+
+function readDevPoseCell(): { col: number; row: number } | null {
+  if (!import.meta.env.DEV) return null;
+  const raw = new URLSearchParams(window.location.search).get('pose');
+  if (!raw) return null;
+  const [c, r] = raw.split(',');
+  const col = Number(c);
+  const row = Number(r);
+  if (!Number.isInteger(col) || !Number.isInteger(row) || col < 0 || col > 15 || row < 0 || row > 4) return null;
+  return { col, row };
+}
+
+function makeIdleKeeper(palette: SkinPalette = 'any'): KeeperPose {
+  return idleKeeperPose(Math.random, palette);
+}
+
+export interface ShootingGameProps {
+  /** Header title override (defaults to the game's name). */
+  title?: string;
+  /** Header subtitle override (defaults to the swipe hint). */
+  subtitle?: string;
+  /** Small badge shown under the header, e.g. "Shot 3/10" or "Matchday 12". */
+  progressLabel?: string;
+  /** Hides the built-in shots/goals/streak stats bar (career screens track their own). */
+  hideStatsBar?: boolean;
+  /** Hides the back navigation is left to the parent; this only controls the mute button visibility. */
+  hideMuteButton?: boolean;
+  /** Limits how many shots this session allows before calling onComplete instead of resetting. */
+  maxShots?: number;
+  /** Fired the instant a shot's outcome is resolved (before the flight animation finishes). */
+  onShotResolved?: (result: ShotResult) => void;
+  /** Fired once the final shot (per maxShots) has finished its result animation. */
+  onComplete?: () => void;
+  /** Club strength (≈52–94). Scales how often a chance is a penalty. */
+  clubStrength?: number;
+  /** Stadium bowl, home/away crowd colours, and opposition defender kit. */
+  stadium?: StadiumAppearance;
+  /** Skin palette for the opposition keeper and defender. */
+  opponentSkinPalette?: SkinPalette;
+}
+
+export default function ShootingGame({
+  title,
+  subtitle,
+  progressLabel,
+  hideStatsBar = false,
+  hideMuteButton = false,
+  maxShots,
+  onShotResolved,
+  onComplete,
+  clubStrength,
+  stadium,
+  opponentSkinPalette = 'any',
+}: ShootingGameProps = {}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sizeRef = useRef({ w: 0, h: 0, dpr: 1 });
@@ -86,6 +317,24 @@ export default function ShootingGame() {
   const [resultLabel, setResultLabel] = useState<{ text: string; color: string; detail: string | null } | null>(null);
   const [stats, setStats] = useState<ShotStats>({ shots: 0, goals: 0, streak: 0, bestStreak: 0 });
   const [muted, setMuted] = useState(false);
+
+  const [initialChance] = useState(() => nextChance(clubStrength, opponentSkinPalette));
+  const [ballHintX, setBallHintX] = useState(initialChance.ballStartXRatio);
+  const [chanceKind, setChanceKind] = useState<ChanceKind>(initialChance.kind);
+
+  const shotsTakenRef = useRef(0);
+  const maxShotsRef = useRef(maxShots);
+  maxShotsRef.current = maxShots;
+  const onShotResolvedRef = useRef(onShotResolved);
+  onShotResolvedRef.current = onShotResolved;
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+  const clubStrengthRef = useRef(clubStrength);
+  clubStrengthRef.current = clubStrength;
+  const skinPaletteRef = useRef(opponentSkinPalette);
+  skinPaletteRef.current = opponentSkinPalette;
+  const stadiumRef = useRef<StadiumAppearance>(stadium ?? readDevStadium() ?? DEFAULT_STADIUM);
+  stadiumRef.current = stadium ?? readDevStadium() ?? DEFAULT_STADIUM;
 
   const animRef = useRef<AnimState>({
     phase: 'idle',
@@ -97,15 +346,30 @@ export default function ShootingGame() {
     ballRadius: 0,
     ballRotation: 0,
     ballTrail: [],
-    keeperPose: makeIdleKeeper(),
+    keeperPose: makeIdleKeeper(opponentSkinPalette),
     resultAtMs: 0,
     shakeMagnitude: 0,
     shakeUntilMs: 0,
+    ballStartXRatio: initialChance.ballStartXRatio,
+    shotDistanceM: initialChance.distanceM,
+    chanceKind: initialChance.kind,
+    defender: initialChance.defender,
+    lastTickMs: 0,
   });
 
   useEffect(() => {
     audio.setMuted(muted);
   }, [muted]);
+
+  useEffect(() => {
+    setBallHintX(animRef.current.ballStartXRatio);
+    setChanceKind(animRef.current.chanceKind);
+  }, []);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    (window as unknown as { __shootingAnim: () => AnimState }).__shootingAnim = () => animRef.current;
+  }, []);
 
   // Keep canvas sized to its container (handles rotation/resizing responsively).
   useEffect(() => {
@@ -131,26 +395,35 @@ export default function ShootingGame() {
 
   const resetForNextShot = useCallback(() => {
     const { w, h } = sizeRef.current;
-    const start = ballStartPixel(w, h);
+    const chance = nextChance(clubStrengthRef.current, skinPaletteRef.current);
+    const view = createPitchView(w, h, chance.distanceM);
+    const start = ballStartPixel(view, chance.ballStartXRatio);
     const anim = animRef.current;
     anim.phase = 'idle';
     anim.dragStart = null;
     anim.dragPoints = [];
     anim.result = null;
+    anim.ballStartXRatio = chance.ballStartXRatio;
+    anim.shotDistanceM = chance.distanceM;
+    anim.chanceKind = chance.kind;
+    anim.defender = chance.defender;
+    anim.lastTickMs = 0;
     anim.ballPixel = start;
-    anim.ballRadius = w * BASE_BALL_RADIUS_RATIO;
+    anim.ballRadius = ballRadiusNear(view);
     anim.ballRotation = 0;
     anim.ballTrail = [];
-    anim.keeperPose = makeIdleKeeper();
+    anim.keeperPose = makeIdleKeeper(skinPaletteRef.current);
     anim.shakeMagnitude = 0;
     anim.shakeUntilMs = 0;
+    setBallHintX(chance.ballStartXRatio);
+    setChanceKind(chance.kind);
     setUiPhase('idle');
     setResultLabel(null);
   }, []);
 
   const launchShot = useCallback((gesture: SwipeGesture) => {
     const anim = animRef.current;
-    const result = resolveShot(gesture);
+    const result = resolveShot(gesture, { penalty: anim.chanceKind === 'penalty' });
     anim.result = result;
     anim.phase = 'shooting';
     anim.shotStartMs = performance.now();
@@ -161,7 +434,46 @@ export default function ShootingGame() {
     audio.playKick(result.power);
   }, []);
 
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const shootThrough = () => {
+      const anim = animRef.current;
+      if (anim.phase !== 'idle' || !anim.defender) return false;
+      const { w, h } = sizeRef.current;
+      if (w < 10 || h < 10) return false;
+      const view = createPitchView(w, h, anim.shotDistanceM);
+      const start = ballStartPixel(view, anim.ballStartXRatio);
+      const feet = worldToScreen(view, anim.defender.worldX, anim.defender.z);
+      const endX = start.x + (feet.x - start.x) * 1.45;
+      const endY = start.y + (feet.y - start.y) * 1.45;
+      launchShot({
+        dx: endX - start.x,
+        dy: start.y - endY,
+        durationMs: 200,
+        curl: 0,
+        ballX: start.x,
+        ballY: start.y,
+        endX,
+        endY,
+        canvasW: w,
+        canvasH: h,
+        distanceM: anim.shotDistanceM,
+      });
+      return true;
+    };
+    (window as unknown as { __shootThroughDefender: () => boolean }).__shootThroughDefender = shootThrough;
+    if (!readDevAutoblock()) return;
+    let attempts = 0;
+    const id = window.setInterval(() => {
+      attempts += 1;
+      if (shootThrough() || attempts >= 8) window.clearInterval(id);
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [launchShot]);
+
   const finishShot = useCallback((result: ShotResult) => {
+    shotsTakenRef.current += 1;
+    onShotResolvedRef.current?.(result);
     setStats((prev) => {
       const goals = prev.goals + (result.outcome === 'goal' ? 1 : 0);
       const streak = result.outcome === 'goal' ? prev.streak + 1 : 0;
@@ -188,6 +500,7 @@ export default function ShootingGame() {
       }
     } else if (result.outcome === 'saved') audio.playSave();
     else if (result.outcome === 'post') audio.playPost();
+    else if (result.outcome === 'blocked') audio.playBlock();
     else audio.playMiss();
   }, []);
 
@@ -212,51 +525,76 @@ export default function ShootingGame() {
         }
         ctx.setTransform(dpr, 0, 0, dpr, shakeX * dpr, shakeY * dpr);
         ctx.clearRect(-shakeX - 4, -shakeY - 4, w + 8, h + 8);
-        drawPitch(ctx, w, h, now);
-        drawGoal(ctx, w, h);
+        const view = createPitchView(w, h, anim.shotDistanceM);
+        const look = stadiumRef.current;
+        const defenderKit = defenderKitFromStadium(look);
+        const plainPitch = look.bowl === false;
+        if (!plainPitch) drawStadium(ctx, view, now, look);
+        drawPitch(ctx, view, now, {
+          night: look.night,
+          plain: plainPitch,
+          quality: look.pitchQuality,
+          seed: look.groundName ?? look.scale,
+          stripes: Boolean(look.pitchStripes),
+        });
+        drawGoal(ctx, view);
 
         if (anim.phase === 'idle' || anim.phase === 'dragging') {
-          const start = ballStartPixel(w, h);
+          const dt = anim.lastTickMs > 0 ? Math.min(0.05, (now - anim.lastTickMs) / 1000) : 0;
+          anim.lastTickMs = now;
+          if (anim.defender && dt > 0) {
+            anim.defender = advanceDefender(anim.defender, anim.shotDistanceM, anim.ballStartXRatio, dt);
+          }
+          const start = ballStartPixel(view, anim.ballStartXRatio);
           anim.ballPixel = start;
-          anim.ballRadius = w * BASE_BALL_RADIUS_RATIO;
-          drawKeeper(ctx, w, h, anim.keeperPose);
+          anim.ballRadius = ballRadiusNear(view);
+          const devPose = readDevKeeperPose();
+          const devCell = readDevPoseCell();
+          drawKeeper(ctx, view, devPose ?? anim.keeperPose, { longSleeves: look.showSun === false });
+          if (anim.defender) {
+            drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit, anim.defender.stride, anim.defender.skinTone, anim.defender.hairColor, look.showSun === false);
+          }
           if (anim.phase === 'dragging' && anim.dragStart && anim.dragPoints.length > 1) {
             // Show the actual curved path being swiped, not just a straight
             // line - this is the live feedback for how much bend/curl the
             // current swipe is imparting.
             drawTrail(ctx, anim.dragPoints);
           }
-          drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
+          if (devPose && devCell) {
+            const atSquare = goalToPixel(cellCenter(devCell), view);
+            drawBall(ctx, atSquare.x, atSquare.y, ballRadiusAtGoal(view), 0);
+          } else {
+            drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
+          }
         } else if (anim.phase === 'shooting' && anim.result) {
           const result = anim.result;
           const elapsed = now - anim.shotStartMs;
           const t = Math.min(1, elapsed / result.travelTimeMs);
           const eased = t * t * (3 - 2 * t); // smoothstep
 
-          const start = ballStartPixel(w, h);
+          const start = ballStartPixel(view, anim.ballStartXRatio);
           // The ball always flies to where it truly ends up - never redirect
           // its visual path toward the keeper - so what you see is always
           // consistent with the outcome (no more "that went in" saves).
-          const end = goalToPixel(result.aim, w, h);
+          const end = goalToPixel(result.aim, view);
 
           const powerT = clamp((result.power - 0.25) / (1.8 - 0.25), 0, 1);
-          const arcHeight = lerpNum(MAX_ARC_HEIGHT_RATIO, MIN_ARC_HEIGHT_RATIO, powerT) * h;
+          const pathLen = Math.hypot(end.x - start.x, end.y - start.y);
+          const arcHeight = lerpNum(MAX_ARC_ALONG_PATH, MIN_ARC_ALONG_PATH, powerT) * pathLen;
           const bend = result.curl * w * MAX_BEND_RATIO;
 
-          // Cubic bezier with two control points: the shot bows out early
-          // (most of the curl) and straightens up as it nears the target,
-          // giving a real "banana" curve whose direction follows the swipe,
-          // not a fixed left/right bias.
-          const c1x = lerpNum(start.x, end.x, 0.32) + bend;
-          const c1y = lerpNum(start.y, end.y, 0.32) - arcHeight;
-          const c2x = lerpNum(start.x, end.x, 0.72) + bend * 0.3;
-          const c2y = lerpNum(start.y, end.y, 0.72) - arcHeight * 0.32;
+          // Gentle banana: a little early bow, then settle into the aimed
+          // point so the shot does not whip sideways at the end.
+          const c1x = lerpNum(start.x, end.x, 0.38) + bend;
+          const c1y = lerpNum(start.y, end.y, 0.38) - arcHeight;
+          const c2x = lerpNum(start.x, end.x, 0.78) + bend * 0.2;
+          const c2y = lerpNum(start.y, end.y, 0.78) - arcHeight * 0.22;
 
           const x = cubicBezier(start.x, c1x, c2x, end.x, eased);
           const y = cubicBezier(start.y, c1y, c2y, end.y, eased);
 
           anim.ballPixel = { x, y };
-          anim.ballRadius = lerpNum(w * BASE_BALL_RADIUS_RATIO, w * FAR_BALL_RADIUS_RATIO, eased);
+          anim.ballRadius = lerpNum(ballRadiusNear(view), ballRadiusAtGoal(view), eased);
           const spinDir = result.curl !== 0 ? Math.sign(result.curl) : 1;
           anim.ballRotation = eased * spinDir * (10 + 14 * powerT);
 
@@ -264,43 +602,84 @@ export default function ShootingGame() {
           const trailLen = Math.round(lerpNum(5, 18, powerT));
           while (anim.ballTrail.length > trailLen) anim.ballTrail.shift();
 
-          const diveStart = result.keeperDive.reactionMs;
-          const diveElapsed = Math.max(0, elapsed - diveStart);
-          const diveTotal = Math.max(1, result.keeperDive.diveDurationMs - diveStart);
-          const diveT = Math.min(1, diveElapsed / diveTotal);
-          const diveEased = diveT * diveT * (3 - 2 * diveT);
+          const saved = result.outcome === 'saved';
+          // Dive with the shot, whether they hold it or not, so a thunderbolt
+          // still produces a throw — they just don't get there on a miss.
+          const diveEased = t * t * (3 - 2 * t);
 
-          // When saved, the keeper genuinely gets to the ball - render them
-          // arriving at its true position so the dive and the "SAVED" call
-          // always agree. When beaten, they dive to wherever they actually
-          // guessed, which can be the wrong way entirely.
-          const renderTarget: AimPoint = result.outcome === 'saved' ? result.aim : result.keeperDive.target;
-
+          // Pose is the square's save or miss motion, interpolated from idle.
+          const dive = result.keeperDive;
+          const idleY = 0.28;
           anim.keeperPose = {
-            pos: { x: renderTarget.x * diveEased, y: 0 },
-            stretch: diveEased,
-            direction: renderTarget.x >= 0 ? 1 : -1,
+            pos: {
+              x: dive.target.x * diveEased,
+              y: idleY + (dive.target.y - idleY) * diveEased,
+            },
+            stretch: dive.stretch * diveEased,
+            direction: dive.direction,
+            layout: dive.layout * diveEased,
+            elevation: dive.elevation * diveEased,
+            hand: {
+              x: dive.hand.x * diveEased,
+              y: idleY + (dive.hand.y - idleY) * diveEased,
+            },
             beaten: false,
+            skinTone: anim.keeperPose.skinTone,
+            hairColor: anim.keeperPose.hairColor,
           };
 
           drawTrail(ctx, anim.ballTrail);
-          drawKeeper(ctx, w, h, anim.keeperPose);
+          drawKeeper(ctx, view, anim.keeperPose, { longSleeves: look.showSun === false });
+          if (anim.defender) {
+            drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit, anim.defender.stride, anim.defender.skinTone, anim.defender.hairColor, look.showSun === false);
+          }
           drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
 
-          if (t >= 1) {
+          if (
+            anim.defender
+            && eased > 0.06
+            && ballHasReachedDefender(view, anim.defender, anim.ballPixel, anim.ballRadius)
+            && (
+              shotLineHitsDefender(anim.shotDistanceM, anim.ballStartXRatio, result.aim, anim.defender)
+              || defenderBlocksBall(view, anim.defender, anim.ballPixel, anim.ballRadius)
+            )
+          ) {
+            const body = defenderScreenBody(view, anim.defender);
+            anim.ballPixel = { x: body.torsoX, y: body.torsoY };
+            const blocked: ShotResult = { ...result, outcome: 'blocked' };
+            anim.result = blocked;
+            anim.phase = 'result';
+            anim.resultAtMs = now;
+            finishShot(blocked);
+          } else if (t >= 1) {
             anim.phase = 'result';
             anim.resultAtMs = now;
             anim.keeperPose = {
-              ...anim.keeperPose,
-              beaten: result.outcome === 'goal',
+              pos: dive.target,
+              stretch: dive.stretch,
+              direction: dive.direction,
+              layout: dive.layout,
+              elevation: dive.elevation,
+              hand: dive.hand,
+              beaten: !saved,
+              skinTone: anim.keeperPose.skinTone,
+              hairColor: anim.keeperPose.hairColor,
             };
             finishShot(result);
           }
         } else if (anim.phase === 'result' && anim.result) {
-          drawKeeper(ctx, w, h, anim.keeperPose);
+          drawKeeper(ctx, view, anim.keeperPose, { longSleeves: look.showSun === false });
+          if (anim.defender) {
+            drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit, anim.defender.stride, anim.defender.skinTone, anim.defender.hairColor, look.showSun === false);
+          }
           drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
           if (now - anim.resultAtMs > RESULT_HOLD_MS) {
-            resetForNextShot();
+            const limit = maxShotsRef.current;
+            if (limit !== undefined && shotsTakenRef.current >= limit) {
+              onCompleteRef.current?.();
+            } else {
+              resetForNextShot();
+            }
           }
         }
       }
@@ -356,7 +735,22 @@ export default function ShootingGame() {
       const dy = start.y - end.y; // screen-up is positive
       const durationMs = Math.max(16, end.t - start.t);
       const curl = computeSwipeCurl(anim.dragPoints);
-      const gesture: SwipeGesture = { dx, dy, durationMs, curl };
+      const { w, h } = sizeRef.current;
+      const view = createPitchView(w, h, anim.shotDistanceM);
+      const ball = ballStartPixel(view, anim.ballStartXRatio);
+      const gesture: SwipeGesture = {
+        dx,
+        dy,
+        durationMs,
+        curl,
+        ballX: ball.x,
+        ballY: ball.y,
+        endX: end.x,
+        endY: end.y,
+        canvasW: w,
+        canvasH: h,
+        distanceM: anim.shotDistanceM,
+      };
 
       anim.dragStart = null;
       anim.dragPoints = [];
@@ -386,26 +780,47 @@ export default function ShootingGame() {
     <div className="relative flex h-full w-full flex-col">
       <header className="z-10 flex items-center justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 text-white">
         <div>
-          <h1 className="text-lg font-bold tracking-wide sm:text-xl">World Player of the Year</h1>
-          <p className="text-xs text-white/50">Swipe the ball to shoot</p>
+          <h1 className="font-display text-lg font-bold sm:text-xl">{title ?? 'World Player of the Year'}</h1>
+          <p className="text-xs text-white/50">{subtitle ?? 'Swipe the ball to shoot'}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            {progressLabel && (
+              <p className="inline-block rounded-full bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-white/80">
+                {progressLabel}
+              </p>
+            )}
+            {chanceKind === 'penalty' && (
+              <p className="inline-block rounded-full bg-amber-400/20 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-amber-200">
+                Penalty · no defender
+              </p>
+            )}
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={() => setMuted((m) => !m)}
-          className="rounded-full bg-white/10 px-3 py-1.5 text-sm text-white/80 backdrop-blur transition hover:bg-white/20"
-          aria-label={muted ? 'Unmute' : 'Mute'}
-        >
-          {muted ? '🔇' : '🔊'}
-        </button>
+        {!hideMuteButton && (
+          <button
+            type="button"
+            onClick={() => setMuted((m) => !m)}
+            className="rounded-full bg-white/10 px-3 py-1.5 text-sm text-white/80 backdrop-blur transition hover:bg-white/20"
+            aria-label={muted ? 'Unmute' : 'Mute'}
+          >
+            {muted ? '🔇' : '🔊'}
+          </button>
+        )}
       </header>
 
-      <StatsBar stats={stats} />
+      {!hideStatsBar && <StatsBar stats={stats} />}
 
       <div ref={containerRef} className="relative min-h-0 flex-1 select-none touch-none">
         <canvas ref={canvasRef} className="absolute inset-0 h-full w-full touch-none" />
 
         {uiPhase === 'idle' && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-[14%] flex justify-center">
+          <div
+            className="pointer-events-none absolute whitespace-nowrap"
+            style={{
+              left: `${Math.min(0.82, Math.max(0.18, ballHintX)) * 100}%`,
+              top: `${(BALL_SCREEN_Y + 0.04) * 100}%`,
+              transform: 'translateX(-50%)',
+            }}
+          >
             <div className="animate-pulse rounded-full bg-black/40 px-4 py-1.5 text-sm text-white/80 backdrop-blur">
               Swipe up on the ball to shoot ⬆
             </div>
@@ -415,7 +830,7 @@ export default function ShootingGame() {
         {resultLabel && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <div
-              className="animate-[pop_0.35s_ease-out] flex flex-col items-center gap-1.5 rounded-2xl border-2 bg-black/60 px-8 py-4 text-3xl font-extrabold tracking-wider backdrop-blur-sm sm:text-5xl"
+              className="animate-[pop_0.35s_ease-out] flex flex-col items-center gap-1.5 rounded-2xl border-2 bg-black/50 px-8 py-4 text-3xl font-bold backdrop-blur-sm sm:text-5xl"
               style={{ color: resultLabel.color, borderColor: resultLabel.color }}
             >
               {resultLabel.text}
