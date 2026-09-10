@@ -836,11 +836,11 @@ export function applyCareerLayoutPreview(): void {
                 : isMatchPreview || isReservePreview
                   ? 'match'
                   : 'hub',
-    age: isTrialPreview || isYouthPreview || isClubTrialPreview || isReservePreview ? 16 : preview === 'end' ? 36 : preview === 'championship-transfer' ? 20 : promoteSummary ? 22 : 19,
-    seasonNumber: isTrialPreview || isYouthPreview || isClubTrialPreview || isReservePreview || preview === 'hub-qualifying' ? 1 : preview === 'end' ? 21 : promoteSummary ? 6 : 4,
+    age: isTrialPreview || isYouthPreview || isClubTrialPreview || isReservePreview || preview === 'reserve-promo' ? 16 : preview === 'end' ? 36 : preview === 'championship-transfer' ? 20 : promoteSummary ? 22 : 19,
+    seasonNumber: isTrialPreview || isYouthPreview || isClubTrialPreview || isReservePreview || preview === 'hub-qualifying' || preview === 'reserve-promo' ? 1 : preview === 'end' ? 21 : promoteSummary ? 6 : 4,
     clubId: isYouthPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : preview === 'match-psg' ? 'psg' : preview === 'championship-transfer' || promoteSummary ? 'leicester' : 'real-madrid',
     parentClubId: isYouthPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : preview === 'match-psg' ? 'psg' : preview === 'championship-transfer' || promoteSummary ? 'leicester' : 'real-madrid',
-    role: isReservePreview || isTrialPreview || isYouthPreview || isClubTrialPreview ? 'reserve' : 'first-team',
+    role: isReservePreview || isTrialPreview || isYouthPreview || isClubTrialPreview || preview === 'reserve-promo' ? 'reserve' : 'first-team',
     trial: preview === 'club-offer'
       ? { shots: [], goals: 6, offeredClubIds: ['real-madrid', 'barcelona', 'atletico-madrid'] }
       : null,
@@ -886,6 +886,35 @@ export function applyCareerLayoutPreview(): void {
     currentSeason:
       preview === 'end'
         ? history[history.length - 1]
+        : preview === 'reserve-promo'
+          ? reservePromoSeason
+        : preview === 'summary'
+          ? season({
+              seasonNumber: 4,
+              clubId: 'real-madrid',
+              role: 'first-team',
+              squadStatus: 'starter',
+              nextSquadStatus: 'starter',
+              matches: [],
+              goals: 32,
+              gamesPlayed: 52,
+              ratioMet: true,
+              age: 19,
+              leagueGoals: 24,
+              leagueGames: 38,
+              cupGames: 4,
+              cupGoals: 2,
+              domesticGames: 42,
+              domesticGoals: 26,
+              continentalStats: [{ cup: 'ucl', games: 10, goals: 6 }],
+              trophies: ['La Liga'],
+              topGoalscorer: true,
+              playerOfTheYear: true,
+              wonWpy: false,
+              earnings: 7_280_000,
+              sponsorship: 8_800_000,
+              league: 'La Liga',
+            })
         : promoteSummary
           ? season({
               seasonNumber: 6,
@@ -1006,7 +1035,7 @@ export function applyCareerLayoutPreview(): void {
     injuryGamesRemaining: 0,
     intlQualifying: { tournament: 'euro', points: 7, played: 3 },
     pendingTransfer,
-    squadStatus: preview === 'hub-rotation' ? 'rotation' : preview === 'end' ? 'starter' : 'starter',
+    squadStatus: preview === 'hub-rotation' || preview === 'reserve-promo' ? 'rotation' : 'starter',
     lastTransferRejection: preview === 'transfer-reject'
       ? 'You agreed terms with Manchester City. Real Madrid rejected the €80m bid — they will not sell a starter to Manchester City on that fee.'
       : null,
