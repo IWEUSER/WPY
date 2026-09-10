@@ -830,8 +830,8 @@ if (ELITE_DUAL_DEFENDER_STRENGTH > 86) {
 }
 
 const first = placeDefender(18, 0.5, () => 0.2);
-const cover = placeCoverDefender(first, 18, 0.5, () => 0.8);
-if (!cover || !chanceIsScoreable(18, 0.5, [first, cover])) {
+const eliteCover = placeCoverDefender(first, 18, 0.5, () => 0.8);
+if (!eliteCover || !chanceIsScoreable(18, 0.5, [first, eliteCover])) {
   console.error('FAIL: a placed cover defender must leave at least one scoreable aim');
   process.exitCode = 1;
 }

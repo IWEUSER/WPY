@@ -22,6 +22,7 @@ import { AFRICA_SKIN_TONES, createPitchView, idleKeeperPose, MAX_SHOT_DISTANCE_M
 import { appearanceRegionForNation, isBlackHair, isBlondeHair, isFairSkin } from '../src/game/shooting/appearance';
 import { rollChanceSetup } from '../src/game/shooting/chanceSetup';
 import { applyMatchResult, createAvailability } from '../src/game/career/availabilityEngine';
+import { useCareerStore } from '../src/game/career/store';
 import { standBottomY, crowdCellSize, pitchQualityFromStrength, stadiumLayout, stadiumRoofBand } from '../src/game/shooting/stadium';
 import {
   CLUB_GROUNDS,
@@ -74,7 +75,7 @@ import {
   TRIALS_AT_LEVEL,
 } from '../src/game/career/trial';
 import { nextYouthKnockoutRound, pickYouthGroupOpponents, pickYouthKnockoutOpponent, youthMaxGames } from '../src/game/career/youthTournament';
-import { nextSquadStatusAfterSeason, shouldSitLeagueFixture, squadStatusOnArrival } from '../src/game/career/squadStatus';
+import { isSquadRotationSitOut, nextSquadStatusAfterSeason, shouldSitLeagueFixture, squadStatusOnArrival } from '../src/game/career/squadStatus';
 import { consecutiveLoanSpells, LOAN_OFFER_COUNT, TRANSFER_MARKET_CAP, TRANSFER_OFFER_COUNT, offerFormRatio, offerTierFromStanding, pickLoanClubsForMiss, pickPermanentClubs, requiredGoalRatio, resolveSeasonTransition, sellingClubAcceptsOffer, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, trialFailTransferPending, tierForRatio } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
 import {
@@ -1888,7 +1889,14 @@ if (barca && hilal && lafc) {
   const starterDrop = nextSquadStatusAfterSeason({
     role: 'first-team',
     current: 'starter',
-    ratio: 0.32,
+    ratio: 0.42,
+    gamesPlayed: 36,
+    bar: 0.5,
+  });
+  const starterCollapse = nextSquadStatusAfterSeason({
+    role: 'first-team',
+    current: 'starter',
+    ratio: 0.28,
     gamesPlayed: 36,
     bar: 0.5,
   });
@@ -1899,8 +1907,8 @@ if (barca && hilal && lafc) {
     gamesPlayed: 24,
     bar: 0.5,
   });
-  console.log('squad status after season', starterHold, starterDrop, rotationUp);
-  if (starterHold !== 'starter' || starterDrop !== 'rotation' || rotationUp !== 'starter') {
+  console.log('squad status after season', starterHold, starterDrop, starterCollapse, rotationUp);
+  if (starterHold !== 'starter' || starterDrop !== 'rotation' || starterCollapse !== 'impact' || rotationUp !== 'starter') {
     console.error('end-of-season squad status must promote or drop from the season ratio');
     process.exitCode = 1;
   }
@@ -1956,7 +1964,7 @@ if (barca && hilal && lafc) {
       else rotationLeaguePlays += 1;
       leagueSeen += 1;
     } else if (fixture.kind !== 'rest') {
-      if (shouldSitLeagueFixture('rotation', leagueSeen)) {
+      if (isSquadRotationSitOut('first-team', 'rotation', fixture.kind, leagueSeen)) {
         console.error('rotation sit-out must not apply to cups or internationals');
         process.exitCode = 1;
       }
@@ -2024,6 +2032,79 @@ if (barca && hilal && lafc) {
   }
   if (!/rejected/i.test(starterVeto.detail) || !/Manchester City/i.test(starterVeto.detail)) {
     console.error('a rejected bid must tell the player they agreed terms and the club blocked the fee');
+    process.exitCode = 1;
+  }
+
+  useCareerStore.setState({
+    phase: 'transfer-choice',
+    clubId: 'real-madrid',
+    parentClubId: 'real-madrid',
+    role: 'first-team',
+    squadStatus: 'starter',
+    lastTransferRejection: null,
+    age: 22,
+    seasonNumber: 5,
+    seasonsAtCurrentClub: 3,
+    careerGoals: 80,
+    careerGames: 140,
+    careerStart: 'favourite-first-team',
+    nationality: 'spain',
+    weeklyWage: 140_000,
+    contractYears: 5,
+    contractYearsRemaining: 4,
+    clubLeague: 'La Liga',
+    seasonHistory: [],
+    currentSeason: {
+      seasonNumber: 4,
+      clubId: 'real-madrid',
+      role: 'first-team',
+      squadStatus: 'starter',
+      matches: [],
+      goals: 28,
+      gamesPlayed: 48,
+      ratioMet: true,
+      age: 21,
+      leagueGoals: 22,
+      trophies: [],
+      topGoalscorer: false,
+      playerOfTheYear: false,
+      wonWpy: false,
+    },
+    pendingTransfer: {
+      kind: 'end-of-season',
+      detail: 'These clubs can pay the transfer fee.',
+      clubIds: ['man-city', 'getafe'],
+      offers: [cityBid, getafeBid],
+      allowDecline: true,
+      stay: {
+        clubId: 'real-madrid',
+        parentClubId: 'real-madrid',
+        role: 'first-team',
+        seasonsAtCurrentClub: 4,
+        contractYearsRemaining: 3,
+        clubLeague: 'La Liga',
+        squadStatus: 'starter',
+      },
+    },
+  });
+  useCareerStore.getState().resolveTransferChoice('man-city');
+  const afterVeto = useCareerStore.getState();
+  console.log('store veto', afterVeto.phase, afterVeto.clubId, afterVeto.pendingTransfer?.offers.map((o) => o.clubId), afterVeto.lastTransferRejection);
+  if (
+    afterVeto.phase !== 'transfer-choice'
+    || afterVeto.clubId !== 'real-madrid'
+    || afterVeto.pendingTransfer?.offers.some((o) => o.clubId === 'man-city')
+    || !afterVeto.pendingTransfer?.offers.some((o) => o.clubId === 'getafe')
+    || !afterVeto.lastTransferRejection
+  ) {
+    console.error('accepting City terms must stay in the window after Madrid reject the bid');
+    process.exitCode = 1;
+  }
+  useCareerStore.getState().resolveTransferChoice('getafe');
+  const afterMove = useCareerStore.getState();
+  console.log('store accept step-down', afterMove.phase, afterMove.clubId, afterMove.squadStatus);
+  if (afterMove.phase !== 'hub' || afterMove.clubId !== 'getafe' || afterMove.squadStatus !== 'starter') {
+    console.error('a step-down bid the club accepts must complete the transfer as a starter');
     process.exitCode = 1;
   }
 
