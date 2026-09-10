@@ -888,38 +888,12 @@ export function applyCareerLayoutPreview(): void {
         ? history[history.length - 1]
         : preview === 'reserve-promo'
           ? reservePromoSeason
-        : preview === 'summary'
-          ? season({
-              seasonNumber: 4,
-              clubId: 'real-madrid',
-              role: 'first-team',
-              squadStatus: 'starter',
-              nextSquadStatus: 'starter',
-              matches: [],
-              goals: 32,
-              gamesPlayed: 52,
-              ratioMet: true,
-              age: 19,
-              leagueGoals: 24,
-              leagueGames: 38,
-              cupGames: 4,
-              cupGoals: 2,
-              domesticGames: 42,
-              domesticGoals: 26,
-              continentalStats: [{ cup: 'ucl', games: 10, goals: 6 }],
-              trophies: ['La Liga'],
-              topGoalscorer: true,
-              playerOfTheYear: true,
-              wonWpy: false,
-              earnings: 7_280_000,
-              sponsorship: 8_800_000,
-              league: 'La Liga',
-            })
         : promoteSummary
           ? season({
               seasonNumber: 6,
               clubId: 'leicester',
               role: 'first-team',
+              squadStatus: 'starter',
               matches: [],
               goals: 21,
               gamesPlayed: 48,
