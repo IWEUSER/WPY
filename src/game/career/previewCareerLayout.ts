@@ -6,7 +6,8 @@ import { mlsConferenceOf } from './data/leagueFormat';
 import { buildSeasonStandings, rankLeagueTable } from './matchEngine';
 import { newContractYears, playerMarketValueFromSeasons, weeklyWageForClub } from './playerValue';
 import { applyTrialMatch, assignOpeningTrialClub, beginClubTrial, beginFavouriteClubTrial, createYouthCampaign, failClubTrial } from './openingFlow';
-import { hydrateSeason } from './seasonSim';
+import { hydrateSeason, nextPlayableFixture } from './seasonSim';
+import { formatNextLine } from './matchBriefing';
 import { useCareerStore } from './store';
 import { resolveSeasonTransition, trialFailTransferPending, type PendingTransfer } from './transfers';
 import type { OpeningCampaign, SeasonRecord } from './types';
@@ -755,6 +756,17 @@ export function applyCareerLayoutPreview(): void {
   nationalTeam = recordInternationalAppearance(nationalTeam, 'euro', true, 1);
   nationalTeam = recordInternationalAppearance(nationalTeam, 'euro', false, 0);
 
+  const recapCalendar = isReservePreview ? reserveSeason?.calendar ?? calendar : calendar;
+  const recapSim = isReservePreview ? reserveSeason?.sim ?? sim : sim;
+  const recapNextFixture = recapCalendar ? nextPlayableFixture(recapCalendar, recapSim) : undefined;
+  const recapNationName = preview === 'mls' ? 'United States' : preview === 'saudi' ? 'Saudi Arabia' : 'Spain';
+  const computedNextLine = recapNextFixture
+    ? formatNextLine(recapNextFixture, recapSim, {
+        playerNationName: recapNationName,
+        tournament: recapSim.internationalTournament ?? recapCalendar.internationalTournament,
+      })
+    : null;
+
   useCareerStore.setState({
     phase:
       isTrialPreview || isTrialRetryPreview || isTrialOffersPreview || preview === 'trial-drop'
@@ -926,7 +938,7 @@ export function applyCareerLayoutPreview(): void {
           playerGoals: 1,
           chances: 2,
           aggregateLine: null,
-          nextLine: 'Next: France · Neutral · World Cup quarter-final',
+          nextLine: computedNextLine,
         }
       : {
           summary: 'Spain won 2–0 vs Italy · 2 goals from 2 chances',
@@ -938,7 +950,7 @@ export function applyCareerLayoutPreview(): void {
           playerGoals: 2,
           chances: 2,
           aggregateLine: null,
-          nextLine: preview === 'hub' ? 'Next: Barcelona · Home · League' : null,
+          nextLine: computedNextLine,
         },
     weeklyWage: preview === 'end' ? 40_000 : promoteSummary && leicester ? weeklyWageForClub(leicester, value, 'Championship') : 140_000,
     careerEarnings: preview === 'end' ? 86_400_000 : 14_560_000,

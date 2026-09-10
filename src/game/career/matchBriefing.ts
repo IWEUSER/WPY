@@ -50,7 +50,10 @@ export function nextMatchBriefing(
 ): NextMatchBriefing {
   const title = fixtureTitle(fixture, opts);
   const vs = fixture.opponentLabel ? ` vs ${fixture.opponentLabel}` : '';
-  const competition = vs && title.endsWith(vs) ? title.slice(0, -vs.length).replace(/:\s*$/, '').trim() : title;
+  let competition = vs && title.endsWith(vs) ? title.slice(0, -vs.length).replace(/:\s*$/, '').trim() : title;
+  if (opts?.playerNationName && competition.endsWith(`: ${opts.playerNationName}`)) {
+    competition = competition.slice(0, -(opts.playerNationName.length + 2)).trim();
+  }
   const venue = fixture.kind === 'rest' ? null : fixtureVenueLabel(fixture);
   const opponent = fixture.opponentLabel
     ?? (fixture.kind === 'rest' ? 'International break' : 'Next match');
