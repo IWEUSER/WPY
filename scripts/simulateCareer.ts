@@ -50,7 +50,8 @@ import { evaluateClubPlayerOfTheTournament } from '../src/game/career/clubIntern
 import { leaguePhaseOpponents, pickSuperCupOpponent } from '../src/game/career/continentalDraw';
 import { settleDrawOnPenalties } from '../src/game/career/penalties';
 import { planDomesticSuperCup } from '../src/game/career/domesticSuperCup';
-import { canWinLeague, ensureInternationalGroup, fixtureTitle, hydrateSeason, leagueFixtureIsHome, nextPlayableFixture, pickDomesticCupOpponent, pickTitleRival, remainingPlayableCount, resolveFixture, shouldSkipFixture } from '../src/game/career/seasonSim';
+import { firstLegStakeLine, formatNextLine, nextMatchBriefing } from '../src/game/career/matchBriefing';
+import { canWinLeague, continentalAggregateLine, ensureInternationalGroup, fixtureTitle, hydrateSeason, leagueFixtureIsHome, nextPlayableFixture, pickDomesticCupOpponent, pickTitleRival, remainingPlayableCount, resolveFixture, shouldSkipFixture } from '../src/game/career/seasonSim';
 import { applyPlayerGroupResult, createGroupState, nationCanProgressKnockout, nationCanWinMajor, simulateNpcRoundAfterPlayerMatch } from '../src/game/career/internationalTable';
 import {
   applyTrialMatch,
@@ -4659,6 +4660,63 @@ console.log('\n--- Club cups, paced tables, transfers, injuries, and elite score
   if (!qfTitle.includes('quarter-final') || !qfTitle.includes('2nd leg')) {
     console.error('quarter-final second legs must be titled as quarter-final 2nd leg');
     process.exitCode = 1;
+  }
+
+  const qf2Brief = nextMatchBriefing(
+    {
+      week: 36,
+      kind: 'continental-knockout',
+      continentalCup: 'ucl',
+      isDecisive: false,
+      leg: 2,
+      europeanRound: 'quarter-final',
+      opponentId: 'bayern',
+      opponentLabel: 'Bayern Munich',
+      isHome: false,
+    },
+    { knockoutAggFor: 1, knockoutAggAgainst: 0 } as ReturnType<typeof hydrateSeason>['sim'],
+  );
+  if (
+    qf2Brief.opponent !== 'Bayern Munich'
+    || qf2Brief.venue !== 'Away'
+    || !qf2Brief.competition.toLowerCase().includes('quarter-final')
+    || qf2Brief.stake !== firstLegStakeLine(1, 0)
+    || firstLegStakeLine(1, 0) !== '1–0 up from the first leg'
+    || firstLegStakeLine(0, 1) !== '1–0 down from the first leg'
+  ) {
+    console.error('hub briefing must lead with opponent, venue, QF 2nd leg, and first-leg aggregate');
+    process.exitCode = 1;
+  }
+
+  const madridKo = hydrateSeason({ seasonNumber: 2, club: madrid, careerGoalRatio: 0.8, nationId: 'spain' });
+  const qf1 = madridKo.calendar.fixtures.find((f) => f.kind === 'continental-knockout' && f.europeanRound === 'quarter-final' && f.leg === 1);
+  const qf2 = madridKo.calendar.fixtures.find((f) => f.kind === 'continental-knockout' && f.europeanRound === 'quarter-final' && f.leg === 2);
+  if (!qf1 || !qf2 || !madridKo.sim.europeanStanding) {
+    console.error('season 2 calendar must include a two-legged Champions League quarter-final');
+    process.exitCode = 1;
+  } else {
+    const simBefore = {
+      ...madridKo.sim,
+      europeanStanding: { ...madridKo.sim.europeanStanding, stage: 'quarter-final' as const },
+      knockoutAggFor: 0,
+      knockoutAggAgainst: 0,
+    };
+    const leg1Fx = { ...qf1, opponentId: 'bayern', opponentLabel: 'Bayern Munich', isHome: true };
+    const resolved = resolveFixture(simBefore, leg1Fx, madrid, 1, () => 0.2);
+    const aggLine = resolved.aggregateLine ?? continentalAggregateLine(leg1Fx, simBefore, resolved.result);
+    if (!aggLine || !aggLine.includes('Aggregate') || !aggLine.includes('second leg to come')) {
+      console.error('after a continental first leg the recap must show aggregate and that the second leg is to come');
+      process.exitCode = 1;
+    }
+    const nextLine = formatNextLine(
+      { ...qf2, opponentId: 'bayern', opponentLabel: 'Bayern Munich', isHome: false },
+      resolved.sim,
+    );
+    if (!nextLine.includes('Bayern Munich') || !nextLine.includes('2nd leg') || !(nextLine.includes('from the first leg') || nextLine.includes('after the first leg'))) {
+      console.error('after a continental first leg, next must name the 2nd-leg opponent and the running score');
+      process.exitCode = 1;
+    }
+    console.log('UCL briefing/recap', qf2Brief.stake, aggLine, nextLine);
   }
 
   let eliteBlowout = 0;

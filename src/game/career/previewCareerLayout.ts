@@ -394,6 +394,22 @@ export function applyCareerLayoutPreview(): void {
       'norway',
       'preview-qualifying-2',
     );
+  } else if (preview === 'hub-ucl-leg2') {
+    const idx = calendar.fixtures.findIndex(
+      (f) => f.kind === 'continental-knockout' && f.europeanRound === 'quarter-final' && f.leg === 2,
+    );
+    if (idx >= 0) {
+      const fx = calendar.fixtures[idx];
+      fx.opponentId = 'bayern';
+      fx.opponentLabel = 'Bayern Munich';
+      fx.isHome = false;
+      fx.continentalCup = 'ucl';
+      fx.playerChances = 2;
+      sim.fixtureIndex = idx;
+    }
+    if (sim.europeanStanding) sim.europeanStanding.stage = 'quarter-final';
+    sim.knockoutAggFor = 1;
+    sim.knockoutAggAgainst = 0;
   } else if (preview === 'match-intl-ko') {
     const idx = calendar.fixtures.findIndex((f) => f.kind === 'international');
     if (idx >= 0) matchFixtureIndex = idx;
@@ -777,7 +793,9 @@ export function applyCareerLayoutPreview(): void {
     seasonsAtCurrentClub: preview === 'end' ? 10 : promoteSummary ? 1 : 3,
     nationality: preview === 'mls' ? 'united-states' : preview === 'saudi' ? 'saudi-arabia' : preview === 'championship-transfer' ? 'england' : 'spain',
     nationalTeam,
-    availability: createAvailability(),
+    availability: preview === 'hub-ucl-leg2'
+      ? { phase: 0, windowFails: 2, bannedGamesRemaining: 0 }
+      : createAvailability(),
     seasonHistory: preview === 'championship-transfer' ? champSeasons.slice(0, 2) : history,
     careerGoals: preview === 'end' ? 312 : preview === 'championship-transfer' ? 72 : 58,
     careerGames: preview === 'end' ? 540 : preview === 'championship-transfer' ? 138 : 76,
@@ -879,18 +897,49 @@ export function applyCareerLayoutPreview(): void {
               topGoalscorer: false,
             },
           }),
-    lastMatchSummary: preview === 'result-pens'
+    lastMatchSummary: preview === 'hub-ucl-leg2'
+      ? 'Won 1–0 vs Bayern Munich · 1 goal from 2 chances · Aggregate 1–0 · second leg to come · Next: Bayern Munich · Away · Champions League quarter-final 2nd leg · 1–0 up from the first leg'
+      : preview === 'result-pens'
       ? 'Spain drew 1–1 vs France (won 5–4 on penalties) · through to the quarter-finals · 1 goal from 2 chances'
       : 'Spain won 2–0 vs Italy · 2 goals from 2 chances',
-    lastMatchResult: {
-      summary: preview === 'result-pens'
-        ? 'Spain drew 1–1 vs France (won 5–4 on penalties) · through to the quarter-finals · 1 goal from 2 chances'
-        : 'Spain won 2–0 vs Italy · 2 goals from 2 chances',
-      isFinal: preview !== 'result-pens',
-      won: true,
-      trophyName: preview === 'result-pens' ? null : 'European Championship',
-      afterPhase: 'season-summary',
-    },
+    lastMatchResult: preview === 'hub-ucl-leg2'
+      ? {
+          summary: 'Won 1–0 vs Bayern Munich · 1 goal from 2 chances · Aggregate 1–0 · second leg to come · Next: Bayern Munich · Away · Champions League quarter-final 2nd leg · 1–0 up from the first leg',
+          headline: 'Won 1–0 vs Bayern Munich',
+          isFinal: false,
+          won: true,
+          trophyName: null,
+          afterPhase: 'hub',
+          playerGoals: 1,
+          chances: 2,
+          aggregateLine: 'Aggregate 1–0 · second leg to come',
+          nextLine: 'Next: Bayern Munich · Away · Champions League quarter-final 2nd leg · 1–0 up from the first leg',
+        }
+      : preview === 'result-pens'
+      ? {
+          summary: 'Spain drew 1–1 vs France (won 5–4 on penalties) · through to the quarter-finals · 1 goal from 2 chances',
+          headline: 'Spain drew 1–1 vs France (won 5–4 on penalties) · through to the quarter-finals',
+          isFinal: false,
+          won: true,
+          trophyName: null,
+          afterPhase: 'hub',
+          playerGoals: 1,
+          chances: 2,
+          aggregateLine: null,
+          nextLine: 'Next: France · Neutral · World Cup quarter-final',
+        }
+      : {
+          summary: 'Spain won 2–0 vs Italy · 2 goals from 2 chances',
+          headline: 'Spain won 2–0 vs Italy',
+          isFinal: preview === 'result',
+          won: true,
+          trophyName: preview === 'result' ? 'European Championship' : null,
+          afterPhase: preview === 'result' ? 'season-summary' : 'hub',
+          playerGoals: 2,
+          chances: 2,
+          aggregateLine: null,
+          nextLine: preview === 'hub' ? 'Next: Barcelona · Home · League' : null,
+        },
     weeklyWage: preview === 'end' ? 40_000 : promoteSummary && leicester ? weeklyWageForClub(leicester, value, 'Championship') : 140_000,
     careerEarnings: preview === 'end' ? 86_400_000 : 14_560_000,
     contractYears: preview === 'end' ? 1 : promoteSummary || preview === 'expired' ? 2 : preview === 'hub' ? 2 : 5,

@@ -257,6 +257,12 @@ export interface LastMatchResult {
   won: boolean;
   trophyName: string | null;
   afterPhase: 'hub' | 'season-summary' | 'match' | 'opening-brief' | 'club-offer' | 'transfer-choice';
+  /** Scoreline / penalty line without player goals, aggregate, or next fixture. */
+  headline?: string | null;
+  playerGoals?: number | null;
+  chances?: number | null;
+  aggregateLine?: string | null;
+  nextLine?: string | null;
 }
 
 export interface IntlQualifyingCarry {
