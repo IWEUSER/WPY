@@ -5,7 +5,7 @@
  * Run with: npm run simulate:career
  */
 import { buildSeasonCalendar, fixtureCrowdAwayShare, fixtureIsHome, fixtureIsNeutral, fixtureIsNight, fixtureShowsSun, fixtureVenueLabel, INTERNATIONAL_BREAK_WEEKS, isClubFinalNeutral, isFinalFixture, nationsLeagueKnockoutWeeks, tournamentWeekCount } from '../src/game/career/calendar';
-import { INJURY_CHANCE_PER_MATCH, injuryDuration } from '../src/game/career/injury';
+import { INJURY_CHANCE_PER_MATCH, injuryDuration, sitOutGamesAfterPlayedMatch } from '../src/game/career/injury';
 import {
   chancesForKnockoutTie,
   chancesForLeagueMatch,
@@ -20,6 +20,8 @@ import { reserveStadium, resolveCareerStadium, resolveMatchStadium, trialStadium
 import { crowdSwatch, kitFromColor, kitFromScheme, luminance } from '../src/game/shooting/kitPalette';
 import { AFRICA_SKIN_TONES, createPitchView, idleKeeperPose, MAX_SHOT_DISTANCE_M, MIN_SHOT_DISTANCE_M, PLAYER_SKIN_TONES, pickPlayerLook, pickPlayerSkin, SHORTS_HALF_H, THIGH_SHARE } from '../src/game/shooting/render';
 import { appearanceRegionForNation, isBlackHair, isBlondeHair, isFairSkin } from '../src/game/shooting/appearance';
+import { rollChanceSetup } from '../src/game/shooting/chanceSetup';
+import { applyMatchResult, createAvailability } from '../src/game/career/availabilityEngine';
 import { standBottomY, crowdCellSize, pitchQualityFromStrength, stadiumLayout, stadiumRoofBand } from '../src/game/shooting/stadium';
 import {
   CLUB_GROUNDS,
@@ -44,11 +46,13 @@ import { countsTowardCareerRecord, displaySeasonLabel, displaySeasonNumber } fro
 import { bumpInternationalSeason, callUpRatio, isInternationalFinalsRound, isSelectedForNationalTeam, markInjuryMissedFinals, selectionRatioForNation } from '../src/game/career/international';
 import { missedChanceWinFactor, simulateClubMatch, simulateLeagueSeason } from '../src/game/career/matchEngine';
 import { aggregateContinental, aggregateDomesticSplit, recordClubAppearanceStats, seasonDomesticSplit } from '../src/game/career/seasonStats';
-import { leaguePhaseOpponents } from '../src/game/career/continentalDraw';
+import { evaluateClubPlayerOfTheTournament } from '../src/game/career/clubInternationalAwards';
+import { leaguePhaseOpponents, pickSuperCupOpponent } from '../src/game/career/continentalDraw';
 import { settleDrawOnPenalties } from '../src/game/career/penalties';
 import { planDomesticSuperCup } from '../src/game/career/domesticSuperCup';
-import { canWinLeague, ensureInternationalGroup, fixtureTitle, hydrateSeason, leagueFixtureIsHome, nextPlayableFixture, pickTitleRival, remainingPlayableCount, resolveFixture, shouldSkipFixture } from '../src/game/career/seasonSim';
-import { nationCanProgressKnockout, nationCanWinMajor } from '../src/game/career/internationalTable';
+import { firstLegStakeLine, formatNextLine, nextMatchBriefing } from '../src/game/career/matchBriefing';
+import { canWinLeague, continentalAggregateLine, ensureInternationalGroup, fixtureTitle, hydrateSeason, leagueFixtureIsHome, nextPlayableFixture, pickDomesticCupOpponent, pickTitleRival, remainingPlayableCount, resolveFixture, shouldSkipFixture } from '../src/game/career/seasonSim';
+import { applyPlayerGroupResult, createGroupState, nationCanProgressKnockout, nationCanWinMajor, simulateNpcRoundAfterPlayerMatch } from '../src/game/career/internationalTable';
 import {
   applyTrialMatch,
   applyYouthMatch,
@@ -70,7 +74,7 @@ import {
   TRIALS_AT_LEVEL,
 } from '../src/game/career/trial';
 import { nextYouthKnockoutRound, pickYouthGroupOpponents, pickYouthKnockoutOpponent, youthMaxGames } from '../src/game/career/youthTournament';
-import { consecutiveLoanSpells, LOAN_OFFER_COUNT, TRANSFER_OFFER_COUNT, offerFormRatio, offerTierFromStanding, pickLoanClubsForMiss, requiredGoalRatio, resolveSeasonTransition, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, trialFailTransferPending, tierForRatio } from '../src/game/career/transfers';
+import { consecutiveLoanSpells, LOAN_OFFER_COUNT, TRANSFER_MARKET_CAP, TRANSFER_OFFER_COUNT, offerFormRatio, offerTierFromStanding, pickLoanClubsForMiss, pickPermanentClubs, requiredGoalRatio, resolveSeasonTransition, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, trialFailTransferPending, tierForRatio } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
 import {
   evaluatePlayerOfTheYear,
@@ -581,8 +585,6 @@ const nationsCalendar = buildSeasonCalendar({
 const nationsRounds = nationsCalendar.fixtures.filter((f) => f.kind === 'international').map((f) => f.internationalRound);
 console.log('season 3 international rounds', nationsRounds);
 const expectedNations = [
-  'friendly',
-  'friendly',
   'group',
   'group',
   'group',
@@ -591,7 +593,7 @@ const expectedNations = [
   'final',
 ];
 if (nationsRounds.join() !== expectedNations.join()) {
-  console.error('season 3 must schedule two friendlies, three Nations League group games, then QF/SF/final');
+  console.error('season 3 must schedule three Nations League group games, then QF/SF/final, with no friendlies');
   process.exitCode = 1;
 }
 const [qfWeek, sfWeek, finalWeek] = nationsLeagueKnockoutWeeks(38);
@@ -857,8 +859,8 @@ if (madridClub) {
   const s3Groups = s3Intl.filter((f) => f.internationalRound === 'group');
   const s3Ko = s3Intl.filter((f) => f.internationalRound === 'quarter-final' || f.internationalRound === 'semi-final' || f.internationalRound === 'final');
   console.log('S3', s3.sim.internationalTournament, s3.sim.internationalStage, 'group', s3Groups.length, 'ko', s3Ko.map((f) => f.week));
-  if (s3.sim.internationalTournament !== 'nations-league' || (s3.sim.internationalStage !== 'group' && s3.sim.internationalStage !== 'friendly')) {
-    console.error('season 3 must start in the Nations League friendlies or group stage');
+  if (s3.sim.internationalTournament !== 'nations-league' || s3.sim.internationalStage !== 'group') {
+    console.error('season 3 must start in the Nations League group stage');
     process.exitCode = 1;
   }
   if (s3Groups.length !== 3 || s3Ko.length !== 3) {
@@ -4624,6 +4626,259 @@ console.log('\n--- Kits, cup nights, FA Cup semis, sun, World Cup copy, African 
   console.log('NL close-rank misses', nlMiss, 'UEFA pool', nationsInConfederation('UEFA').length);
   if (nlMiss > 0) {
     console.error('Nations League groups must stay with closely ranked European countries');
+    process.exitCode = 1;
+  }
+}
+
+console.log('\n--- Club cups, paced tables, transfers, injuries, and elite scores ---');
+{
+  const city = getClub('man-city')!;
+  const madrid = getClub('real-madrid')!;
+  const calendar = buildSeasonCalendar({
+    seasonNumber: 2,
+    leagueMatchWeeks: leagueMatchWeeks('Premier League'),
+    clubTier: 1,
+    confederation: 'UEFA',
+    country: 'England',
+    nationConfederation: 'UEFA',
+  });
+  const r16 = calendar.fixtures.filter((f) => f.kind === 'continental-knockout' && f.europeanRound === 'round-of-16');
+  const qf = calendar.fixtures.filter((f) => f.kind === 'continental-knockout' && f.europeanRound === 'quarter-final');
+  if (r16.length !== 2 || qf.length !== 2 || !qf.some((f) => f.leg === 2)) {
+    console.error('Champions League quarter-finals must be two-legged and tagged separately from the last 16');
+    process.exitCode = 1;
+  }
+  const qfTitle = fixtureTitle({
+    week: 36,
+    kind: 'continental-knockout',
+    continentalCup: 'ucl',
+    isDecisive: false,
+    leg: 2,
+    europeanRound: 'quarter-final',
+    opponentLabel: 'Real Madrid',
+  });
+  if (!qfTitle.includes('quarter-final') || !qfTitle.includes('2nd leg')) {
+    console.error('quarter-final second legs must be titled as quarter-final 2nd leg');
+    process.exitCode = 1;
+  }
+
+  const qf2Brief = nextMatchBriefing(
+    {
+      week: 36,
+      kind: 'continental-knockout',
+      continentalCup: 'ucl',
+      isDecisive: false,
+      leg: 2,
+      europeanRound: 'quarter-final',
+      opponentId: 'bayern',
+      opponentLabel: 'Bayern Munich',
+      isHome: false,
+    },
+    { knockoutAggFor: 1, knockoutAggAgainst: 0 } as ReturnType<typeof hydrateSeason>['sim'],
+  );
+  if (
+    qf2Brief.opponent !== 'Bayern Munich'
+    || qf2Brief.venue !== 'Away'
+    || !qf2Brief.competition.toLowerCase().includes('quarter-final')
+    || qf2Brief.stake !== firstLegStakeLine(1, 0)
+    || firstLegStakeLine(1, 0) !== '1–0 up from the first leg'
+    || firstLegStakeLine(0, 1) !== '1–0 down from the first leg'
+  ) {
+    console.error('hub briefing must lead with opponent, venue, QF 2nd leg, and first-leg aggregate');
+    process.exitCode = 1;
+  }
+
+  const madridKo = hydrateSeason({ seasonNumber: 2, club: madrid, careerGoalRatio: 0.8, nationId: 'spain' });
+  const qf1 = madridKo.calendar.fixtures.find((f) => f.kind === 'continental-knockout' && f.europeanRound === 'quarter-final' && f.leg === 1);
+  const qf2 = madridKo.calendar.fixtures.find((f) => f.kind === 'continental-knockout' && f.europeanRound === 'quarter-final' && f.leg === 2);
+  if (!qf1 || !qf2 || !madridKo.sim.europeanStanding) {
+    console.error('season 2 calendar must include a two-legged Champions League quarter-final');
+    process.exitCode = 1;
+  } else {
+    const simBefore = {
+      ...madridKo.sim,
+      europeanStanding: { ...madridKo.sim.europeanStanding, stage: 'quarter-final' as const },
+      knockoutAggFor: 0,
+      knockoutAggAgainst: 0,
+    };
+    const leg1Fx = { ...qf1, opponentId: 'bayern', opponentLabel: 'Bayern Munich', isHome: true };
+    const resolved = resolveFixture(simBefore, leg1Fx, madrid, 1, () => 0.2);
+    const aggLine = resolved.aggregateLine ?? continentalAggregateLine(leg1Fx, simBefore, resolved.result);
+    if (!aggLine || !aggLine.includes('Aggregate') || !aggLine.includes('second leg to come')) {
+      console.error('after a continental first leg the recap must show aggregate and that the second leg is to come');
+      process.exitCode = 1;
+    }
+    const nextLine = formatNextLine(
+      { ...qf2, opponentId: 'bayern', opponentLabel: 'Bayern Munich', isHome: false },
+      resolved.sim,
+    );
+    if (!nextLine.includes('Bayern Munich') || !nextLine.includes('2nd leg') || !(nextLine.includes('from the first leg') || nextLine.includes('after the first leg'))) {
+      console.error('after a continental first leg, next must name the 2nd-leg opponent and the running score');
+      process.exitCode = 1;
+    }
+    console.log('UCL briefing/recap', qf2Brief.stake, aggLine, nextLine);
+  }
+
+  let eliteBlowout = 0;
+  for (let i = 0; i < 250; i++) {
+    const result = simulateClubMatch(
+      { clubStrength: city.strength, opponentStrength: madrid.strength, isHome: true },
+      Math.random,
+      3,
+    );
+    if (result.scoreFor < 3 || result.scoreFor > 4 || result.scoreAgainst > 3 || result.scoreFor + result.scoreAgainst > 6) {
+      eliteBlowout += 1;
+    }
+  }
+  console.log('elite City-Madrid blowouts', eliteBlowout);
+  if (eliteBlowout > 0) {
+    console.error('elite Champions League ties must stay low-scoring even after a hat-trick');
+    process.exitCode = 1;
+  }
+
+  const aggDraw = settleDrawOnPenalties({ scoreFor: 1, scoreAgainst: 1, outcome: 'draw' }, true, () => 0.1);
+  if (!aggDraw.penalties || aggDraw.outcome !== 'win') {
+    console.error('level continental ties must be settled on penalties');
+    process.exitCode = 1;
+  }
+
+  const paced = simulateNpcRoundAfterPlayerMatch(
+    applyPlayerGroupResult(
+      createGroupState('Q', ['spain', 'scotland', 'norway', 'georgia', 'cyprus', 'israel'], 'qualifying'),
+      'spain',
+      'scotland',
+      2,
+      0,
+      true,
+    ),
+    'spain',
+    'scotland',
+    'pace-test',
+  );
+  const playedCounts = paced.rows.map((row) => row.played);
+  console.log('paced qualifying played', playedCounts);
+  if (playedCounts.some((played) => played !== 1)) {
+    console.error('other nations must stay on the same number of games as the player');
+    process.exitCode = 1;
+  }
+
+  const s1 = hydrateSeason({
+    seasonNumber: 1,
+    club: madrid,
+    careerGoalRatio: 0.8,
+    nationId: 'spain',
+    rng: () => 0.31,
+  });
+  const s1Ids = s1.calendar.fixtures
+    .filter((f) => f.kind === 'international' && f.internationalRound === 'qualifier' && f.opponentId)
+    .map((f) => f.opponentId as string);
+  const s1Homes = s1.calendar.fixtures
+    .filter((f) => f.kind === 'international' && f.internationalRound === 'qualifier')
+    .map((f) => Boolean(f.isHome));
+  const s2 = hydrateSeason({
+    seasonNumber: 2,
+    club: madrid,
+    careerGoalRatio: 0.8,
+    nationId: 'spain',
+    qualifierCarry: {
+      tournament: 'world-cup',
+      points: 10,
+      played: 5,
+      opponentIds: s1Ids,
+      group: s1.sim.internationalGroup ?? undefined,
+    },
+    rng: () => 0.77,
+  });
+  const s2Quals = s2.calendar.fixtures.filter((f) => f.kind === 'international' && f.internationalRound === 'qualifier');
+  const s2Ids = s2Quals.map((f) => f.opponentId as string);
+  const s2Homes = s2Quals.map((f) => Boolean(f.isHome));
+  console.log('WC S1/S2 opponents', s1Ids, s2Ids, 'homes', s1Homes, s2Homes);
+  if (s1Ids.length !== 5 || s2Ids.join() !== s1Ids.join()) {
+    console.error('World Cup qualifying must reuse the same six-team group across both seasons');
+    process.exitCode = 1;
+  }
+  if (s2Homes.some((home, i) => home === s1Homes[i])) {
+    console.error('the second qualifying season must flip home and away against the same group');
+    process.exitCode = 1;
+  }
+  if ((s2.sim.internationalGroup?.teamIds ?? []).sort().join() !== ['spain', ...s1Ids].sort().join()) {
+    console.error('season 2 qualifying table must keep the same six nations');
+    process.exitCode = 1;
+  }
+
+  const wonPot = evaluateClubPlayerOfTheTournament({
+    continentalChampion: 'ucl',
+    continentalStats: [{ cup: 'ucl', games: 13, goals: 10 }],
+  });
+  const lostPot = evaluateClubPlayerOfTheTournament({
+    continentalChampion: 'ucl',
+    continentalStats: [{ cup: 'ucl', games: 13, goals: 4 }],
+  });
+  const noTitle = evaluateClubPlayerOfTheTournament({
+    continentalChampion: null,
+    continentalStats: [{ cup: 'ucl', games: 13, goals: 12 }],
+  });
+  if (!wonPot.won || lostPot.won || noTitle.won) {
+    console.error('club Player of the Tournament requires winning the cup and a 0.7 goal ratio');
+    process.exitCode = 1;
+  }
+
+  const saudiOnly = pickPermanentClubs(1, 260_000_000, ['man-city'], 'spain', false, 'Premier League', TRANSFER_MARKET_CAP + 1);
+  if (saudiOnly.length === 0 || saudiOnly.some((club) => !(TWILIGHT_SAUDI_CLUB_IDS as readonly string[]).includes(club.id))) {
+    console.error('players valued over €250m must only receive offers from top Saudi clubs');
+    process.exitCode = 1;
+  }
+
+  const used = new Set<string>();
+  const lateFa = [
+    pickDomesticCupOpponent(city, 'quarter-final', used),
+    pickDomesticCupOpponent(city, 'semi-final', used),
+    pickDomesticCupOpponent(city, 'final', used),
+  ];
+  if (lateFa.some((club) => !club || club.league !== 'Premier League')) {
+    console.error('FA Cup quarter-finals onward must be Premier League clubs');
+    process.exitCode = 1;
+  }
+
+  const superSeen = new Set<string>();
+  for (let i = 0; i < 40; i++) {
+    const opp = pickSuperCupOpponent(madrid, 'ucl', () => (i + 0.5) / 40, i === 0 ? undefined : 'atletico-madrid');
+    if (opp) superSeen.add(opp.id);
+  }
+  console.log('super cup pool', [...superSeen]);
+  if (superSeen.size < 2 || (superSeen.has('atletico-madrid') && superSeen.size === 1)) {
+    console.error('UEFA Super Cup opponent must vary among the other cup\'s top sides');
+    process.exitCode = 1;
+  }
+
+  if (sitOutGamesAfterPlayedMatch(1) !== 0 || sitOutGamesAfterPlayedMatch(2) !== 1) {
+    console.error('a one-week injury after a played match must not sit the next knockout');
+    process.exitCode = 1;
+  }
+
+  const dropPens = applyMatchResult(applyMatchResult(applyMatchResult(createAvailability(), false), false), false);
+  if (dropPens.bannedGamesRemaining <= 0) {
+    console.error('three open-play blanks must still drop the player');
+    process.exitCode = 1;
+  }
+  const keptByOpenPlay = applyMatchResult(applyMatchResult(applyMatchResult(createAvailability(), false), false), true);
+  if (keptByOpenPlay.bannedGamesRemaining !== 0 || keptByOpenPlay.windowFails !== 0) {
+    console.error('an open-play goal must reset the drop window');
+    process.exitCode = 1;
+  }
+
+  let trialPens = 0;
+  for (let i = 0; i < 80; i++) {
+    if (rollChanceSetup({ clubStrength: 90, allowPenalties: false, rng: () => i / 80 }).kind === 'penalty') trialPens += 1;
+  }
+  if (trialPens > 0) {
+    console.error('trial matches must not roll penalty chances');
+    process.exitCode = 1;
+  }
+
+  const r16Stage = { ...s2.sim, europeanStanding: { cup: 'ucl' as const, stage: 'round-of-16' as const } };
+  if (qf.some((f) => !shouldSkipFixture(f, r16Stage))) {
+    console.error('quarter-final fixtures must wait until the last 16 is finished');
     process.exitCode = 1;
   }
 }

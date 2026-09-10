@@ -80,6 +80,8 @@ export interface ShotResult {
   saveMargin: number;
   /** Penalty only: the side the keeper committed to before the kick. */
   penaltyCommit?: -1 | 0 | 1;
+  /** True when this chance was a penalty, scored or not. */
+  penalty?: boolean;
   /** The 16×5 goalmouth cell the shot arrived in, when the shot was on target. */
   saveCell?: SaveCell;
 }

@@ -23,6 +23,15 @@ export function injuryDuration(remainingGames: number, rng: () => number = Math.
   return left;
 }
 
+/**
+ * A one-week injury is this matchweek. After the player has already played
+ * the game they got hurt in, only leftover weeks sit them out.
+ */
+export function sitOutGamesAfterPlayedMatch(duration: number): number {
+  if (duration <= 0) return 0;
+  return Math.max(0, duration - 1);
+}
+
 export function describeInjury(gamesRemaining: number): string {
   if (gamesRemaining <= 0) return '';
   if (gamesRemaining === 1) return 'Injured — misses the next game';

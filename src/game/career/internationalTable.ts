@@ -106,6 +106,37 @@ export function simulateRestOfGroup(state: IntlGroupState, playerId: string, see
   return { ...state, rows: sortGroupTable(rows) };
 }
 
+/**
+ * After the player plays one group/qualifier match, simulate that same
+ * matchday among the sides who are not involved so every nation stays on
+ * the same number of games.
+ */
+export function simulateNpcRoundAfterPlayerMatch(
+  state: IntlGroupState,
+  playerId: string,
+  opponentId: string,
+  seed: string,
+): IntlGroupState {
+  const others = state.teamIds.filter((id) => id !== playerId && id !== opponentId);
+  if (others.length < 2) return { ...state, rows: sortGroupTable(state.rows) };
+  const rng = mulberry32(hashSeed(seed));
+  const order = [...others];
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    const tmp = order[i];
+    order[i] = order[j];
+    order[j] = tmp;
+  }
+  let rows = state.rows.map((r) => ({ ...r }));
+  for (let i = 0; i + 1 < order.length; i += 2) {
+    const home = order[i];
+    const away = order[i + 1];
+    const [hg, ag] = simulateScore(home, away, rng);
+    rows = applyResult(rows, home, away, hg, ag);
+  }
+  return { ...state, rows: sortGroupTable(rows) };
+}
+
 export function applyPlayerGroupResult(
   state: IntlGroupState,
   playerId: string,

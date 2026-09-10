@@ -102,6 +102,9 @@ export interface SeasonRecord {
   topGoalscorerReason?: string | null;
   playerOfTheYearReason?: string | null;
   wpyReason?: string | null;
+  /** Club continental Player of the Tournament (must win the cup at ≥ 0.7). */
+  clubPlayerOfTheTournament?: boolean;
+  clubPlayerOfTheTournamentReason?: string | null;
   /** Weekly wage × 52 for this season. */
   earnings?: number;
   /** One-off seasonal boot / shirt deal. */
@@ -244,6 +247,8 @@ export interface CareerState {
    * Null outside that window.
    */
   intlQualifying: IntlQualifyingCarry | null;
+  /** Last UEFA Super Cup opponent, so the tie does not repeat the same club. */
+  lastSuperCupOpponentId?: string | null;
 }
 
 export interface LastMatchResult {
@@ -252,6 +257,12 @@ export interface LastMatchResult {
   won: boolean;
   trophyName: string | null;
   afterPhase: 'hub' | 'season-summary' | 'match' | 'opening-brief' | 'club-offer' | 'transfer-choice';
+  /** Scoreline / penalty line without player goals, aggregate, or next fixture. */
+  headline?: string | null;
+  playerGoals?: number | null;
+  chances?: number | null;
+  aggregateLine?: string | null;
+  nextLine?: string | null;
 }
 
 export interface IntlQualifyingCarry {

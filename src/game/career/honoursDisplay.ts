@@ -27,6 +27,7 @@ export function awardLabels(season: SeasonRecord): string[] {
   const labels: string[] = [];
   if (season.topGoalscorer) labels.push('Top goalscorer');
   if (season.playerOfTheYear) labels.push('Player of the Year');
+  if (season.clubPlayerOfTheTournament) labels.push('Club Player of the Tournament');
   const intl = season.international;
   if (intl?.playerOfTheTournament && intl.tournament) {
     const name = INTERNATIONAL_TOURNAMENTS[intl.tournament]?.name ?? intl.tournament;

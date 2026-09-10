@@ -212,7 +212,7 @@ function pickSecondDivisionClubs(
 }
 
 /** Paid bids need a budget. A free agent still draws quality clubs — just more of them. */
-function pickPermanentClubs(
+export function pickPermanentClubs(
   qualityTier: ClubTier,
   fee: number,
   excludeIds: string[],
@@ -221,6 +221,14 @@ function pickPermanentClubs(
   fromLeague?: string | null,
   marketValue?: number,
 ): Club[] {
+  if ((marketValue ?? 0) > TRANSFER_MARKET_CAP) {
+    return shuffle(
+      TWILIGHT_SAUDI_CLUB_IDS
+        .map((id) => getClub(id))
+        .filter((club): club is Club => Boolean(club))
+        .filter((club) => !excludeIds.includes(club.id)),
+    ).slice(0, TRANSFER_OFFER_COUNT);
+  }
   if (qualityTier === 1 && (marketValue ?? 0) < ELITE_TRANSFER_VALUE_FLOOR) {
     qualityTier = 2;
   }
@@ -360,6 +368,8 @@ export function consecutiveLoanSpells(history: SeasonRecord[], current?: SeasonR
 export const TWILIGHT_MLS_CLUB_IDS = ['lafc', 'inter-miami', 'nycfc', 'la-galaxy'] as const;
 /** From age 32, the same money from the four Saudi giants. */
 export const TWILIGHT_SAUDI_CLUB_IDS = ['al-hilal', 'al-nassr', 'al-ittihad', 'al-ahli'] as const;
+/** European clubs will not bid above this asking price. */
+export const TRANSFER_MARKET_CAP = 250_000_000;
 
 /** Top-tier European weekly wage, used for twilight MLS and Saudi bids. */
 export function twilightStarWage(marketValue: number): number {

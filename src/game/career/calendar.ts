@@ -47,6 +47,8 @@ export interface CalendarFixture {
   isDecisive: boolean;
   /** Leg number for two-legged continental knockout ties. */
   leg?: 1 | 2;
+  /** Distinguishes R16 from quarter-final so the second leg is not skipped. */
+  europeanRound?: 'round-of-16' | 'quarter-final';
   /** Pre-assigned opponent for this fixture (club id, or a nation id for
    * international matches). */
   opponentId?: string;
@@ -367,12 +369,14 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
     const knockoutStart = Math.max(1, leagueMatchWeeks - KNOCKOUT_LEGS_BEFORE_FINAL + 1);
     let knockoutWeek = knockoutStart;
     for (let round = 0; round < KNOCKOUT_ROUNDS_BEFORE_SEMI; round++) {
+      const europeanRound = round === 0 ? 'round-of-16' : 'quarter-final';
       fixtures.push({
         week: Math.min(leagueMatchWeeks, knockoutWeek++),
         kind: 'continental-knockout',
         continentalCup: cup,
         isDecisive: false,
         leg: 1,
+        europeanRound,
       });
       fixtures.push({
         week: Math.min(leagueMatchWeeks, knockoutWeek++),
@@ -380,6 +384,7 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
         continentalCup: cup,
         isDecisive: false,
         leg: 2,
+        europeanRound,
       });
     }
     fixtures.push({
@@ -418,15 +423,6 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
   }
 
   if (intlLive && campaign.phase === 'nations-league' && campaign.tournament) {
-    for (let i = 0; i < INTERNATIONAL_FRIENDLIES; i++) {
-      const week = Math.max(1, Math.min(leagueMatchWeeks, Math.round((0.03 + i * 0.05) * leagueMatchWeeks)));
-      fixtures.push({
-        week,
-        kind: 'international',
-        isDecisive: false,
-        internationalRound: 'friendly',
-      });
-    }
     const groupCount = tournamentGroupGames(campaign.tournament);
     for (let i = 0; i < groupCount; i++) {
       const fraction = 0.12 + (i / Math.max(1, groupCount - 1)) * 0.5;

@@ -6,11 +6,12 @@ import { mlsConferenceOf } from './data/leagueFormat';
 import { buildSeasonStandings, rankLeagueTable } from './matchEngine';
 import { newContractYears, playerMarketValueFromSeasons, weeklyWageForClub } from './playerValue';
 import { applyTrialMatch, assignOpeningTrialClub, beginClubTrial, beginFavouriteClubTrial, createYouthCampaign, failClubTrial } from './openingFlow';
-import { hydrateSeason } from './seasonSim';
+import { hydrateSeason, nextPlayableFixture } from './seasonSim';
+import { formatNextLine } from './matchBriefing';
 import { useCareerStore } from './store';
 import { resolveSeasonTransition, trialFailTransferPending, type PendingTransfer } from './transfers';
 import type { OpeningCampaign, SeasonRecord } from './types';
-import { applyPlayerGroupResult, createGroupState, simulateRestOfGroup } from './internationalTable';
+import { applyPlayerGroupResult, createGroupState, simulateNpcRoundAfterPlayerMatch } from './internationalTable';
 
 function season(partial: SeasonRecord): SeasonRecord {
   return partial;
@@ -60,6 +61,8 @@ export function applyCareerLayoutPreview(): void {
       trophies: ['La Liga', 'Copa del Rey', 'Champions League'],
       topGoalscorer: true,
       playerOfTheYear: true,
+      clubPlayerOfTheTournament: false,
+      clubPlayerOfTheTournamentReason: 'Won the Champions League but scored 0.31 goals per game in it.',
       wonWpy: true,
       wpyReason: 'Elite goal ratio plus winning the Champions League.',
       earnings: 7_280_000,
@@ -215,10 +218,11 @@ export function applyCareerLayoutPreview(): void {
   const club = getClub(previewClubId);
   if (!club) return;
   const { calendar, sim } = hydrateSeason({
-    seasonNumber: 4,
+    seasonNumber: preview === 'hub-qualifying' ? 1 : 4,
     club,
     careerGoalRatio: 0.78,
     nationId: preview === 'mls' ? 'united-states' : preview === 'saudi' ? 'saudi-arabia' : preview === 'match-psg' ? 'france' : 'spain',
+    careerStart: preview === 'hub-qualifying' ? 'favourite-first-team' : undefined,
   });
   if (preview === 'mls') {
     sim.leagueTable = rankLeagueTable(
@@ -367,11 +371,7 @@ export function applyCareerLayoutPreview(): void {
     sim.qualifierPoints = 4;
     sim.internationalGroup = applyPlayerGroupResult(
       applyPlayerGroupResult(
-        simulateRestOfGroup(
-          createGroupState('Q', ['spain', 'scotland', 'norway', 'georgia', 'cyprus'], 'qualifying'),
-          'spain',
-          'preview-qualifying',
-        ),
+        createGroupState('Q', ['spain', 'scotland', 'norway', 'georgia', 'cyprus', 'israel'], 'qualifying'),
         'spain',
         'scotland',
         2,
@@ -384,6 +384,33 @@ export function applyCareerLayoutPreview(): void {
       1,
       false,
     );
+    sim.internationalGroup = simulateNpcRoundAfterPlayerMatch(
+      simulateNpcRoundAfterPlayerMatch(
+        sim.internationalGroup,
+        'spain',
+        'scotland',
+        'preview-qualifying-1',
+      ),
+      'spain',
+      'norway',
+      'preview-qualifying-2',
+    );
+  } else if (preview === 'hub-ucl-leg2') {
+    const idx = calendar.fixtures.findIndex(
+      (f) => f.kind === 'continental-knockout' && f.europeanRound === 'quarter-final' && f.leg === 2,
+    );
+    if (idx >= 0) {
+      const fx = calendar.fixtures[idx];
+      fx.opponentId = 'bayern';
+      fx.opponentLabel = 'Bayern Munich';
+      fx.isHome = false;
+      fx.continentalCup = 'ucl';
+      fx.playerChances = 2;
+      sim.fixtureIndex = idx;
+    }
+    if (sim.europeanStanding) sim.europeanStanding.stage = 'quarter-final';
+    sim.knockoutAggFor = 1;
+    sim.knockoutAggAgainst = 0;
   } else if (preview === 'match-intl-ko') {
     const idx = calendar.fixtures.findIndex((f) => f.kind === 'international');
     if (idx >= 0) matchFixtureIndex = idx;
@@ -729,6 +756,17 @@ export function applyCareerLayoutPreview(): void {
   nationalTeam = recordInternationalAppearance(nationalTeam, 'euro', true, 1);
   nationalTeam = recordInternationalAppearance(nationalTeam, 'euro', false, 0);
 
+  const recapCalendar = isReservePreview ? reserveSeason?.calendar ?? calendar : calendar;
+  const recapSim = isReservePreview ? reserveSeason?.sim ?? sim : sim;
+  const recapNextFixture = recapCalendar ? nextPlayableFixture(recapCalendar, recapSim) : undefined;
+  const recapNationName = preview === 'mls' ? 'United States' : preview === 'saudi' ? 'Saudi Arabia' : 'Spain';
+  const computedNextLine = recapNextFixture
+    ? formatNextLine(recapNextFixture, recapSim, {
+        playerNationName: recapNationName,
+        tournament: recapSim.internationalTournament ?? recapCalendar.internationalTournament,
+      })
+    : null;
+
   useCareerStore.setState({
     phase:
       isTrialPreview || isTrialRetryPreview || isTrialOffersPreview || preview === 'trial-drop'
@@ -755,7 +793,7 @@ export function applyCareerLayoutPreview(): void {
                   ? 'match'
                   : 'hub',
     age: isTrialPreview || isYouthPreview || isClubTrialPreview || isReservePreview ? 16 : preview === 'end' ? 36 : preview === 'championship-transfer' ? 20 : promoteSummary ? 22 : 19,
-    seasonNumber: isTrialPreview || isYouthPreview || isClubTrialPreview || isReservePreview ? 1 : preview === 'end' ? 21 : promoteSummary ? 6 : 4,
+    seasonNumber: isTrialPreview || isYouthPreview || isClubTrialPreview || isReservePreview || preview === 'hub-qualifying' ? 1 : preview === 'end' ? 21 : promoteSummary ? 6 : 4,
     clubId: isYouthPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : preview === 'match-psg' ? 'psg' : preview === 'championship-transfer' || promoteSummary ? 'leicester' : 'real-madrid',
     parentClubId: isYouthPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : preview === 'match-psg' ? 'psg' : preview === 'championship-transfer' || promoteSummary ? 'leicester' : 'real-madrid',
     role: isReservePreview || isTrialPreview || isYouthPreview || isClubTrialPreview ? 'reserve' : 'first-team',
@@ -767,7 +805,9 @@ export function applyCareerLayoutPreview(): void {
     seasonsAtCurrentClub: preview === 'end' ? 10 : promoteSummary ? 1 : 3,
     nationality: preview === 'mls' ? 'united-states' : preview === 'saudi' ? 'saudi-arabia' : preview === 'championship-transfer' ? 'england' : 'spain',
     nationalTeam,
-    availability: createAvailability(),
+    availability: preview === 'hub-ucl-leg2'
+      ? { phase: 0, windowFails: 2, bannedGamesRemaining: 0 }
+      : createAvailability(),
     seasonHistory: preview === 'championship-transfer' ? champSeasons.slice(0, 2) : history,
     careerGoals: preview === 'end' ? 312 : preview === 'championship-transfer' ? 72 : 58,
     careerGames: preview === 'end' ? 540 : preview === 'championship-transfer' ? 138 : 76,
@@ -822,6 +862,8 @@ export function applyCareerLayoutPreview(): void {
               trophies: ['Championship'],
               topGoalscorer: false,
               playerOfTheYear: true,
+              clubPlayerOfTheTournament: false,
+              clubPlayerOfTheTournamentReason: 'Win the continental tournament at 0.7 goals per game to take Player of the Tournament.',
               topGoalscorerReason: '20 league goals in Championship, but another striker took the golden boot.',
               playerOfTheYearReason: 'Won Championship Player of the Year with 20 league goals.',
               wonWpy: false,
@@ -867,18 +909,49 @@ export function applyCareerLayoutPreview(): void {
               topGoalscorer: false,
             },
           }),
-    lastMatchSummary: preview === 'result-pens'
+    lastMatchSummary: preview === 'hub-ucl-leg2'
+      ? 'Won 1–0 vs Bayern Munich · 1 goal from 2 chances · Aggregate 1–0 · second leg to come · Next: Bayern Munich · Away · Champions League quarter-final 2nd leg · 1–0 up from the first leg'
+      : preview === 'result-pens'
       ? 'Spain drew 1–1 vs France (won 5–4 on penalties) · through to the quarter-finals · 1 goal from 2 chances'
       : 'Spain won 2–0 vs Italy · 2 goals from 2 chances',
-    lastMatchResult: {
-      summary: preview === 'result-pens'
-        ? 'Spain drew 1–1 vs France (won 5–4 on penalties) · through to the quarter-finals · 1 goal from 2 chances'
-        : 'Spain won 2–0 vs Italy · 2 goals from 2 chances',
-      isFinal: preview !== 'result-pens',
-      won: true,
-      trophyName: preview === 'result-pens' ? null : 'European Championship',
-      afterPhase: 'season-summary',
-    },
+    lastMatchResult: preview === 'hub-ucl-leg2'
+      ? {
+          summary: 'Won 1–0 vs Bayern Munich · 1 goal from 2 chances · Aggregate 1–0 · second leg to come · Next: Bayern Munich · Away · Champions League quarter-final 2nd leg · 1–0 up from the first leg',
+          headline: 'Won 1–0 vs Bayern Munich',
+          isFinal: false,
+          won: true,
+          trophyName: null,
+          afterPhase: 'hub',
+          playerGoals: 1,
+          chances: 2,
+          aggregateLine: 'Aggregate 1–0 · second leg to come',
+          nextLine: 'Next: Bayern Munich · Away · Champions League quarter-final 2nd leg · 1–0 up from the first leg',
+        }
+      : preview === 'result-pens'
+      ? {
+          summary: 'Spain drew 1–1 vs France (won 5–4 on penalties) · through to the quarter-finals · 1 goal from 2 chances',
+          headline: 'Spain drew 1–1 vs France (won 5–4 on penalties) · through to the quarter-finals',
+          isFinal: false,
+          won: true,
+          trophyName: null,
+          afterPhase: 'hub',
+          playerGoals: 1,
+          chances: 2,
+          aggregateLine: null,
+          nextLine: computedNextLine,
+        }
+      : {
+          summary: 'Spain won 2–0 vs Italy · 2 goals from 2 chances',
+          headline: 'Spain won 2–0 vs Italy',
+          isFinal: preview === 'result',
+          won: true,
+          trophyName: preview === 'result' ? 'European Championship' : null,
+          afterPhase: preview === 'result' ? 'season-summary' : 'hub',
+          playerGoals: 2,
+          chances: 2,
+          aggregateLine: null,
+          nextLine: computedNextLine,
+        },
     weeklyWage: preview === 'end' ? 40_000 : promoteSummary && leicester ? weeklyWageForClub(leicester, value, 'Championship') : 140_000,
     careerEarnings: preview === 'end' ? 86_400_000 : 14_560_000,
     contractYears: preview === 'end' ? 1 : promoteSummary || preview === 'expired' ? 2 : preview === 'hub' ? 2 : 5,

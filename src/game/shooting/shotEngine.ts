@@ -445,6 +445,7 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
       keeperDive: computeKeeperDive(actualAim, aimToSaveCell(actualAim), false, difficulty, travelTimeMs, shotCtx),
       saveMargin: 0,
       penaltyCommit,
+      penalty: Boolean(options.penalty),
     };
   }
 
@@ -459,6 +460,7 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
       keeperDive: computeKeeperDive(actualAim, aimToSaveCell(actualAim), false, difficulty, travelTimeMs, shotCtx),
       saveMargin: 0,
       penaltyCommit,
+      penalty: Boolean(options.penalty),
     };
   }
 
@@ -481,5 +483,6 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
     saveMargin,
     saveCell,
     penaltyCommit,
+    penalty: Boolean(options.penalty),
   };
 }
