@@ -10,6 +10,9 @@ import type { WpyResult } from './wpy';
 
 export type PlayerRole = 'reserve' | 'first-team' | 'loan';
 
+/** Playing time in the first-team / loan squad. Separate from contract role. */
+export type SquadStatus = 'starter' | 'rotation' | 'impact';
+
 /**
  * Tracks the escalating "miss games -> get dropped" rule:
  * - You get an allowance of consecutive games to score in.
@@ -76,6 +79,10 @@ export interface SeasonRecord {
   seasonNumber: number;
   clubId: string;
   role: PlayerRole;
+  /** Playing-time status used for this season's league rotation. */
+  squadStatus?: SquadStatus;
+  /** Status locked in at season end for the following campaign. */
+  nextSquadStatus?: SquadStatus;
   matches: MatchRecord[];
   goals: number;
   gamesPlayed: number;
@@ -188,6 +195,13 @@ export interface CareerState {
   clubId: string | null;
   parentClubId: string | null;
   role: PlayerRole;
+  /** League playing time: starter, rotation, or impact. Unused in the reserve year. */
+  squadStatus: SquadStatus;
+  /**
+   * Set when the player agreed personal terms but the selling club rejected
+   * the fee. Cleared on a completed move or stay.
+   */
+  lastTransferRejection: string | null;
   /** Seasons spent at the current club (0 = this is the grace-period season). */
   seasonsAtCurrentClub: number;
   trial: TrialState | null;

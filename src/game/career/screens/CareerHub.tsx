@@ -13,6 +13,13 @@ import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons, transferFe
 import { conferenceTable, ensureInternationalGroup, fixtureTitle, internationalRoundLabel, nextPlayableFixture, type SeasonSimState } from '../seasonSim';
 import { nextMatchBriefing, playerGoalsLine } from '../matchBriefing';
 import { groupPosition, sortGroupTable } from '../internationalTable';
+import {
+  completedLeagueFixtureCount,
+  describeRotationSitOut,
+  describeSquadStatus,
+  isSquadRotationSitOut,
+  SQUAD_STATUS_LABEL,
+} from '../squadStatus';
 import { requiredGoalRatio } from '../transfers';
 import { useCareerStore } from '../store';
 import { DATA_CARD, DATA_INSET } from './dataUi';
@@ -30,6 +37,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const clubId = useCareerStore((s) => s.clubId);
   const parentClubId = useCareerStore((s) => s.parentClubId);
   const role = useCareerStore((s) => s.role);
+  const squadStatus = useCareerStore((s) => s.squadStatus);
   const season = useCareerStore((s) => s.currentSeason);
   const seasonCalendar = useCareerStore((s) => s.seasonCalendar);
   const availability = useCareerStore((s) => s.availability);
@@ -75,7 +83,18 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const nextFixture = seasonCalendar && seasonSim ? nextPlayableFixture(seasonCalendar, seasonSim) : undefined;
   const nextIsInternational = nextFixture?.kind === 'international';
   const squadAvailability = nextIsInternational && nationalTeam ? nationalTeam.availability : availability;
-  const available = isAvailable(squadAvailability) && !injured;
+  const rotatedOut = Boolean(
+    nextFixture
+    && seasonCalendar
+    && seasonSim
+    && isSquadRotationSitOut(
+      role,
+      squadStatus,
+      nextFixture.kind,
+      completedLeagueFixtureCount(seasonCalendar, seasonSim.fixtureIndex),
+    ),
+  );
+  const available = isAvailable(squadAvailability) && !injured && !rotatedOut;
   const briefing = nextFixture
     ? nextMatchBriefing(nextFixture, seasonSim, {
         playerNationName: nation?.name,
@@ -84,9 +103,11 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
     : null;
   const squadLine = injured
     ? describeInjury(injuryGamesRemaining)
-    : nextIsInternational
-      ? describeAvailability(squadAvailability)
-      : describeAvailability(availability);
+    : rotatedOut
+      ? describeRotationSitOut(squadStatus)
+      : nextIsInternational
+        ? describeAvailability(squadAvailability)
+        : describeAvailability(availability);
   const week = seasonCalendar && seasonSim
     ? currentCalendarWeek(seasonCalendar, seasonSim.fixtureIndex)
     : season.matches.length + 1;
@@ -122,6 +143,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
       <div className={DATA_CARD} style={{ borderLeft: `4px solid ${kit.primary}` }}>
         <p className="text-xs uppercase tracking-wide text-white/40">
           {displaySeasonLabel(seasonNumber, { role, careerStart })} · {ROLE_LABEL[role]}
+          {role !== 'reserve' ? ` · ${SQUAD_STATUS_LABEL[squadStatus]}` : ''}
           {` · Week ${week} of ${totalWeeks}`}
         </p>
         <h1 className="font-display text-2xl font-bold">{club.name}</h1>
@@ -131,6 +153,9 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         </p>
         {nation && <p className="mt-1 text-xs text-white/50">International: {nation.name}</p>}
         {parentClub && <p className="mt-1 text-xs text-white/40">On loan from {parentClub.name}</p>}
+        {role !== 'reserve' && (
+          <p className="mt-1 text-xs text-white/50">{describeSquadStatus(squadStatus)}</p>
+        )}
         {role !== 'reserve' && (
           <p className="mt-1 text-xs text-white/50">
             Market value {formatEuros(marketValue)}

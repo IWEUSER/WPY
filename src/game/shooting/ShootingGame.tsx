@@ -31,6 +31,7 @@ import { TOP_LEAGUES } from '../career/playerValue';
 import {
   advanceDefender,
   ballHasReachedDefender,
+  chanceDefenders,
   defenderBlocksBall,
   defenderScreenBody,
   shotLineHitsDefender,
@@ -70,6 +71,7 @@ interface AnimState {
   shotDistanceM: number;
   chanceKind: ChanceKind;
   defender: DefenderPose | null;
+  defenders: DefenderPose[];
   lastTickMs: number;
 }
 
@@ -214,20 +216,29 @@ function readDevStadium(): StadiumAppearance | null {
   };
 }
 
+function readDevDualDefenders(): boolean {
+  if (!import.meta.env.DEV) return false;
+  const raw = new URLSearchParams(window.location.search).get('defenders');
+  return raw === '2' || raw === 'dual';
+}
+
 function nextChance(
   clubStrength?: number,
   skinPalette: SkinPalette = 'any',
   allowPenalties = true,
+  opponentStrength?: number,
 ): ChanceSetup {
   const forcePenalty = allowPenalties && readDevPenalty();
   const forceDistance = readDevDistance();
   return rollChanceSetup({
     clubStrength,
+    opponentStrength,
     forcePenalty,
     forceDistanceM: forcePenalty ? undefined : (forceDistance ?? undefined),
     disableDefender: readDevDefenderOff(),
     skinPalette,
     allowPenalties,
+    forceDualDefenders: readDevDualDefenders(),
   });
 }
 
@@ -295,6 +306,8 @@ export interface ShootingGameProps {
   onComplete?: () => void;
   /** Club strength (≈52–94). Scales how often a chance is a penalty. */
   clubStrength?: number;
+  /** Opposition quality. Faster close-down; elite sides can bring a second defender. */
+  opponentStrength?: number;
   /** Stadium bowl, home/away crowd colours, and opposition defender kit. */
   stadium?: StadiumAppearance;
   /** Skin palette for the opposition keeper and defender. */
@@ -313,6 +326,7 @@ export default function ShootingGame({
   onShotResolved,
   onComplete,
   clubStrength,
+  opponentStrength,
   stadium,
   opponentSkinPalette = 'any',
   allowPenalties = true,
@@ -326,9 +340,10 @@ export default function ShootingGame({
   const [stats, setStats] = useState<ShotStats>({ shots: 0, goals: 0, streak: 0, bestStreak: 0 });
   const [muted, setMuted] = useState(false);
 
-  const [initialChance] = useState(() => nextChance(clubStrength, opponentSkinPalette, allowPenalties));
+  const [initialChance] = useState(() => nextChance(clubStrength, opponentSkinPalette, allowPenalties, opponentStrength));
   const [ballHintX, setBallHintX] = useState(initialChance.ballStartXRatio);
   const [chanceKind, setChanceKind] = useState<ChanceKind>(initialChance.kind);
+  const [defenderCount, setDefenderCount] = useState(chanceDefenders(initialChance).length);
 
   const shotsTakenRef = useRef(0);
   const maxShotsRef = useRef(maxShots);
@@ -339,6 +354,8 @@ export default function ShootingGame({
   onCompleteRef.current = onComplete;
   const clubStrengthRef = useRef(clubStrength);
   clubStrengthRef.current = clubStrength;
+  const opponentStrengthRef = useRef(opponentStrength);
+  opponentStrengthRef.current = opponentStrength;
   const skinPaletteRef = useRef(opponentSkinPalette);
   skinPaletteRef.current = opponentSkinPalette;
   const allowPenaltiesRef = useRef(allowPenalties);
@@ -364,6 +381,7 @@ export default function ShootingGame({
     shotDistanceM: initialChance.distanceM,
     chanceKind: initialChance.kind,
     defender: initialChance.defender,
+    defenders: chanceDefenders(initialChance),
     lastTickMs: 0,
   });
 
@@ -405,7 +423,12 @@ export default function ShootingGame({
 
   const resetForNextShot = useCallback(() => {
     const { w, h } = sizeRef.current;
-    const chance = nextChance(clubStrengthRef.current, skinPaletteRef.current, allowPenaltiesRef.current);
+    const chance = nextChance(
+      clubStrengthRef.current,
+      skinPaletteRef.current,
+      allowPenaltiesRef.current,
+      opponentStrengthRef.current,
+    );
     const view = createPitchView(w, h, chance.distanceM);
     const start = ballStartPixel(view, chance.ballStartXRatio);
     const anim = animRef.current;
@@ -417,6 +440,7 @@ export default function ShootingGame({
     anim.shotDistanceM = chance.distanceM;
     anim.chanceKind = chance.kind;
     anim.defender = chance.defender;
+    anim.defenders = chanceDefenders(chance);
     anim.lastTickMs = 0;
     anim.ballPixel = start;
     anim.ballRadius = ballRadiusNear(view);
@@ -427,6 +451,7 @@ export default function ShootingGame({
     anim.shakeUntilMs = 0;
     setBallHintX(chance.ballStartXRatio);
     setChanceKind(chance.kind);
+    setDefenderCount(chanceDefenders(chance).length);
     setUiPhase('idle');
     setResultLabel(null);
   }, []);
@@ -552,8 +577,17 @@ export default function ShootingGame({
         if (anim.phase === 'idle' || anim.phase === 'dragging') {
           const dt = anim.lastTickMs > 0 ? Math.min(0.05, (now - anim.lastTickMs) / 1000) : 0;
           anim.lastTickMs = now;
-          if (anim.defender && dt > 0) {
-            anim.defender = advanceDefender(anim.defender, anim.shotDistanceM, anim.ballStartXRatio, dt);
+          if (anim.defenders.length > 0 && dt > 0) {
+            anim.defenders = anim.defenders.map((defender) =>
+              advanceDefender(
+                defender,
+                anim.shotDistanceM,
+                anim.ballStartXRatio,
+                dt,
+                opponentStrengthRef.current ?? 70,
+              ),
+            );
+            anim.defender = anim.defenders[0] ?? null;
           }
           const start = ballStartPixel(view, anim.ballStartXRatio);
           anim.ballPixel = start;
@@ -561,8 +595,8 @@ export default function ShootingGame({
           const devPose = readDevKeeperPose();
           const devCell = readDevPoseCell();
           drawKeeper(ctx, view, devPose ?? anim.keeperPose, { longSleeves: look.showSun === false });
-          if (anim.defender) {
-            drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit, anim.defender.stride, anim.defender.skinTone, anim.defender.hairColor, look.showSun === false);
+          for (const defender of [...anim.defenders].sort((a, b) => a.z - b.z)) {
+            drawDefender(ctx, view, defender.worldX, defender.z, defenderKit, defender.stride, defender.skinTone, defender.hairColor, look.showSun === false);
           }
           if (anim.phase === 'dragging' && anim.dragStart && anim.dragPoints.length > 1) {
             // Show the actual curved path being swiped, not just a straight
@@ -640,21 +674,21 @@ export default function ShootingGame({
 
           drawTrail(ctx, anim.ballTrail);
           drawKeeper(ctx, view, anim.keeperPose, { longSleeves: look.showSun === false });
-          if (anim.defender) {
-            drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit, anim.defender.stride, anim.defender.skinTone, anim.defender.hairColor, look.showSun === false);
+          for (const defender of [...anim.defenders].sort((a, b) => a.z - b.z)) {
+            drawDefender(ctx, view, defender.worldX, defender.z, defenderKit, defender.stride, defender.skinTone, defender.hairColor, look.showSun === false);
           }
           drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
 
-          if (
-            anim.defender
-            && eased > 0.06
-            && ballHasReachedDefender(view, anim.defender, anim.ballPixel, anim.ballRadius)
-            && (
-              shotLineHitsDefender(anim.shotDistanceM, anim.ballStartXRatio, result.aim, anim.defender)
-              || defenderBlocksBall(view, anim.defender, anim.ballPixel, anim.ballRadius)
-            )
-          ) {
-            const body = defenderScreenBody(view, anim.defender);
+          const blocking = eased > 0.06
+            ? anim.defenders.find((defender) =>
+              ballHasReachedDefender(view, defender, anim.ballPixel, anim.ballRadius)
+              && (
+                shotLineHitsDefender(anim.shotDistanceM, anim.ballStartXRatio, result.aim, defender)
+                || defenderBlocksBall(view, defender, anim.ballPixel, anim.ballRadius)
+              ))
+            : undefined;
+          if (blocking) {
+            const body = defenderScreenBody(view, blocking);
             anim.ballPixel = { x: body.torsoX, y: body.torsoY };
             const blocked: ShotResult = { ...result, outcome: 'blocked' };
             anim.result = blocked;
@@ -679,8 +713,8 @@ export default function ShootingGame({
           }
         } else if (anim.phase === 'result' && anim.result) {
           drawKeeper(ctx, view, anim.keeperPose, { longSleeves: look.showSun === false });
-          if (anim.defender) {
-            drawDefender(ctx, view, anim.defender.worldX, anim.defender.z, defenderKit, anim.defender.stride, anim.defender.skinTone, anim.defender.hairColor, look.showSun === false);
+          for (const defender of [...anim.defenders].sort((a, b) => a.z - b.z)) {
+            drawDefender(ctx, view, defender.worldX, defender.z, defenderKit, defender.stride, defender.skinTone, defender.hairColor, look.showSun === false);
           }
           drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
           if (now - anim.resultAtMs > RESULT_HOLD_MS) {
@@ -801,6 +835,11 @@ export default function ShootingGame({
             {chanceKind === 'penalty' && (
               <p className="inline-block rounded-full bg-amber-400/20 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-amber-200">
                 Penalty · no defender
+              </p>
+            )}
+            {chanceKind === 'open' && defenderCount > 1 && (
+              <p className="inline-block rounded-full bg-sky-400/15 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-sky-200">
+                Two defenders
               </p>
             )}
           </div>

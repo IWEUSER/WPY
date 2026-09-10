@@ -49,7 +49,12 @@ export interface ChanceSetup {
   distanceM: number;
   ballStartXRatio: number;
   defender: DefenderPose | null;
+  /** All outfield defenders on this chance. Empty on a penalty. */
+  defenders?: DefenderPose[];
 }
+
+/** Opposition at this strength spawn a second defender on open-play chances. */
+export const ELITE_DUAL_DEFENDER_STRENGTH = 86;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -151,8 +156,13 @@ export function defenderCloseTarget(
   return { worldX: clamp(lineX + coverSide * offset, -7.5, 7.5), z };
 }
 
-export function defenderCloseSpeedMps(shotDistanceM: number): number {
-  return canKeepTenYardGap(shotDistanceM) ? DEFENDER_CLOSE_SPEED_MPS : DEFENDER_CLOSE_SPEED_NEAR_MPS;
+export function oppositionCloseSpeedScale(opponentStrength = 70): number {
+  return clamp(1 + (opponentStrength - 70) * 0.012, 0.9, 1.32);
+}
+
+export function defenderCloseSpeedMps(shotDistanceM: number, opponentStrength = 70): number {
+  const base = canKeepTenYardGap(shotDistanceM) ? DEFENDER_CLOSE_SPEED_MPS : DEFENDER_CLOSE_SPEED_NEAR_MPS;
+  return base * oppositionCloseSpeedScale(opponentStrength);
 }
 
 /** Step the defender toward the ball. dt is seconds; large frames are capped. */
@@ -161,6 +171,7 @@ export function advanceDefender(
   shotDistanceM: number,
   ballStartXRatio: number,
   dtSeconds: number,
+  opponentStrength = 70,
 ): DefenderPose {
   const target = defenderCloseTarget(shotDistanceM, ballStartXRatio, defender.coverSide);
   const dx = target.worldX - defender.worldX;
@@ -169,7 +180,7 @@ export function advanceDefender(
   if (dist < 0.025) {
     return { ...defender, worldX: target.worldX, z: target.z };
   }
-  const speed = defenderCloseSpeedMps(shotDistanceM);
+  const speed = defenderCloseSpeedMps(shotDistanceM, opponentStrength);
   const step = Math.min(dist, speed * clamp(dtSeconds, 0, 0.05));
   const t = step / dist;
   return {
@@ -277,17 +288,83 @@ export function defenderBlocksBall(
 
 export interface RollChanceOptions {
   clubStrength?: number;
+  /** Opposition quality. Scales close-down speed and can add a second defender. */
+  opponentStrength?: number;
   rng?: () => number;
   forcePenalty?: boolean;
   forceDistanceM?: number;
   disableDefender?: boolean;
   skinPalette?: SkinPalette;
   allowPenalties?: boolean;
+  forceDualDefenders?: boolean;
+}
+
+export function chanceDefenders(setup: Pick<ChanceSetup, 'defender' | 'defenders'>): DefenderPose[] {
+  if (setup.defenders && setup.defenders.length > 0) return setup.defenders;
+  return setup.defender ? [setup.defender] : [];
+}
+
+const SCOREABLE_AIMS: AimPoint[] = [
+  { x: -0.92, y: 0.12 },
+  { x: 0.92, y: 0.12 },
+  { x: -0.72, y: 0.55 },
+  { x: 0.72, y: 0.55 },
+  { x: -0.88, y: 0.88 },
+  { x: 0.88, y: 0.88 },
+  { x: -0.45, y: 1.08 },
+  { x: 0.45, y: 1.08 },
+  { x: 0, y: 1.14 },
+];
+
+/** True when at least one in-goal or lofted aim misses every defender. */
+export function chanceIsScoreable(
+  distanceM: number,
+  ballStartXRatio: number,
+  defenders: DefenderPose[],
+): boolean {
+  if (defenders.length === 0) return true;
+  return SCOREABLE_AIMS.some((aim) =>
+    !defenders.some((defender) => shotLineHitsDefender(distanceM, ballStartXRatio, aim, defender)),
+  );
+}
+
+/**
+ * Opposite-side cover for elite chances. Nudged wide if the pair would
+ * close every shooting lane; omitted rather than create an unwinnable look.
+ */
+export function placeCoverDefender(
+  first: DefenderPose,
+  shotDistanceM: number,
+  ballStartXRatio: number,
+  rng: () => number = Math.random,
+  palette: SkinPalette = 'any',
+): DefenderPose | null {
+  if (!canKeepTenYardGap(shotDistanceM)) return null;
+  const coverSide: -1 | 1 = first.coverSide === 1 ? -1 : 1;
+  const ballWorldX = ballWorldXFromRatio(ballStartXRatio);
+  const z = clamp(first.z * 0.72, MIN_DEFENDER_Z_M, Math.max(MIN_DEFENDER_Z_M, first.z - 1.1));
+  const tryOffset = (offset: number): DefenderPose => {
+    const look = pickPlayerLook(rng() * 1_000_000, palette);
+    return {
+      worldX: clamp(lineToGoalCentreX(ballWorldX, shotDistanceM, z) + coverSide * offset, -7.5, 7.5),
+      z,
+      coverSide,
+      stride: 0,
+      skinTone: look.skin,
+      hairColor: look.hair,
+    };
+  };
+  const firstTry = tryOffset(1.85 + rng() * 0.7);
+  if (chanceIsScoreable(shotDistanceM, ballStartXRatio, [first, firstTry])) return firstTry;
+  const wide = tryOffset(2.65);
+  if (chanceIsScoreable(shotDistanceM, ballStartXRatio, [first, wide])) return wide;
+  return null;
 }
 
 export function rollChanceSetup(options: RollChanceOptions = {}): ChanceSetup {
   const rng = options.rng ?? Math.random;
   const clubStrength = options.clubStrength ?? 70;
+  const opponentStrength = options.opponentStrength ?? 70;
   const allowPenalties = options.allowPenalties !== false;
   const takePenalty = allowPenalties && (Boolean(options.forcePenalty) || (
     options.forceDistanceM === undefined && rollIsPenalty(clubStrength, rng)
@@ -299,13 +376,28 @@ export function rollChanceSetup(options: RollChanceOptions = {}): ChanceSetup {
       distanceM: FIFA.penaltySpot,
       ballStartXRatio: 0.5,
       defender: null,
+      defenders: [],
     };
   }
 
   const distanceM = options.forceDistanceM ?? randomShotDistanceM(rng);
   const ballStartXRatio = randomBallStartXRatio(rng);
-  const defender = options.disableDefender
+  const first = options.disableDefender
     ? null
     : placeDefender(distanceM, ballStartXRatio, rng, options.skinPalette ?? 'any');
-  return { kind: 'open', distanceM, ballStartXRatio, defender };
+  const wantCover = Boolean(
+    first
+    && (options.forceDualDefenders || opponentStrength >= ELITE_DUAL_DEFENDER_STRENGTH),
+  );
+  const cover = wantCover && first
+    ? placeCoverDefender(first, distanceM, ballStartXRatio, rng, options.skinPalette ?? 'any')
+    : null;
+  const defenders = first ? (cover ? [first, cover] : [first]) : [];
+  return {
+    kind: 'open',
+    distanceM,
+    ballStartXRatio,
+    defender: first,
+    defenders,
+  };
 }

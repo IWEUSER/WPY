@@ -1,7 +1,9 @@
 import { getClub, TIER_LABEL } from '../data/clubs';
 import { formatEuros, formatWeeklyWage } from '../playerValue';
+import { defaultSquadStatus, squadStatusOnArrival, SQUAD_STATUS_LABEL } from '../squadStatus';
 import { useCareerStore } from '../store';
 import type { ClubOfferTerms } from '../transfers';
+import type { SquadStatus } from '../types';
 
 const KIND_LABEL: Record<string, string> = {
   loan: 'Loan offers',
@@ -17,11 +19,13 @@ function OfferCard({
   clubId,
   onPick,
   compact,
+  likelyStatus,
 }: {
   offer: ClubOfferTerms;
   clubId: string | null;
   onPick: (id: string) => void;
   compact?: boolean;
+  likelyStatus?: SquadStatus;
 }) {
   const club = getClub(offer.clubId);
   if (!club) return null;
@@ -45,6 +49,10 @@ function OfferCard({
           {offer.contractYears > 0
             ? ` · ${offer.contractYears}-year ${offer.move === 'loan' ? 'loan' : 'contract'}`
             : ''}
+          {likelyStatus ? ` · ${SQUAD_STATUS_LABEL[likelyStatus]}` : ''}
+        </p>
+        <p className={`mt-1 text-white/40 ${compact ? 'text-[10px]' : 'text-[11px]'}`}>
+          {isCurrentClubRenewal ? 'Sign the new deal' : 'Agree personal terms'}
         </p>
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1">
@@ -60,6 +68,7 @@ function OfferCard({
 export default function TransferChoiceScreen() {
   const pending = useCareerStore((s) => s.pendingTransfer);
   const clubId = useCareerStore((s) => s.clubId);
+  const lastTransferRejection = useCareerStore((s) => s.lastTransferRejection);
   const resolveTransferChoice = useCareerStore((s) => s.resolveTransferChoice);
 
   const currentClub = clubId ? getClub(clubId) : undefined;
@@ -75,6 +84,17 @@ export default function TransferChoiceScreen() {
   const stayYears = pending.stay?.contractYearsRemaining;
   const showStay = Boolean(pending.allowDecline && stayClub);
   const featuredPair = Boolean(renewalOffer && showStay);
+  const nextIfStay = pending.stay?.squadStatus ?? defaultSquadStatus('first-team');
+  const fromClub = clubId ? getClub(clubId) : undefined;
+  const likelyFor = (offer: ClubOfferTerms): SquadStatus => {
+    if (offer.renewal || offer.clubId === clubId) return nextIfStay;
+    return squadStatusOnArrival({
+      fromClub,
+      toClub: getClub(offer.clubId),
+      move: offer.move,
+      nextIfStay,
+    });
+  };
 
   return (
     <div className="flex h-full w-full flex-col items-center gap-6 overflow-y-auto px-6 py-[max(1.5rem,env(safe-area-inset-top))] text-center text-white">
@@ -82,7 +102,18 @@ export default function TransferChoiceScreen() {
         <p className="text-sm text-white/50">{KIND_LABEL[pending.kind] ?? 'Clubs'}</p>
         <h1 className="font-display text-2xl font-bold">Choose your club</h1>
         <p className="mt-2 max-w-sm text-sm text-white/60">{pending.detail}</p>
+        {pending.kind !== 'trial-offers' && pending.kind !== 'loan' && (
+          <p className="mt-2 max-w-sm text-xs text-white/45">
+            You accept personal terms first. Your club then accepts or rejects the fee.
+          </p>
+        )}
       </div>
+
+      {(lastTransferRejection || pending.rejectionDetail) && (
+        <div className="w-full max-w-md rounded-2xl border border-amber-300/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+          {lastTransferRejection ?? pending.rejectionDetail}
+        </div>
+      )}
 
       {(renewalOffer || showStay) && (
         <div className={`grid w-full max-w-md gap-3 ${featuredPair ? 'grid-cols-2' : 'grid-cols-1'}`}>
@@ -92,6 +123,7 @@ export default function TransferChoiceScreen() {
               clubId={clubId}
               onPick={(id) => resolveTransferChoice(id)}
               compact={featuredPair}
+              likelyStatus={likelyFor(renewalOffer)}
             />
           )}
           {showStay && stayClub && (
@@ -110,6 +142,7 @@ export default function TransferChoiceScreen() {
                   {renewalOffer && stayYears != null
                     ? `Keep the current deal · ${stayYears} year${stayYears === 1 ? '' : 's'} left`
                     : 'Stay at this club'}
+                  {` · ${SQUAD_STATUS_LABEL[nextIfStay]}`}
                 </p>
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1">
@@ -130,6 +163,7 @@ export default function TransferChoiceScreen() {
               offer={offer}
               clubId={clubId}
               onPick={(id) => resolveTransferChoice(id)}
+              likelyStatus={likelyFor(offer)}
             />
           ))}
         </div>

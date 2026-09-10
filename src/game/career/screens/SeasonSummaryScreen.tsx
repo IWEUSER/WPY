@@ -5,6 +5,7 @@ import { formatEuros, formatWeeklyWage } from '../playerValue';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { formatInternationalSeason } from '../honoursDisplay';
 import { displaySeasonLabel, displaySeasonNumber } from '../seasonDisplay';
+import { defaultSquadStatus, describeSquadStatus, nextSquadStatusAfterSeason, SQUAD_STATUS_LABEL } from '../squadStatus';
 import { countLoanSpells, requiredGoalRatio, resolveSeasonTransition } from '../transfers';
 import { leagueMatchWeeks } from '../data/clubs';
 import { useCareerStore } from '../store';
@@ -15,6 +16,7 @@ export default function SeasonSummaryScreen() {
   const parentClubId = useCareerStore((s) => s.parentClubId);
   const season = useCareerStore((s) => s.currentSeason);
   const role = useCareerStore((s) => s.role);
+  const squadStatus = useCareerStore((s) => s.squadStatus);
   const seasonsAtCurrentClub = useCareerStore((s) => s.seasonsAtCurrentClub);
   const age = useCareerStore((s) => s.age);
   const careerGoals = useCareerStore((s) => s.careerGoals);
@@ -60,6 +62,7 @@ export default function SeasonSummaryScreen() {
     clubLeague,
     homeContractYearsRemaining,
     careerStart,
+    squadStatus,
   });
 
   const honours: string[] = [];
@@ -215,6 +218,36 @@ export default function SeasonSummaryScreen() {
           <p className="mt-1 text-xs">{wpyResult.reason}</p>
         </div>
       )}
+
+      {role !== 'reserve' || preview.immediate?.role === 'first-team' ? (
+        <div className={`w-full max-w-sm ${DATA_INSET} text-sm text-white/80`}>
+          <p className="text-xs uppercase tracking-wide text-white/40">Squad role</p>
+          {role !== 'reserve' && (
+            <p className="mt-1 font-semibold">
+              This season: {SQUAD_STATUS_LABEL[squadStatus]}
+            </p>
+          )}
+          {(() => {
+            const stayStatus = preview.immediate?.squadStatus
+              ?? preview.pendingTransfer?.stay?.squadStatus
+              ?? nextSquadStatusAfterSeason({
+                role: role === 'reserve' ? 'first-team' : role,
+                current: role === 'reserve' ? 'rotation' : squadStatus ?? defaultSquadStatus(role),
+                ratio,
+                gamesPlayed: season.gamesPlayed,
+                bar: threshold,
+              });
+            return (
+              <>
+                <p className={`${role !== 'reserve' ? 'mt-1 ' : 'mt-1 '}font-semibold`}>
+                  Next season{preview.pendingTransfer ? ' if you stay' : ''}: {SQUAD_STATUS_LABEL[stayStatus]}
+                </p>
+                <p className="mt-1 text-xs text-white/50">{describeSquadStatus(stayStatus)}</p>
+              </>
+            );
+          })()}
+        </div>
+      ) : null}
 
       {(() => {
         const stay = preview.pendingTransfer?.stay ?? preview.immediate;

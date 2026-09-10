@@ -293,7 +293,7 @@ export function applyCareerLayoutPreview(): void {
     || preview === 'match-intl' || preview === 'match-ucl' || preview === 'match-intl-ko'
     || preview === 'match-africa' || preview === 'match-overcast'
     || preview === 'match-sweden' || preview === 'match-poland' || preview === 'match-brazil'
-    || preview === 'match-psg';
+    || preview === 'match-psg' || preview === 'match-city';
   let matchFixtureIndex = Math.max(0, calendar.fixtures.findIndex((f) => f.kind !== 'rest'));
   if (preview === 'match' || preview === 'match-away' || preview === 'match-local' || preview === 'match-night') {
     const wantHome = preview !== 'match-away';
@@ -453,6 +453,27 @@ export function applyCareerLayoutPreview(): void {
       fx.opponentLabel = opp.label;
       fx.isHome = true;
       fx.playerChances = 2;
+    }
+  } else if (preview === 'match-city') {
+    const idx = calendar.fixtures.findIndex((f) => f.kind === 'league' && f.isHome);
+    if (idx >= 0) matchFixtureIndex = idx;
+    const fx = calendar.fixtures[matchFixtureIndex];
+    if (fx) {
+      fx.kind = 'league';
+      fx.opponentId = 'man-city';
+      fx.opponentLabel = 'Manchester City';
+      fx.isHome = true;
+      fx.playerChances = 2;
+    }
+  } else if (preview === 'hub-rotation') {
+    let leagueSeen = 0;
+    for (let i = 0; i < calendar.fixtures.length; i++) {
+      if (calendar.fixtures[i].kind !== 'league') continue;
+      if (leagueSeen === 2) {
+        sim.fixtureIndex = i;
+        break;
+      }
+      leagueSeen += 1;
     }
   } else if (preview === 'match-psg') {
     const idx = calendar.fixtures.findIndex((f) => f.kind === 'league' && f.isHome);
@@ -710,6 +731,29 @@ export function applyCareerLayoutPreview(): void {
           })),
           allowDecline: true,
         }
+      : preview === 'transfer-reject'
+      ? {
+          kind: 'end-of-season',
+          detail: 'These clubs can pay the transfer fee. You can stay where you are.',
+          clubIds: ['bayern', 'arsenal', 'chelsea', 'getafe'],
+          offers: [
+            { clubId: 'bayern', move: 'permanent', fee: 80_000_000, weeklyWage: weeklyWageForClub(getClub('bayern')!, value), contractYears: newContractYears(19) },
+            { clubId: 'arsenal', move: 'permanent', fee: 80_000_000, weeklyWage: weeklyWageForClub(getClub('arsenal')!, value), contractYears: newContractYears(19) },
+            { clubId: 'chelsea', move: 'permanent', fee: 80_000_000, weeklyWage: weeklyWageForClub(getClub('chelsea')!, value), contractYears: newContractYears(19) },
+            { clubId: 'getafe', move: 'permanent', fee: 45_000_000, weeklyWage: weeklyWageForClub(getClub('getafe')!, value), contractYears: newContractYears(19) },
+          ],
+          allowDecline: true,
+          stay: {
+            clubId: 'real-madrid',
+            parentClubId: 'real-madrid',
+            role: 'first-team',
+            seasonsAtCurrentClub: 4,
+            contractYearsRemaining: 4,
+            clubLeague: 'La Liga',
+            squadStatus: 'starter',
+          },
+          rejectionDetail: 'You agreed terms with Manchester City. Real Madrid rejected the €80m bid — they will not sell a starter to Manchester City on that fee.',
+        }
       : preview === 'transfer'
       ? {
           kind: 'loan-or-transfer',
@@ -777,7 +821,7 @@ export function applyCareerLayoutPreview(): void {
         ? 'career'
         : preview === 'club-choice'
         ? 'club-choice'
-        : preview === 'transfer' || preview === 'expired' || preview === 'renew' || preview === 'championship-transfer' || isReserveLoansPreview || preview === 'first-team-miss'
+        : preview === 'transfer' || preview === 'expired' || preview === 'renew' || preview === 'championship-transfer' || isReserveLoansPreview || preview === 'first-team-miss' || preview === 'transfer-reject'
           ? 'transfer-choice'
           : preview === 'reserve-promo'
             ? 'season-summary'
@@ -962,5 +1006,9 @@ export function applyCareerLayoutPreview(): void {
     injuryGamesRemaining: 0,
     intlQualifying: { tournament: 'euro', points: 7, played: 3 },
     pendingTransfer,
+    squadStatus: preview === 'hub-rotation' ? 'rotation' : preview === 'end' ? 'starter' : 'starter',
+    lastTransferRejection: preview === 'transfer-reject'
+      ? 'You agreed terms with Manchester City. Real Madrid rejected the €80m bid — they will not sell a starter to Manchester City on that fee.'
+      : null,
   });
 }

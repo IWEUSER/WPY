@@ -4,6 +4,7 @@ import type { ShotResult } from '../../shooting/types';
 import { currentCalendarWeek, fixtureVenueLabel } from '../calendar';
 import { getClub, leagueMatchWeeks } from '../data/clubs';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
+import { nationStrength } from '../data/fifaRankings';
 import { getNation } from '../international';
 import { appearanceRegionForNation } from '../../shooting/appearance';
 import { resolveCareerStadium } from '../matchVenue';
@@ -87,6 +88,12 @@ export default function MatchScreen() {
   const opponentNation = fixture?.kind === 'international' && fixture.opponentId
     ? getNation(fixture.opponentId)
     : undefined;
+  const opponentClub = fixture?.kind !== 'international' && fixture?.opponentId
+    ? getClub(fixture.opponentId)
+    : undefined;
+  const opponentStrength = fixture?.kind === 'international' && fixture.opponentId
+    ? nationStrength(fixture.opponentId)
+    : opponentClub?.strength;
 
   return (
     <ShootingGame
@@ -97,6 +104,7 @@ export default function MatchScreen() {
       hideStatsBar
       maxShots={chances}
       clubStrength={club?.strength}
+      opponentStrength={opponentStrength}
       allowPenalties={opening?.kind !== 'club-trial'}
       stadium={stadium}
       opponentSkinPalette={appearanceRegionForNation(opponentNation)}
