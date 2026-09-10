@@ -11,10 +11,12 @@ import type { SeasonStandings } from '../matchEngine';
 import { displaySeasonLabel } from '../seasonDisplay';
 import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
 import { conferenceTable, ensureInternationalGroup, fixtureTitle, internationalRoundLabel, nextPlayableFixture, type SeasonSimState } from '../seasonSim';
+import { nextMatchBriefing, playerGoalsLine } from '../matchBriefing';
 import { groupPosition, sortGroupTable } from '../internationalTable';
 import { requiredGoalRatio } from '../transfers';
 import { useCareerStore } from '../store';
 import { DATA_CARD, DATA_INSET } from './dataUi';
+import type { LastMatchResult } from '../types';
 
 const ROLE_LABEL: Record<string, string> = {
   reserve: 'Reserve Team',
@@ -35,6 +37,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const seasonStandings = useCareerStore((s) => s.seasonStandings);
   const seasonSim = useCareerStore((s) => s.seasonSim);
   const lastMatchSummary = useCareerStore((s) => s.lastMatchSummary);
+  const lastMatchResult = useCareerStore((s) => s.lastMatchResult);
   const careerGoals = useCareerStore((s) => s.careerGoals);
   const careerGames = useCareerStore((s) => s.careerGames);
   const seasonHistory = useCareerStore((s) => s.seasonHistory);
@@ -73,6 +76,17 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const nextIsInternational = nextFixture?.kind === 'international';
   const squadAvailability = nextIsInternational && nationalTeam ? nationalTeam.availability : availability;
   const available = isAvailable(squadAvailability) && !injured;
+  const briefing = nextFixture
+    ? nextMatchBriefing(nextFixture, seasonSim, {
+        playerNationName: nation?.name,
+        tournament: seasonCalendar?.internationalTournament ?? seasonSim?.internationalTournament,
+      })
+    : null;
+  const squadLine = injured
+    ? describeInjury(injuryGamesRemaining)
+    : nextIsInternational
+      ? describeAvailability(squadAvailability)
+      : describeAvailability(availability);
   const week = seasonCalendar && seasonSim
     ? currentCalendarWeek(seasonCalendar, seasonSim.fixtureIndex)
     : season.matches.length + 1;
@@ -139,41 +153,54 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         <SeasonCompetitions calendar={seasonCalendar} />
       </div>
 
+      {briefing && (
+        <div className={`mt-4 ${DATA_CARD}`}>
+          <p className="text-xs uppercase tracking-wide text-white/40">Next match</p>
+          <h2 className="mt-1 font-display text-2xl font-bold leading-tight">{briefing.opponent}</h2>
+          <p className="mt-1 text-sm text-white/70">
+            {[briefing.venue, briefing.competition].filter(Boolean).join(' · ')}
+          </p>
+          {briefing.stake && (
+            <p className="mt-2 text-sm font-semibold text-emerald-300">{briefing.stake}</p>
+          )}
+          <div
+            className={`mt-3 rounded-xl px-3 py-2 text-sm font-semibold ${
+              available ? 'bg-emerald-500/15 text-emerald-300' : 'bg-red-500/15 text-red-300'
+            }`}
+          >
+            {squadLine}
+          </div>
+        </div>
+      )}
+
       <button
         type="button"
         onClick={advance}
         className="mt-4 w-full rounded-2xl bg-emerald-500 px-6 py-4 text-lg font-bold text-black shadow-lg shadow-emerald-500/20 transition active:scale-[0.98]"
       >
         {available ? (nextFixture ? 'Play Next Match' : 'End of season') : 'Continue'}
-        {nextFixture ? (
+        {!briefing && nextFixture ? (
           <span className="mt-1 block text-xs font-medium text-black/70">
             {fixtureTitle(nextFixture, {
               playerNationName: nation?.name,
               tournament: seasonCalendar?.internationalTournament ?? seasonSim?.internationalTournament,
             })}
-            {nextFixture.kind !== 'rest'
-              ? ` · ${fixtureVenueLabel(nextFixture)}`
-              : ''}
-            {nextFixture.kind === 'league' && nextFixture.opponentId === seasonSim?.titleRivalId
-              ? ' · league rival'
-              : ''}
+            {nextFixture.kind !== 'rest' ? ` · ${fixtureVenueLabel(nextFixture)}` : ''}
           </span>
-        ) : seasonCalendar && seasonSim ? (
+        ) : seasonCalendar && seasonSim && !nextFixture ? (
           <span className="mt-1 block text-xs font-medium text-black/70">Review the campaign</span>
         ) : null}
       </button>
 
-      <div
-        className={`mt-4 rounded-xl px-4 py-3 text-sm font-semibold ${
-          available ? 'bg-emerald-500/15 text-emerald-300' : 'bg-red-500/15 text-red-300'
-        }`}
-      >
-        {injured
-          ? describeInjury(injuryGamesRemaining)
-          : nextIsInternational
-            ? describeAvailability(squadAvailability)
-            : describeAvailability(availability)}
-      </div>
+      {!briefing && (
+        <div
+          className={`mt-4 rounded-xl px-4 py-3 text-sm font-semibold ${
+            available ? 'bg-emerald-500/15 text-emerald-300' : 'bg-red-500/15 text-red-300'
+          }`}
+        >
+          {squadLine}
+        </div>
+      )}
 
       {week > 0 && (
         <div className={`mt-3 ${DATA_INSET}`}>
@@ -192,21 +219,11 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         </div>
       )}
 
-      {lastMatchSummary && (
-        <div className={`mt-3 ${DATA_INSET} text-sm text-white/80`}>{lastMatchSummary}</div>
+      {(lastMatchResult || lastMatchSummary) && (
+        <LastMatchRecap result={lastMatchResult} fallback={lastMatchSummary} />
       )}
 
       <div className="mt-5 flex flex-col gap-5">
-        {seasonStandings && (
-          <StandingsCard
-            standings={seasonStandings}
-            clubId={club.id}
-            cupName={seasonSim?.domesticCup ? DOMESTIC_CUPS[seasonSim.domesticCup].name : null}
-            cupStage={seasonSim?.domesticCupStage ?? null}
-            sim={seasonSim}
-          />
-        )}
-
         <div className={DATA_CARD}>
           <div className="mb-2 flex items-baseline justify-between">
             <span className="text-xs uppercase tracking-wide text-white/40">Season ratio</span>
@@ -238,11 +255,75 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
             intlGoals={nationalTeam?.goals ?? 0}
             dropped={Boolean(nationalTeam && !isAvailable(nationalTeam.availability))}
             selected={Boolean(seasonSimWithGroup?.internationalSelected)}
+            includeTable={false}
           />
         )}
 
+        <details className={DATA_CARD}>
+          <summary className="cursor-pointer list-none text-sm font-semibold text-white/85 [&::-webkit-details-marker]:hidden">
+            Tables
+            <span className="mt-0.5 block text-xs font-medium text-white/40">League, cups, internationals</span>
+          </summary>
+          <div className="mt-4 flex flex-col gap-5">
+            {seasonStandings && (
+              <StandingsCard
+                standings={seasonStandings}
+                clubId={club.id}
+                cupName={seasonSim?.domesticCup ? DOMESTIC_CUPS[seasonSim.domesticCup].name : null}
+                cupStage={seasonSim?.domesticCupStage ?? null}
+                sim={seasonSim}
+                nested
+              />
+            )}
+            {nation && role !== 'reserve' && seasonSimWithGroup?.internationalGroup && (
+              <InternationalCard
+                nationId={nationality!}
+                nationName={nation.name}
+                clubTier={club.tier}
+                careerRatio={callUpRatio({ season, careerGoals, careerGames })}
+                sim={seasonSimWithGroup}
+                caps={nationalTeam?.caps ?? 0}
+                intlGoals={nationalTeam?.goals ?? 0}
+                dropped={Boolean(nationalTeam && !isAvailable(nationalTeam.availability))}
+                selected={Boolean(seasonSimWithGroup?.internationalSelected)}
+                includeTable
+                tableOnly
+              />
+            )}
+          </div>
+        </details>
+
         <RecentForm matches={season.matches} />
       </div>
+    </div>
+  );
+}
+
+function LastMatchRecap({
+  result,
+  fallback,
+}: {
+  result: LastMatchResult | null;
+  fallback: string | null;
+}) {
+  const headline = result?.headline ?? result?.summary ?? fallback;
+  if (!headline) return null;
+  const playerLine =
+    result?.playerGoals != null && result?.chances != null
+      ? playerGoalsLine(result.playerGoals, result.chances)
+      : null;
+  const structured = Boolean(result?.headline || result?.aggregateLine || result?.nextLine || playerLine);
+
+  return (
+    <div className={`mt-3 ${DATA_INSET}`}>
+      <p className="text-xs uppercase tracking-wide text-white/40">Last match</p>
+      <p className="mt-1 text-sm font-semibold text-white/90">{headline}</p>
+      {structured && playerLine && <p className="mt-1 text-sm text-white/70">{playerLine}</p>}
+      {result?.aggregateLine && <p className="mt-1 text-sm font-semibold text-emerald-200">{result.aggregateLine}</p>}
+      {result?.nextLine && <p className="mt-1 text-sm text-white/70">{result.nextLine}</p>}
+      {!structured && fallback && fallback !== headline && (
+        <p className="mt-1 text-sm text-white/70">{fallback}</p>
+      )}
     </div>
   );
 }
@@ -253,12 +334,14 @@ function StandingsCard({
   cupName,
   cupStage,
   sim,
+  nested = false,
 }: {
   standings: SeasonStandings;
   clubId: string;
   cupName: string | null;
   cupStage: string | null;
   sim: SeasonSimState | null;
+  nested?: boolean;
 }) {
   const conference = conferenceTable(standings.league, clubId);
   const inMls = Boolean(mlsConferenceOf(clubId));
@@ -290,7 +373,7 @@ function StandingsCard({
       : null;
 
   return (
-    <div className={DATA_CARD}>
+    <div className={nested ? '' : DATA_CARD}>
       <p className="text-xs uppercase tracking-wide text-white/40">Standings</p>
       <div className="mt-2 grid grid-cols-2 gap-3">
         <div>
@@ -329,6 +412,8 @@ function InternationalCard({
   intlGoals,
   dropped,
   selected,
+  includeTable = true,
+  tableOnly = false,
 }: {
   nationId: string;
   nationName: string;
@@ -339,6 +424,8 @@ function InternationalCard({
   intlGoals: number;
   dropped: boolean;
   selected: boolean;
+  includeTable?: boolean;
+  tableOnly?: boolean;
 }) {
   const bar = selectionRatioForNation(nationId);
   const clubOk = clubEligibleForNationalTeam(clubTier);
@@ -382,6 +469,37 @@ function InternationalCard({
     return `Need a ${bar.toFixed(2)} goals/game ratio for a call-up — currently ${careerRatio.toFixed(2)}.`;
   })();
 
+  const showTable = includeTable && Boolean(group && sim?.internationalStage && sim.internationalStage !== 'not-selected');
+
+  if (tableOnly) {
+    if (!showTable || !group) return null;
+    return (
+      <div>
+        <p className="text-xs uppercase tracking-wide text-white/40">{nationName} table</p>
+        <table className="mt-3 w-full table-fixed border-collapse text-left text-xs">
+          <thead>
+            <tr className="text-[10px] uppercase tracking-wide text-white/40">
+              <th className="pb-1 font-medium">{group.kind === 'qualifying' ? 'Qualifying' : `Group ${group.letter}`}</th>
+              <th className="w-10 pb-1 text-right font-medium">P</th>
+              <th className="w-10 pb-1 text-right font-medium">GD</th>
+              <th className="w-10 pb-1 text-right font-medium">Pts</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortGroupTable(group.rows).map((row, i) => (
+              <tr key={row.nationId} className={row.nationId === nationId ? 'font-semibold text-white' : 'text-white/70'}>
+                <td className="py-0.5 pr-2">{i + 1}. {row.name}</td>
+                <td className="py-0.5 text-right tabular-nums">{row.played}</td>
+                <td className="py-0.5 text-right tabular-nums">{row.goalsFor - row.goalsAgainst}</td>
+                <td className="py-0.5 text-right tabular-nums">{row.points}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
   return (
     <div className={DATA_CARD}>
       <p className="text-xs uppercase tracking-wide text-white/40">{nationName} {tournamentName ? `· ${tournamentName}` : 'call-up'}</p>
@@ -394,7 +512,7 @@ function InternationalCard({
           {group.kind === 'qualifying' ? 'Qualifying' : `Group ${group.letter}`} · {pos}{ordinal(pos)}
         </p>
       )}
-      {group && sim?.internationalStage && sim.internationalStage !== 'not-selected' && (
+      {showTable && group && (
         <table className="mt-3 w-full table-fixed border-collapse text-left text-xs">
           <thead>
             <tr className="text-[10px] uppercase tracking-wide text-white/40">

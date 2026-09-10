@@ -8,6 +8,7 @@ import { getNation } from '../international';
 import { appearanceRegionForNation } from '../../shooting/appearance';
 import { resolveCareerStadium } from '../matchVenue';
 import { fixtureTitle } from '../seasonSim';
+import { firstLegStakeLine, isTwoLeggedClubKnockout } from '../matchBriefing';
 import { useCareerStore } from '../store';
 
 export default function MatchScreen() {
@@ -64,8 +65,14 @@ export default function MatchScreen() {
     ? `Week ${currentCalendarWeek(calendar, liveMatch.fixtureIndex)} of ${calendar.totalWeeks}`
     : `Matchday ${matchNumber}/${club ? leagueMatchWeeks(club.league) : matchNumber}`;
   const venueLabel = fixture ? fixtureVenueLabel(fixture) : null;
-  const progressLabel = simulated && liveMatch
-    ? `${weekLabel}${competitionName ? ` · ${competitionName}` : ''}${venueLabel ? ` · ${venueLabel}` : ''} · ${chances} chance${chances === 1 ? '' : 's'}`
+  const tieStake =
+    fixture && isTwoLeggedClubKnockout(fixture) && fixture.leg === 2 && seasonSim
+      ? firstLegStakeLine(seasonSim.knockoutAggFor, seasonSim.knockoutAggAgainst)
+      : fixture && isTwoLeggedClubKnockout(fixture) && fixture.leg === 1
+        ? 'First of two legs'
+        : null;
+  const progressLabel = simulated && calendar && liveMatch
+    ? `${weekLabel}${competitionName ? ` · ${competitionName}` : ''}${venueLabel ? ` · ${venueLabel}` : ''}${tieStake ? ` · ${tieStake}` : ''} · ${chances} chance${chances === 1 ? '' : 's'}`
     : weekLabel;
 
   const stadium = resolveCareerStadium({

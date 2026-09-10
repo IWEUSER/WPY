@@ -1345,6 +1345,30 @@ function isOneOffKnockout(fixture: CalendarFixture): boolean {
   return false;
 }
 
+function continentalThroughNote(fixture: CalendarFixture, through: boolean): string {
+  if (!through) return 'out on aggregate';
+  if (fixture.kind === 'continental-semi-final') return 'through to the final';
+  if (fixture.europeanRound === 'quarter-final') return 'through to the semi-final';
+  return 'through to the quarter-final';
+}
+
+/** Running score of a two-legged club tie, including this match, with progress on the decider. */
+export function continentalAggregateLine(
+  fixture: CalendarFixture,
+  sim: SeasonSimState,
+  result: { scoreFor: number; scoreAgainst: number; penalties?: { won: boolean } },
+): string | null {
+  if (fixture.kind !== 'continental-knockout' && fixture.kind !== 'continental-semi-final') return null;
+  const aggFor = sim.knockoutAggFor + result.scoreFor;
+  const aggAgainst = sim.knockoutAggAgainst + result.scoreAgainst;
+  const score = `Aggregate ${aggFor}\u2013${aggAgainst}`;
+  const deciding = fixture.leg === 2 || (fixture.kind === 'continental-semi-final' && fixture.leg == null);
+  if (deciding) {
+    return `${score} \u00b7 ${continentalThroughNote(fixture, twoLeggedTieProgressed(aggFor, aggAgainst, result))}`;
+  }
+  return `${score} \u00b7 second leg to come`;
+}
+
 function knockoutProgressNote(
   fixture: CalendarFixture,
   won: boolean,
@@ -1391,7 +1415,7 @@ export function resolveFixture(
   playerClub: Club,
   playerGoals: number,
   rng: () => number = Math.random,
-): { sim: SeasonSimState; result: ClubMatchResult; summary: string } {
+): { sim: SeasonSimState; result: ClubMatchResult; summary: string; aggregateLine: string | null } {
   const isHome = fixtureIsHome(fixture);
   const scored = playerGoals > 0;
   const isInternational = fixture.kind === 'international';
@@ -1469,5 +1493,6 @@ export function resolveFixture(
       : `${verb} ${score}${fixture.opponentLabel ? ` vs ${fixture.opponentLabel}` : ''}`;
   const progress = knockoutProgressNote(fixture, result.outcome === 'win', sim.internationalTournament);
   if (progress) summary = `${summary} · ${progress}`;
-  return { sim: next, result, summary };
+  const aggregateLine = continentalAggregateLine(fixture, sim, result);
+  return { sim: next, result, summary, aggregateLine };
 }
