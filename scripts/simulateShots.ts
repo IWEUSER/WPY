@@ -25,16 +25,22 @@ import {
   DEFENDER_CLOSE_SPEED_MPS,
   DEFENDER_CLOSE_STOP_GAP_M,
   DEFENDER_GAP_M,
+  ELITE_DUAL_DEFENDER_STRENGTH,
   advanceDefender,
   ballWorldXFromRatio,
   canKeepTenYardGap,
+  chanceDefenders,
+  chanceIsScoreable,
   defenderBlocksBall,
+  defenderCloseSpeedMps,
   defenderCloseTarget,
   defenderDistanceFromBallM,
   defenderOffsetFromShootingLineM,
   expectedChancesPerLeagueSeason,
   expectedPenaltiesPerSeason,
+  oppositionCloseSpeedScale,
   penaltyChanceProbability,
+  placeCoverDefender,
   placeDefender,
   rollChanceSetup,
   shotLineHitsDefender,
@@ -755,6 +761,84 @@ const nearGap = defenderDistanceFromBallM(nearNow, MIN_SHOT_DISTANCE_M, 0.5);
 console.log(`6-yard close: start=${defenderDistanceFromBallM(nearStart, MIN_SHOT_DISTANCE_M, 0.5).toFixed(2)} settled=${nearGap.toFixed(2)}`);
 if (nearGap < 1.1) {
   console.error('FAIL: a 6-yard closer must not walk onto the ball');
+  process.exitCode = 1;
+}
+
+console.log('\n--- Elite opposition: faster close-down, dual defenders still scoreable ---');
+const weakScale = oppositionCloseSpeedScale(52);
+const midScale = oppositionCloseSpeedScale(70);
+const eliteScale = oppositionCloseSpeedScale(94);
+console.log(`close-down scale weak=${weakScale.toFixed(2)} mid=${midScale.toFixed(2)} elite=${eliteScale.toFixed(2)}`);
+if (!(weakScale < midScale && midScale < eliteScale) || midScale < 0.99 || midScale > 1.01 || eliteScale < 1.2) {
+  console.error('FAIL: elite defenders must close faster than mid-table, without changing the mid-table jog');
+  process.exitCode = 1;
+}
+const eliteSpeed = defenderCloseSpeedMps(18, 94);
+const midSpeed = defenderCloseSpeedMps(18, 70);
+if (!(eliteSpeed > midSpeed + 0.4) || Math.abs(midSpeed - DEFENDER_CLOSE_SPEED_MPS) > 0.05) {
+  console.error('FAIL: 18-yard elite close-down must be quicker than the current mid-table speed');
+  process.exitCode = 1;
+}
+
+let eliteSettled = { ...closeStart };
+for (let i = 0; i < 400; i++) eliteSettled = advanceDefender(eliteSettled, 18, 0.5, 0.04, 94);
+const eliteSettledGap = defenderDistanceFromBallM(eliteSettled, 18, 0.5);
+if (eliteSettledGap + 1e-6 < DEFENDER_CLOSE_STOP_GAP_M - 0.05) {
+  console.error('FAIL: an elite closer must still stop short of the ball');
+  process.exitCode = 1;
+}
+
+let dualFail = 0;
+let dualMissing = 0;
+let dualUnscoreable = 0;
+for (let i = 0; i < 200; i++) {
+  const dist = 16 + (i % 8);
+  const xRatio = 0.18 + (i % 7) * 0.1;
+  const setup = rollChanceSetup({
+    forceDistanceM: dist,
+    opponentStrength: 94,
+    allowPenalties: false,
+    rng: () => ((i * 41 + 7) % 1000) / 1000,
+  });
+  const pack = chanceDefenders(setup);
+  if (pack.length < 2) {
+    if (canKeepTenYardGap(dist)) dualMissing += 1;
+    continue;
+  }
+  if (pack[0].coverSide === pack[1].coverSide) dualFail += 1;
+  if (!chanceIsScoreable(setup.distanceM, setup.ballStartXRatio, pack)) dualUnscoreable += 1;
+}
+console.log(`elite dual: missing=${dualMissing}/200 same-side=${dualFail} unwinnable=${dualUnscoreable}`);
+if (dualMissing > 12 || dualFail > 0 || dualUnscoreable > 0) {
+  console.error('FAIL: elite open-play chances must add an opposite-side cover that still leaves a scoring lane');
+  process.exitCode = 1;
+}
+
+const weakOpen = rollChanceSetup({
+  forceDistanceM: 18,
+  opponentStrength: 66,
+  allowPenalties: false,
+  rng: () => 0.2,
+});
+if (chanceDefenders(weakOpen).length !== 1) {
+  console.error('FAIL: a mid-table or weaker side must keep a single defender');
+  process.exitCode = 1;
+}
+if (ELITE_DUAL_DEFENDER_STRENGTH > 86) {
+  console.error('FAIL: dual defenders should appear from the elite band (≈86)');
+  process.exitCode = 1;
+}
+
+const first = placeDefender(18, 0.5, () => 0.2);
+const eliteCover = placeCoverDefender(first, 18, 0.5, () => 0.8);
+if (!eliteCover || !chanceIsScoreable(18, 0.5, [first, eliteCover])) {
+  console.error('FAIL: a placed cover defender must leave at least one scoreable aim');
+  process.exitCode = 1;
+}
+
+const elitePen = rollChanceSetup({ forcePenalty: true, opponentStrength: 94, forceDualDefenders: true });
+if (elitePen.defender !== null || (elitePen.defenders?.length ?? 0) !== 0) {
+  console.error('FAIL: penalties stay defender-free even against elite sides');
   process.exitCode = 1;
 }
 

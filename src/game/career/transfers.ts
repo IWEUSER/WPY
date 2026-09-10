@@ -19,7 +19,8 @@ import {
   transferFeeFromValue,
   weeklyWageForClub,
 } from './playerValue';
-import type { PlayerRole, SeasonRecord } from './types';
+import { defaultSquadStatus, nextSquadStatusAfterSeason, squadStatusOnArrival } from './squadStatus';
+import type { PlayerRole, SeasonRecord, SquadStatus } from './types';
 
 export const MAX_CONSECUTIVE_LOANS = 2;
 /** @deprecated Use consecutiveLoanSpells — kept so older tests still compile. */
@@ -295,6 +296,8 @@ export interface PendingTransfer {
   allowDecline: boolean;
   /** Applied when the player declines and stays. */
   stay?: SeasonTransitionImmediate;
+  /** Shown after the selling club vetoes a bid the player already accepted. */
+  rejectionDetail?: string;
 }
 
 export interface SeasonTransitionImmediate {
@@ -306,6 +309,8 @@ export interface SeasonTransitionImmediate {
   /** League the club will play in next season (top flight after promotion). */
   clubLeague?: string;
   weeklyWage?: number;
+  /** Playing-time status for the season about to start. */
+  squadStatus?: SquadStatus;
 }
 
 export interface SeasonTransitionResult {
@@ -336,6 +341,7 @@ export interface SeasonTransitionParams {
   /** Parent-club years remaining while out on a later-career loan. Null on the first youth loan. */
   homeContractYearsRemaining?: number | null;
   careerStart?: string | null;
+  squadStatus?: SquadStatus;
 }
 
 /** Ratio the player is judged against this season. On loan that's the parent first-team bar. */
@@ -545,6 +551,15 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
   const currentLeague = params.clubLeague ?? club.league;
   const promoted = role === 'first-team' && earnedPromotion(currentLeague, params.leaguePosition);
   const nextLeague = promoted ? (promotionTarget(currentLeague) ?? currentLeague) : currentLeague;
+  const currentStatus = params.squadStatus ?? defaultSquadStatus(role);
+  const stayBar = requiredGoalRatio(role, club, getClub(parentClubId));
+  const nextIfStay = nextSquadStatusAfterSeason({
+    role: role === 'reserve' ? 'first-team' : role,
+    current: role === 'reserve' ? 'rotation' : currentStatus,
+    ratio,
+    gamesPlayed: season.gamesPlayed,
+    bar: stayBar,
+  });
   const stayOn = (extra: Partial<SeasonTransitionImmediate> = {}): SeasonTransitionImmediate => {
     const stay: SeasonTransitionImmediate = {
       clubId,
@@ -553,6 +568,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       seasonsAtCurrentClub: seasonsAtCurrentClub + 1,
       contractYearsRemaining: Math.max(0, yearsLeft - 1),
       clubLeague: nextLeague,
+      squadStatus: role === 'reserve' ? 'rotation' : nextIfStay,
       ...extra,
     };
     const stayClub = getClub(stay.clubId) ?? club;
@@ -570,7 +586,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       return {
         headline: 'Promoted to the First Team!',
         detail: `You hit ${threshold.toFixed(2)} goals/game in the reserves - ${club.name} want you in the first-team squad now.`,
-        immediate: stayOn({ role: 'first-team', contractYearsRemaining: FIRST_CONTRACT_YEARS }),
+        immediate: stayOn({ role: 'first-team', contractYearsRemaining: FIRST_CONTRACT_YEARS, squadStatus: 'rotation' }),
       };
     }
     const options = pickLoanClubsForMiss(ratio, nationality, LOAN_OFFER_COUNT, [club.id], club.id);
@@ -611,6 +627,12 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
           contractYearsRemaining: recalledYears,
           clubLeague: parentClub.league,
           weeklyWage: weeklyWageForClub(parentClub, value, parentClub.league),
+          squadStatus: squadStatusOnArrival({
+            fromClub: club,
+            toClub: parentClub,
+            move: 'permanent',
+            nextIfStay,
+          }),
         }),
         value,
         fee,
@@ -873,6 +895,82 @@ function withTwilightMlsOffers(
     applyTwilightDestinations(next, TWILIGHT_MLS_CLUB_IDS, value, fee, age, blocked);
   }
   return next;
+}
+
+/**
+ * Two-step transfer: the player has already accepted personal terms.
+ * Forced sales, free transfers, and expiring deals go through. A starter
+ * with years left can have a listed-fee bid vetoed when the destination
+ * is a peer or a step up — they then pick another offer.
+ */
+export function sellingClubAcceptsOffer(params: {
+  offer: ClubOfferTerms;
+  kind: TransferKind;
+  allowDecline: boolean;
+  currentClubId: string;
+  role: PlayerRole;
+  squadStatus: SquadStatus;
+  contractYearsLeft: number;
+  playerValue: number;
+}): { accepted: boolean; detail: string } {
+  const dest = getClub(params.offer.clubId);
+  const current = getClub(params.currentClubId);
+  const destName = dest?.name ?? 'the bidding club';
+  const clubName = current?.name ?? 'Your club';
+
+  if (params.offer.renewal || params.offer.clubId === params.currentClubId) {
+    return { accepted: true, detail: '' };
+  }
+  if (!params.allowDecline) {
+    return { accepted: true, detail: '' };
+  }
+  if (params.kind === 'sold' || params.kind === 'loan' || params.kind === 'trial-offers') {
+    return { accepted: true, detail: '' };
+  }
+  if (params.offer.fee <= 0 || params.contractYearsLeft <= 1 || params.role === 'reserve') {
+    return { accepted: true, detail: '' };
+  }
+
+  const feeLine = params.offer.move === 'loan'
+    ? 'loan request'
+    : `€${Math.round(params.offer.fee / 1_000_000)}m bid`;
+
+  if (params.offer.move === 'loan') {
+    if (params.squadStatus === 'starter' && params.contractYearsLeft > 1) {
+      return {
+        accepted: false,
+        detail: `You agreed terms with ${destName}. ${clubName} rejected the ${feeLine} — they will not loan a starter.`,
+      };
+    }
+    return { accepted: true, detail: '' };
+  }
+
+  if (params.squadStatus === 'impact') {
+    return { accepted: true, detail: '' };
+  }
+
+  const steppingUp = Boolean(dest && current && dest.tier < current.tier);
+  const peerMove = Boolean(dest && current && dest.tier <= current.tier);
+  const listedFloor = params.playerValue * (params.squadStatus === 'rotation' ? 0.7 : 1.15);
+
+  if (params.squadStatus === 'rotation') {
+    if (steppingUp && params.contractYearsLeft >= 3 && params.offer.fee < listedFloor) {
+      return {
+        accepted: false,
+        detail: `You agreed terms with ${destName}. ${clubName} rejected the ${feeLine} — they will not sell a rotation player up a level on that fee.`,
+      };
+    }
+    return { accepted: true, detail: '' };
+  }
+
+  // Starter with years left: listed-fee moves to a peer or better club are blocked.
+  if (peerMove && params.offer.fee < listedFloor) {
+    return {
+      accepted: false,
+      detail: `You agreed terms with ${destName}. ${clubName} rejected the ${feeLine} — they will not sell a starter to ${destName} on that fee.`,
+    };
+  }
+  return { accepted: true, detail: '' };
 }
 
 /** After both trial bands fail, clubs at the best-ratio band offer a reserve deal. */
