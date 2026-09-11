@@ -64,7 +64,10 @@ export type DomesticCupId =
   | 'dfb-pokal'
   | 'coupe-de-france'
   | 'kings-cup'
-  | 'us-open-cup';
+  | 'us-open-cup'
+  | 'taca-de-portugal'
+  | 'knvb-beker'
+  | 'turkish-cup';
 
 export const DOMESTIC_CUPS: Record<DomesticCupId, Competition> = {
   'fa-cup': { id: 'fa-cup', name: 'FA Cup', kind: 'domestic-cup', country: 'England' },
@@ -74,6 +77,9 @@ export const DOMESTIC_CUPS: Record<DomesticCupId, Competition> = {
   'coupe-de-france': { id: 'coupe-de-france', name: 'Coupe de France', kind: 'domestic-cup', country: 'France' },
   'kings-cup': { id: 'kings-cup', name: 'King Cup', kind: 'domestic-cup', country: 'Saudi Arabia' },
   'us-open-cup': { id: 'us-open-cup', name: 'US Open Cup', kind: 'domestic-cup', country: 'United States' },
+  'taca-de-portugal': { id: 'taca-de-portugal', name: 'Taça de Portugal', kind: 'domestic-cup', country: 'Portugal' },
+  'knvb-beker': { id: 'knvb-beker', name: 'KNVB Beker', kind: 'domestic-cup', country: 'Netherlands' },
+  'turkish-cup': { id: 'turkish-cup', name: 'Turkish Cup', kind: 'domestic-cup', country: 'Turkey' },
 };
 
 const DOMESTIC_CUP_BY_COUNTRY: Record<string, DomesticCupId> = {
@@ -84,6 +90,9 @@ const DOMESTIC_CUP_BY_COUNTRY: Record<string, DomesticCupId> = {
   France: 'coupe-de-france',
   'Saudi Arabia': 'kings-cup',
   'United States': 'us-open-cup',
+  Portugal: 'taca-de-portugal',
+  Netherlands: 'knvb-beker',
+  Turkey: 'turkish-cup',
 };
 
 export function domesticCupForCountry(country: string): DomesticCupId | null {

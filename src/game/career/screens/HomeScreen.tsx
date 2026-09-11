@@ -46,7 +46,7 @@ export default function HomeScreen({ onPractice }: { onPractice: () => void }) {
       <div>
         <h1 className="font-display text-3xl font-bold sm:text-4xl">World Player of the Year</h1>
         <p className="mt-2 text-sm text-white/55">20 seasons. One country. Every goal counts.</p>
-        <p className="mt-2 text-[11px] uppercase tracking-wide text-emerald-300/80">Squad roles · 10 Sep</p>
+        <p className="mt-2 text-[11px] uppercase tracking-wide text-emerald-300/80">Portugal · Eredivisie · 11 Sep</p>
       </div>
 
       <div className="flex w-full max-w-xs flex-col gap-3">

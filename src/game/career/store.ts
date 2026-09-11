@@ -7,6 +7,7 @@ import { FORM_WINDOW_GAMES, RETIREMENT_AGE, SEASON_LENGTH, STARTING_AGE } from '
 import { planSuperCup } from './continentalDraw';
 import { planDomesticSuperCup } from './domesticSuperCup';
 import { getClub, leagueMatchWeeks } from './data/clubs';
+import { CURRENT_RULES_STAMP, migratedRulesStamp, rebuildCurrentSeason } from './rulesStamp';
 import { clubContinentalCup, internationalCalendarSeason, isInternationalFinalsSeason, type ContinentalCupId } from './data/competitions';
 import { continentalQualificationForNextSeason } from './europeanQualification';
 import {
@@ -216,6 +217,7 @@ function startSimulatedSeason(
   | 'seasonSponsorship'
   | 'clubLeague'
   | 'careerEarnings'
+  | 'rulesStamp'
 > {
   const club = getClub(clubId);
   const league = extras?.league ?? club?.league ?? null;
@@ -291,6 +293,7 @@ function startSimulatedSeason(
     seasonSponsorship: sponsorship,
     clubLeague: league,
     careerEarnings,
+    rulesStamp: CURRENT_RULES_STAMP,
   };
 }
 
@@ -640,6 +643,7 @@ function initialState(): CareerState {
     qualifiedContinentalCup: null,
     intlQualifying: null,
     lastSuperCupOpponentId: null,
+    rulesStamp: CURRENT_RULES_STAMP,
   };
 }
 
@@ -771,6 +775,8 @@ interface CareerActions {
   returnToHub: () => void;
   resetCareer: () => void;
   returnToMenu: () => void;
+  /** Regenerates the remaining calendar when career rules have changed. */
+  rebuildThisSeason: () => void;
 }
 
 export type CareerStore = CareerState & CareerActions;
@@ -1877,10 +1883,12 @@ export const useCareerStore = create<CareerStore>()(
         })),
 
       returnToMenu: () => set({ phase: 'menu' }),
+
+      rebuildThisSeason: () => set((state) => rebuildCurrentSeason(state)),
     }),
     {
       name: 'wpy-career-v1',
-      version: 30,
+      version: 31,
       migrate: (persisted) => {
         const state = persisted as Partial<CareerState>;
         const sim = state.seasonSim;
@@ -2024,6 +2032,7 @@ export const useCareerStore = create<CareerStore>()(
           lastSuperCupOpponentId: state.lastSuperCupOpponentId ?? null,
           squadStatus: state.squadStatus ?? defaultSquadStatus(state.role ?? 'reserve'),
           lastTransferRejection: state.lastTransferRejection ?? null,
+          rulesStamp: migratedRulesStamp(state),
           pendingTransfer: state.pendingTransfer
             ? {
                 ...state.pendingTransfer,

@@ -21,6 +21,7 @@ import {
   SQUAD_STATUS_LABEL,
 } from '../squadStatus';
 import { requiredGoalRatio } from '../transfers';
+import { saveNeedsRebuild } from '../rulesStamp';
 import { useCareerStore } from '../store';
 import { DATA_CARD, DATA_INSET } from './dataUi';
 import type { LastMatchResult } from '../types';
@@ -57,8 +58,10 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const seasonSponsorship = useCareerStore((s) => s.seasonSponsorship);
   const injuryGamesRemaining = useCareerStore((s) => s.injuryGamesRemaining);
   const careerStart = useCareerStore((s) => s.careerStart);
+  const rulesStamp = useCareerStore((s) => s.rulesStamp);
   const advance = useCareerStore((s) => s.advance);
   const openCareerRecord = useCareerStore((s) => s.openCareerRecord);
+  const rebuildThisSeason = useCareerStore((s) => s.rebuildThisSeason);
 
   const club = clubId ? getClub(clubId) : undefined;
   const parentClub = role === 'loan' && parentClubId ? getClub(parentClubId) : undefined;
@@ -177,6 +180,27 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         </p>
         <SeasonCompetitions calendar={seasonCalendar} />
       </div>
+
+      {saveNeedsRebuild({
+        phase: 'hub',
+        seasonCalendar,
+        seasonSim,
+        rulesStamp,
+      }) && (
+        <div className={`mt-4 ${DATA_CARD} border-amber-400/40`}>
+          <p className="text-xs uppercase tracking-wide text-amber-300/80">Career rules updated</p>
+          <p className="mt-1 text-sm text-white/70">
+            New leagues and cup calendars are in. Rebuild this season to apply them. Your club, role, and stats stay.
+          </p>
+          <button
+            type="button"
+            onClick={rebuildThisSeason}
+            className="mt-3 w-full rounded-xl bg-amber-400 px-4 py-3 text-sm font-bold text-black transition active:scale-[0.98]"
+          >
+            Rebuild this season
+          </button>
+        </div>
+      )}
 
       {briefing && (
         <div className={`mt-4 ${DATA_CARD}`}>

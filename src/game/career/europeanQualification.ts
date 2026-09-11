@@ -9,6 +9,7 @@ import { clubContinentalCup, type ContinentalCupId } from './data/competitions';
  * La Liga / Serie A: 1–4 CL, 5–6 EL, 7 ECL
  * Bundesliga: 1–4 CL, 5 EL, 6 ECL
  * Ligue 1: 1–3 CL, 4 EL, 5 ECL
+ * Primeira Liga / Eredivisie / Super Lig: 1–2 CL, 3 EL, 4 ECL
  * Saudi Pro League: 1–4 AFC Champions League Elite
  */
 const UEFA_PLACES: Record<string, { ucl: number; uel: number; uecl: number }> = {
@@ -17,6 +18,9 @@ const UEFA_PLACES: Record<string, { ucl: number; uel: number; uecl: number }> = 
   'Serie A': { ucl: 4, uel: 2, uecl: 1 },
   Bundesliga: { ucl: 4, uel: 1, uecl: 1 },
   'Ligue 1': { ucl: 3, uel: 1, uecl: 1 },
+  'Primeira Liga': { ucl: 2, uel: 1, uecl: 1 },
+  Eredivisie: { ucl: 2, uel: 1, uecl: 1 },
+  'Super Lig': { ucl: 2, uel: 1, uecl: 1 },
 };
 
 const CUP_RANK: Record<ContinentalCupId, number> = {

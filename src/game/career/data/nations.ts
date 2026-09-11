@@ -22,7 +22,7 @@ function nationsOf(confederation: Confederation, names: string[]): Nation[] {
 
 /**
  * All 211 FIFA member associations, grouped by confederation. `name` matches
- * `Club.country` for the seven countries that have a domestic league in the
+ * `Club.country` for the ten countries that have a domestic league in the
  * game so trial/transfer home bias and cup scheduling can key off nationality.
  */
 export const NATIONS: Nation[] = [

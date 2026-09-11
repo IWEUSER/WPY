@@ -59,6 +59,32 @@ const KITS: Record<string, KitScheme> = {
   'man-city': { primary: '#6CABDD', secondary: '#FFFFFF', pattern: 'solid', shorts: '#FFFFFF', socks: '#FFFFFF' },
   bayern: { primary: '#DC052D', secondary: '#FFFFFF', pattern: 'solid', shorts: '#DC052D', socks: '#FFFFFF' },
   dortmund: { primary: '#FDE100', secondary: '#000000', pattern: 'solid', shorts: '#000000', socks: '#000000' },
+
+  benfica: { primary: '#E30613', shorts: '#FFFFFF', socks: '#E30613' },
+  porto: { primary: '#003087', secondary: '#FFFFFF', pattern: 'vertical', shorts: '#003087', socks: '#FFFFFF' },
+  sporting: { primary: '#008057', secondary: '#FFFFFF', pattern: 'hoops', shorts: '#000000', socks: '#008057' },
+  'vitoria-guimaraes': { primary: '#FFFFFF', secondary: '#111111', shorts: '#111111', socks: '#111111', pattern: 'solid' },
+  boavista: { primary: '#111111', secondary: '#FFFFFF', pattern: 'vertical', shorts: '#FFFFFF', socks: '#111111' },
+  ajax: { primary: '#D2122E', secondary: '#FFFFFF', pattern: 'vertical', shorts: '#FFFFFF', socks: '#D2122E' },
+  psv: { primary: '#E30613', secondary: '#FFFFFF', pattern: 'vertical', shorts: '#000000', socks: '#000000' },
+  feyenoord: { primary: '#E30613', secondary: '#FFFFFF', pattern: 'vertical', shorts: '#000000', socks: '#000000' },
+  az: { primary: '#E30613', secondary: '#FFFFFF', pattern: 'vertical', shorts: '#E30613', socks: '#E30613' },
+  utrecht: { primary: '#E30613', secondary: '#FFFFFF', pattern: 'vertical', shorts: '#E30613', socks: '#E30613' },
+  'sparta-rotterdam': { primary: '#E30613', secondary: '#FFFFFF', pattern: 'vertical', shorts: '#E30613', socks: '#E30613' },
+  heerenveen: { primary: '#003DA5', secondary: '#FFFFFF', pattern: 'vertical', shorts: '#003DA5', socks: '#003DA5' },
+  groningen: { primary: '#007A33', secondary: '#FFFFFF', pattern: 'vertical', shorts: '#FFFFFF', socks: '#007A33' },
+  'go-ahead-eagles': { primary: '#F5C518', secondary: '#E30613', pattern: 'vertical', shorts: '#E30613', socks: '#F5C518' },
+  'nac-breda': { primary: '#F5C518', secondary: '#111111', pattern: 'vertical', shorts: '#111111', socks: '#F5C518' },
+  heracles: { primary: '#111111', secondary: '#FFFFFF', pattern: 'vertical', shorts: '#FFFFFF', socks: '#111111' },
+  'willem-ii': { primary: '#003DA5', secondary: '#E30613', pattern: 'vertical', shorts: '#FFFFFF', socks: '#003DA5' },
+  galatasaray: { primary: '#F68B1F', secondary: '#E30613', pattern: 'vertical', shorts: '#F68B1F', socks: '#E30613' },
+  fenerbahce: { primary: '#003399', secondary: '#FFD100', pattern: 'vertical', shorts: '#FFFFFF', socks: '#003399' },
+  besiktas: { primary: '#111111', secondary: '#FFFFFF', pattern: 'vertical', shorts: '#FFFFFF', socks: '#111111' },
+  trabzonspor: { primary: '#6B1E3A', secondary: '#1B4F8A', pattern: 'vertical', shorts: '#6B1E3A', socks: '#6B1E3A' },
+  goztepe: { primary: '#F5C518', secondary: '#E30613', pattern: 'vertical', shorts: '#E30613', socks: '#F5C518' },
+  konyaspor: { primary: '#007A33', secondary: '#FFFFFF', pattern: 'vertical', shorts: '#007A33', socks: '#FFFFFF' },
+  antalyaspor: { primary: '#E30613', secondary: '#FFFFFF', pattern: 'vertical', shorts: '#FFFFFF', socks: '#E30613' },
+  'istanbul-basaksehir': { primary: '#F68B1F', secondary: '#003399', pattern: 'vertical', shorts: '#003399', socks: '#F68B1F' },
 };
 
 /**
@@ -137,6 +163,15 @@ const SOCK_OVERRIDES: Record<string, string> = {
   norwich: '#FFF200',
   watford: '#FBEE23',
   'sheff-utd': '#EE2737',
+  benfica: '#E30613',
+  porto: '#FFFFFF',
+  sporting: '#008057',
+  ajax: '#D2122E',
+  psv: '#000000',
+  feyenoord: '#000000',
+  galatasaray: '#E30613',
+  fenerbahce: '#003399',
+  besiktas: '#111111',
 };
 
 export function clubKit(club: Club | undefined, fallback = '#1D4ED8'): KitScheme {

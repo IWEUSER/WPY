@@ -117,6 +117,16 @@ export const CLUB_GROUNDS: Record<string, ClubGround> = {
   juventus: { name: 'Allianz Stadium', capacity: 41_507, tiers: 2 },
   chelsea: { name: 'Stamford Bridge', capacity: 40_044, tiers: 3 },
   'real-sociedad': { name: 'Reale Arena', capacity: LISTED_MIN_CAPACITY, tiers: 3 },
+  benfica: { name: 'Estádio da Luz', capacity: 64_642, tiers: 3 },
+  ajax: { name: 'Johan Cruyff Arena', capacity: 55_500, tiers: 2 },
+  galatasaray: { name: 'Rams Park', capacity: 52_223, tiers: 2 },
+  feyenoord: { name: 'De Kuip', capacity: 51_117, tiers: 2 },
+  sporting: { name: 'Estádio José Alvalade', capacity: 50_095, tiers: 2 },
+  porto: { name: 'Estádio do Dragão', capacity: 50_033, tiers: 2 },
+  fenerbahce: { name: 'Şükrü Saracoğlu Stadium', capacity: 47_430, tiers: 2 },
+  besiktas: { name: 'Tüpraş Stadium', capacity: 42_590, tiers: 2 },
+  konyaspor: { name: 'Konya Metropolitan Stadium', capacity: 42_000, tiers: 2 },
+  trabzonspor: { name: 'Şenol Güneş Stadium', capacity: 40_782, tiers: 2 },
 };
 
 function hashKey(key: string): number {

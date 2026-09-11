@@ -1,8 +1,9 @@
 import { MLS_CONFERENCE_SIZE, MLS_REGULAR_SEASON_WEEKS, mlsConferenceOf } from './leagueFormat';
 
 /**
- * The football pyramid this career mode plays out across: major European
- * leagues plus Saudi Arabia and MLS, each at its real division size.
+ * The football pyramid this career mode plays out across: the big five
+ * European leagues, Primeira Liga, Eredivisie, Super Lig, plus Saudi Arabia
+ * and MLS, each at its real division size.
  * Tiers 1 (elite) through 5 (lower level) exist so the trial and transfer
  * logic has real headroom.
  *
@@ -408,6 +409,66 @@ const CLUB_SEED: Club[] = [
   { id: 'st-louis', name: 'St. Louis City', country: 'United States', league: 'MLS', tier: 4, strength: 64, color: '#E30613', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
   { id: 'dc-united', name: 'D.C. United', country: 'United States', league: 'MLS', tier: 4, strength: 61, color: '#000000', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
 
+  // Portugal - Primeira Liga
+  { id: 'benfica', name: 'Benfica', country: 'Portugal', league: 'Primeira Liga', tier: 2, strength: 84, color: '#E30613', reserveGoalRatio: 0.55, firstTeamGoalRatio: 0.42 },
+  { id: 'porto', name: 'FC Porto', country: 'Portugal', league: 'Primeira Liga', tier: 2, strength: 83, color: '#003087', reserveGoalRatio: 0.55, firstTeamGoalRatio: 0.42 },
+  { id: 'sporting', name: 'Sporting CP', country: 'Portugal', league: 'Primeira Liga', tier: 2, strength: 82, color: '#008057', reserveGoalRatio: 0.55, firstTeamGoalRatio: 0.42 },
+  { id: 'braga', name: 'SC Braga', country: 'Portugal', league: 'Primeira Liga', tier: 3, strength: 76, color: '#E30613', reserveGoalRatio: 0.45, firstTeamGoalRatio: 0.35 },
+  { id: 'vitoria-guimaraes', name: 'Vitória Guimarães', country: 'Portugal', league: 'Primeira Liga', tier: 4, strength: 70, color: '#FFFFFF', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+  { id: 'famalicao', name: 'Famalicão', country: 'Portugal', league: 'Primeira Liga', tier: 4, strength: 67, color: '#003DA5', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+  { id: 'casa-pia', name: 'Casa Pia', country: 'Portugal', league: 'Primeira Liga', tier: 4, strength: 64, color: '#111111', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'rio-ave', name: 'Rio Ave', country: 'Portugal', league: 'Primeira Liga', tier: 4, strength: 65, color: '#007A33', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'gil-vicente', name: 'Gil Vicente', country: 'Portugal', league: 'Primeira Liga', tier: 4, strength: 64, color: '#E30613', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'moreirense', name: 'Moreirense', country: 'Portugal', league: 'Primeira Liga', tier: 4, strength: 63, color: '#007A33', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'estoril', name: 'Estoril Praia', country: 'Portugal', league: 'Primeira Liga', tier: 4, strength: 63, color: '#FFD100', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'santa-clara', name: 'Santa Clara', country: 'Portugal', league: 'Primeira Liga', tier: 4, strength: 64, color: '#E30613', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'arouca', name: 'Arouca', country: 'Portugal', league: 'Primeira Liga', tier: 5, strength: 62, color: '#F5C518', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+  { id: 'boavista', name: 'Boavista', country: 'Portugal', league: 'Primeira Liga', tier: 5, strength: 62, color: '#111111', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+  { id: 'nacional', name: 'Nacional', country: 'Portugal', league: 'Primeira Liga', tier: 5, strength: 61, color: '#111111', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+  { id: 'estrela', name: 'Estrela da Amadora', country: 'Portugal', league: 'Primeira Liga', tier: 5, strength: 60, color: '#E30613', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+  { id: 'avs', name: 'AVS', country: 'Portugal', league: 'Primeira Liga', tier: 5, strength: 59, color: '#6B1E3A', reserveGoalRatio: 0.28, firstTeamGoalRatio: 0.24 },
+  { id: 'farense', name: 'Farense', country: 'Portugal', league: 'Primeira Liga', tier: 5, strength: 59, color: '#111111', reserveGoalRatio: 0.28, firstTeamGoalRatio: 0.24 },
+
+  // Netherlands - Eredivisie
+  { id: 'ajax', name: 'Ajax', country: 'Netherlands', league: 'Eredivisie', tier: 2, strength: 85, color: '#D2122E', reserveGoalRatio: 0.55, firstTeamGoalRatio: 0.42 },
+  { id: 'psv', name: 'PSV', country: 'Netherlands', league: 'Eredivisie', tier: 2, strength: 84, color: '#E30613', reserveGoalRatio: 0.55, firstTeamGoalRatio: 0.42 },
+  { id: 'feyenoord', name: 'Feyenoord', country: 'Netherlands', league: 'Eredivisie', tier: 2, strength: 83, color: '#E30613', reserveGoalRatio: 0.55, firstTeamGoalRatio: 0.42 },
+  { id: 'az', name: 'AZ', country: 'Netherlands', league: 'Eredivisie', tier: 3, strength: 76, color: '#E30613', reserveGoalRatio: 0.45, firstTeamGoalRatio: 0.35 },
+  { id: 'twente', name: 'FC Twente', country: 'Netherlands', league: 'Eredivisie', tier: 4, strength: 73, color: '#E30613', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'utrecht', name: 'FC Utrecht', country: 'Netherlands', league: 'Eredivisie', tier: 4, strength: 70, color: '#E30613', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+  { id: 'sparta-rotterdam', name: 'Sparta Rotterdam', country: 'Netherlands', league: 'Eredivisie', tier: 4, strength: 66, color: '#E30613', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'heerenveen', name: 'Heerenveen', country: 'Netherlands', league: 'Eredivisie', tier: 4, strength: 65, color: '#003DA5', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'groningen', name: 'FC Groningen', country: 'Netherlands', league: 'Eredivisie', tier: 4, strength: 65, color: '#007A33', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'go-ahead-eagles', name: 'Go Ahead Eagles', country: 'Netherlands', league: 'Eredivisie', tier: 4, strength: 64, color: '#F5C518', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'nec', name: 'NEC', country: 'Netherlands', league: 'Eredivisie', tier: 4, strength: 64, color: '#E30613', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'nac-breda', name: 'NAC Breda', country: 'Netherlands', league: 'Eredivisie', tier: 4, strength: 63, color: '#F5C518', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'pec-zwolle', name: 'PEC Zwolle', country: 'Netherlands', league: 'Eredivisie', tier: 5, strength: 62, color: '#003DA5', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+  { id: 'fortuna-sittard', name: 'Fortuna Sittard', country: 'Netherlands', league: 'Eredivisie', tier: 5, strength: 62, color: '#F5C518', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+  { id: 'heracles', name: 'Heracles', country: 'Netherlands', league: 'Eredivisie', tier: 5, strength: 61, color: '#111111', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+  { id: 'willem-ii', name: 'Willem II', country: 'Netherlands', league: 'Eredivisie', tier: 5, strength: 61, color: '#003DA5', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+  { id: 'almere', name: 'Almere City', country: 'Netherlands', league: 'Eredivisie', tier: 5, strength: 59, color: '#E30613', reserveGoalRatio: 0.28, firstTeamGoalRatio: 0.24 },
+  { id: 'volendam', name: 'FC Volendam', country: 'Netherlands', league: 'Eredivisie', tier: 5, strength: 58, color: '#F5A12D', reserveGoalRatio: 0.28, firstTeamGoalRatio: 0.24 },
+
+  // Turkey - Super Lig
+  { id: 'galatasaray', name: 'Galatasaray', country: 'Turkey', league: 'Super Lig', tier: 2, strength: 84, color: '#F68B1F', reserveGoalRatio: 0.55, firstTeamGoalRatio: 0.42 },
+  { id: 'fenerbahce', name: 'Fenerbahçe', country: 'Turkey', league: 'Super Lig', tier: 2, strength: 83, color: '#003399', reserveGoalRatio: 0.55, firstTeamGoalRatio: 0.42 },
+  { id: 'besiktas', name: 'Beşiktaş', country: 'Turkey', league: 'Super Lig', tier: 3, strength: 80, color: '#111111', reserveGoalRatio: 0.5, firstTeamGoalRatio: 0.4 },
+  { id: 'trabzonspor', name: 'Trabzonspor', country: 'Turkey', league: 'Super Lig', tier: 3, strength: 76, color: '#6B1E3A', reserveGoalRatio: 0.45, firstTeamGoalRatio: 0.35 },
+  { id: 'istanbul-basaksehir', name: 'İstanbul Başakşehir', country: 'Turkey', league: 'Super Lig', tier: 4, strength: 72, color: '#F68B1F', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'samsunspor', name: 'Samsunspor', country: 'Turkey', league: 'Super Lig', tier: 4, strength: 70, color: '#E30613', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+  { id: 'goztepe', name: 'Göztepe', country: 'Turkey', league: 'Super Lig', tier: 4, strength: 68, color: '#F5C518', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+  { id: 'konyaspor', name: 'Konyaspor', country: 'Turkey', league: 'Super Lig', tier: 4, strength: 67, color: '#007A33', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
+  { id: 'antalyaspor', name: 'Antalyaspor', country: 'Turkey', league: 'Super Lig', tier: 4, strength: 66, color: '#E30613', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'alanyaspor', name: 'Alanyaspor', country: 'Turkey', league: 'Super Lig', tier: 4, strength: 66, color: '#F68B1F', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'kasimpasa', name: 'Kasımpaşa', country: 'Turkey', league: 'Super Lig', tier: 4, strength: 65, color: '#003DA5', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'gaziantep', name: 'Gaziantep', country: 'Turkey', league: 'Super Lig', tier: 4, strength: 65, color: '#E30613', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'eyupspor', name: 'Eyüpspor', country: 'Turkey', league: 'Super Lig', tier: 4, strength: 65, color: '#5B2C6F', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'rizespor', name: 'Rizespor', country: 'Turkey', league: 'Super Lig', tier: 4, strength: 64, color: '#003DA5', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'sivasspor', name: 'Sivasspor', country: 'Turkey', league: 'Super Lig', tier: 4, strength: 64, color: '#E30613', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'kayserispor', name: 'Kayserispor', country: 'Turkey', league: 'Super Lig', tier: 5, strength: 63, color: '#E30613', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+  { id: 'hatayspor', name: 'Hatayspor', country: 'Turkey', league: 'Super Lig', tier: 5, strength: 62, color: '#6B1E3A', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+  { id: 'kocaelispor', name: 'Kocaelispor', country: 'Turkey', league: 'Super Lig', tier: 5, strength: 61, color: '#007A33', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+
   // Mexico - Liga MX (Leagues Cup opponents)
   { id: 'club-america', name: 'Club América', country: 'Mexico', league: 'Liga MX', tier: 2, strength: 80, color: '#FFD100', reserveGoalRatio: 0.5, firstTeamGoalRatio: 0.4, playable: false },
   { id: 'monterrey', name: 'Monterrey', country: 'Mexico', league: 'Liga MX', tier: 2, strength: 79, color: '#003DA5', reserveGoalRatio: 0.5, firstTeamGoalRatio: 0.4, playable: false },
@@ -503,6 +564,9 @@ export const TARGET_LEAGUE_SIZE: Record<string, number> = {
   '2. Bundesliga': 18,
   'Ligue 1': 18,
   'Ligue 2': 18,
+  'Primeira Liga': 18,
+  Eredivisie: 18,
+  'Super Lig': 18,
   'Saudi Pro League': 18,
   MLS: 28,
 };

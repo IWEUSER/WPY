@@ -180,6 +180,9 @@ export function fixtureIsNight(fixture: CalendarFixture): boolean {
       || fixture.domesticCup === 'coppa-italia'
       || fixture.domesticCup === 'dfb-pokal'
       || fixture.domesticCup === 'coupe-de-france'
+      || fixture.domesticCup === 'taca-de-portugal'
+      || fixture.domesticCup === 'knvb-beker'
+      || fixture.domesticCup === 'turkish-cup'
     );
   }
   if (fixture.kind === 'league') {

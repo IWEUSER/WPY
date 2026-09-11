@@ -263,6 +263,12 @@ export interface CareerState {
   intlQualifying: IntlQualifyingCarry | null;
   /** Last UEFA Super Cup opponent, so the tie does not repeat the same club. */
   lastSuperCupOpponentId?: string | null;
+  /**
+   * Calendar / league-list generation this save was built with. Mid-season
+   * saves whose stamp does not match `CURRENT_RULES_STAMP` can rebuild the
+   * remaining fixtures without wiping career history.
+   */
+  rulesStamp?: string | null;
 }
 
 export interface LastMatchResult {

@@ -40,8 +40,8 @@ import {
   isListedGround,
 } from '../src/game/shooting/grounds';
 import { clubKit } from '../src/game/career/data/clubKits';
-import { clubContinentalCup, internationalCalendarSeason, internationalCampaignForSeason, internationalTournamentForSeason } from '../src/game/career/data/competitions';
-import { cupFromLeaguePosition, continentalQualificationForNextSeason } from '../src/game/career/europeanQualification';
+import { clubContinentalCup, domesticCupForCountry, internationalCalendarSeason, internationalCampaignForSeason, internationalTournamentForSeason } from '../src/game/career/data/competitions';
+import { CURRENT_RULES_STAMP, migratedRulesStamp, rebuildCurrentSeason, saveNeedsRebuild } from '../src/game/career/rulesStamp';
 import { fifaRank, knockoutRankCap, nationsInConfederation, tournamentOpponents, worldCupKnockoutRankCap } from '../src/game/career/data/fifaRankings';
 import { countsTowardCareerRecord, displaySeasonLabel, displaySeasonNumber } from '../src/game/career/seasonDisplay';
 import { bumpInternationalSeason, callUpRatio, isInternationalFinalsRound, isSelectedForNationalTeam, markInjuryMissedFinals, selectionRatioForNation } from '../src/game/career/international';
@@ -89,7 +89,7 @@ import {
   internationalAwardWinChance,
 } from '../src/game/career/internationalAwards';
 import { formatInternationalSeason, careerAwardCounts, careerTrophyCounts, formatGamesGoals, seasonLeagueLabel } from '../src/game/career/honoursDisplay';
-import type { SeasonRecord } from '../src/game/career/types';
+import type { CareerState, SeasonRecord } from '../src/game/career/types';
 
 const N = 50000;
 
@@ -1444,6 +1444,14 @@ if (!picker.some((g) => g.league === 'Premier League' && g.clubs.some((c) => c.i
   console.error('the favourite-club picker must include playable league clubs');
   process.exitCode = 1;
 }
+if (
+  !picker.some((g) => g.league === 'Primeira Liga' && g.clubs.some((c) => c.id === 'benfica'))
+  || !picker.some((g) => g.league === 'Eredivisie' && g.clubs.some((c) => c.id === 'ajax'))
+  || !picker.some((g) => g.league === 'Super Lig' && g.clubs.some((c) => c.id === 'galatasaray'))
+) {
+  console.error('the favourite-club picker must include Primeira Liga, Eredivisie and Super Lig');
+  process.exitCode = 1;
+}
 
 console.log('\n--- Transfer offers: at least one home-nation club ---');
 const dummySeason: SeasonRecord = {
@@ -1540,12 +1548,10 @@ if (assignClubTier('United States', 'MLS', 94) < 3 || assignClubTier('Saudi Arab
 }
 
 console.log('\n--- League opponents home and away, never a third meeting ---');
-const playableLeagues = [...new Set(CLUBS.map((c) => c.league))];
-for (const league of playableLeagues) {
-  const size = clubsInLeague(league).length;
-  const target = TARGET_LEAGUE_SIZE[league];
-  if (!target || size !== target) {
-    console.error(`${league} has ${size} clubs; need ${target ?? 'a real division size'}`);
+for (const [league, target] of Object.entries(TARGET_LEAGUE_SIZE)) {
+  const size = clubsInLeague(league).filter((c) => c.playable !== false).length;
+  if (size !== target) {
+    console.error(`${league} has ${size} clubs; need ${target}`);
     process.exitCode = 1;
   }
 }
@@ -1562,6 +1568,134 @@ if (madrid) {
   }
   if (Object.values(counts).some((n) => n !== 2) || Object.keys(counts).length !== rivals.length) {
     console.error('every league rival must appear exactly twice');
+    process.exitCode = 1;
+  }
+}
+
+console.log('\n--- Primeira Liga, Eredivisie, Super Lig calendars ---');
+{
+  const benfica = getClub('benfica');
+  const ajax = getClub('ajax');
+  const gala = getClub('galatasaray');
+  if (!benfica || !ajax || !gala) {
+    console.error('Benfica, Ajax and Galatasaray must exist');
+    process.exitCode = 1;
+  } else {
+    const benficaSeason = hydrateSeason({ seasonNumber: 2, club: benfica, careerGoalRatio: 0.8, nationId: 'portugal' });
+    const leagueGames = benficaSeason.calendar.fixtures.filter((f) => f.kind === 'league' && f.opponentId).length;
+    console.log(
+      'Benfica league games',
+      leagueGames,
+      'cup',
+      benficaSeason.sim.domesticCup,
+      'europe',
+      clubContinentalCup(benfica),
+    );
+    if (leagueGames !== 34 || leagueMatchWeeks('Primeira Liga', benfica) !== 34) {
+      console.error('Primeira Liga must be 18 clubs / 34 league weeks');
+      process.exitCode = 1;
+    }
+    if (benficaSeason.sim.domesticCup !== 'taca-de-portugal' || domesticCupForCountry('Portugal') !== 'taca-de-portugal') {
+      console.error('Benfica must play the Taça de Portugal');
+      process.exitCode = 1;
+    }
+    if (clubContinentalCup(benfica) !== 'uel') {
+      console.error('Benfica typical status is Europa League');
+      process.exitCode = 1;
+    }
+    const ajaxSeason = hydrateSeason({ seasonNumber: 2, club: ajax, careerGoalRatio: 0.8, nationId: 'netherlands' });
+    const galaSeason = hydrateSeason({ seasonNumber: 2, club: gala, careerGoalRatio: 0.8, nationId: 'turkey' });
+    if (ajaxSeason.sim.domesticCup !== 'knvb-beker' || galaSeason.sim.domesticCup !== 'turkish-cup') {
+      console.error('Ajax and Galatasaray must play their domestic cups');
+      process.exitCode = 1;
+    }
+    if (leagueMatchWeeks('Eredivisie', ajax) !== 34 || leagueMatchWeeks('Super Lig', gala) !== 34) {
+      console.error('Eredivisie and Super Lig must be 34-game seasons');
+      process.exitCode = 1;
+    }
+  }
+}
+
+console.log('\n--- Old-save rules stamp rebuilds the remaining calendar ---');
+{
+  const benfica = getClub('benfica')!;
+  const { calendar, sim } = hydrateSeason({ seasonNumber: 4, club: benfica, careerGoalRatio: 0.72, nationId: 'portugal' });
+  const mid = calendar.fixtures.findIndex((f) => f.week >= 12);
+  sim.fixtureIndex = mid >= 0 ? mid : 8;
+  const currentSeason: SeasonRecord = {
+    seasonNumber: 4,
+    clubId: 'benfica',
+    role: 'first-team',
+    matches: [],
+    goals: 11,
+    gamesPlayed: 14,
+    ratioMet: true,
+    age: 19,
+    leagueGoals: 9,
+    leagueGames: 11,
+    cupGames: 2,
+    cupGoals: 1,
+    domesticGames: 13,
+    domesticGoals: 10,
+    continentalStats: [],
+    trophies: [],
+    topGoalscorer: false,
+    playerOfTheYear: false,
+    wonWpy: false,
+  };
+  const stale = {
+    phase: 'hub' as const,
+    clubId: 'benfica',
+    role: 'first-team' as const,
+    seasonNumber: 4,
+    nationality: 'portugal',
+    clubLeague: 'Primeira Liga',
+    seasonCalendar: calendar,
+    seasonSim: sim,
+    currentSeason,
+    careerGoals: 40,
+    careerGames: 70,
+    careerStart: 'favourite-first-team' as const,
+    rulesStamp: null,
+    intlQualifying: null,
+    nationalTeam: null,
+    qualifiedContinentalCup: 'uel' as const,
+  };
+  if (!saveNeedsRebuild(stale)) {
+    console.error('an in-progress save without the current rules stamp must offer a rebuild');
+    process.exitCode = 1;
+  }
+  if (migratedRulesStamp({ phase: 'menu' }) !== CURRENT_RULES_STAMP) {
+    console.error('menu saves must quiet-migrate onto the current rules stamp');
+    process.exitCode = 1;
+  }
+  if (migratedRulesStamp(stale) != null) {
+    console.error('in-progress saves must keep a missing stamp so the hub can rebuild');
+    process.exitCode = 1;
+  }
+  const rebuilt = rebuildCurrentSeason(stale as CareerState);
+  const rebuiltWeek = rebuilt.seasonCalendar && rebuilt.seasonSim
+    ? rebuilt.seasonCalendar.fixtures[rebuilt.seasonSim.fixtureIndex]?.week
+    : 0;
+  console.log('rebuild stamp', rebuilt.rulesStamp, 'week', rebuiltWeek, 'goals kept', currentSeason.goals);
+  if (rebuilt.rulesStamp !== CURRENT_RULES_STAMP) {
+    console.error('rebuild must stamp the current rules');
+    process.exitCode = 1;
+  }
+  if (!rebuilt.seasonSim || rebuilt.seasonSim.fixtureIndex === 0 || (rebuiltWeek ?? 0) < 12) {
+    console.error('rebuild must skip ahead to the same calendar week');
+    process.exitCode = 1;
+  }
+  if (currentSeason.goals !== 11 || currentSeason.gamesPlayed !== 14) {
+    console.error('rebuild must not wipe stats already earned');
+    process.exitCode = 1;
+  }
+  if (!rebuilt.seasonCalendar?.fixtures.some((f) => f.domesticCup === 'taca-de-portugal')) {
+    console.error('rebuilt Benfica calendar must still include the Taça de Portugal');
+    process.exitCode = 1;
+  }
+  if (saveNeedsRebuild({ ...stale, ...rebuilt })) {
+    console.error('a rebuilt save must not keep asking to rebuild');
     process.exitCode = 1;
   }
 }
@@ -3586,6 +3720,17 @@ console.log('\n--- League position qualifies for Europe next season ---');
     console.error('Saudi top four must play the AFC Champions League Elite');
     process.exitCode = 1;
   }
+  if (
+    cupFromLeaguePosition('Primeira Liga', 2) !== 'ucl'
+    || cupFromLeaguePosition('Primeira Liga', 3) !== 'uel'
+    || cupFromLeaguePosition('Primeira Liga', 4) !== 'uecl'
+    || cupFromLeaguePosition('Eredivisie', 2) !== 'ucl'
+    || cupFromLeaguePosition('Super Lig', 4) !== 'uecl'
+    || cupFromLeaguePosition('Super Lig', 5) != null
+  ) {
+    console.error('Portugal, Netherlands and Turkey must get 2 CL, 1 EL and 1 ECL');
+    process.exitCode = 1;
+  }
   const uelUpgrade = continentalQualificationForNextSeason({
     club: palace,
     league: 'Premier League',
@@ -4583,8 +4728,33 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
     process.exitCode = 1;
   }
   evenDecks(psgL, 2, 'Parc des Princes');
-  if (Object.keys(CLUB_GROUNDS).length < 36) {
+  if (Object.keys(CLUB_GROUNDS).length < 46) {
     console.error('the listed stadium table is missing clubs');
+    process.exitCode = 1;
+  }
+  const luz = groundForClub('benfica');
+  const dragao = groundForClub('porto');
+  const cruyff = groundForClub('ajax');
+  const rams = groundForClub('galatasaray');
+  console.log('PT/NL/TR grounds', luz.name, luz.tiers, dragao.tiers, cruyff.tiers, rams.tiers);
+  if (luz.tiers !== 3 || luz.capacity < 60_000 || luz.name !== 'Estádio da Luz') {
+    console.error('Benfica must play in a three-deck Estádio da Luz');
+    process.exitCode = 1;
+  }
+  const threeDeck = CLUBS
+    .filter((c) => c.country === 'Portugal' || c.country === 'Netherlands' || c.country === 'Turkey')
+    .filter((c) => groundForClub(c.id).tiers === 3)
+    .map((c) => c.id);
+  if (threeDeck.length !== 1 || threeDeck[0] !== 'benfica') {
+    console.error('only Benfica among Portugal, Netherlands and Turkey clubs may have a three-tier stadium', threeDeck);
+    process.exitCode = 1;
+  }
+  if (dragao.tiers > 2 || cruyff.tiers > 2 || rams.tiers > 2) {
+    console.error('Porto, Ajax and Galatasaray must be one or two decks');
+    process.exitCode = 1;
+  }
+  if (groundForClub('estoril').tiers !== 2 || isListedGround('estoril') || (groundForClub('estoril').capacity ?? 99_000) >= LISTED_MIN_CAPACITY) {
+    console.error('smaller Primeira Liga grounds must stay two-deck municipal stands');
     process.exitCode = 1;
   }
 }
@@ -4625,15 +4795,36 @@ console.log('\n--- Kits, cup nights, FA Cup semis, sun, World Cup copy, African 
     console.error('Lyon must wear all white');
     process.exitCode = 1;
   }
+  const sportingKit = clubKit(getClub('sporting'));
+  const ajaxKit = clubKit(getClub('ajax'));
+  const portoKit = clubKit(getClub('porto'));
+  const galaKit = clubKit(getClub('galatasaray'));
+  const fenerKit = clubKit(getClub('fenerbahce'));
+  const besiktasKit = clubKit(getClub('besiktas'));
+  if (sportingKit.pattern !== 'hoops' || sportingKit.primary !== '#008057') {
+    console.error('Sporting CP must wear green and white hoops');
+    process.exitCode = 1;
+  }
+  if (ajaxKit.pattern !== 'vertical' || portoKit.pattern !== 'vertical' || galaKit.pattern !== 'vertical') {
+    console.error('Ajax, Porto and Galatasaray must wear striped shirts');
+    process.exitCode = 1;
+  }
+  if (fenerKit.secondary !== '#FFD100' || besiktasKit.pattern !== 'vertical') {
+    console.error('Fenerbahçe must be navy/yellow and Beşiktaş black/white stripes');
+    process.exitCode = 1;
+  }
 
   const nightCups = [
     { week: 12, kind: 'domestic-cup' as const, isDecisive: false, domesticCup: 'copa-del-rey' as const, domesticCupStage: 'quarter-final' as const },
     { week: 12, kind: 'domestic-cup' as const, isDecisive: false, domesticCup: 'coppa-italia' as const, domesticCupStage: 'quarter-final' as const },
     { week: 12, kind: 'domestic-cup' as const, isDecisive: false, domesticCup: 'dfb-pokal' as const, domesticCupStage: 'quarter-final' as const },
     { week: 12, kind: 'domestic-cup' as const, isDecisive: false, domesticCup: 'coupe-de-france' as const, domesticCupStage: 'quarter-final' as const },
+    { week: 12, kind: 'domestic-cup' as const, isDecisive: false, domesticCup: 'taca-de-portugal' as const, domesticCupStage: 'quarter-final' as const },
+    { week: 12, kind: 'domestic-cup' as const, isDecisive: false, domesticCup: 'knvb-beker' as const, domesticCupStage: 'quarter-final' as const },
+    { week: 12, kind: 'domestic-cup' as const, isDecisive: false, domesticCup: 'turkish-cup' as const, domesticCupStage: 'quarter-final' as const },
   ];
   if (nightCups.some((f) => !fixtureIsNight(f))) {
-    console.error('Spanish, German, Italian and French cup ties must be night games');
+    console.error('Spanish, German, Italian, French, Portuguese, Dutch and Turkish cup ties must be night games');
     process.exitCode = 1;
   }
 
