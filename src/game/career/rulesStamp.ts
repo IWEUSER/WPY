@@ -61,6 +61,7 @@ export function rebuildCurrentSeason(state: CareerState): Partial<CareerState> {
   const superCupOpponentId = state.seasonCalendar.fixtures.find(
     (f) => f.kind === 'super-cup' && !f.domesticSuperCup && f.opponentId,
   )?.opponentId;
+  const calendarCup = state.seasonCalendar.fixtures.find((f) => f.continentalCup)?.continentalCup;
   const { calendar, sim } = hydrateSeason({
     seasonNumber: state.seasonNumber,
     club,
@@ -79,9 +80,7 @@ export function rebuildCurrentSeason(state: CareerState): Partial<CareerState> {
     league: state.clubLeague ?? club.league,
     continentalCup: leagueOnly
       ? null
-      : state.qualifiedContinentalCup !== undefined
-        ? state.qualifiedContinentalCup
-        : clubContinentalCup(club),
+      : calendarCup ?? state.qualifiedContinentalCup ?? clubContinentalCup(club),
     excludeQualifierIds: qualifierExcludeIds(state.nationalTeam, state.intlQualifying?.opponentIds),
     leagueOnly,
     careerStart: state.careerStart,

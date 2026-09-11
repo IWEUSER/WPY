@@ -42,6 +42,7 @@ import {
 import { clubKit } from '../src/game/career/data/clubKits';
 import { clubContinentalCup, domesticCupForCountry, internationalCalendarSeason, internationalCampaignForSeason, internationalTournamentForSeason } from '../src/game/career/data/competitions';
 import { CURRENT_RULES_STAMP, migratedRulesStamp, rebuildCurrentSeason, saveNeedsRebuild } from '../src/game/career/rulesStamp';
+import { cupFromLeaguePosition, continentalQualificationForNextSeason } from '../src/game/career/europeanQualification';
 import { fifaRank, knockoutRankCap, nationsInConfederation, tournamentOpponents, worldCupKnockoutRankCap } from '../src/game/career/data/fifaRankings';
 import { countsTowardCareerRecord, displaySeasonLabel, displaySeasonNumber } from '../src/game/career/seasonDisplay';
 import { bumpInternationalSeason, callUpRatio, isInternationalFinalsRound, isSelectedForNationalTeam, markInjuryMissedFinals, selectionRatioForNation } from '../src/game/career/international';
@@ -1692,6 +1693,10 @@ console.log('\n--- Old-save rules stamp rebuilds the remaining calendar ---');
   }
   if (!rebuilt.seasonCalendar?.fixtures.some((f) => f.domesticCup === 'taca-de-portugal')) {
     console.error('rebuilt Benfica calendar must still include the Taça de Portugal');
+    process.exitCode = 1;
+  }
+  if (!rebuilt.seasonCalendar?.fixtures.some((f) => f.continentalCup === 'uel')) {
+    console.error('rebuilt Benfica calendar must keep the Europa League campaign');
     process.exitCode = 1;
   }
   if (saveNeedsRebuild({ ...stale, ...rebuilt })) {
