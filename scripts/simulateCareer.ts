@@ -77,7 +77,7 @@ import {
 } from '../src/game/career/trial';
 import { nextYouthKnockoutRound, pickYouthGroupOpponents, pickYouthKnockoutOpponent, youthMaxGames } from '../src/game/career/youthTournament';
 import { isSquadRotationSitOut, nextSquadStatusAfterSeason, shouldSitLeagueFixture, squadStatusOnArrival } from '../src/game/career/squadStatus';
-import { consecutiveLoanSpells, LOAN_OFFER_COUNT, TRANSFER_MARKET_CAP, TRANSFER_OFFER_COUNT, offerFormRatio, offerTierFromStanding, pickLoanClubsForMiss, pickPermanentClubs, requiredGoalRatio, resolveSeasonTransition, sellingClubAcceptsOffer, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, trialFailTransferPending, tierForRatio } from '../src/game/career/transfers';
+import { consecutiveLoanSpells, LOAN_OFFER_COUNT, SAUDI_OFFER_MIN_AGE, TRANSFER_MARKET_CAP, TRANSFER_OFFER_COUNT, offerFormRatio, offerTierFromStanding, pickLoanClubsForMiss, pickPermanentClubs, requiredGoalRatio, resolveSeasonTransition, sellingClubAcceptsOffer, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, trialFailTransferPending, tierForRatio } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
 import {
   evaluatePlayerOfTheYear,
@@ -1227,6 +1227,49 @@ if (path.qualified) {
 }
 
 {
+  useCareerStore.getState().resetCareer();
+  const opening = createYouthCampaign('spain', () => 0.31);
+  const first = opening.calendar.fixtures[0];
+  useCareerStore.setState({
+    nationality: 'spain',
+    careerStart: 'youth',
+    openingCampaign: opening,
+    liveMatch: {
+      fixtureIndex: 0,
+      chancesTotal: first?.playerChances ?? 1,
+      chancesTaken: first?.playerChances ?? 1,
+      goals: 1,
+      openPlayGoals: 1,
+    },
+    seasonCalendar: opening.calendar,
+    seasonSim: null,
+    currentSeason: null,
+    lastMatchResult: null,
+    phase: 'match',
+  });
+  useCareerStore.getState().finishLiveMatch();
+  const afterFirst = useCareerStore.getState();
+  if (afterFirst.phase !== 'match-result' || afterFirst.lastMatchResult?.afterPhase !== 'hub' || afterFirst.openingCampaign?.fixtureIndex !== 1) {
+    console.error('youth match 1 must recap and leave the second group game queued');
+    process.exitCode = 1;
+  }
+  useCareerStore.getState().acknowledgeMatchResult();
+  const afterAck = useCareerStore.getState();
+  if (afterAck.phase !== 'hub' || afterAck.lastMatchResult) {
+    console.error('continuing the youth recap must clear lastMatchResult so the next match can start');
+    process.exitCode = 1;
+  }
+  useCareerStore.getState().advance();
+  const matchTwo = useCareerStore.getState();
+  console.log('youth match 2', matchTwo.phase, matchTwo.liveMatch?.fixtureIndex, matchTwo.openingCampaign?.fixtureIndex);
+  if (matchTwo.phase !== 'match' || matchTwo.liveMatch?.fixtureIndex !== 1 || matchTwo.openingCampaign?.fixtureIndex !== 1) {
+    console.error('Play Next Match after youth game 1 must open group match 2');
+    process.exitCode = 1;
+  }
+  useCareerStore.getState().resetCareer();
+}
+
+{
   const weak = new Set<string>();
   for (let i = 0; i < 40; i++) {
     const rng = () => (i * 17 + 3) % 1000 / 1000;
@@ -1499,6 +1542,31 @@ if (saleLoans !== LOAN_OFFER_COUNT || salePerms.length !== TRANSFER_OFFER_COUNT)
 if (saleTiers.some((tier) => tier < 5) || salePerms.some((o) => o.clubId === 'west-ham')) {
   console.error('a 0.08 ratio must only attract lower-level clubs, never West Ham or a higher band');
   process.exitCode = 1;
+}
+{
+  const saleSaudi = salePerms.filter((o) => getClub(o.clubId)?.league === 'Saudi Pro League');
+  if (saleSaudi.length !== 1) {
+    console.error('a 20-year-old sale window must include exactly one Saudi offer');
+    process.exitCode = 1;
+  }
+  const teenSale = resolveSeasonTransition({
+    season: { ...dummySeason, age: 17 },
+    role: 'first-team',
+    clubId: 'bayern',
+    parentClubId: 'bayern',
+    seasonsAtCurrentClub: 1,
+    age: 17,
+    careerGoals: 2,
+    careerGames: 24,
+    nationality: 'germany',
+    loansUsed: 0,
+  });
+  const teenSaudi = (teenSale.pendingTransfer?.offers ?? []).filter((o) => getClub(o.clubId)?.league === 'Saudi Pro League');
+  console.log('Saudi age gate', '20', saleSaudi.map((o) => o.clubId), '17', teenSaudi.map((o) => o.clubId));
+  if (teenSaudi.length !== 0) {
+    console.error('Saudi offers must not appear before age 20');
+    process.exitCode = 1;
+  }
 }
 
 {
@@ -3405,8 +3473,8 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     console.error('age 34 must be offered LAFC, Inter Miami, NYCFC and LA Galaxy');
     process.exitCode = 1;
   }
-  if (TWILIGHT_SAUDI_CLUB_IDS.some((id) => !saudiIds.has(id))) {
-    console.error('age 34 must also see the four Saudi giant offers');
+  if (twilightSaudi.length !== 1 || ![...saudiIds].every((id) => (TWILIGHT_SAUDI_CLUB_IDS as readonly string[]).includes(id))) {
+    console.error('age 34 must see exactly one Saudi giant offer');
     process.exitCode = 1;
   }
   const namedMlsWages = twilightMls.filter((o) => (TWILIGHT_MLS_CLUB_IDS as readonly string[]).includes(o.clubId));
@@ -3439,8 +3507,8 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     console.error('MLS twilight offers start at 34, not 32');
     process.exitCode = 1;
   }
-  if (TWILIGHT_SAUDI_CLUB_IDS.some((id) => !age32Saudi.some((o) => o.clubId === id))) {
-    console.error('from age 32 the four Saudi clubs must table similar star contracts');
+  if (age32Saudi.length !== 1 || age32Saudi.some((o) => !(TWILIGHT_SAUDI_CLUB_IDS as readonly string[]).includes(o.clubId))) {
+    console.error('from age 32 exactly one Saudi giant must table a star contract');
     process.exitCode = 1;
   }
   if (
@@ -3449,6 +3517,32 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
       .some((o) => o.weeklyWage < 100_000 || o.weeklyWage <= ordinaryMlsWage)
   ) {
     console.error('age-32 Saudi offers must pay elite European wages');
+    process.exitCode = 1;
+  }
+
+  const starAt = (age: number) =>
+    resolveSeasonTransition({
+      season: { ...dummySeason, clubId: 'barcelona', goals: 20, gamesPlayed: 38, age },
+      role: 'first-team',
+      clubId: 'barcelona',
+      parentClubId: 'barcelona',
+      seasonsAtCurrentClub: 2,
+      age,
+      careerGoals: 80,
+      careerGames: 120,
+      nationality: 'spain',
+      loansUsed: 0,
+      contractYearsRemaining: 2,
+    });
+  const age19Saudi = (starAt(19).pendingTransfer?.offers ?? []).filter((o) => getClub(o.clubId)?.league === 'Saudi Pro League');
+  const age20Saudi = (starAt(20).pendingTransfer?.offers ?? []).filter((o) => getClub(o.clubId)?.league === 'Saudi Pro League');
+  console.log('star Saudi offers', '19', age19Saudi.map((o) => o.clubId), '20', age20Saudi.map((o) => o.clubId));
+  if (age19Saudi.length !== 0) {
+    console.error('a 19-year-old must not receive a Saudi offer');
+    process.exitCode = 1;
+  }
+  if (age20Saudi.length !== 1 || age20Saudi.some((o) => !(TWILIGHT_SAUDI_CLUB_IDS as readonly string[]).includes(o.clubId))) {
+    console.error('from age 20 a star window must include exactly one Saudi giant');
     process.exitCode = 1;
   }
 
@@ -5254,9 +5348,14 @@ console.log('\n--- Club cups, paced tables, transfers, injuries, and elite score
     process.exitCode = 1;
   }
 
-  const saudiOnly = pickPermanentClubs(1, 260_000_000, ['man-city'], 'spain', false, 'Premier League', TRANSFER_MARKET_CAP + 1);
-  if (saudiOnly.length === 0 || saudiOnly.some((club) => !(TWILIGHT_SAUDI_CLUB_IDS as readonly string[]).includes(club.id))) {
-    console.error('players valued over €250m must only receive offers from top Saudi clubs');
+  const saudiOnly = pickPermanentClubs(1, 260_000_000, ['man-city'], 'spain', false, 'Premier League', TRANSFER_MARKET_CAP + 1, 24);
+  const saudiTooYoung = pickPermanentClubs(1, 260_000_000, ['man-city'], 'spain', false, 'Premier League', TRANSFER_MARKET_CAP + 1, 19);
+  if (saudiOnly.length !== 1 || saudiOnly.some((club) => !(TWILIGHT_SAUDI_CLUB_IDS as readonly string[]).includes(club.id))) {
+    console.error('players valued over €250m must receive exactly one top Saudi offer');
+    process.exitCode = 1;
+  }
+  if (saudiTooYoung.length !== 0) {
+    console.error(`a player under ${SAUDI_OFFER_MIN_AGE} must not receive a Saudi offer even over €250m`);
     process.exitCode = 1;
   }
 
