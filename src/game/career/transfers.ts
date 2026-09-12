@@ -119,7 +119,7 @@ function pickSaudiOfferClub(excludeIds: string[]): Club | undefined {
   return shuffle(
     TWILIGHT_SAUDI_CLUB_IDS
       .map((id) => getClub(id))
-      .filter((club): club is Club => Boolean(club) && !excludeIds.includes(club.id)),
+      .filter((club): club is Club => club != null && !excludeIds.includes(club.id)),
   )[0];
 }
 
@@ -957,8 +957,16 @@ function withTwilightMlsOffers(
     .map((offer) => ({ ...offer }));
   const blocked = new Set(excludeIds);
   if (age >= SAUDI_OFFER_MIN_AGE) {
+    const bestPermTier = Math.min(
+      ...next
+        .filter((offer) => offer.move === 'permanent' && !offer.renewal)
+        .map((offer) => getClub(offer.clubId)?.tier ?? 5),
+      5,
+    );
     const wantGiant =
-      value >= ELITE_TRANSFER_VALUE_FLOOR || value > TRANSFER_MARKET_CAP || age >= 32;
+      value > TRANSFER_MARKET_CAP ||
+      age >= 32 ||
+      (value >= ELITE_TRANSFER_VALUE_FLOOR && bestPermTier <= 2);
     if (wantGiant) {
       const saudi = pickSaudiOfferClub([...excludeIds, ...next.map((offer) => offer.clubId)]);
       if (saudi) {

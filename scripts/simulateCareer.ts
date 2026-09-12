@@ -2000,9 +2000,15 @@ if (barca && hilal && lafc) {
   });
   const paidPerm = (paidStar.pendingTransfer?.offers ?? []).filter((o) => o.move === 'permanent');
   const paidIds = paidPerm.map((o) => o.clubId);
+  const paidSaudi = paidIds.filter((id) => getClub(id)?.league === 'Saudi Pro League');
+  const paidEurope = paidIds.filter((id) => getClub(id)?.league !== 'Saudi Pro League');
   console.log('€200m 5yr bidders', paidIds, paidPerm.map((o) => o.fee));
-  if (paidIds.length === 0 || paidIds.some((id) => !MEGA_CLUB_IDS.has(id))) {
-    console.error('a €200m fee must only attract PSG, Real Madrid or Manchester City');
+  if (paidEurope.length === 0 || paidEurope.some((id) => !MEGA_CLUB_IDS.has(id))) {
+    console.error('a €200m fee must only attract PSG, Real Madrid or Manchester City from Europe');
+    process.exitCode = 1;
+  }
+  if (paidSaudi.length !== 1 || paidSaudi.some((id) => !(TWILIGHT_SAUDI_CLUB_IDS as readonly string[]).includes(id))) {
+    console.error('a €200m 21-year-old must also see exactly one Saudi giant');
     process.exitCode = 1;
   }
   if (paidPerm.some((o) => o.fee < 180_000_000)) {
@@ -3049,11 +3055,17 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
     const champPerms = (champStarMove.pendingTransfer?.offers ?? []).filter(
       (o) => o.move === 'permanent' && !o.renewal && o.clubId !== 'leicester',
     );
+    const champSaudi = champPerms.filter((o) => getClub(o.clubId)?.league === 'Saudi Pro League');
+    const champEurope = champPerms.filter((o) => getClub(o.clubId)?.league !== 'Saudi Pro League');
     const champLeagues = champPerms.map((o) => getClub(o.clubId)?.league);
-    const champTiers = [...new Set(champPerms.map((o) => getClub(o.clubId)?.tier))];
-    console.log('Championship star offers', champPerms.length, champLeagues, 'tiers', champTiers);
+    const champTiers = [...new Set(champEurope.map((o) => getClub(o.clubId)?.tier))];
+    console.log('Championship star offers', champPerms.length, champLeagues, 'tiers', champTiers, 'saudi', champSaudi.map((o) => o.clubId));
     if (champPerms.length !== TRANSFER_OFFER_COUNT) {
       console.error('Championship transfer windows must table six permanent offers');
+      process.exitCode = 1;
+    }
+    if (champSaudi.length !== 1) {
+      console.error('a 20-year-old Championship window must include exactly one Saudi offer');
       process.exitCode = 1;
     }
     if (champTiers.length !== 1) {
