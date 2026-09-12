@@ -1408,7 +1408,7 @@ export const useCareerStore = create<CareerStore>()(
             return { phase: 'club-offer', lastMatchResult: null };
           }
           if (after === 'hub') {
-            return { phase: 'hub' };
+            return { phase: 'hub', lastMatchResult: null };
           }
           return {
             phase: after ?? (state.clubId ? 'hub' : 'menu'),
