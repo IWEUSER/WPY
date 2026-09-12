@@ -721,7 +721,7 @@ export function applyCareerLayoutPreview(): void {
         })
       : null;
   const firstTeamMissPreview =
-    preview === 'first-team-miss'
+    preview === 'first-team-miss' || preview === 'transfer-20'
       ? resolveSeasonTransition({
           season: season({
             seasonNumber: 1,
@@ -731,7 +731,7 @@ export function applyCareerLayoutPreview(): void {
             goals: 8,
             gamesPlayed: 38,
             ratioMet: false,
-            age: 17,
+            age: preview === 'transfer-20' ? 20 : 17,
             leagueGoals: 8,
             trophies: [],
             topGoalscorer: false,
@@ -741,8 +741,8 @@ export function applyCareerLayoutPreview(): void {
           role: 'first-team',
           clubId: 'real-madrid',
           parentClubId: 'real-madrid',
-          seasonsAtCurrentClub: 0,
-          age: 17,
+          seasonsAtCurrentClub: preview === 'transfer-20' ? 1 : 0,
+          age: preview === 'transfer-20' ? 20 : 17,
           careerGoals: 8,
           careerGames: 38,
           nationality: 'spain',
@@ -772,7 +772,7 @@ export function applyCareerLayoutPreview(): void {
       ? trialOffersPreview
       : isReserveLoansPreview
       ? reserveLoansPreview?.pendingTransfer ?? null
-      : preview === 'first-team-miss'
+      : preview === 'first-team-miss' || preview === 'transfer-20'
       ? firstTeamMissPreview?.pendingTransfer ?? null
       : preview === 'expired'
       ? {
@@ -891,7 +891,7 @@ export function applyCareerLayoutPreview(): void {
         ? 'career'
         : preview === 'club-choice'
         ? 'club-choice'
-        : preview === 'transfer' || preview === 'expired' || preview === 'renew' || preview === 'championship-transfer' || isReserveLoansPreview || preview === 'first-team-miss' || preview === 'transfer-reject'
+        : preview === 'transfer' || preview === 'expired' || preview === 'renew' || preview === 'championship-transfer' || isReserveLoansPreview || preview === 'first-team-miss' || preview === 'transfer-20' || preview === 'transfer-reject'
           ? 'transfer-choice'
           : preview === 'reserve-promo'
             ? 'season-summary'
@@ -906,7 +906,7 @@ export function applyCareerLayoutPreview(): void {
                 : isMatchPreview || isReservePreview
                   ? 'match'
                   : 'hub',
-    age: isTrialPreview || isYouthPreview || isYouthNextPreview || isClubTrialPreview || isReservePreview || preview === 'reserve-promo' ? 16 : preview === 'end' ? 36 : preview === 'championship-transfer' ? 20 : promoteSummary ? 22 : 19,
+    age: isTrialPreview || isYouthPreview || isYouthNextPreview || isClubTrialPreview || isReservePreview || preview === 'reserve-promo' ? 16 : preview === 'end' ? 36 : preview === 'championship-transfer' || preview === 'transfer-20' ? 20 : preview === 'first-team-miss' ? 17 : promoteSummary ? 22 : 19,
     seasonNumber: isTrialPreview || isYouthPreview || isYouthNextPreview || isClubTrialPreview || isReservePreview || preview === 'hub-qualifying' || preview === 'reserve-promo' ? 1 : preview === 'end' ? 21 : promoteSummary ? 6 : 4,
     clubId: isYouthPreview || isYouthNextPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : preview === 'match-psg' ? 'psg' : preview === 'benfica' || preview === 'rebuild' || preview === 'match-benfica' ? 'benfica' : preview === 'ajax' || preview === 'match-ajax' ? 'ajax' : preview === 'galatasaray' || preview === 'match-galatasaray' ? 'galatasaray' : preview === 'championship-transfer' || promoteSummary ? 'leicester' : 'real-madrid',
     parentClubId: isYouthPreview || isYouthNextPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : preview === 'match-psg' ? 'psg' : preview === 'benfica' || preview === 'rebuild' || preview === 'match-benfica' ? 'benfica' : preview === 'ajax' || preview === 'match-ajax' ? 'ajax' : preview === 'galatasaray' || preview === 'match-galatasaray' ? 'galatasaray' : preview === 'championship-transfer' || promoteSummary ? 'leicester' : 'real-madrid',
