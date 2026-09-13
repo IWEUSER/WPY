@@ -340,17 +340,25 @@ export function pickPermanentClubs(
   const affordable = (tier: ClubTier) =>
     withoutSaudi(tierPool(tier, excludeIds).filter((c) => canPayFee(c, fee)));
   let pool = affordable(qualityTier);
-  if (pool.length === 0 && fee > 0 && qualityTier > 1) {
-    pool = affordable((qualityTier - 1) as ClubTier);
-  }
   if (pool.length === 0 && fee > 0) {
     for (let tier = (qualityTier + 1) as ClubTier; tier <= 5; tier = (tier + 1) as ClubTier) {
       pool = affordable(tier);
       if (pool.length > 0) break;
     }
   }
-  if (pool.length === 0) {
+  if (pool.length === 0 && qualityTier >= 4) {
     pool = withoutSaudi(tierPool(qualityTier, excludeIds));
+  }
+  if (pool.length < TRANSFER_OFFER_COUNT && qualityTier === 1) {
+    const seen = new Set(pool.map((club) => club.id));
+    for (const club of withoutSaudi(tierPool(1, excludeIds))) {
+      if (seen.has(club.id)) continue;
+      pool.push(club);
+      if (pool.length >= TRANSFER_OFFER_COUNT) break;
+    }
+  }
+  if (pool.length === 0) {
+    return attachOneSaudiOffer([], qualityTier, excludeIds, age);
   }
   const extraHome = withoutSaudi(nearbyTierClubs(qualityTier, excludeIds).filter(
     (c) => clubTransferBudget(c) >= fee,
@@ -359,7 +367,7 @@ export function pickPermanentClubs(
   return attachOneSaudiOffer(
     pickClubsBiasedToCountry(
       pool,
-      Math.min(TRANSFER_OFFER_COUNT, Math.max(pool.length, 1)),
+      Math.min(TRANSFER_OFFER_COUNT, pool.length),
       country,
       minHome,
       extraHome,
