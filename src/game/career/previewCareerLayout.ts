@@ -6,7 +6,7 @@ import { mlsConferenceOf } from './data/leagueFormat';
 import { buildSeasonStandings, rankLeagueTable } from './matchEngine';
 import { newContractYears, playerMarketValueFromSeasons, weeklyWageForClub } from './playerValue';
 import { applyTrialMatch, applyYouthMatch, assignOpeningTrialClub, beginClubTrial, beginFavouriteClubTrial, createYouthCampaign, failClubTrial } from './openingFlow';
-import { hydrateSeason, nextPlayableFixture } from './seasonSim';
+import { hydrateSeason, nextActionableFixture } from './seasonSim';
 import { CURRENT_RULES_STAMP } from './rulesStamp';
 import { formatNextLine } from './matchBriefing';
 import { useCareerStore } from './store';
@@ -317,7 +317,8 @@ export function applyCareerLayoutPreview(): void {
     || preview === 'match-africa' || preview === 'match-overcast'
     || preview === 'match-sweden' || preview === 'match-poland' || preview === 'match-brazil'
     || preview === 'match-psg' || preview === 'match-city'
-    || preview === 'match-benfica' || preview === 'match-ajax' || preview === 'match-galatasaray';
+    || preview === 'match-benfica' || preview === 'match-ajax' || preview === 'match-galatasaray'
+    || preview === 'cup-pens';
   let matchFixtureIndex = Math.max(0, calendar.fixtures.findIndex((f) => f.kind !== 'rest'));
   if (preview === 'match' || preview === 'match-away' || preview === 'match-local' || preview === 'match-night') {
     const wantHome = preview !== 'match-away';
@@ -490,14 +491,27 @@ export function applyCareerLayoutPreview(): void {
       fx.playerChances = 2;
     }
   } else if (preview === 'hub-rotation') {
-    let leagueSeen = 0;
+    let completed = 0;
     for (let i = 0; i < calendar.fixtures.length; i++) {
-      if (calendar.fixtures[i].kind !== 'league') continue;
-      if (leagueSeen === 2) {
+      if (calendar.fixtures[i].kind === 'rest') continue;
+      if (completed % 3 === 2) {
         sim.fixtureIndex = i;
         break;
       }
-      leagueSeen += 1;
+      completed += 1;
+    }
+  } else if (preview === 'hub-sitout') {
+    const cupIdx = calendar.fixtures.findIndex((f) => f.kind === 'domestic-cup');
+    if (cupIdx >= 0) {
+      calendar.fixtures[cupIdx].playerChances = 0;
+      sim.fixtureIndex = cupIdx;
+    }
+  } else if (preview === 'cup-pens') {
+    const idx = calendar.fixtures.findIndex((f) => f.kind === 'domestic-cup' && f.domesticCupStage === 'final');
+    if (idx >= 0) {
+      matchFixtureIndex = idx;
+      const fx = calendar.fixtures[idx];
+      fx.playerChances = 1;
     }
   } else if (preview === 'match-psg') {
     const idx = calendar.fixtures.findIndex((f) => f.kind === 'league' && f.isHome);
@@ -864,7 +878,7 @@ export function applyCareerLayoutPreview(): void {
 
   const recapCalendar = isReservePreview ? reserveSeason?.calendar ?? calendar : calendar;
   const recapSim = isReservePreview ? reserveSeason?.sim ?? sim : sim;
-  const recapNextFixture = recapCalendar ? nextPlayableFixture(recapCalendar, recapSim) : undefined;
+  const recapNextFixture = recapCalendar ? nextActionableFixture(recapCalendar, recapSim) : undefined;
   const recapNationName =
     preview === 'mls' ? 'United States'
     : preview === 'saudi' ? 'Saudi Arabia'
@@ -893,8 +907,8 @@ export function applyCareerLayoutPreview(): void {
         ? 'club-choice'
         : preview === 'transfer' || preview === 'expired' || preview === 'renew' || preview === 'championship-transfer' || isReserveLoansPreview || preview === 'first-team-miss' || preview === 'transfer-20' || preview === 'transfer-reject'
           ? 'transfer-choice'
-          : preview === 'reserve-promo'
-            ? 'season-summary'
+          : preview === 'reserve-promo' || preview === 'loan-summary'
+          ? 'season-summary'
           : preview === 'club-offer'
             ? 'club-offer'
           : preview === 'result' || preview === 'result-pens'
@@ -908,9 +922,9 @@ export function applyCareerLayoutPreview(): void {
                   : 'hub',
     age: isTrialPreview || isYouthPreview || isYouthNextPreview || isClubTrialPreview || isReservePreview || preview === 'reserve-promo' ? 16 : preview === 'end' ? 36 : preview === 'championship-transfer' || preview === 'transfer-20' ? 20 : preview === 'first-team-miss' ? 17 : promoteSummary ? 22 : 19,
     seasonNumber: isTrialPreview || isYouthPreview || isYouthNextPreview || isClubTrialPreview || isReservePreview || preview === 'hub-qualifying' || preview === 'reserve-promo' ? 1 : preview === 'end' ? 21 : promoteSummary ? 6 : 4,
-    clubId: isYouthPreview || isYouthNextPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : preview === 'match-psg' ? 'psg' : preview === 'benfica' || preview === 'rebuild' || preview === 'match-benfica' ? 'benfica' : preview === 'ajax' || preview === 'match-ajax' ? 'ajax' : preview === 'galatasaray' || preview === 'match-galatasaray' ? 'galatasaray' : preview === 'championship-transfer' || promoteSummary ? 'leicester' : 'real-madrid',
+    clubId: isYouthPreview || isYouthNextPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : preview === 'match-psg' ? 'psg' : preview === 'benfica' || preview === 'rebuild' || preview === 'match-benfica' ? 'benfica' : preview === 'ajax' || preview === 'match-ajax' ? 'ajax' : preview === 'galatasaray' || preview === 'match-galatasaray' ? 'galatasaray' : preview === 'championship-transfer' || promoteSummary ? 'leicester' : preview === 'loan-summary' ? 'levante' : 'real-madrid',
     parentClubId: isYouthPreview || isYouthNextPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : preview === 'match-psg' ? 'psg' : preview === 'benfica' || preview === 'rebuild' || preview === 'match-benfica' ? 'benfica' : preview === 'ajax' || preview === 'match-ajax' ? 'ajax' : preview === 'galatasaray' || preview === 'match-galatasaray' ? 'galatasaray' : preview === 'championship-transfer' || promoteSummary ? 'leicester' : 'real-madrid',
-    role: isReservePreview || isTrialPreview || isYouthPreview || isYouthNextPreview || isClubTrialPreview || preview === 'reserve-promo' ? 'reserve' : 'first-team',
+    role: isReservePreview || isTrialPreview || isYouthPreview || isYouthNextPreview || isClubTrialPreview || preview === 'reserve-promo' ? 'reserve' : preview === 'loan-summary' ? 'loan' : 'first-team',
     trial: preview === 'club-offer'
       ? { shots: [], goals: 6, offeredClubIds: ['real-madrid', 'barcelona', 'atletico-madrid'] }
       : null,
@@ -945,7 +959,18 @@ export function applyCareerLayoutPreview(): void {
           goals: 0,
         }
       : isMatchPreview
-      ? { fixtureIndex: matchFixtureIndex, chancesTotal: 2, chancesTaken: 0, goals: 0 }
+      ? preview === 'cup-pens'
+        ? {
+            fixtureIndex: matchFixtureIndex,
+            chancesTotal: 1,
+            chancesTaken: 0,
+            goals: 0,
+            penaltyKick: true,
+            goalsAtNinety: 0,
+            ninetyScoreFor: 1,
+            ninetyScoreAgainst: 1,
+          }
+        : { fixtureIndex: matchFixtureIndex, chancesTotal: 2, chancesTaken: 0, goals: 0 }
       : null,
     seasonSim: isYouthPreview || isYouthNextPreview || isClubTrialPreview || isTrialPreview
       ? null
