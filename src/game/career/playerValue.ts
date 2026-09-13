@@ -15,7 +15,7 @@ export const TOP_LEAGUES = new Set(['Premier League', 'La Liga', 'Serie A', 'Bun
  */
 export function leagueValueWeight(league: string): number {
   if (TOP_LEAGUES.has(league)) return 1;
-  if (league === 'Saudi Pro League') return 0.24;
+  if (league === 'Saudi Pro League') return 0.2;
   if (SECOND_DIVISIONS.has(league)) return 0.4;
   if (league === 'Liga MX') return 0.32;
   if (league === 'MLS') return 0.22;
@@ -375,7 +375,8 @@ export function firstTopFlightValueCap(seasons: SeasonRecord[]): number | null {
     (season) => countsTowardCareerRecord(season.seasonNumber, season.role) && season.gamesPlayed > 0,
   );
   const top = counted.filter((season) => TOP_LEAGUES.has(seasonLeague(season)));
-  if (top.length !== 1) return null;
+  const lower = counted.filter((season) => !TOP_LEAGUES.has(seasonLeague(season)));
+  if (top.length !== 1 || lower.length === 0) return null;
   const goals = top[0].goals;
   return Math.max(8_000_000, Math.round((6_000_000 + goals * 1_150_000) / 100_000) * 100_000);
 }

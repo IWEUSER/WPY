@@ -338,15 +338,18 @@ export function pickPermanentClubs(
     );
   }
   const affordable = (tier: ClubTier) =>
-    withoutSaudi(tierPool(tier, excludeIds).filter((c) => clubTransferBudget(c) >= fee));
+    withoutSaudi(tierPool(tier, excludeIds).filter((c) => canPayFee(c, fee)));
   let pool = affordable(qualityTier);
+  if (pool.length === 0 && fee > 0 && qualityTier > 1) {
+    pool = affordable((qualityTier - 1) as ClubTier);
+  }
   if (pool.length === 0 && fee > 0) {
     for (let tier = (qualityTier + 1) as ClubTier; tier <= 5; tier = (tier + 1) as ClubTier) {
       pool = affordable(tier);
       if (pool.length > 0) break;
     }
   }
-  if (pool.length === 0 && fee <= 0) {
+  if (pool.length === 0) {
     pool = withoutSaudi(tierPool(qualityTier, excludeIds));
   }
   const extraHome = withoutSaudi(nearbyTierClubs(qualityTier, excludeIds).filter(
@@ -518,7 +521,7 @@ function offerTerms(
   return clubs.map((club) => ({
     clubId: club.id,
     move,
-    fee: move === 'loan' ? 0 : fee,
+    fee: move === 'loan' ? 0 : Math.min(fee, clubTransferBudget(club)),
     weeklyWage: weeklyWageForClub(club, value),
     contractYears: years,
   }));

@@ -2942,8 +2942,18 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
     careerGames: 89,
   });
   console.log('13-game 0.00 offers', thinOffers.map((o) => `${o.move}:${o.clubId}:${getClub(o.clubId)?.tier}`), 'form', form.toFixed(2));
-  if (form < 0.9 || thinLoanTiers.some((t) => t > 1) || thinPermTiers.some((t) => t > 1) || thinLoans.length === 0 || thinPerms.length === 0) {
-    console.error('a 13-game blank must not tank loans while transfers stay elite — both follow career form');
+  if (form < 0.9 || thinPermTiers.some((t) => t > 1) || thinPerms.length === 0) {
+    console.error('a 13-game blank must not tank transfers — they still follow career form');
+    process.exitCode = 1;
+  }
+  if (
+    thinLoans.length !== LOAN_OFFER_COUNT
+    || thinLoans.some((o) => {
+      const dest = getClub(o.clubId);
+      return !dest || !SECOND_DIVISIONS.has(dest.league);
+    })
+  ) {
+    console.error('a missed season still loans to a second division even when career form stays elite');
     process.exitCode = 1;
   }
 
@@ -2995,8 +3005,15 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
     console.error('missing the first-team bar must not table a New Contract from the current club');
     process.exitCode = 1;
   }
-  if (liverpoolLoanTiers.some((tier) => tier < 5) || liverpoolLoanTiers.length !== LOAN_OFFER_COUNT) {
-    console.error('a 0.33 ratio must produce six lower-level loans, not Strong clubs');
+  const liverpoolLoans = (liverpoolMiss.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan');
+  if (
+    liverpoolLoans.length !== LOAN_OFFER_COUNT
+    || liverpoolLoans.some((o) => {
+      const dest = getClub(o.clubId);
+      return !dest || dest.league === 'Premier League' || !SECOND_DIVISIONS.has(dest.league);
+    })
+  ) {
+    console.error('a 0.33 Liverpool miss must loan to a second division, not the Premier League');
     process.exitCode = 1;
   }
 
