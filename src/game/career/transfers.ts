@@ -165,11 +165,14 @@ function takeShuffled(pool: Club[], count: number, seen: Set<string>): Club[] {
   return out;
 }
 
+export function canLoanToSameDivision(playerRatio: number, club: Club): boolean {
+  return playerRatio >= club.firstTeamGoalRatio;
+}
+
 /**
- * Six loan destinations at the ratio-appropriate level:
- * parent-country clubs first, then nationality when that country can
- * supply them, then the rest of the world. If nationality cannot supply
- * two, five come from the parent country.
+ * Missed the parent bar: go to a second division — home country first,
+ * then another country. Same-division loans are allowed only when the
+ * player's reserve/loan ratio already meets that club's first-team bar.
  */
 export function pickLoanClubsForMiss(
   ratio: number,
@@ -178,29 +181,50 @@ export function pickLoanClubsForMiss(
   excludeIds: string[] = [],
   parentClubId?: string | null,
 ): Club[] {
-  const tier = tierForRatio(ratio);
   const parent = parentClubId ? getClub(parentClubId) : undefined;
   const parentCountry = parent?.country ?? null;
+  const parentLeague = parent?.league ?? null;
+  const parentAlreadySecond = Boolean(parentLeague && SECOND_DIVISIONS.has(parentLeague));
   const natCountry = countryForNationality(nationality);
   const exclude = excludeIds.filter(Boolean);
-  const atTierIn = (country: string | null) =>
-    country
-      ? withoutSaudi(CLUBS.filter(
-          (c) => c.playable !== false && c.tier === tier && c.country === country && !exclude.includes(c.id),
-        ))
-      : [];
   const seen = new Set<string>(exclude);
   const picked: Club[] = [];
-  const natPool = atTierIn(natCountry);
-  const sameCountry = Boolean(parentCountry && natCountry && parentCountry === natCountry);
-  if (sameCountry || natPool.length < 2) {
-    picked.push(...takeShuffled(atTierIn(parentCountry), 5, seen));
-  } else {
-    picked.push(...takeShuffled(atTierIn(parentCountry), 3, seen));
-    picked.push(...takeShuffled(natPool, 2, seen));
+  const secondIn = (country: string | null) =>
+    country
+      ? withoutSaudi(CLUBS.filter(
+          (c) =>
+            c.playable !== false &&
+            SECOND_DIVISIONS.has(c.league) &&
+            c.country === country &&
+            !exclude.includes(c.id),
+        ))
+      : [];
+  const homeSecond = parentAlreadySecond ? [] : secondIn(parentCountry);
+  const natSecond =
+    natCountry && natCountry !== parentCountry ? secondIn(natCountry) : [];
+  const worldSecond = withoutSaudi(CLUBS.filter(
+    (c) => c.playable !== false && SECOND_DIVISIONS.has(c.league) && !exclude.includes(c.id),
+  ));
+  const sameDivision = parentLeague
+    ? withoutSaudi(CLUBS.filter(
+        (c) =>
+          c.playable !== false &&
+          c.league === parentLeague &&
+          !exclude.includes(c.id) &&
+          canLoanToSameDivision(ratio, c),
+      ))
+    : [];
+
+  if (homeSecond.length > 0 && natSecond.length >= 2) {
+    picked.push(...takeShuffled(homeSecond, 3, seen));
+    picked.push(...takeShuffled(natSecond, 2, seen));
+  } else if (homeSecond.length > 0) {
+    picked.push(...takeShuffled(homeSecond, 5, seen));
+  } else if (natSecond.length > 0) {
+    picked.push(...takeShuffled(natSecond, 3, seen));
   }
-  const world = withoutSaudi(CLUBS.filter((c) => c.playable !== false && c.tier === tier && !seen.has(c.id)));
-  picked.push(...takeShuffled(world, count - picked.length, seen));
+  picked.push(...takeShuffled(worldSecond, count - picked.length, seen));
+  picked.push(...takeShuffled(sameDivision, count - picked.length, seen));
   return picked.slice(0, count);
 }
 
@@ -316,7 +340,13 @@ export function pickPermanentClubs(
   const affordable = (tier: ClubTier) =>
     withoutSaudi(tierPool(tier, excludeIds).filter((c) => clubTransferBudget(c) >= fee));
   let pool = affordable(qualityTier);
-  if (pool.length === 0) {
+  if (pool.length === 0 && fee > 0) {
+    for (let tier = (qualityTier + 1) as ClubTier; tier <= 5; tier = (tier + 1) as ClubTier) {
+      pool = affordable(tier);
+      if (pool.length > 0) break;
+    }
+  }
+  if (pool.length === 0 && fee <= 0) {
     pool = withoutSaudi(tierPool(qualityTier, excludeIds));
   }
   const extraHome = withoutSaudi(nearbyTierClubs(qualityTier, excludeIds).filter(

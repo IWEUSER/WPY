@@ -95,12 +95,39 @@ export const MEGA_TRANSFER_FEE = 180_000_000;
 /** Elite clubs do not buy below this market value. */
 export const ELITE_TRANSFER_VALUE_FLOOR = 50_000_000;
 
+/**
+ * Ceiling on what a club will pay, keyed to recent fee ranges:
+ * Ajax/PSV-level Eredivisie sides buy in the €15–25m band, not €60m;
+ * MLS Designated Player fees sit around €6–12m; 2. Bundesliga mid-table
+ * deals are a few million.
+ */
 export function clubTransferBudget(club: Club): number {
-  if (MEGA_CLUB_IDS.has(club.id)) return 260_000_000;
-  if (club.tier === 1) return 130_000_000;
-  if (club.tier === 2) return 60_000_000;
-  if (club.tier === 3) return 25_000_000;
-  if (club.tier === 4) return 8_000_000;
+  if (MEGA_CLUB_IDS.has(club.id)) return 220_000_000;
+  const league = club.league;
+  if (league === 'MLS') return club.tier <= 3 ? 12_000_000 : 6_000_000;
+  if (league === 'Eredivisie' || league === 'Primeira Liga' || league === 'Super Lig') {
+    if (club.tier <= 2) return 22_000_000;
+    if (club.tier === 3) return 10_000_000;
+    if (club.tier === 4) return 5_000_000;
+    return 2_000_000;
+  }
+  if (league === 'Liga MX') return club.tier <= 3 ? 10_000_000 : 4_000_000;
+  if (league === 'Saudi Pro League') return club.tier <= 2 ? 70_000_000 : 12_000_000;
+  if (SECOND_DIVISIONS.has(league)) {
+    if (league === 'Championship') return club.tier === 4 ? 12_000_000 : 5_000_000;
+    return club.tier === 4 ? 5_000_000 : 2_000_000;
+  }
+  if (league === 'Premier League') {
+    if (club.tier === 1) return 130_000_000;
+    if (club.tier === 2) return 50_000_000;
+    if (club.tier === 3) return 22_000_000;
+    if (club.tier === 4) return 10_000_000;
+    return 4_000_000;
+  }
+  if (club.tier === 1) return 90_000_000;
+  if (club.tier === 2) return 35_000_000;
+  if (club.tier === 3) return 16_000_000;
+  if (club.tier === 4) return 7_000_000;
   return 2_500_000;
 }
 
@@ -325,12 +352,32 @@ export function playerMarketValueFromSeasons(params: {
     weight += season.goals;
   }
   const scale = weight > 0 ? weighted / weight : clubLeagueScale(fallbackClub);
-  const base = valueFromScale(age, ratio, careerGoals, scale, careerGames);
+  const weightedGoals = seasons.reduce((sum, season) => {
+    if (!countsTowardCareerRecord(season.seasonNumber, season.role) || season.gamesPlayed <= 0) return sum;
+    return sum + season.goals * leagueValueWeight(seasonLeague(season));
+  }, 0);
+  const base = valueFromScale(age, ratio, careerGoals, scale, careerGames, weightedGoals);
   const poor = consecutivePoorFactor(consecutiveSeasonsBelow(seasons, 0.25));
   const lastLeague = lastSeasonLeague(seasons) ?? fallbackClub.league;
   const floor = youngDivisionStarFloor({ age, league: lastLeague, seasons });
   const raw = Math.max(floor, base * poor);
-  return Math.max(100_000, Math.round(raw / 100_000) * 100_000);
+  const capped = Math.min(raw, firstTopFlightValueCap(seasons) ?? raw);
+  return Math.max(100_000, Math.round(capped / 100_000) * 100_000);
+}
+
+/**
+ * One decent top-flight season after a lower-league apprenticeship is not
+ * Haaland money. 16 Bundesliga goals after two 2. Liga years should sit
+ * in the low-to-mid €20ms, not €60m+.
+ */
+export function firstTopFlightValueCap(seasons: SeasonRecord[]): number | null {
+  const counted = seasons.filter(
+    (season) => countsTowardCareerRecord(season.seasonNumber, season.role) && season.gamesPlayed > 0,
+  );
+  const top = counted.filter((season) => TOP_LEAGUES.has(seasonLeague(season)));
+  if (top.length !== 1) return null;
+  const goals = top[0].goals;
+  return Math.max(8_000_000, Math.round((6_000_000 + goals * 1_150_000) / 100_000) * 100_000);
 }
 
 function lastSeasonLeague(seasons: SeasonRecord[]): string | null {
@@ -358,12 +405,14 @@ function valueFromScale(
   careerGoals: number,
   scale: number,
   careerGames?: number,
+  weightedGoals?: number,
 ): number {
   const ratioScale = Math.max(0.015, ratio / ANCHOR_RATIO);
-  const volume = Math.min(1.15, Math.max(0.18, 0.7 + careerGoals / 70));
+  const volumeGoals = weightedGoals ?? careerGoals;
+  const volume = Math.min(1.12, Math.max(0.18, 0.62 + volumeGoals / 90));
   const proven =
     careerGames != null && careerGames >= 50
-      ? Math.min(1.35, 0.92 + (careerGames - 50) / 200)
+      ? Math.min(1.2, 0.9 + (careerGames - 50) / 280)
       : 1;
   const raw = BARCELONA_ANCHOR_VALUE * scale * ratioScale * ageValueFactor(age) * volume * proven;
   return Math.max(100_000, Math.round(raw / 100_000) * 100_000);

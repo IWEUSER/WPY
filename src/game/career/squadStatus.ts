@@ -15,9 +15,9 @@ export function defaultSquadStatus(role: PlayerRole): SquadStatus {
 }
 
 export function describeSquadStatus(status: SquadStatus): string {
-  if (status === 'starter') return 'In the starting XI for league games';
-  if (status === 'rotation') return 'Rotated in the league — cups and internationals still need you';
-  return 'Impact role in the league — roughly every other match';
+  if (status === 'starter') return 'In the starting XI across league, cups and internationals';
+  if (status === 'rotation') return 'Rotated across league, cups and internationals';
+  return 'Impact role across all competitions — roughly every other match';
 }
 
 export function describeRotationSitOut(status: SquadStatus): string {
@@ -26,13 +26,14 @@ export function describeRotationSitOut(status: SquadStatus): string {
 }
 
 /**
- * Sit-out pattern among league fixtures already completed this season.
+ * Sit-out pattern among actionable fixtures already completed this season.
  * Starter: never. Rotation: every third. Impact: every other.
+ * Applies to league, cups and internationals alike.
  */
-export function shouldSitLeagueFixture(status: SquadStatus, completedLeagueFixtures: number): boolean {
+export function shouldSitLeagueFixture(status: SquadStatus, completedFixtures: number): boolean {
   if (status === 'starter') return false;
-  if (status === 'rotation') return completedLeagueFixtures % 3 === 2;
-  return completedLeagueFixtures % 2 === 1;
+  if (status === 'rotation') return completedFixtures % 3 === 2;
+  return completedFixtures % 2 === 1;
 }
 
 export function completedLeagueFixtureCount(
@@ -40,18 +41,18 @@ export function completedLeagueFixtureCount(
   fixtureIndex: number,
 ): number {
   if (!calendar) return 0;
-  return calendar.fixtures.slice(0, fixtureIndex).filter((fixture) => fixture.kind === 'league').length;
+  return calendar.fixtures.slice(0, fixtureIndex).filter((fixture) => fixture.kind !== 'rest').length;
 }
 
 export function isSquadRotationSitOut(
   role: PlayerRole,
   squadStatus: SquadStatus,
   fixtureKind: CalendarFixture['kind'],
-  completedLeagueFixtures: number,
+  completedFixtures: number,
 ): boolean {
   if (role === 'reserve') return false;
-  if (fixtureKind !== 'league') return false;
-  return shouldSitLeagueFixture(squadStatus, completedLeagueFixtures);
+  if (fixtureKind === 'rest') return false;
+  return shouldSitLeagueFixture(squadStatus, completedFixtures);
 }
 
 /**

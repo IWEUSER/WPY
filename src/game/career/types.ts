@@ -283,6 +283,8 @@ export interface LastMatchResult {
   chances?: number | null;
   aggregateLine?: string | null;
   nextLine?: string | null;
+  /** Why the player sat the fixture out (injured, rotation, dropped, no chance). */
+  sitOutReason?: string | null;
 }
 
 export interface IntlQualifyingCarry {
