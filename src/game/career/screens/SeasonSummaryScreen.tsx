@@ -227,7 +227,7 @@ export default function SeasonSummaryScreen() {
               This season: {SQUAD_STATUS_LABEL[squadStatus]}
             </p>
           )}
-          {(() => {
+          {role !== 'loan' && (() => {
             const stayStatus = preview.immediate?.squadStatus
               ?? preview.pendingTransfer?.stay?.squadStatus
               ?? nextSquadStatusAfterSeason({
@@ -249,7 +249,7 @@ export default function SeasonSummaryScreen() {
         </div>
       ) : null}
 
-      {(() => {
+      {role !== 'loan' && (() => {
         const stay = preview.pendingTransfer?.stay ?? preview.immediate;
         const nextLeague = stay?.clubLeague;
         const promoted = Boolean(nextLeague && nextLeague !== (clubLeague ?? club.league));

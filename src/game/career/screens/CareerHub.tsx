@@ -10,7 +10,7 @@ import { clubEligibleForNationalTeam, callUpRatio, getNation, isSelectedForNatio
 import type { SeasonStandings } from '../matchEngine';
 import { displaySeasonLabel } from '../seasonDisplay';
 import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
-import { conferenceTable, ensureInternationalGroup, fixtureTitle, internationalRoundLabel, nextPlayableFixture, type SeasonSimState } from '../seasonSim';
+import { conferenceTable, ensureInternationalGroup, fixtureTitle, internationalRoundLabel, nextActionableFixture, type SeasonSimState } from '../seasonSim';
 import { nextMatchBriefing, playerGoalsLine } from '../matchBriefing';
 import { groupPosition, sortGroupTable } from '../internationalTable';
 import {
@@ -83,7 +83,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const threshold = requiredGoalRatio(role, club, parentClub);
   const ratioProgress = Math.min(1, threshold > 0 ? ratio / threshold : 0);
   const injured = (injuryGamesRemaining ?? 0) > 0;
-  const nextFixture = seasonCalendar && seasonSim ? nextPlayableFixture(seasonCalendar, seasonSim) : undefined;
+  const nextFixture = seasonCalendar && seasonSim ? nextActionableFixture(seasonCalendar, seasonSim) : undefined;
   const nextIsInternational = nextFixture?.kind === 'international';
   const squadAvailability = nextIsInternational && nationalTeam ? nationalTeam.availability : availability;
   const rotatedOut = Boolean(
@@ -97,7 +97,8 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
       completedLeagueFixtureCount(seasonCalendar, seasonSim.fixtureIndex),
     ),
   );
-  const available = isAvailable(squadAvailability) && !injured && !rotatedOut;
+  const noChance = (nextFixture?.playerChances ?? 1) <= 0;
+  const available = isAvailable(squadAvailability) && !injured && !rotatedOut && !noChance;
   const briefing = nextFixture
     ? nextMatchBriefing(nextFixture, seasonSim, {
         playerNationName: nation?.name,
@@ -108,7 +109,9 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
     ? describeInjury(injuryGamesRemaining)
     : rotatedOut
       ? describeRotationSitOut(squadStatus)
-      : nextIsInternational
+      : noChance
+        ? 'No chance this match'
+        : nextIsInternational
         ? describeAvailability(squadAvailability)
         : describeAvailability(availability);
   const week = seasonCalendar && seasonSim
@@ -368,6 +371,11 @@ function LastMatchRecap({
       <p className="text-xs uppercase tracking-wide text-white/40">Last match</p>
       <p className="mt-1 text-sm font-semibold text-white/90">{headline}</p>
       {structured && playerLine && <p className="mt-1 text-sm text-white/70">{playerLine}</p>}
+      {result?.sitOutReason && (
+        <p className="mt-1 text-sm font-semibold text-amber-200">
+          You did not play — {result.sitOutReason}
+        </p>
+      )}
       {result?.aggregateLine && <p className="mt-1 text-sm font-semibold text-emerald-200">{result.aggregateLine}</p>}
       {result?.nextLine && <p className="mt-1 text-sm text-white/70">{result.nextLine}</p>}
       {!structured && fallback && fallback !== headline && (
@@ -477,7 +485,7 @@ function InternationalCard({
   tableOnly?: boolean;
 }) {
   const bar = selectionRatioForNation(nationId);
-  const clubOk = clubEligibleForNationalTeam(clubTier);
+  const clubOk = clubEligibleForNationalTeam(clubTier, nationId);
   const inForm = isSelectedForNationalTeam({ clubTier, careerGoalRatio: careerRatio, nationId });
   const tournamentName = sim?.internationalTournament
     ? INTERNATIONAL_TOURNAMENTS[sim.internationalTournament].name

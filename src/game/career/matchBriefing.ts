@@ -1,6 +1,6 @@
 import { fixtureVenueLabel, type CalendarFixture, type SeasonCalendar } from './calendar';
 import type { InternationalTournamentId } from './data/competitions';
-import { fixtureTitle, nextPlayableFixture, type SeasonSimState } from './seasonSim';
+import { fixtureTitle, nextActionableFixture, type SeasonSimState } from './seasonSim';
 
 export interface NextMatchBriefing {
   opponent: string;
@@ -90,7 +90,7 @@ export function nextFixtureLine(
   opts?: BriefingOpts,
   seasonComplete = false,
 ): string | null {
-  const next = nextPlayableFixture(calendar, sim);
+  const next = nextActionableFixture(calendar, sim);
   if (!next) return seasonComplete ? 'Next: season review' : null;
   return formatNextLine(next, sim, opts);
 }
