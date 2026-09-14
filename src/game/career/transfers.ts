@@ -384,21 +384,35 @@ export function pickPermanentClubs(
   }
   const affordable = (tier: ClubTier) =>
     withoutSaudi(tierPool(tier, excludeIds).filter((c) => canPayFee(c, fee)));
+  const allIn = (tier: ClubTier) => withoutSaudi(tierPool(tier, excludeIds));
+  const fillFrom = (into: Club[], source: Club[], count: number) => {
+    const seen = new Set(into.map((c) => c.id));
+    for (const club of source) {
+      if (into.length >= count) break;
+      if (seen.has(club.id)) continue;
+      into.push(club);
+      seen.add(club.id);
+    }
+    return into;
+  };
   let pool = affordable(qualityTier);
+  if (pool.length < TRANSFER_OFFER_COUNT) {
+    pool = fillFrom(pool, allIn(qualityTier), TRANSFER_OFFER_COUNT);
+  }
   if (pool.length === 0 && fee > 0) {
     for (let tier = (qualityTier + 1) as ClubTier; tier <= 5; tier = (tier + 1) as ClubTier) {
       pool = affordable(tier);
+      if (pool.length < TRANSFER_OFFER_COUNT) {
+        pool = fillFrom(pool, allIn(tier), TRANSFER_OFFER_COUNT);
+      }
       if (pool.length > 0) break;
     }
   }
-  if (pool.length === 0 && fee > 0) {
+  if (pool.length < TRANSFER_OFFER_COUNT && fee > 0 && qualityTier <= 3) {
     for (let tier = (qualityTier - 1) as ClubTier; tier >= 1; tier = (tier - 1) as ClubTier) {
-      pool = affordable(tier);
-      if (pool.length > 0) break;
+      pool = fillFrom(pool, affordable(tier), TRANSFER_OFFER_COUNT);
+      if (pool.length >= TRANSFER_OFFER_COUNT) break;
     }
-  }
-  if (pool.length === 0 && qualityTier >= 4) {
-    pool = withoutSaudi(tierPool(qualityTier, excludeIds));
   }
   if (pool.length < TRANSFER_OFFER_COUNT && qualityTier === 1) {
     const seen = new Set(pool.map((club) => club.id));

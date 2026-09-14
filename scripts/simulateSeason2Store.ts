@@ -601,17 +601,17 @@ if (store.getState().phase === 'opening-brief') store.getState().startOpeningTri
     s.phase,
     s.pendingTransfer?.kind,
     s.parentClubId,
-    s.age,
-    s.weeklyWage,
-    s.pendingTransfer?.offers?.map((o) => o.move).join(','),
+    s.openingCampaign?.trialClubId,
+    s.openingCampaign?.trialTier,
   );
   if (
-    s.phase !== 'transfer-choice'
-    || s.pendingTransfer?.kind !== 'loan'
+    s.phase !== 'match'
     || s.parentClubId !== 'real-madrid'
-    || s.pendingTransfer.offers?.some((o) => o.move !== 'loan')
+    || s.openingCampaign?.trialClubId === 'real-madrid'
+    || s.openingCampaign?.trialTier !== getClub('real-madrid')?.tier
+    || s.pendingTransfer
   ) {
-    console.error('Failing a favourite-club trial must offer sequential loans from that club, not a drop-tier retry');
+    console.error('missing a favourite-club trial must offer another look at the same level, not a forced loan');
     process.exitCode = 1;
   }
 }
