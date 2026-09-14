@@ -286,6 +286,10 @@ if (s2.role !== 'first-team' || s2.age !== 17) {
   console.error('The first first-team season must be at age 17');
   process.exitCode = 1;
 }
+if (s2.squadStatus !== 'rising-star') {
+  console.error('Youth-path first-team Season 1 must start as a Rising star');
+  process.exitCode = 1;
+}
 if (s2.seasonSim?.internationalTournament !== 'world-cup' || s2.seasonSim?.internationalPhase !== 'qualifiers') {
   console.error('Youth-path first-team Season 1 must be World Cup qualifying, not the tournament');
   process.exitCode = 1;
