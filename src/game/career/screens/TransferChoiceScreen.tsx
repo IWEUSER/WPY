@@ -83,7 +83,7 @@ export default function TransferChoiceScreen() {
   const otherOffers = offers.filter((o) => o !== renewalOffer);
   const stayYears = pending.stay?.contractYearsRemaining;
   const outOfContract = stayYears != null && stayYears <= 0;
-  const showStay = Boolean(pending.allowDecline && stayClub && !outOfContract);
+  const showStay = Boolean(pending.allowDecline && pending.stay && stayClub && !outOfContract);
   const nextIfStay = pending.stay?.squadStatus ?? defaultSquadStatus('first-team');
   const fromClub = clubId ? getClub(clubId) : undefined;
   const likelyFor = (offer: ClubOfferTerms): SquadStatus => {

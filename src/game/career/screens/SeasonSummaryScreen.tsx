@@ -288,7 +288,7 @@ export default function SeasonSummaryScreen() {
                     </p>
                   </>
                 )}
-                {!stayOffered && !loansOffered && role !== 'loan' && (() => {
+                {!stayOffered && !loansOffered && (() => {
                   const stayStatus = nextSquadStatusAfterSeason({
                     role: role === 'reserve' ? 'first-team' : role,
                     current: role === 'reserve' ? 'rising-star' : squadStatus ?? defaultSquadStatus(role),

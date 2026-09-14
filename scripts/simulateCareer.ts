@@ -5680,7 +5680,7 @@ console.log('\n--- Kits, cup nights, FA Cup semis, sun, World Cup copy, African 
   }
   for (let i = 0; i < 40; i++) {
     const my = pickPlayerLook(i * 23 + 8, 'southeast-asia');
-    if (isFairSkin(my.skin)) {
+    if (luminance(my.skin) > 0.72) {
       console.error('southeast-Asian sides must not spawn fair northern-European skin');
       process.exitCode = 1;
       break;

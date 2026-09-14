@@ -240,7 +240,7 @@ function skinsForRegion(region: AppearanceRegion): readonly string[] {
     case 'south-asia':
       return [...BROWN, LIGHT_BROWN[1]];
     case 'southeast-asia':
-      return [...LIGHT_BROWN, BROWN[0], LIGHT_TAN[1]];
+      return [...LIGHT_BROWN, BROWN[0]];
     case 'pacific':
       return [...BROWN, ...DARK, LIGHT_BROWN[1]];
     default:
