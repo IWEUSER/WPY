@@ -803,7 +803,7 @@ export function applyCareerLayoutPreview(): void {
       : preview === 'expired'
       ? {
           kind: 'end-of-season',
-          detail: 'Out of contract: more clubs can bid because there is no fee. You can stay where you are.',
+          detail: 'Out of contract: more clubs can bid because there is no fee.',
           clubIds: ['real-madrid', 'man-city', 'psg', 'bayern', 'arsenal', 'chelsea'],
           offers: ['real-madrid', 'man-city', 'psg', 'bayern', 'arsenal', 'chelsea'].map((clubId) => ({
             clubId,
@@ -1055,7 +1055,7 @@ export function applyCareerLayoutPreview(): void {
               topGoalscorer: false,
               playerOfTheYear: true,
               clubPlayerOfTheTournament: false,
-              clubPlayerOfTheTournamentReason: 'Win the continental tournament at 0.7 goals per game to take Player of the Tournament.',
+              clubPlayerOfTheTournamentReason: '',
               topGoalscorerReason: '20 league goals in Championship, but another striker took the golden boot.',
               playerOfTheYearReason: 'Won Championship Player of the Year with 20 league goals.',
               wonWpy: false,
@@ -1169,5 +1169,8 @@ export function applyCareerLayoutPreview(): void {
       ? 'You agreed terms with Manchester City. Real Madrid rejected the €80m bid — they will not sell a starter to Manchester City on that fee.'
       : null,
     rulesStamp: preview === 'rebuild' ? 'old-save' : CURRENT_RULES_STAMP,
+    wpyResult: preview === 's1-summary' || preview === 'loan-summary'
+      ? { won: false, reason: '' }
+      : undefined,
   });
 }

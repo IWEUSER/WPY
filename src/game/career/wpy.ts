@@ -73,6 +73,6 @@ export function evaluateWpy(context: WpySeasonContext, rng: () => number = Math.
 
   return {
     won: false,
-    reason: trophyMet ? 'Won the trophy, but the ratio requirement was not met.' : 'Ratio and/or trophy requirement not met.',
+    reason: '',
   };
 }

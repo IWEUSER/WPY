@@ -82,8 +82,8 @@ export default function TransferChoiceScreen() {
   const renewalOffer = offers.find((o) => o.renewal && o.clubId === clubId) ?? null;
   const otherOffers = offers.filter((o) => o !== renewalOffer);
   const stayYears = pending.stay?.contractYearsRemaining;
-  const showStay = Boolean(pending.allowDecline && stayClub);
-  const featuredPair = Boolean(renewalOffer && showStay);
+  const outOfContract = stayYears != null && stayYears <= 0;
+  const showStay = Boolean(pending.allowDecline && pending.stay && stayClub && !outOfContract);
   const nextIfStay = pending.stay?.squadStatus ?? defaultSquadStatus('first-team');
   const fromClub = clubId ? getClub(clubId) : undefined;
   const likelyFor = (offer: ClubOfferTerms): SquadStatus => {
@@ -116,13 +116,12 @@ export default function TransferChoiceScreen() {
       )}
 
       {(renewalOffer || showStay) && (
-        <div className={`grid w-full max-w-md gap-3 ${featuredPair ? 'grid-cols-2' : 'grid-cols-1'}`}>
+        <div className="flex w-full max-w-sm flex-col gap-3">
           {renewalOffer && (
             <OfferCard
               offer={renewalOffer}
               clubId={clubId}
               onPick={(id) => resolveTransferChoice(id)}
-              compact={featuredPair}
               likelyStatus={likelyFor(renewalOffer)}
             />
           )}
@@ -130,15 +129,15 @@ export default function TransferChoiceScreen() {
             <button
               type="button"
               onClick={() => resolveTransferChoice(null)}
-              className={`flex items-center gap-3 rounded-2xl border border-white/20 bg-[#050807] text-left shadow-[0_10px_28px_rgba(0,0,0,0.45)] backdrop-blur transition active:scale-[0.98] ${featuredPair ? 'p-3' : 'p-4'}`}
+              className="flex items-center gap-3 rounded-2xl border border-white/20 bg-[#050807] p-4 text-left shadow-[0_10px_28px_rgba(0,0,0,0.45)] backdrop-blur transition active:scale-[0.98]"
               style={{ borderLeft: `4px solid ${stayClub.color}` }}
             >
               <div className="min-w-0 flex-1">
-                <p className={`font-bold ${featuredPair ? 'text-sm leading-tight' : ''}`}>{stayClub.name}</p>
+                <p className="font-bold">{stayClub.name}</p>
                 <p className="text-[11px] text-white/50">
                   {stayClub.country} · {stayClub.league}
                 </p>
-                <p className={`mt-1 text-white/70 ${featuredPair ? 'text-[11px] leading-snug' : 'text-xs'}`}>
+                <p className="mt-1 text-xs text-white/70">
                   {renewalOffer && stayYears != null
                     ? `Keep the current deal · ${stayYears} year${stayYears === 1 ? '' : 's'} left`
                     : 'Stay at this club'}

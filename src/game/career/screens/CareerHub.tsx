@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { calendarDomesticCup, calendarIncludesInternational, currentCalendarWeek, fixtureVenueLabel, type SeasonCalendar } from '../calendar';
 import { clubKit } from '../data/clubKits';
 import { getClub, leagueMatchWeeks } from '../data/clubs';
@@ -12,6 +11,7 @@ import {
   describeRotationSitOut,
   describeSquadStatus,
   isSquadRotationSitOut,
+  isToughMinutesFixture,
   SQUAD_STATUS_LABEL,
 } from '../squadStatus';
 import { displaySeasonLabel, displaySeasonNumber } from '../seasonDisplay';
@@ -25,7 +25,7 @@ import { requiredGoalRatio } from '../transfers';
 import { saveNeedsRebuild } from '../rulesStamp';
 import { useCareerStore } from '../store';
 import { DATA_CARD, DATA_INSET } from './dataUi';
-import type { LastMatchResult } from '../types';
+import type { LastMatchResult, SquadStatus } from '../types';
 
 const ROLE_LABEL: Record<string, string> = {
   reserve: 'Reserve Team',
@@ -67,15 +67,25 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const club = clubId ? getClub(clubId) : undefined;
   const parentClub = role === 'loan' && parentClubId ? getClub(parentClubId) : undefined;
   const nation = nationality ? getNation(nationality) : undefined;
-  if (!club || !season) return null;
+  let seasonSimWithGroup = seasonSim;
+  try {
+    if (seasonSim) {
+      seasonSimWithGroup = ensureInternationalGroup(seasonSim, seasonCalendar, seasonNumber);
+    }
+  } catch {
+    seasonSimWithGroup = seasonSim;
+  }
+  if (!club || !season) {
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center gap-4 px-6 text-center text-white">
+        <p className="text-sm text-white/60">This career could not load the current season.</p>
+        <button type="button" onClick={onOpenMenu} className="text-sm text-emerald-300 underline underline-offset-2">
+          Menu
+        </button>
+      </div>
+    );
+  }
   const kit = clubKit(club);
-  const seasonSimWithGroup = seasonSim
-    ? ensureInternationalGroup(seasonSim, seasonCalendar, seasonNumber)
-    : seasonSim;
-  useEffect(() => {
-    if (!seasonSimWithGroup || seasonSimWithGroup === seasonSim) return;
-    useCareerStore.setState({ seasonSim: seasonSimWithGroup });
-  }, [seasonSim, seasonSimWithGroup]);
 
   const played = season.gamesPlayed;
   const goals = season.goals;
@@ -84,26 +94,32 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const threshold = requiredGoalRatio(role, club, parentClub);
   const ratioProgress = Math.min(1, threshold > 0 ? ratio / threshold : 0);
   const injured = (injuryGamesRemaining ?? 0) > 0;
-  const nextFixture = seasonCalendar && seasonSim ? nextActionableFixture(seasonCalendar, seasonSim) : undefined;
+  const nextFixture = seasonCalendar && seasonSimWithGroup
+    ? nextActionableFixture(seasonCalendar, seasonSimWithGroup)
+    : undefined;
   const nextIsInternational = nextFixture?.kind === 'international';
   const squadAvailability = nextIsInternational && nationalTeam ? nationalTeam.availability : availability;
   const rotatedOut = Boolean(
     nextFixture
     && seasonCalendar
-    && seasonSim
+    && seasonSimWithGroup
     && isSquadRotationSitOut(
       role,
       squadStatus,
       nextFixture.kind,
-      completedLeagueFixtureCount(seasonCalendar, seasonSim.fixtureIndex),
+      completedLeagueFixtureCount(seasonCalendar, seasonSimWithGroup.fixtureIndex),
+      {
+        toughMinutes: isToughMinutesFixture(nextFixture, club, nationality),
+        seasonMatchCount: season.matches.length,
+      },
     ),
   );
   const noChance = chancesForSquadStatus(squadStatus, nextFixture?.playerChances ?? 1) <= 0;
   const available = isAvailable(squadAvailability) && !injured && !rotatedOut && !noChance;
   const briefing = nextFixture
-    ? nextMatchBriefing(nextFixture, seasonSim, {
+    ? nextMatchBriefing(nextFixture, seasonSimWithGroup, {
         playerNationName: nation?.name,
-        tournament: seasonCalendar?.internationalTournament ?? seasonSim?.internationalTournament,
+        tournament: seasonCalendar?.internationalTournament ?? seasonSimWithGroup?.internationalTournament,
       })
     : null;
   const squadLine = injured
@@ -115,8 +131,8 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         : nextIsInternational
         ? describeAvailability(squadAvailability)
         : describeAvailability(availability);
-  const week = seasonCalendar && seasonSim
-    ? currentCalendarWeek(seasonCalendar, seasonSim.fixtureIndex)
+  const week = seasonCalendar && seasonSimWithGroup
+    ? currentCalendarWeek(seasonCalendar, seasonSimWithGroup.fixtureIndex)
     : season.matches.length + 1;
   const publicSeasonNumber = displaySeasonNumber(seasonNumber, { role, careerStart });
   const totalWeeks = seasonCalendar?.totalWeeks ?? leagueMatchWeeks(club.league);
@@ -312,6 +328,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
             includeTable={false}
             publicSeason={publicSeasonNumber}
             calendarWeek={week}
+            squadStatus={squadStatus}
           />
         )}
 
@@ -325,7 +342,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
               <StandingsCard
                 standings={seasonStandings}
                 clubId={club.id}
-                cupName={seasonSim?.domesticCup ? DOMESTIC_CUPS[seasonSim.domesticCup].name : null}
+                cupName={seasonSim?.domesticCup ? DOMESTIC_CUPS[seasonSim.domesticCup]?.name ?? null : null}
                 cupStage={seasonSim?.domesticCupStage ?? null}
                 sim={seasonSim}
                 nested
@@ -346,6 +363,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
                 tableOnly
                 publicSeason={publicSeasonNumber}
                 calendarWeek={week}
+                squadStatus={squadStatus}
               />
             )}
           </div>
@@ -424,7 +442,7 @@ function StandingsCard({
     pending: '—',
   };
   const cupHeadline = europe
-    ? { stage: stageLabel[europe.stage] ?? europe.stage, name: CONTINENTAL_CUPS[europe.cup].name }
+    ? { stage: stageLabel[europe.stage] ?? europe.stage, name: CONTINENTAL_CUPS[europe.cup]?.name ?? europe.cup }
     : sim?.leaguesCupStage && sim.leaguesCupStage !== 'not-entered'
       ? { stage: stageLabel[sim.leaguesCupStage] ?? sim.leaguesCupStage, name: 'Leagues Cup' }
       : cupName && cupStage && cupStage !== 'not-entered'
@@ -479,6 +497,7 @@ function InternationalCard({
   tableOnly = false,
   publicSeason = null,
   calendarWeek = 99,
+  squadStatus = 'starter',
 }: {
   nationId: string;
   nationName: string;
@@ -493,6 +512,7 @@ function InternationalCard({
   tableOnly?: boolean;
   publicSeason?: number | null;
   calendarWeek?: number;
+  squadStatus?: SquadStatus;
 }) {
   const bar = selectionRatioForNation(nationId);
   const clubOk = clubEligibleForNationalTeam(clubTier, nationId);
@@ -502,10 +522,11 @@ function InternationalCard({
     nationId,
     publicSeason,
     calendarWeek,
+    squadStatus,
   });
   const waitingSeason1 = publicSeason === 1 && calendarWeek <= SEASON_1_CALL_UP_MIN_WEEK;
   const tournamentName = sim?.internationalTournament
-    ? INTERNATIONAL_TOURNAMENTS[sim.internationalTournament].name
+    ? INTERNATIONAL_TOURNAMENTS[sim.internationalTournament]?.name
     : null;
   const group = sim?.internationalGroup;
   const pos = group ? groupPosition(group, nationId) : 0;
@@ -539,6 +560,9 @@ function InternationalCard({
   const statusLine = (() => {
     if (!clubOk) {
       return `Need a move to a higher-level club before ${nationName} will consider you.`;
+    }
+    if (squadStatus && squadStatus !== 'starter') {
+      return `Call-ups are for starters — currently ${SQUAD_STATUS_LABEL[squadStatus]}.`;
     }
     if (waitingSeason1) {
       return `International call-ups start after week ${SEASON_1_CALL_UP_MIN_WEEK} in Season 1.`;
@@ -650,8 +674,8 @@ function SeasonCompetitions({ calendar }: { calendar: SeasonCalendar | null }) {
   }
   const internationalLabel = international
     ? calendar.internationalPhase === 'qualifiers'
-      ? `${INTERNATIONAL_TOURNAMENTS[international].name} qualifying`
-      : INTERNATIONAL_TOURNAMENTS[international].name
+      ? `${INTERNATIONAL_TOURNAMENTS[international]?.name ?? 'International'} qualifying`
+      : (INTERNATIONAL_TOURNAMENTS[international]?.name ?? 'International')
     : null;
 
   return (
@@ -678,7 +702,7 @@ function SeasonCompetitions({ calendar }: { calendar: SeasonCalendar | null }) {
       )}
       {[...cupIds].map((id) => (
         <span key={id} className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/70">
-          {CONTINENTAL_CUPS[id].name}
+          {CONTINENTAL_CUPS[id]?.name ?? id}
         </span>
       ))}
       {internationalLabel && (

@@ -28,7 +28,7 @@ export function evaluateClubPlayerOfTheTournament(params: {
 }): ClubInternationalAwardResult {
   const cup = params.continentalChampion ?? null;
   if (!cup) {
-    return { won: false, reason: 'Win the continental tournament to be eligible.' };
+    return { won: false, reason: '' };
   }
   const { games, goals } = statsForCup(params.continentalStats, cup);
   if (games <= 0) {

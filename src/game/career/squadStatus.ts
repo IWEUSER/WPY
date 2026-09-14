@@ -1,5 +1,6 @@
 import type { CalendarFixture, SeasonCalendar } from './calendar';
-import type { Club } from './data/clubs';
+import { getClub, type Club } from './data/clubs';
+import { nationStrength } from './data/fifaRankings';
 import type { PlayerRole, SeasonRecord, SquadStatus } from './types';
 
 export const SQUAD_STATUS_LABEL: Record<SquadStatus, string> = {
@@ -42,12 +43,12 @@ export function openingSquadStatus(role: PlayerRole): SquadStatus {
 export function describeSquadStatus(status: SquadStatus): string {
   if (status === 'starter') return 'In the starting XI across league, cups and internationals';
   if (status === 'rising-star') {
-    return 'Rising star — more games than a reserve, one chance each time you play';
+    return 'Rising star — more games than a reserve, one chance each time you play. Sits more often in tournaments and against stronger sides.';
   }
   if (status === 'reserve') {
-    return 'Reserve role across league, cups and internationals — fewer appearances';
+    return 'Reserve role across league, cups and internationals — fewer appearances, and fewer still in tournaments or against stronger sides';
   }
-  return 'Impact role across all competitions — roughly every other match';
+  return 'Impact — every other match. The manager moves you here after week 20 if a reserve run is well below the bar, or at season end if a starter is well short.';
 }
 
 export function describeRotationSitOut(status: SquadStatus): string {
@@ -59,13 +60,39 @@ export function describeRotationSitOut(status: SquadStatus): string {
 /**
  * Sit-out pattern among actionable fixtures already completed this season.
  * Starter: never. Rising star: every fourth. Reserve: two of every three.
- * Impact: every other. Applies to league, cups and internationals alike.
+ * Impact: every other.
  */
 export function shouldSitLeagueFixture(status: SquadStatus, completedFixtures: number): boolean {
   if (status === 'starter') return false;
   if (status === 'rising-star') return completedFixtures % 4 === 3;
   if (status === 'reserve') return completedFixtures % 3 !== 0;
   return completedFixtures % 2 === 1;
+}
+
+/** Tougher minutes: international tournament rounds, or a stronger opponent. */
+export function isToughMinutesFixture(
+  fixture: CalendarFixture,
+  club: Club,
+  nationId?: string | null,
+): boolean {
+  if (fixture.kind === 'international') {
+    const round = fixture.internationalRound;
+    if (round && round !== 'qualifier' && round !== 'friendly') return true;
+    if (fixture.opponentId && nationId) {
+      return nationStrength(fixture.opponentId) > nationStrength(nationId);
+    }
+    return false;
+  }
+  const opp = fixture.opponentId ? getClub(fixture.opponentId) : undefined;
+  if (!opp) return false;
+  return opp.strength > club.strength;
+}
+
+/** Rising star sits two of three tough games; reserve sits four of five. */
+export function shouldSitToughFixture(status: SquadStatus, completedFixtures: number): boolean {
+  if (status === 'starter' || status === 'impact') return false;
+  if (status === 'rising-star') return completedFixtures % 3 !== 0;
+  return completedFixtures % 5 !== 0;
 }
 
 /** Rising star always gets a single look in matches they play. */
@@ -87,9 +114,16 @@ export function isSquadRotationSitOut(
   squadStatus: SquadStatus,
   fixtureKind: CalendarFixture['kind'],
   completedFixtures: number,
+  extra?: {
+    toughMinutes?: boolean;
+    seasonMatchCount?: number;
+  },
 ): boolean {
-  if (role === 'reserve') return false;
+  if (role === 'reserve') return extra?.seasonMatchCount === 0;
   if (fixtureKind === 'rest') return false;
+  if (extra?.toughMinutes && (squadStatus === 'rising-star' || squadStatus === 'reserve')) {
+    return shouldSitToughFixture(squadStatus, completedFixtures);
+  }
   return shouldSitLeagueFixture(squadStatus, completedFixtures);
 }
 
@@ -186,10 +220,11 @@ export function squadStatusAfterFormReview(params: {
 export function squadStatusOnArrival(params: {
   fromClub: Club | null | undefined;
   toClub: Club | null | undefined;
-  move: 'loan' | 'permanent' | 'promotion' | 'stay';
+  move: 'loan' | 'permanent' | 'promotion' | 'stay' | 'recall';
   nextIfStay: SquadStatus;
 }): SquadStatus {
   if (params.move === 'stay') return params.nextIfStay;
+  if (params.move === 'recall') return 'reserve';
   if (params.move === 'loan') return 'starter';
   if (params.move === 'promotion') return 'rising-star';
   if (!params.fromClub || !params.toClub) return 'starter';

@@ -23,6 +23,7 @@ export default function MatchScreen() {
   const calendar = useCareerStore((s) => s.seasonCalendar);
   const liveMatch = useCareerStore((s) => s.liveMatch);
   const seasonSim = useCareerStore((s) => s.seasonSim);
+  const squadStatus = useCareerStore((s) => s.squadStatus);
   const recordMatchShot = useCareerStore((s) => s.recordMatchShot);
   const recordMatchChance = useCareerStore((s) => s.recordMatchChance);
   const finishLiveMatch = useCareerStore((s) => s.finishLiveMatch);
@@ -47,12 +48,12 @@ export default function MatchScreen() {
     ? opening.kind === 'youth-tournament'
       ? opening.youthName
       : `${club?.name ?? 'Club'} trial`
-    : fixture?.continentalCup
-    ? CONTINENTAL_CUPS[fixture.continentalCup].name
+      : fixture?.continentalCup
+    ? CONTINENTAL_CUPS[fixture.continentalCup]?.name
     : fixture?.kind === 'domestic-cup' && fixture.domesticCup
-      ? DOMESTIC_CUPS[fixture.domesticCup].name
+      ? DOMESTIC_CUPS[fixture.domesticCup]?.name
       : fixture?.kind === 'international' && seasonSim?.internationalTournament
-        ? INTERNATIONAL_TOURNAMENTS[seasonSim.internationalTournament].name
+        ? INTERNATIONAL_TOURNAMENTS[seasonSim.internationalTournament]?.name
         : null;
 
   const penaltyKick = Boolean(liveMatch?.penaltyKick);
@@ -114,7 +115,7 @@ export default function MatchScreen() {
       maxShots={chances}
       clubStrength={club?.strength}
       opponentStrength={opponentStrength}
-      allowPenalties={opening?.kind !== 'club-trial'}
+      allowPenalties={opening?.kind !== 'club-trial' && (penaltyKick || squadStatus === 'starter')}
       forcePenalty={penaltyKick}
       stadium={stadium}
       opponentSkinPalette={appearanceRegionForNation(opponentNation)}

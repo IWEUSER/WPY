@@ -55,6 +55,7 @@ import {
   syncInternationalCalendar,
   trophyNameForFixture,
   internationalRoundLabel,
+  internationalStageWhenSelected,
   type LiveMatch,
   type SeasonSimState,
 } from './seasonSim';
@@ -86,6 +87,7 @@ import {
   completedLeagueFixtureCount,
   defaultSquadStatus,
   isSquadRotationSitOut,
+  isToughMinutesFixture,
   nextSquadStatusAfterSeason,
   normalizeSquadStatus,
   openingSquadStatus,
@@ -149,6 +151,7 @@ function withInternationalForm(
     role?: PlayerRole;
     careerStart?: CareerStart | null;
     calendar?: SeasonCalendar | null;
+    squadStatus?: SquadStatus | null;
   },
 ): SeasonSimState {
   if (!clubId) return sim;
@@ -165,6 +168,7 @@ function withInternationalForm(
     nationId,
     publicSeason: publicSeason >= 1 ? publicSeason : null,
     calendarWeek: ctx?.week ?? 1,
+    squadStatus: ctx?.squadStatus ?? 'starter',
   });
   if (selected === sim.internationalSelected) return sim;
   if (!selected) {
@@ -177,7 +181,7 @@ function withInternationalForm(
   const next: SeasonSimState = {
     ...sim,
     internationalSelected: true,
-    internationalStage: sim.internationalStage === 'not-selected' ? 'qualifying' : sim.internationalStage,
+    internationalStage: internationalStageWhenSelected(sim),
   };
   return ensureInternationalGroup(next, ctx?.calendar, ctx?.seasonNumber ?? 1);
 }
@@ -328,6 +332,7 @@ function startSimulatedSeason(
     excludeQualifierIds: leagueOnly ? undefined : extras?.excludeQualifierIds,
     leagueOnly,
     careerStart: extras?.careerStart,
+    squadStatus: extras?.squadStatus ?? (role === 'reserve' ? 'reserve' : 'starter'),
   });
   season = {
     ...season,
@@ -849,6 +854,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
   if (!sim || !calendar || !season || !state.clubId) return {};
   const club = getClub(state.clubId);
   if (!club) return {};
+  sim = ensureInternationalGroup(sim, calendar, state.seasonNumber);
   const nationName = state.nationality ? getNation(state.nationality)?.name : undefined;
 
   const applySitOutRecap = (
@@ -920,6 +926,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
           role: state.role,
           careerStart: state.careerStart,
           calendar,
+          squadStatus: reviewed.squadStatus,
         },
       ),
       seasonCalendar: calendar,
@@ -1014,6 +1021,10 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
       state.squadStatus ?? defaultSquadStatus(state.role),
       fixture.kind,
       completedLeagueFixtureCount(calendar, sim.fixtureIndex),
+      {
+        toughMinutes: isToughMinutesFixture(fixture, club, state.nationality),
+        seasonMatchCount: season.matches.length,
+      },
     );
     if (rotatedOut) {
       const resolution = resolveFixture(sim, fixture, club, 0);
@@ -1102,6 +1113,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
           role: state.role,
           careerStart: state.careerStart,
           calendar,
+          squadStatus: state.squadStatus,
         },
       ),
       seasonCalendar: calendar,
@@ -1225,6 +1237,7 @@ function finishResolvedLiveMatch(
       role: state.role,
       careerStart: state.careerStart,
       calendar: nextCalendar,
+      squadStatus: state.squadStatus,
     },
   );
   const complete = nextSim.fixtureIndex >= nextCalendar.fixtures.length;
@@ -1977,7 +1990,7 @@ export const useCareerStore = create<CareerStore>()(
               : squadStatusOnArrival({
                   fromClub: getClub(state.clubId),
                   toClub: nextClub,
-                  move: 'permanent',
+                  move: clubId === state.parentClubId && state.role === 'loan' ? 'recall' : 'permanent',
                   nextIfStay,
                 });
 
@@ -2041,8 +2054,20 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 32,
+      version: 34,
       migrate: (persisted) => {
+        try {
+          return migrateCareerPersist(persisted);
+        } catch (err) {
+          console.error('career persist migrate failed', err);
+          return persisted as CareerState;
+        }
+      },
+    },
+  ),
+);
+
+function migrateCareerPersist(persisted: unknown): CareerState {
         const state = persisted as Partial<CareerState>;
         const sim = state.seasonSim;
         const padSeason = (season: SeasonRecord, index: number, archived = false): SeasonRecord => ({
@@ -2226,10 +2251,7 @@ export const useCareerStore = create<CareerStore>()(
                   })),
               }
             : null,
-        };
-      },
-    },
-  ),
-);
+        } as CareerState;
+}
 
 export const TRIAL_TOTAL_SHOTS = TRIAL_SHOTS;

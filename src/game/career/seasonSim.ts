@@ -1,4 +1,5 @@
 import type { CalendarFixture, DomesticCupStage, LeaguesCupStage, PlayoffRound, SeasonCalendar, SuperCupStage } from './calendar';
+import type { SquadStatus } from './types';
 import { buildSeasonCalendar, fixtureIsHome } from './calendar';
 import { leaguePhaseOpponents } from './continentalDraw';
 import {
@@ -13,6 +14,7 @@ import {
   ligaMxClubs,
   leagueMatchWeeks,
   qualifiesForSaudiSuperCup,
+  SECOND_DIVISIONS,
   type Club,
 } from './data/clubs';
 import {
@@ -191,6 +193,8 @@ export interface HydrateSeasonParams {
   leagueOnly?: boolean;
   /** Which start path this season belongs to — drives the international year. */
   careerStart?: string | null;
+  /** Starters only are called up. Omitted treats the player as a starter. */
+  squadStatus?: SquadStatus | null;
 }
 
 const GROUP_GAMES = 8;
@@ -252,6 +256,7 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
         nationId,
         publicSeason,
         calendarWeek: 1,
+        squadStatus: params.squadStatus ?? 'starter',
       }),
   );
   const startsAtTournament =
@@ -458,9 +463,55 @@ function groupMatchesPrefer(
   return group.kind !== 'qualifying';
 }
 
+function groupsEquivalent(
+  a: IntlGroupState | null | undefined,
+  b: IntlGroupState | null | undefined,
+): boolean {
+  if (!a || !b) return a === b;
+  if (a.kind !== b.kind || a.letter !== b.letter) return false;
+  if (a.teamIds.length !== b.teamIds.length) return false;
+  const other = new Set(b.teamIds);
+  return a.teamIds.every((id) => other.has(id));
+}
+
+/** Qualifying leftovers on a finals-only calendar (Euro / continental) crash the hub. */
+function leftoverQualifyingInFinalsYear(
+  sim: Pick<SeasonSimState, 'internationalStage' | 'internationalPhase'>,
+  calendar: SeasonCalendar,
+): boolean {
+  if (sim.internationalStage !== 'qualifying' && sim.internationalStage !== 'failed-qualifying') {
+    return false;
+  }
+  if (sim.internationalPhase === 'qualifiers') return false;
+  const hasQualifier = calendar.fixtures.some(
+    (f) => f.kind === 'international' && f.internationalRound === 'qualifier',
+  );
+  if (hasQualifier) return false;
+  return (
+    sim.internationalPhase === 'tournament-only'
+    || sim.internationalPhase === 'nations-league'
+    || calendar.fixtures.some((f) => f.kind === 'international' && f.internationalRound === 'group')
+  );
+}
+
+/** Stage to use when a player is first called up mid-season. */
+export function internationalStageWhenSelected(
+  sim: Pick<SeasonSimState, 'internationalStage' | 'internationalPhase'>,
+): InternationalStage {
+  if (sim.internationalStage && sim.internationalStage !== 'not-selected') {
+    return sim.internationalStage;
+  }
+  if (sim.internationalPhase === 'tournament-only' || sim.internationalPhase === 'nations-league') {
+    return 'group';
+  }
+  return 'qualifying';
+}
+
 /**
  * Existing saves often have no table, or a finals group left over while still
  * qualifying. Rebuild from the calendar so a restart still shows the right one.
+ * Always return the same `sim` reference when the table does not change so the
+ * hub cannot loop on a new object every render.
  */
 export function ensureInternationalGroup(
   sim: SeasonSimState,
@@ -468,8 +519,12 @@ export function ensureInternationalGroup(
   seasonNumber: number,
 ): SeasonSimState {
   if (!calendar || !sim.nationId || !sim.internationalTournament) return sim;
-  const prefer = internationalGroupPrefer(sim.internationalStage);
-  if (groupMatchesPrefer(sim.internationalGroup, prefer)) return sim;
+  const internationalStage = leftoverQualifyingInFinalsYear(sim, calendar)
+    ? 'group'
+    : sim.internationalStage;
+  const stageChanged = internationalStage !== sim.internationalStage;
+  const prefer = internationalGroupPrefer(internationalStage);
+  if (!stageChanged && groupMatchesPrefer(sim.internationalGroup, prefer)) return sim;
   const internationalGroup = buildInternationalGroup(
     sim.nationId,
     sim.internationalTournament,
@@ -477,7 +532,11 @@ export function ensureInternationalGroup(
     seasonNumber,
     prefer,
   );
-  return internationalGroup ? { ...sim, internationalGroup } : sim;
+  if (!internationalGroup) {
+    return stageChanged ? { ...sim, internationalStage } : sim;
+  }
+  if (!stageChanged && groupsEquivalent(sim.internationalGroup, internationalGroup)) return sim;
+  return { ...sim, internationalStage, internationalGroup };
 }
 
 export function syncInternationalCalendar(calendar: SeasonCalendar, sim: SeasonSimState): SeasonCalendar {
@@ -738,7 +797,7 @@ function findReturnLeg(fixtures: CalendarFixture[], firstIndex: number): Calenda
   return undefined;
 }
 
-/** Later cup rounds stay in the player's division so the FA Cup is not all Championship sides. */
+/** Later cup rounds prefer higher divisions so second-tier sides do not keep meeting each other in finals. */
 export function pickDomesticCupOpponent(
   club: Club,
   stage: DomesticCupStage | undefined,
@@ -748,9 +807,13 @@ export function pickDomesticCupOpponent(
   const sameLeague = clubsInLeague(club.league).filter((c) => c.id !== club.id && !usedIds.has(c.id));
   const late = stage === 'quarter-final' || stage === 'semi-final' || stage === 'final';
   const last16 = stage === 'round-of-16';
+  const fromSecondDivision = SECOND_DIVISIONS.has(club.league);
+  const higherDivision = country.filter((c) => !SECOND_DIVISIONS.has(c.league));
   let pool: Club[];
-  if (late && sameLeague.length > 0) {
-    pool = sameLeague;
+  if (late && fromSecondDivision && higherDivision.length > 0) {
+    pool = higherDivision;
+  } else if (late) {
+    pool = country.length > 0 ? country : sameLeague;
   } else if (last16 && sameLeague.length > 0) {
     const lower = country.filter((c) => c.league !== club.league);
     pool = [...sameLeague, ...shuffle(lower).slice(0, Math.max(3, Math.ceil(sameLeague.length / 2)))];
