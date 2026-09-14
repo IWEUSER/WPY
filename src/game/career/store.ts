@@ -854,6 +854,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
   if (!sim || !calendar || !season || !state.clubId) return {};
   const club = getClub(state.clubId);
   if (!club) return {};
+  sim = ensureInternationalGroup(sim, calendar, state.seasonNumber);
   const nationName = state.nationality ? getNation(state.nationality)?.name : undefined;
 
   const applySitOutRecap = (
@@ -2053,8 +2054,20 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 33,
+      version: 34,
       migrate: (persisted) => {
+        try {
+          return migrateCareerPersist(persisted);
+        } catch (err) {
+          console.error('career persist migrate failed', err);
+          return persisted as CareerState;
+        }
+      },
+    },
+  ),
+);
+
+function migrateCareerPersist(persisted: unknown): CareerState {
         const state = persisted as Partial<CareerState>;
         const sim = state.seasonSim;
         const padSeason = (season: SeasonRecord, index: number, archived = false): SeasonRecord => ({
@@ -2238,10 +2251,7 @@ export const useCareerStore = create<CareerStore>()(
                   })),
               }
             : null,
-        };
-      },
-    },
-  ),
-);
+        } as CareerState;
+}
 
 export const TRIAL_TOTAL_SHOTS = TRIAL_SHOTS;

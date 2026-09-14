@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { calendarDomesticCup, calendarIncludesInternational, currentCalendarWeek, fixtureVenueLabel, type SeasonCalendar } from '../calendar';
 import { clubKit } from '../data/clubKits';
 import { getClub, leagueMatchWeeks } from '../data/clubs';
@@ -68,6 +67,14 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const club = clubId ? getClub(clubId) : undefined;
   const parentClub = role === 'loan' && parentClubId ? getClub(parentClubId) : undefined;
   const nation = nationality ? getNation(nationality) : undefined;
+  let seasonSimWithGroup = seasonSim;
+  try {
+    if (seasonSim) {
+      seasonSimWithGroup = ensureInternationalGroup(seasonSim, seasonCalendar, seasonNumber);
+    }
+  } catch {
+    seasonSimWithGroup = seasonSim;
+  }
   if (!club || !season) {
     return (
       <div className="flex h-full w-full flex-col items-center justify-center gap-4 px-6 text-center text-white">
@@ -79,13 +86,6 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
     );
   }
   const kit = clubKit(club);
-  const seasonSimWithGroup = seasonSim
-    ? ensureInternationalGroup(seasonSim, seasonCalendar, seasonNumber)
-    : seasonSim;
-  useEffect(() => {
-    if (!seasonSimWithGroup || seasonSimWithGroup === seasonSim) return;
-    useCareerStore.setState({ seasonSim: seasonSimWithGroup });
-  }, [seasonSim, seasonSimWithGroup]);
 
   const played = season.gamesPlayed;
   const goals = season.goals;
@@ -94,18 +94,20 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const threshold = requiredGoalRatio(role, club, parentClub);
   const ratioProgress = Math.min(1, threshold > 0 ? ratio / threshold : 0);
   const injured = (injuryGamesRemaining ?? 0) > 0;
-  const nextFixture = seasonCalendar && seasonSim ? nextActionableFixture(seasonCalendar, seasonSim) : undefined;
+  const nextFixture = seasonCalendar && seasonSimWithGroup
+    ? nextActionableFixture(seasonCalendar, seasonSimWithGroup)
+    : undefined;
   const nextIsInternational = nextFixture?.kind === 'international';
   const squadAvailability = nextIsInternational && nationalTeam ? nationalTeam.availability : availability;
   const rotatedOut = Boolean(
     nextFixture
     && seasonCalendar
-    && seasonSim
+    && seasonSimWithGroup
     && isSquadRotationSitOut(
       role,
       squadStatus,
       nextFixture.kind,
-      completedLeagueFixtureCount(seasonCalendar, seasonSim.fixtureIndex),
+      completedLeagueFixtureCount(seasonCalendar, seasonSimWithGroup.fixtureIndex),
       {
         toughMinutes: isToughMinutesFixture(nextFixture, club, nationality),
         seasonMatchCount: season.matches.length,
@@ -115,9 +117,9 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const noChance = chancesForSquadStatus(squadStatus, nextFixture?.playerChances ?? 1) <= 0;
   const available = isAvailable(squadAvailability) && !injured && !rotatedOut && !noChance;
   const briefing = nextFixture
-    ? nextMatchBriefing(nextFixture, seasonSim, {
+    ? nextMatchBriefing(nextFixture, seasonSimWithGroup, {
         playerNationName: nation?.name,
-        tournament: seasonCalendar?.internationalTournament ?? seasonSim?.internationalTournament,
+        tournament: seasonCalendar?.internationalTournament ?? seasonSimWithGroup?.internationalTournament,
       })
     : null;
   const squadLine = injured
@@ -129,8 +131,8 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         : nextIsInternational
         ? describeAvailability(squadAvailability)
         : describeAvailability(availability);
-  const week = seasonCalendar && seasonSim
-    ? currentCalendarWeek(seasonCalendar, seasonSim.fixtureIndex)
+  const week = seasonCalendar && seasonSimWithGroup
+    ? currentCalendarWeek(seasonCalendar, seasonSimWithGroup.fixtureIndex)
     : season.matches.length + 1;
   const publicSeasonNumber = displaySeasonNumber(seasonNumber, { role, careerStart });
   const totalWeeks = seasonCalendar?.totalWeeks ?? leagueMatchWeeks(club.league);
@@ -440,7 +442,7 @@ function StandingsCard({
     pending: '—',
   };
   const cupHeadline = europe
-    ? { stage: stageLabel[europe.stage] ?? europe.stage, name: CONTINENTAL_CUPS[europe.cup].name }
+    ? { stage: stageLabel[europe.stage] ?? europe.stage, name: CONTINENTAL_CUPS[europe.cup]?.name ?? europe.cup }
     : sim?.leaguesCupStage && sim.leaguesCupStage !== 'not-entered'
       ? { stage: stageLabel[sim.leaguesCupStage] ?? sim.leaguesCupStage, name: 'Leagues Cup' }
       : cupName && cupStage && cupStage !== 'not-entered'
@@ -700,7 +702,7 @@ function SeasonCompetitions({ calendar }: { calendar: SeasonCalendar | null }) {
       )}
       {[...cupIds].map((id) => (
         <span key={id} className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/70">
-          {CONTINENTAL_CUPS[id].name}
+          {CONTINENTAL_CUPS[id]?.name ?? id}
         </span>
       ))}
       {internationalLabel && (

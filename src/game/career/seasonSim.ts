@@ -470,7 +470,28 @@ function groupsEquivalent(
   if (!a || !b) return a === b;
   if (a.kind !== b.kind || a.letter !== b.letter) return false;
   if (a.teamIds.length !== b.teamIds.length) return false;
-  return a.teamIds.every((id, i) => id === b.teamIds[i]);
+  const other = new Set(b.teamIds);
+  return a.teamIds.every((id) => other.has(id));
+}
+
+/** Qualifying leftovers on a finals-only calendar (Euro / continental) crash the hub. */
+function leftoverQualifyingInFinalsYear(
+  sim: Pick<SeasonSimState, 'internationalStage' | 'internationalPhase'>,
+  calendar: SeasonCalendar,
+): boolean {
+  if (sim.internationalStage !== 'qualifying' && sim.internationalStage !== 'failed-qualifying') {
+    return false;
+  }
+  if (sim.internationalPhase === 'qualifiers') return false;
+  const hasQualifier = calendar.fixtures.some(
+    (f) => f.kind === 'international' && f.internationalRound === 'qualifier',
+  );
+  if (hasQualifier) return false;
+  return (
+    sim.internationalPhase === 'tournament-only'
+    || sim.internationalPhase === 'nations-league'
+    || calendar.fixtures.some((f) => f.kind === 'international' && f.internationalRound === 'group')
+  );
 }
 
 /** Stage to use when a player is first called up mid-season. */
@@ -498,8 +519,12 @@ export function ensureInternationalGroup(
   seasonNumber: number,
 ): SeasonSimState {
   if (!calendar || !sim.nationId || !sim.internationalTournament) return sim;
-  const prefer = internationalGroupPrefer(sim.internationalStage);
-  if (groupMatchesPrefer(sim.internationalGroup, prefer)) return sim;
+  const internationalStage = leftoverQualifyingInFinalsYear(sim, calendar)
+    ? 'group'
+    : sim.internationalStage;
+  const stageChanged = internationalStage !== sim.internationalStage;
+  const prefer = internationalGroupPrefer(internationalStage);
+  if (!stageChanged && groupMatchesPrefer(sim.internationalGroup, prefer)) return sim;
   const internationalGroup = buildInternationalGroup(
     sim.nationId,
     sim.internationalTournament,
@@ -507,9 +532,11 @@ export function ensureInternationalGroup(
     seasonNumber,
     prefer,
   );
-  if (!internationalGroup) return sim;
-  if (groupsEquivalent(sim.internationalGroup, internationalGroup)) return sim;
-  return { ...sim, internationalGroup };
+  if (!internationalGroup) {
+    return stageChanged ? { ...sim, internationalStage } : sim;
+  }
+  if (!stageChanged && groupsEquivalent(sim.internationalGroup, internationalGroup)) return sim;
+  return { ...sim, internationalStage, internationalGroup };
 }
 
 export function syncInternationalCalendar(calendar: SeasonCalendar, sim: SeasonSimState): SeasonCalendar {

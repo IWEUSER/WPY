@@ -3117,6 +3117,37 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
       console.error('ensureInternationalGroup must not allocate a new sim every hub render');
       process.exitCode = 1;
     }
+    if (once.internationalStage === 'qualifying') {
+      console.error('a leftover qualifying stage in a finals year must be corrected to group');
+      process.exitCode = 1;
+    }
+    const leftoverQualGroup = {
+      ...s4.sim,
+      internationalStage: 'qualifying' as const,
+      internationalGroup: {
+        letter: 'Q',
+        kind: 'qualifying' as const,
+        teamIds: ['spain', 'scotland', 'norway', 'georgia'],
+        rows: [],
+      },
+    };
+    let hubSim = leftoverQualGroup;
+    let hubWrites = 0;
+    for (let i = 0; i < 20; i++) {
+      const next = ensureInternationalGroup(hubSim, s4.calendar, 4);
+      if (next !== hubSim) {
+        hubWrites += 1;
+        hubSim = next;
+      }
+    }
+    if (hubWrites > 1) {
+      console.error('hub must not rewrite seasonSim on every paint after a leftover qualifying group');
+      process.exitCode = 1;
+    }
+    if (hubSim.internationalStage === 'qualifying' || hubSim.internationalGroup?.kind === 'qualifying') {
+      console.error('leftover qualifying table in a Euro year must become the finals group');
+      process.exitCode = 1;
+    }
     if (internationalStageWhenSelected({ internationalStage: 'not-selected', internationalPhase: 'tournament-only' }) !== 'group') {
       console.error('a mid-season call-up in a finals year must not reset to qualifying');
       process.exitCode = 1;

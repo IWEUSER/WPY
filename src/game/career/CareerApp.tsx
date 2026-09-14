@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import ShootingGame from '../shooting/ShootingGame';
 import HomeScreen from './screens/HomeScreen';
 import ClubChoiceScreen from './screens/ClubChoiceScreen';
@@ -29,9 +29,15 @@ if (import.meta.env.DEV) {
 }
 
 export default function CareerApp() {
+  const [hydrated, setHydrated] = useState(() => useCareerStore.persist.hasHydrated());
   const [practicing, setPracticing] = useState(
     () => import.meta.env.DEV && new URLSearchParams(window.location.search).has('practice'),
   );
+  useEffect(() => {
+    const unsub = useCareerStore.persist.onFinishHydration(() => setHydrated(true));
+    if (useCareerStore.persist.hasHydrated()) setHydrated(true);
+    return unsub;
+  }, []);
   const phase = useCareerStore((s) => s.phase);
   const nationality = useCareerStore((s) => s.nationality);
   const openingCampaign = useCareerStore((s) => s.openingCampaign);
@@ -41,6 +47,14 @@ export default function CareerApp() {
   const pendingTransfer = useCareerStore((s) => s.pendingTransfer);
   const clubId = useCareerStore((s) => s.clubId);
   const returnToMenu = useCareerStore((s) => s.returnToMenu);
+
+  if (!hydrated) {
+    return (
+      <div className="flex h-full w-full items-center justify-center text-sm text-white/40">
+        Loading career…
+      </div>
+    );
+  }
 
   if (practicing) {
     return (
