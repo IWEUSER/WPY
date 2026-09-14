@@ -120,17 +120,26 @@ export function clubEligibleForNationalTeam(clubTier: ClubTier, nationId?: strin
   return clubTier <= maxClubTierForNation(nationId);
 }
 
+/** Public Season 1 has no international call-ups until after this week. */
+export const SEASON_1_CALL_UP_MIN_WEEK = 20;
+
 /**
  * Call-up uses the ratio passed in (career until this season has a real
  * sample, then this season). Top nations still need a proper club;
- * weaker nations will pick a lower-league striker.
+ * weaker nations will pick a lower-league striker. Season 1 waits until
+ * after week 20.
  */
 export function isSelectedForNationalTeam(params: {
   clubTier: ClubTier;
   careerGoalRatio: number;
   nationId: string | null;
+  publicSeason?: number | null;
+  calendarWeek?: number;
 }): boolean {
   if (!params.nationId) return false;
+  if (params.publicSeason === 1 && (params.calendarWeek ?? 0) <= SEASON_1_CALL_UP_MIN_WEEK) {
+    return false;
+  }
   if (!clubEligibleForNationalTeam(params.clubTier, params.nationId)) return false;
   return params.careerGoalRatio >= selectionRatioForNation(params.nationId);
 }
@@ -144,9 +153,9 @@ export function seasonRatioForSelection(season: { goals: number; gamesPlayed: nu
 /**
  * Until this season has VALUE_FORM_MIN_GAMES, take the better of this
  * season and prior career so a new campaign with a 1.13 career ratio is
- * selected from week 1, a hot start can still earn a call-up, and a
- * 13-game blank cannot wipe the career figure. After 15 games, this
- * season decides.
+ * selected once Season 1 call-ups open (after week 20), a hot start can
+ * still earn a call-up, and a 13-game blank cannot wipe the career figure.
+ * After 15 games, this season decides.
  */
 export function callUpRatio(params: {
   season?: { goals: number; gamesPlayed: number } | null;

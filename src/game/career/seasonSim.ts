@@ -241,6 +241,7 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
   const inEuro = tournament !== 'euro' || Boolean(nationId && isEuroDefaultQualifier(nationId));
   const inNationsLeague =
     tournament !== 'nations-league' || Boolean(nationId && nationsLeagueGroupLetter(nationId));
+  const publicSeason = intlSeason >= 1 ? intlSeason : null;
   const internationalSelected = Boolean(
     campaignActive &&
       inEuro &&
@@ -249,6 +250,8 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
         clubTier: club.tier,
         careerGoalRatio,
         nationId,
+        publicSeason,
+        calendarWeek: 1,
       }),
   );
   const startsAtTournament =

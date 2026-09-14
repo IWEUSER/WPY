@@ -79,6 +79,23 @@ function playOpeningMatch(goals: number) {
   store.getState().acknowledgeMatchResult();
 }
 
+function completeLiveMatch(openPlayGoals = 1) {
+  let guard = 0;
+  while (store.getState().liveMatch && guard < 8) {
+    const live = store.getState().liveMatch;
+    if (!live) break;
+    if (live.penaltyKick) {
+      store.getState().recordMatchChance(fakeShot(true));
+    } else if (live.chancesTaken < live.chancesTotal) {
+      for (let i = live.chancesTaken; i < live.chancesTotal; i++) {
+        store.getState().recordMatchChance(fakeShot(i < openPlayGoals));
+      }
+    }
+    store.getState().finishLiveMatch();
+    guard += 1;
+  }
+}
+
 function playSimSeason(scoreAll: boolean) {
   let guard = 0;
   while (guard++ < 160) {
@@ -269,6 +286,10 @@ if (s2.role !== 'first-team' || s2.age !== 17) {
   console.error('The first first-team season must be at age 17');
   process.exitCode = 1;
 }
+if (s2.squadStatus !== 'rising-star') {
+  console.error('Youth-path first-team Season 1 must start as a Rising star');
+  process.exitCode = 1;
+}
 if (s2.seasonSim?.internationalTournament !== 'world-cup' || s2.seasonSim?.internationalPhase !== 'qualifiers') {
   console.error('Youth-path first-team Season 1 must be World Cup qualifying, not the tournament');
   process.exitCode = 1;
@@ -302,13 +323,12 @@ store.getState().advance();
 const live = store.getState().liveMatch;
 const fixture = store.getState().seasonCalendar?.fixtures[live?.fixtureIndex ?? 0];
 console.log('first S2 live match', live, 'fixture', fixture?.kind, fixture?.opponentLabel, 'chances', live?.chancesTotal);
-
-if (live) {
-  for (let i = 0; i < live.chancesTotal; i++) {
-    store.getState().recordMatchChance(fakeShot(i === 0));
-  }
-  store.getState().finishLiveMatch();
+if (live && live.chancesTotal !== 1) {
+  console.error('Rising star Season 1 must get one chance in each game played');
+  process.exitCode = 1;
 }
+completeLiveMatch(1);
+if (store.getState().phase === 'match-result') store.getState().acknowledgeMatchResult();
 const after = store.getState();
 console.log('after first S2 match:', after.lastMatchSummary);
 console.log('league pos', after.seasonStandings?.league.find((r) => r.clubId === after.clubId)?.position, 'pts', after.seasonStandings?.league.find((r) => r.clubId === after.clubId)?.points);
@@ -346,12 +366,8 @@ const afterRatio =
     ? after.currentSeason.goals / after.currentSeason.gamesPlayed
     : 0;
 console.log('after first match intl selected', after.seasonSim?.internationalSelected, 'season ratio', afterRatio.toFixed(2));
-if (afterRatio >= 0.66 && !after.seasonSim?.internationalSelected) {
-  console.error('hitting the national bar this season must trigger a call-up');
-  process.exitCode = 1;
-}
-if (afterRatio < 0.66 && after.seasonSim?.internationalSelected) {
-  console.error('a season ratio below the national bar must not keep the player selected');
+if (after.seasonSim?.internationalSelected) {
+  console.error('Season 1 call-ups must wait until after week 20');
   process.exitCode = 1;
 }
 if (after.careerGames !== 1) {
@@ -468,9 +484,12 @@ if (cupFinalIndex == null || cupFinalIndex < 0 || !after.seasonSim || !after.sea
       fixtureIndex: cupFinalIndex,
       domesticCupStage: 'final',
     },
-    liveMatch: { fixtureIndex: cupFinalIndex, chancesTotal: 1, chancesTaken: 1, goals: 1 },
+    liveMatch: { fixtureIndex: cupFinalIndex, chancesTotal: 1, chancesTaken: 0, goals: 0, openPlayGoals: 0 },
+    lastMatchResult: null,
+    lastMatchSummary: null,
+    injuryGamesRemaining: 0,
   });
-  store.getState().finishLiveMatch();
+  completeLiveMatch(1);
   const finalState = store.getState();
   console.log('cup final phase', finalState.phase, finalState.lastMatchResult);
   if (finalState.phase !== 'match-result' || !finalState.lastMatchResult?.isFinal) {
@@ -605,17 +624,17 @@ if (store.getState().phase === 'opening-brief') store.getState().startOpeningTri
     s.phase,
     s.pendingTransfer?.kind,
     s.parentClubId,
-    s.age,
-    s.weeklyWage,
-    s.pendingTransfer?.offers?.map((o) => o.move).join(','),
+    s.openingCampaign?.trialClubId,
+    s.openingCampaign?.trialTier,
   );
   if (
-    s.phase !== 'transfer-choice'
-    || s.pendingTransfer?.kind !== 'loan'
+    s.phase !== 'match'
     || s.parentClubId !== 'real-madrid'
-    || s.pendingTransfer.offers?.some((o) => o.move !== 'loan')
+    || s.openingCampaign?.trialClubId === 'real-madrid'
+    || s.openingCampaign?.trialTier !== getClub('real-madrid')?.tier
+    || s.pendingTransfer
   ) {
-    console.error('Failing a favourite-club trial must offer sequential loans from that club, not a drop-tier retry');
+    console.error('missing a favourite-club trial must offer another look at the same level, not a forced loan');
     process.exitCode = 1;
   }
 }
@@ -656,10 +675,11 @@ store.getState().chooseNationality('england');
     || s.seasonNumber !== 1
     || s.age !== 17
     || s.contractYearsRemaining !== 2
+    || s.squadStatus !== 'rising-star'
     || !kinds.has('league')
     || !kinds.has('domestic-cup')
   ) {
-    console.error('Favourite first-team must start Season 1 at age 17 on a 2-year deal with the full calendar');
+    console.error('Favourite first-team must start Season 1 at age 17 on a 2-year deal as a Rising star with the full calendar');
     process.exitCode = 1;
   }
   const tournamentGames = (s.seasonCalendar?.fixtures ?? []).filter(

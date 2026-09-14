@@ -26,7 +26,7 @@ import {
 import { evaluatePlayerOfTheYear, evaluateTopGoalscorer } from './domesticAwards';
 import { evaluateClubPlayerOfTheTournament } from './clubInternationalAwards';
 import { evaluateInternationalTournamentAwards } from './internationalAwards';
-import { countsTowardCareerRecord } from './seasonDisplay';
+import { countsTowardCareerRecord, displaySeasonNumber } from './seasonDisplay';
 import { trophyLabels } from './honoursDisplay';
 import {
   bumpInternationalSeason,
@@ -43,7 +43,7 @@ import {
   patchPriorQualifyingOutcomes,
 } from './international';
 import { buildSeasonStandings, type ClubMatchResult } from './matchEngine';
-import { isFinalFixture, isInternationalTournamentFixture, type CalendarFixture, type SeasonCalendar } from './calendar';
+import { isFinalFixture, isInternationalTournamentFixture, currentCalendarWeek, type CalendarFixture, type SeasonCalendar } from './calendar';
 import {
   canWinLeague,
   ensureInternationalGroup,
@@ -82,10 +82,17 @@ import {
   trialFailTransferPending,
 } from './transfers';
 import {
+  chancesForSquadStatus,
   completedLeagueFixtureCount,
   defaultSquadStatus,
   isSquadRotationSitOut,
   nextSquadStatusAfterSeason,
+  normalizeSquadStatus,
+  openingSquadStatus,
+  ROLE_REVIEW_WEEK,
+  seasonOverridesRatioBar,
+  seasonRatioClearsBar,
+  squadStatusAfterFormReview,
   squadStatusOnArrival,
 } from './squadStatus';
 import { evaluateWpy } from './wpy';
@@ -136,14 +143,28 @@ function withInternationalForm(
   nationId: string | null,
   careerGoals: number,
   careerGames: number,
+  ctx?: {
+    week?: number;
+    seasonNumber?: number;
+    role?: PlayerRole;
+    careerStart?: CareerStart | null;
+    calendar?: SeasonCalendar | null;
+  },
 ): SeasonSimState {
   if (!clubId) return sim;
   const club = getClub(clubId);
   if (!club) return sim;
+  const publicSeason = internationalCalendarSeason(ctx?.seasonNumber ?? 1, {
+    leagueOnly: ctx?.role === 'reserve',
+    careerStart: ctx?.careerStart,
+    role: ctx?.role,
+  });
   const selected = isSelectedForNationalTeam({
     clubTier: club.tier,
     careerGoalRatio: callUpRatio({ season, careerGoals, careerGames }),
     nationId,
+    publicSeason: publicSeason >= 1 ? publicSeason : null,
+    calendarWeek: ctx?.week ?? 1,
   });
   if (selected === sim.internationalSelected) return sim;
   if (!selected) {
@@ -153,10 +174,41 @@ function withInternationalForm(
       internationalStage: sim.internationalStage === 'qualifying' ? 'not-selected' : sim.internationalStage,
     };
   }
-  return {
+  const next: SeasonSimState = {
     ...sim,
     internationalSelected: true,
     internationalStage: sim.internationalStage === 'not-selected' ? 'qualifying' : sim.internationalStage,
+  };
+  return ensureInternationalGroup(next, ctx?.calendar, ctx?.seasonNumber ?? 1);
+}
+
+function reviewedSquadFields(
+  state: Pick<CareerState, 'role' | 'squadStatus' | 'clubId'>,
+  season: SeasonRecord | null,
+  calendar: SeasonCalendar | null,
+  sim: SeasonSimState | null,
+): { squadStatus: CareerState['squadStatus']; currentSeason: SeasonRecord | null } {
+  const current = normalizeSquadStatus(state.squadStatus, state.role);
+  if (!season || !calendar || !sim || state.role === 'reserve') {
+    return { squadStatus: current, currentSeason: season };
+  }
+  const week = currentCalendarWeek(calendar, sim.fixtureIndex);
+  if (week <= ROLE_REVIEW_WEEK) return { squadStatus: current, currentSeason: season };
+  const club = state.clubId ? getClub(state.clubId) : undefined;
+  if (!club) return { squadStatus: current, currentSeason: season };
+  const ratio = season.gamesPlayed > 0 ? season.goals / season.gamesPlayed : 0;
+  const next = squadStatusAfterFormReview({
+    current,
+    ratio,
+    gamesPlayed: season.gamesPlayed,
+    // Playing time follows the club the player is actually at. Parent first-team
+    // bars are for the end-of-loan recall, not a mid-season drop on loan.
+    bar: club.firstTeamGoalRatio,
+    honoursClear: seasonOverridesRatioBar(season),
+  });
+  return {
+    squadStatus: next,
+    currentSeason: { ...season, squadStatus: next },
   };
 }
 
@@ -610,7 +662,7 @@ function initialState(): CareerState {
     clubId: null,
     parentClubId: null,
     role: 'reserve',
-    squadStatus: 'rotation',
+    squadStatus: 'reserve',
     lastTransferRejection: null,
     seasonsAtCurrentClub: 0,
     trial: null,
@@ -726,7 +778,7 @@ function beginSignedCareer(
     clubId,
     parentClubId: clubId,
     role,
-    squadStatus: defaultSquadStatus(role),
+    squadStatus: openingSquadStatus(role),
     lastTransferRejection: null,
     seasonNumber,
     age,
@@ -741,7 +793,7 @@ function beginSignedCareer(
       careerEarnings: 0,
       contractYearsRemaining: dealYears,
       careerStart,
-      squadStatus: defaultSquadStatus(role),
+      squadStatus: openingSquadStatus(role),
     }),
     pendingTransfer: null,
     openingCampaign: null,
@@ -852,10 +904,27 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
         wpyResult: awarded.wpyResult,
       };
     }
+    const reviewed = reviewedSquadFields(state, season, calendar, sim);
+    const hubSim = sim!;
     return {
-      seasonSim: sim,
+      seasonSim: withInternationalForm(
+        hubSim,
+        reviewed.currentSeason ?? season,
+        state.clubId,
+        state.nationality,
+        state.careerGoals,
+        careerGames,
+        {
+          week: currentCalendarWeek(calendar, hubSim.fixtureIndex),
+          seasonNumber: state.seasonNumber,
+          role: state.role,
+          careerStart: state.careerStart,
+          calendar,
+        },
+      ),
       seasonCalendar: calendar,
-      currentSeason: season,
+      currentSeason: reviewed.currentSeason,
+      squadStatus: reviewed.squadStatus,
       availability,
       nationalTeam,
       careerGames,
@@ -864,7 +933,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
       lastMatchSummary,
       lastMatchResult,
       injuryGamesRemaining,
-      seasonStandings: buildSeasonStandings(sim!.leagueTable, sim!.europeanStanding),
+      seasonStandings: buildSeasonStandings(hubSim.leagueTable, hubSim.europeanStanding),
       liveMatch: null,
       phase: 'hub',
     };
@@ -980,7 +1049,10 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
       return sitOutHub();
     }
 
-    const chances = fixture.playerChances ?? 1;
+    const chances = chancesForSquadStatus(
+      state.squadStatus ?? defaultSquadStatus(state.role),
+      fixture.playerChances ?? 1,
+    );
     if (chances <= 0) {
       const resolution = resolveFixture(sim, fixture, club, 0);
       sim = { ...resolution.sim, fixtureIndex: sim.fixtureIndex + 1 };
@@ -1017,7 +1089,21 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
 
     const liveMatch: LiveMatch = { fixtureIndex: sim.fixtureIndex, chancesTotal: chances, chancesTaken: 0, goals: 0, openPlayGoals: 0 };
     return {
-      seasonSim: withInternationalForm(sim, season, state.clubId, state.nationality, state.careerGoals, state.careerGames),
+      seasonSim: withInternationalForm(
+        sim,
+        season,
+        state.clubId,
+        state.nationality,
+        state.careerGoals,
+        state.careerGames,
+        {
+          week: currentCalendarWeek(calendar, sim.fixtureIndex),
+          seasonNumber: state.seasonNumber,
+          role: state.role,
+          careerStart: state.careerStart,
+          calendar,
+        },
+      ),
       seasonCalendar: calendar,
       currentSeason: season,
       availability,
@@ -1133,6 +1219,13 @@ function finishResolvedLiveMatch(
     state.nationality,
     nextCareerGoals,
     nextCareerGames,
+    {
+      week: currentCalendarWeek(nextCalendar, nextSim.fixtureIndex),
+      seasonNumber: state.seasonNumber,
+      role: state.role,
+      careerStart: state.careerStart,
+      calendar: nextCalendar,
+    },
   );
   const complete = nextSim.fixtureIndex >= nextCalendar.fixtures.length;
   const withHonours = complete
@@ -1166,10 +1259,20 @@ function finishResolvedLiveMatch(
     afterPhase,
   });
 
+  const reviewed = complete
+    ? { squadStatus: state.squadStatus, currentSeason: awarded.season }
+    : reviewedSquadFields(
+        { ...state, squadStatus: state.squadStatus },
+        awarded.season,
+        nextCalendar,
+        withHonours,
+      );
+
   return {
     seasonSim: withHonours,
     seasonCalendar: nextCalendar,
-    currentSeason: awarded.season,
+    currentSeason: reviewed.currentSeason,
+    squadStatus: reviewed.squadStatus,
     availability,
     nationalTeam,
     liveMatch: null,
@@ -1537,10 +1640,16 @@ export const useCareerStore = create<CareerStore>()(
               ratio,
               gamesPlayed: season.gamesPlayed,
               bar: threshold,
+              honoursClear: seasonOverridesRatioBar(season),
             });
           const finishedSeason: SeasonRecord = {
             ...season,
-            ratioMet: ratio >= threshold,
+            ratioMet: seasonRatioClearsBar({
+              ratio,
+              gamesPlayed: season.gamesPlayed,
+              bar: threshold,
+              season,
+            }),
             earnings: season.earnings ?? 0,
             squadStatus: state.squadStatus,
             nextSquadStatus: nextStatus,
@@ -1692,6 +1801,7 @@ export const useCareerStore = create<CareerStore>()(
                   const stayParent = stay.parentClubId ? getClub(stay.parentClubId) : undefined;
                   return stayClub ? requiredGoalRatio(stay.role, stayClub, stayParent) : 0;
                 })(),
+                honoursClear: state.currentSeason ? seasonOverridesRatioBar(state.currentSeason) : false,
               });
             const nextClub = getClub(stay.clubId);
             const superCup = nextClub
@@ -1858,6 +1968,7 @@ export const useCareerStore = create<CareerStore>()(
                 const parent = state.parentClubId ? getClub(state.parentClubId) : undefined;
                 return cur ? requiredGoalRatio(state.role, cur, parent) : 0;
               })(),
+              honoursClear: state.currentSeason ? seasonOverridesRatioBar(state.currentSeason) : false,
             });
           const arrivalStatus: SquadStatus = takeLoan
             ? 'starter'
@@ -1930,7 +2041,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 31,
+      version: 32,
       migrate: (persisted) => {
         const state = persisted as Partial<CareerState>;
         const sim = state.seasonSim;
@@ -1945,6 +2056,7 @@ export const useCareerStore = create<CareerStore>()(
           domesticGoals: season.domesticGoals ?? season.leagueGoals ?? season.goals,
           continentalStats: season.continentalStats ?? [],
           trophies: season.trophies ?? [],
+          squadStatus: season.squadStatus ? normalizeSquadStatus(season.squadStatus, season.role) : season.squadStatus,
           topGoalscorer: season.topGoalscorer ?? false,
           playerOfTheYear: season.playerOfTheYear ?? false,
           wonWpy: season.wonWpy ?? false,
@@ -2072,12 +2184,33 @@ export const useCareerStore = create<CareerStore>()(
           previousChampionClubId: state.previousChampionClubId ?? null,
           qualifiedContinentalCup: state.qualifiedContinentalCup ?? null,
           lastSuperCupOpponentId: state.lastSuperCupOpponentId ?? null,
-          squadStatus: state.squadStatus ?? defaultSquadStatus(state.role ?? 'reserve'),
+          squadStatus: (() => {
+            const status = normalizeSquadStatus(state.squadStatus, state.role ?? 'reserve');
+            if (
+              state.role === 'first-team'
+              && status === 'starter'
+              && displaySeasonNumber(state.seasonNumber ?? 1, {
+                role: state.role,
+                careerStart: state.careerStart,
+              }) === 1
+            ) {
+              return 'rising-star';
+            }
+            return status;
+          })(),
           lastTransferRejection: state.lastTransferRejection ?? null,
           rulesStamp: migratedRulesStamp(state),
           pendingTransfer: state.pendingTransfer
             ? {
                 ...state.pendingTransfer,
+                stay: state.pendingTransfer.stay
+                  ? {
+                      ...state.pendingTransfer.stay,
+                      squadStatus: state.pendingTransfer.stay.squadStatus
+                        ? normalizeSquadStatus(state.pendingTransfer.stay.squadStatus)
+                        : state.pendingTransfer.stay.squadStatus,
+                    }
+                  : state.pendingTransfer.stay,
                 offers: (state.pendingTransfer.offers ??
                   (state.pendingTransfer.clubIds ?? []).map((clubId) => ({
                     clubId,
