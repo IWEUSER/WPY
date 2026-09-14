@@ -199,9 +199,9 @@ export default function SeasonSummaryScreen() {
           <p className="mt-1 font-semibold">
             {season.clubPlayerOfTheTournament ? 'Player of the Tournament.' : 'Not this season.'}
           </p>
-          {season.clubPlayerOfTheTournamentReason && (
+          {season.clubPlayerOfTheTournamentReason ? (
             <p className="mt-1 text-xs">{season.clubPlayerOfTheTournamentReason}</p>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -215,7 +215,7 @@ export default function SeasonSummaryScreen() {
         >
           <p className="text-xs uppercase tracking-wide text-white/40">World Player of the Year</p>
           <p className="mt-1 font-semibold">{wpyResult.won ? 'You won it.' : 'Not this season.'}</p>
-          <p className="mt-1 text-xs">{wpyResult.reason}</p>
+          {wpyResult.reason ? <p className="mt-1 text-xs">{wpyResult.reason}</p> : null}
         </div>
       )}
 
@@ -232,6 +232,36 @@ export default function SeasonSummaryScreen() {
             const stayOffered = Boolean(stay) && (preview.immediate || preview.pendingTransfer?.allowDecline);
             const loansOffered = (preview.pendingTransfer?.offers ?? []).some((o) => o.move === 'loan');
             const forcedLoan = preview.pendingTransfer?.kind === 'loan' && !stayOffered;
+            const parentName = parentClub?.name ?? 'your parent club';
+            if (role === 'loan') {
+              const recalled = stay?.clubId === parentClubId;
+              return (
+                <>
+                  {recalled ? (
+                    <>
+                      <p className="mt-1 font-semibold">
+                        If you return to {parentName}: {SQUAD_STATUS_LABEL.reserve}
+                      </p>
+                      <p className="mt-1 text-xs text-white/50">
+                        A recall is a reserve role at {parentName} — you will not stay at {club.name}.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="mt-1 text-xs text-white/50">
+                      You will not stay at {club.name}. Next season is with {parentName} or another club.
+                    </p>
+                  )}
+                  {loansOffered && (
+                    <>
+                      <p className="mt-1 font-semibold">On loan: {SQUAD_STATUS_LABEL.starter}</p>
+                      <p className="mt-1 text-xs text-white/50">
+                        A further loan is first-team football at the new club.
+                      </p>
+                    </>
+                  )}
+                </>
+              );
+            }
             if (forcedLoan) {
               return (
                 <>

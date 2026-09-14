@@ -19,6 +19,7 @@ export type AppearanceRegion =
   | 'middle-east'
   | 'east-asia'
   | 'south-asia'
+  | 'southeast-asia'
   | 'pacific';
 
 export interface PlayerLook {
@@ -148,6 +149,21 @@ const SOUTH_ASIA = new Set([
   'afghanistan',
 ]);
 
+const SOUTHEAST_ASIA = new Set([
+  'malaysia',
+  'indonesia',
+  'thailand',
+  'vietnam',
+  'singapore',
+  'philippines',
+  'myanmar',
+  'cambodia',
+  'laos',
+  'brunei-darussalam',
+  'brunei',
+  'timor-leste',
+]);
+
 const MIDDLE_EAST = new Set([
   'saudi-arabia',
   'qatar',
@@ -179,6 +195,7 @@ export function appearanceRegionForNation(
   if (MEDITERRANEAN.has(id)) return 'mediterranean';
   if (EAST_ASIA.has(id)) return 'east-asia';
   if (SOUTH_ASIA.has(id)) return 'south-asia';
+  if (SOUTHEAST_ASIA.has(id)) return 'southeast-asia';
   if (MIDDLE_EAST.has(id)) return 'middle-east';
   if (nation.confederation === 'OFC') return 'pacific';
   if (nation.confederation === 'CONMEBOL') return 'latino';
@@ -222,6 +239,8 @@ function skinsForRegion(region: AppearanceRegion): readonly string[] {
       return [LIGHT_TAN[0], LIGHT_BROWN[0], FAIR[2]];
     case 'south-asia':
       return [...BROWN, LIGHT_BROWN[1]];
+    case 'southeast-asia':
+      return [...LIGHT_BROWN, BROWN[0], LIGHT_TAN[1]];
     case 'pacific':
       return [...BROWN, ...DARK, LIGHT_BROWN[1]];
     default:
@@ -249,6 +268,7 @@ function hairForRegion(region: AppearanceRegion, skin: string, seed: number): st
     case 'africa':
     case 'east-asia':
     case 'south-asia':
+    case 'southeast-asia':
     case 'pacific':
       return pickWeighted(seed + 17, [
         { value: HAIR_BLACK, w: 8 },

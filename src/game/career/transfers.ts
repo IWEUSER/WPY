@@ -801,7 +801,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
         : newContractYears(age);
     if (parentClub && (ratio >= returnBar || honoursClear)) {
       return parallelTransfers(
-        `${parentClub.name} want you back - straight into the first team!`,
+        `${parentClub.name} want you back — into the first-team squad as a reserve.`,
         honoursClear
           ? `A league or tournament honour this season overrode ${parentClub.name}'s ${returnBar.toFixed(2)} first-team bar.`
           : `${ratio.toFixed(2)} goals/game on loan cleared ${parentClub.name}'s first-team bar of ${returnBar.toFixed(2)}.`,
@@ -816,7 +816,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
           squadStatus: squadStatusOnArrival({
             fromClub: club,
             toClub: parentClub,
-            move: 'permanent',
+            move: 'recall',
             nextIfStay,
           }),
         }),

@@ -36,6 +36,10 @@ export default function CareerApp() {
   const nationality = useCareerStore((s) => s.nationality);
   const openingCampaign = useCareerStore((s) => s.openingCampaign);
   const seasonSim = useCareerStore((s) => s.seasonSim);
+  const lastMatchResult = useCareerStore((s) => s.lastMatchResult);
+  const liveMatch = useCareerStore((s) => s.liveMatch);
+  const pendingTransfer = useCareerStore((s) => s.pendingTransfer);
+  const clubId = useCareerStore((s) => s.clubId);
   const returnToMenu = useCareerStore((s) => s.returnToMenu);
 
   if (practicing) {
@@ -71,12 +75,24 @@ export default function CareerApp() {
     case 'nationality-choice':
       return <NationalityScreen />;
     case 'match':
+      if (!liveMatch && !openingCampaign) {
+        return <CareerHub onOpenMenu={returnToMenu} />;
+      }
       return <MatchScreen />;
     case 'match-result':
+      if (lastMatchResult == null) {
+        return <CareerHub onOpenMenu={returnToMenu} />;
+      }
       return <MatchResultScreen />;
     case 'season-summary':
+      if (!clubId) {
+        return <CareerHub onOpenMenu={returnToMenu} />;
+      }
       return <SeasonSummaryScreen />;
     case 'transfer-choice':
+      if (!pendingTransfer) {
+        return <CareerHub onOpenMenu={returnToMenu} />;
+      }
       return <TransferChoiceScreen />;
     case 'hub':
       return openingCampaign && !seasonSim ? (

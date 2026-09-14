@@ -1055,7 +1055,7 @@ export function applyCareerLayoutPreview(): void {
               topGoalscorer: false,
               playerOfTheYear: true,
               clubPlayerOfTheTournament: false,
-              clubPlayerOfTheTournamentReason: 'Win the continental tournament at 0.7 goals per game to take Player of the Tournament.',
+              clubPlayerOfTheTournamentReason: '',
               topGoalscorerReason: '20 league goals in Championship, but another striker took the golden boot.',
               playerOfTheYearReason: 'Won Championship Player of the Year with 20 league goals.',
               wonWpy: false,

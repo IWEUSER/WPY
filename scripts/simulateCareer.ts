@@ -53,7 +53,7 @@ import { leaguePhaseOpponents, pickSuperCupOpponent } from '../src/game/career/c
 import { settleDrawOnPenalties } from '../src/game/career/penalties';
 import { planDomesticSuperCup } from '../src/game/career/domesticSuperCup';
 import { firstLegStakeLine, formatNextLine, nextMatchBriefing } from '../src/game/career/matchBriefing';
-import { canWinLeague, continentalAggregateLine, ensureInternationalGroup, fixtureTitle, hydrateSeason, leagueFixtureIsHome, nextActionableFixture, nextPlayableFixture, pickDomesticCupOpponent, pickTitleRival, remainingPlayableCount, resolveFixture, shouldSkipFixture } from '../src/game/career/seasonSim';
+import { canWinLeague, continentalAggregateLine, ensureInternationalGroup, fixtureTitle, hydrateSeason, internationalStageWhenSelected, leagueFixtureIsHome, nextActionableFixture, nextPlayableFixture, pickDomesticCupOpponent, pickTitleRival, remainingPlayableCount, resolveFixture, shouldSkipFixture } from '../src/game/career/seasonSim';
 import { applyPlayerGroupResult, createGroupState, nationCanProgressKnockout, nationCanWinMajor, simulateNpcRoundAfterPlayerMatch } from '../src/game/career/internationalTable';
 import {
   applyTrialMatch,
@@ -76,7 +76,7 @@ import {
   TRIALS_AT_LEVEL,
 } from '../src/game/career/trial';
 import { nextYouthKnockoutRound, pickYouthGroupOpponents, pickYouthKnockoutOpponent, youthMaxGames } from '../src/game/career/youthTournament';
-import { chancesForSquadStatus, describeSquadStatus, isSquadRotationSitOut, nextSquadStatusAfterSeason, openingSquadStatus, RISING_STAR_MIN_RATIO, ROLE_REVIEW_WEEK, seasonOverridesRatioBar, shouldSitLeagueFixture, squadStatusAfterFormReview, squadStatusOnArrival } from '../src/game/career/squadStatus';
+import { chancesForSquadStatus, describeSquadStatus, isSquadRotationSitOut, isToughMinutesFixture, nextSquadStatusAfterSeason, openingSquadStatus, RISING_STAR_MIN_RATIO, ROLE_REVIEW_WEEK, seasonOverridesRatioBar, shouldSitLeagueFixture, shouldSitToughFixture, squadStatusAfterFormReview, squadStatusOnArrival } from '../src/game/career/squadStatus';
 import { consecutiveLoanSpells, LOAN_OFFER_COUNT, SAUDI_OFFER_MIN_AGE, TRANSFER_MARKET_CAP, TRANSFER_OFFER_COUNT, offerFormRatio, offerTierFromStanding, pickLoanClubsForMiss, pickPermanentClubs, requiredGoalRatio, resolveSeasonTransition, sellingClubAcceptsOffer, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, trialFailTransferPending, tierForRatio } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
 import {
@@ -767,11 +767,16 @@ if (selectionRatioForNation('spain') !== 0.66) {
   console.error('top-ranked countries must require a 0.66 career ratio');
   process.exitCode = 1;
 }
-const spainPick = isSelectedForNationalTeam({ clubTier: 1, careerGoalRatio: 0.66, nationId: 'spain' });
-const spainMiss = isSelectedForNationalTeam({ clubTier: 1, careerGoalRatio: 0.65, nationId: 'spain' });
-const lutonPick = isSelectedForNationalTeam({ clubTier: 5, careerGoalRatio: 1, nationId: 'spain' });
-console.log('Spain 0.66 at Madrid', spainPick, 'Spain 0.65', spainMiss, 'Spain 1.00 at Luton', lutonPick);
-if (!spainPick || spainMiss || lutonPick) {
+const spainRising = isSelectedForNationalTeam({ clubTier: 1, careerGoalRatio: 0.66, nationId: 'spain', squadStatus: 'rising-star' });
+const spainStarter = isSelectedForNationalTeam({ clubTier: 1, careerGoalRatio: 0.66, nationId: 'spain', squadStatus: 'starter' });
+const spainMiss = isSelectedForNationalTeam({ clubTier: 1, careerGoalRatio: 0.65, nationId: 'spain', squadStatus: 'starter' });
+const lutonPick = isSelectedForNationalTeam({ clubTier: 5, careerGoalRatio: 1, nationId: 'spain', squadStatus: 'starter' });
+console.log('Spain starter/rising', spainStarter, spainRising, 'Spain 0.65', spainMiss, 'Spain 1.00 at Luton', lutonPick);
+if (!spainStarter || spainRising) {
+  console.error('international call-ups must be starters only');
+  process.exitCode = 1;
+}
+if (spainMiss || lutonPick) {
   console.error('selection must use 0.66 for Spain and Spain must not pick lower-league players');
   process.exitCode = 1;
 }
@@ -2250,6 +2255,38 @@ if (barca && hilal && lafc) {
     console.error('Rising star copy must mention one chance per game');
     process.exitCode = 1;
   }
+  if (!/week 20/.test(describeSquadStatus('impact')) || !/every other/.test(describeSquadStatus('impact'))) {
+    console.error('Impact copy must explain the week-20 drop and every-other minutes');
+    process.exitCode = 1;
+  }
+  if (isSquadRotationSitOut('reserve', 'reserve', 'league', 0, { seasonMatchCount: 0 }) !== true
+    || isSquadRotationSitOut('reserve', 'reserve', 'league', 0, { seasonMatchCount: 1 }) !== false) {
+    console.error('academy reserve players must sit the first match of a new season');
+    process.exitCode = 1;
+  }
+  if (shouldSitToughFixture('rising-star', 0) !== false || shouldSitToughFixture('rising-star', 1) !== true) {
+    console.error('Rising star must sit two of three tournament or stronger-side games');
+    process.exitCode = 1;
+  }
+  if (shouldSitToughFixture('reserve', 0) !== false || shouldSitToughFixture('reserve', 1) !== true) {
+    console.error('first-team reserve must sit four of five tournament or stronger-side games');
+    process.exitCode = 1;
+  }
+  const foxesClub = getClub('leicester')!;
+  if (!isToughMinutesFixture({ kind: 'league', opponentId: 'man-city', week: 1 } as never, foxesClub)) {
+    console.error('a Championship side must treat Manchester City as a stronger opponent');
+    process.exitCode = 1;
+  }
+  const recallStatus = squadStatusOnArrival({
+    fromClub: getClub('mainz'),
+    toClub: getClub('bayern'),
+    move: 'recall',
+    nextIfStay: 'starter',
+  });
+  if (recallStatus !== 'reserve') {
+    console.error('a return to the parent club must be a reserve role, not a starter');
+    process.exitCode = 1;
+  }
 
   const madridCal = hydrateSeason({
     seasonNumber: 2,
@@ -2846,6 +2883,10 @@ if ((loanBack.pendingTransfer?.stay?.role ?? loanBack.immediate?.role) !== 'firs
   console.error('meeting the parent first-team bar must return to the first team');
   process.exitCode = 1;
 }
+if ((loanBack.pendingTransfer?.stay?.squadStatus ?? loanBack.immediate?.squadStatus) !== 'reserve') {
+  console.error('a successful loan return must be a reserve role at the parent club');
+  process.exitCode = 1;
+}
 if (!loanBack.pendingTransfer || loanBack.pendingTransfer.offers.filter((o) => o.move === 'permanent').length < TRANSFER_OFFER_COUNT) {
   console.error('a successful loan return still offers parallel transfers');
   process.exitCode = 1;
@@ -3024,6 +3065,7 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
       nationId: 'spain',
       publicSeason: 1,
       calendarWeek: 20,
+      squadStatus: 'starter',
     });
     const s1After = isSelectedForNationalTeam({
       clubTier: 1,
@@ -3031,6 +3073,7 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
       nationId: 'spain',
       publicSeason: 1,
       calendarWeek: 21,
+      squadStatus: 'starter',
     });
     const s2Early = isSelectedForNationalTeam({
       clubTier: 1,
@@ -3038,6 +3081,7 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
       nationId: 'spain',
       publicSeason: 2,
       calendarWeek: 4,
+      squadStatus: 'starter',
     });
     console.log('S1 call-up week 20/21', s1Pick, s1After, 'S2 week 4', s2Early, 'min week', SEASON_1_CALL_UP_MIN_WEEK);
     if (s1Pick || !s1After || !s2Early) {
@@ -3053,6 +3097,40 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
     });
     if (s1Hydrate.sim.internationalSelected) {
       console.error('Season 1 must start without a national-team call-up');
+      process.exitCode = 1;
+    }
+  }
+
+  {
+    const s4 = hydrateSeason({
+      seasonNumber: 4,
+      club: getClub('real-madrid')!,
+      careerGoalRatio: 0.8,
+      nationId: 'spain',
+      careerStart: 'favourite-first-team',
+      squadStatus: 'starter',
+    });
+    const leftover = { ...s4.sim, internationalStage: 'qualifying' as const };
+    const once = ensureInternationalGroup(leftover, s4.calendar, 4);
+    const twice = ensureInternationalGroup(once, s4.calendar, 4);
+    if (once !== twice) {
+      console.error('ensureInternationalGroup must not allocate a new sim every hub render');
+      process.exitCode = 1;
+    }
+    if (internationalStageWhenSelected({ internationalStage: 'not-selected', internationalPhase: 'tournament-only' }) !== 'group') {
+      console.error('a mid-season call-up in a finals year must not reset to qualifying');
+      process.exitCode = 1;
+    }
+    const s4Rising = hydrateSeason({
+      seasonNumber: 4,
+      club: getClub('real-madrid')!,
+      careerGoalRatio: 0.8,
+      nationId: 'spain',
+      careerStart: 'favourite-first-team',
+      squadStatus: 'rising-star',
+    });
+    if (s4Rising.sim.internationalSelected) {
+      console.error('Season 4 Rising stars must not receive a national-team call-up');
       process.exitCode = 1;
     }
   }
@@ -5591,9 +5669,22 @@ console.log('\n--- Kits, cup nights, FA Cup semis, sun, World Cup copy, African 
   const swedenN = getNation('sweden')!;
   const polandN = getNation('poland')!;
   const brazilN = getNation('brazil')!;
+  const malaysiaN = getNation('malaysia')!;
   if (appearanceRegionForNation(swedenN) !== 'nordic' || appearanceRegionForNation(polandN) !== 'eastern-europe' || appearanceRegionForNation(brazilN) !== 'latino') {
     console.error('Sweden/Poland/Brazil must map to nordic, eastern-europe, latino looks');
     process.exitCode = 1;
+  }
+  if (appearanceRegionForNation(malaysiaN) !== 'southeast-asia') {
+    console.error('Malaysia must use southeast-Asian skin tones, not the generic fair mix');
+    process.exitCode = 1;
+  }
+  for (let i = 0; i < 40; i++) {
+    const my = pickPlayerLook(i * 23 + 8, 'southeast-asia');
+    if (isFairSkin(my.skin)) {
+      console.error('southeast-Asian sides must not spawn fair northern-European skin');
+      process.exitCode = 1;
+      break;
+    }
   }
   let swedenBlonde = 0;
   let polandFair = 0;
@@ -5947,6 +6038,24 @@ console.log('\n--- Club cups, paced tables, transfers, injuries, and elite score
     console.error('club Player of the Tournament requires winning the cup and a 0.7 goal ratio');
     process.exitCode = 1;
   }
+  if (noTitle.reason) {
+    console.error('club Player of the Tournament must not tell the player to win the tournament to be eligible');
+    process.exitCode = 1;
+  }
+
+  const wpyMiss = evaluateWpy({
+    seasonGoalRatio: 0.3,
+    eliteRatioBar: 0.5,
+    wonChampionsLeague: false,
+    isInternationalTournamentYear: false,
+    wonInternationalTournament: false,
+    recentFormGoals: 10,
+    recentFormGames: 20,
+  });
+  if (wpyMiss.won || wpyMiss.reason) {
+    console.error('a WPY miss must only say the player did not win, with no ratio/trophy copy');
+    process.exitCode = 1;
+  }
 
   const saudiOnly = pickPermanentClubs(1, 260_000_000, ['man-city'], 'spain', false, 'Premier League', TRANSFER_MARKET_CAP + 1, 24);
   const saudiTooYoung = pickPermanentClubs(1, 260_000_000, ['man-city'], 'spain', false, 'Premier League', TRANSFER_MARKET_CAP + 1, 19);
@@ -5965,8 +6074,19 @@ console.log('\n--- Club cups, paced tables, transfers, injuries, and elite score
     pickDomesticCupOpponent(city, 'semi-final', used),
     pickDomesticCupOpponent(city, 'final', used),
   ];
-  if (lateFa.some((club) => !club || club.league !== 'Premier League')) {
-    console.error('FA Cup quarter-finals onward must be Premier League clubs');
+  if (lateFa.some((club) => !club)) {
+    console.error('FA Cup quarter-finals onward must still draw an opponent');
+    process.exitCode = 1;
+  }
+  const foxes = getClub('leicester')!;
+  const champUsed = new Set<string>();
+  const lateChamp = [
+    pickDomesticCupOpponent(foxes, 'quarter-final', champUsed),
+    pickDomesticCupOpponent(foxes, 'semi-final', champUsed),
+    pickDomesticCupOpponent(foxes, 'final', champUsed),
+  ];
+  if (lateChamp.some((club) => !club || club.league !== 'Premier League')) {
+    console.error('Championship FA Cup quarter-finals onward must be Premier League clubs');
     process.exitCode = 1;
   }
 

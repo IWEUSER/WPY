@@ -4,7 +4,7 @@ import { clubsInCountry, type ClubTier } from './data/clubs';
 import { fifaRank } from './data/fifaRankings';
 import { NATIONS, getNation, type Nation } from './data/nations';
 import { VALUE_FORM_MIN_GAMES } from './playerValue';
-import type { AvailabilityState, InternationalSeasonRecord, SeasonRecord } from './types';
+import type { AvailabilityState, InternationalSeasonRecord, SeasonRecord, SquadStatus } from './types';
 
 export type { Nation };
 export { NATIONS, getNation };
@@ -125,9 +125,9 @@ export const SEASON_1_CALL_UP_MIN_WEEK = 20;
 
 /**
  * Call-up uses the ratio passed in (career until this season has a real
- * sample, then this season). Top nations still need a proper club;
- * weaker nations will pick a lower-league striker. Season 1 waits until
- * after week 20.
+ * sample, then this season). Only first-team starters are called.
+ * Top nations still need a proper club; weaker nations will pick a
+ * lower-league striker. Season 1 waits until after week 20.
  */
 export function isSelectedForNationalTeam(params: {
   clubTier: ClubTier;
@@ -135,8 +135,10 @@ export function isSelectedForNationalTeam(params: {
   nationId: string | null;
   publicSeason?: number | null;
   calendarWeek?: number;
+  squadStatus?: SquadStatus | null;
 }): boolean {
   if (!params.nationId) return false;
+  if ((params.squadStatus ?? 'starter') !== 'starter') return false;
   if (params.publicSeason === 1 && (params.calendarWeek ?? 0) <= SEASON_1_CALL_UP_MIN_WEEK) {
     return false;
   }

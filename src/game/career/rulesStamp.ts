@@ -3,7 +3,7 @@ import { getClub } from './data/clubs';
 import { clubContinentalCup, internationalCalendarSeason } from './data/competitions';
 import { callUpRatio, isSelectedForNationalTeam, qualifierExcludeIds } from './international';
 import { buildSeasonStandings } from './matchEngine';
-import { ensureInternationalGroup, hydrateSeason, type SeasonSimState } from './seasonSim';
+import { ensureInternationalGroup, hydrateSeason, internationalStageWhenSelected, type SeasonSimState } from './seasonSim';
 import type { CareerState } from './types';
 
 /** Bump when calendar generation, playable leagues, or cup rules change. */
@@ -84,6 +84,7 @@ export function rebuildCurrentSeason(state: CareerState): Partial<CareerState> {
     excludeQualifierIds: qualifierExcludeIds(state.nationalTeam, state.intlQualifying?.opponentIds),
     leagueOnly,
     careerStart: state.careerStart,
+    squadStatus: state.squadStatus,
   });
 
   const old = state.seasonSim;
@@ -104,9 +105,13 @@ export function rebuildCurrentSeason(state: CareerState): Partial<CareerState> {
     nationId: state.nationality,
     publicSeason: publicSeason >= 1 ? publicSeason : null,
     calendarWeek: week,
+    squadStatus: state.squadStatus,
   });
   const nextIntlStage = selected
-    ? (old.internationalStage === 'not-selected' ? 'qualifying' : old.internationalStage)
+    ? internationalStageWhenSelected({
+        internationalStage: old.internationalStage,
+        internationalPhase: old.internationalPhase ?? sim.internationalPhase,
+      })
     : old.internationalStage === 'qualifying'
       ? 'not-selected'
       : old.internationalStage;
