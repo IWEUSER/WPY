@@ -86,11 +86,23 @@ export function confederationOfNation(nationId: string | null | undefined): Conf
   return getNation(nationId)?.confederation ?? null;
 }
 
-/** Call-ups are only for first-team players at a proper senior club, not the lower pyramid. */
+/** @deprecated Top-20 nations still use this as their club-level ceiling. */
 export const MAX_CLUB_TIER_FOR_SELECTION: ClubTier = 3;
 
 /** Top-20 FIFA nations demand a 0.66 career ratio. */
 export const TOP_NATION_SELECTION_RATIO = 0.66;
+
+/**
+ * Only the best countries insist on a certain club level. Albania and
+ * other mid/low FIFA sides will call a player from any playable club.
+ */
+export function maxClubTierForNation(nationId: string | null | undefined): ClubTier {
+  if (!nationId) return MAX_CLUB_TIER_FOR_SELECTION;
+  const rank = fifaRank(nationId);
+  if (rank <= 20) return 3;
+  if (rank <= 50) return 4;
+  return 5;
+}
 
 export function selectionRatioForNation(nationId: string): number {
   const rank = fifaRank(nationId);
@@ -104,13 +116,14 @@ export function selectionRatioForTier(_clubTier: ClubTier): number {
   return TOP_NATION_SELECTION_RATIO;
 }
 
-export function clubEligibleForNationalTeam(clubTier: ClubTier): boolean {
-  return clubTier <= MAX_CLUB_TIER_FOR_SELECTION;
+export function clubEligibleForNationalTeam(clubTier: ClubTier, nationId?: string | null): boolean {
+  return clubTier <= maxClubTierForNation(nationId);
 }
 
 /**
  * Call-up uses the ratio passed in (career until this season has a real
- * sample, then this season). Lower-league clubs are never selected.
+ * sample, then this season). Top nations still need a proper club;
+ * weaker nations will pick a lower-league striker.
  */
 export function isSelectedForNationalTeam(params: {
   clubTier: ClubTier;
@@ -118,7 +131,7 @@ export function isSelectedForNationalTeam(params: {
   nationId: string | null;
 }): boolean {
   if (!params.nationId) return false;
-  if (!clubEligibleForNationalTeam(params.clubTier)) return false;
+  if (!clubEligibleForNationalTeam(params.clubTier, params.nationId)) return false;
   return params.careerGoalRatio >= selectionRatioForNation(params.nationId);
 }
 

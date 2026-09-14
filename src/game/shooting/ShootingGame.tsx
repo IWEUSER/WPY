@@ -227,8 +227,9 @@ function nextChance(
   skinPalette: SkinPalette = 'any',
   allowPenalties = true,
   opponentStrength?: number,
+  forcePenaltyChance = false,
 ): ChanceSetup {
-  const forcePenalty = allowPenalties && readDevPenalty();
+  const forcePenalty = (allowPenalties && readDevPenalty()) || forcePenaltyChance;
   const forceDistance = readDevDistance();
   return rollChanceSetup({
     clubStrength,
@@ -314,6 +315,8 @@ export interface ShootingGameProps {
   opponentSkinPalette?: SkinPalette;
   /** When false, every chance is open play (club trials). */
   allowPenalties?: boolean;
+  /** Force this session to a penalty kick (cup shootouts). */
+  forcePenalty?: boolean;
 }
 
 export default function ShootingGame({
@@ -330,6 +333,7 @@ export default function ShootingGame({
   stadium,
   opponentSkinPalette = 'any',
   allowPenalties = true,
+  forcePenalty = false,
 }: ShootingGameProps = {}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -340,7 +344,9 @@ export default function ShootingGame({
   const [stats, setStats] = useState<ShotStats>({ shots: 0, goals: 0, streak: 0, bestStreak: 0 });
   const [muted, setMuted] = useState(false);
 
-  const [initialChance] = useState(() => nextChance(clubStrength, opponentSkinPalette, allowPenalties, opponentStrength));
+  const [initialChance] = useState(() =>
+    nextChance(clubStrength, opponentSkinPalette, allowPenalties, opponentStrength, forcePenalty),
+  );
   const [ballHintX, setBallHintX] = useState(initialChance.ballStartXRatio);
   const [chanceKind, setChanceKind] = useState<ChanceKind>(initialChance.kind);
   const [defenderCount, setDefenderCount] = useState(chanceDefenders(initialChance).length);
@@ -360,6 +366,8 @@ export default function ShootingGame({
   skinPaletteRef.current = opponentSkinPalette;
   const allowPenaltiesRef = useRef(allowPenalties);
   allowPenaltiesRef.current = allowPenalties;
+  const forcePenaltyRef = useRef(forcePenalty);
+  forcePenaltyRef.current = forcePenalty;
   const stadiumRef = useRef<StadiumAppearance>(stadium ?? readDevStadium() ?? DEFAULT_STADIUM);
   stadiumRef.current = stadium ?? readDevStadium() ?? DEFAULT_STADIUM;
 
@@ -428,6 +436,7 @@ export default function ShootingGame({
       skinPaletteRef.current,
       allowPenaltiesRef.current,
       opponentStrengthRef.current,
+      forcePenaltyRef.current,
     );
     const view = createPitchView(w, h, chance.distanceM);
     const start = ballStartPixel(view, chance.ballStartXRatio);

@@ -341,6 +341,7 @@ function recapFromResolution(opts: {
       chances: opts.chances ?? null,
       aggregateLine: opts.aggregateLine,
       nextLine,
+      sitOutReason: opts.extra ?? null,
     },
   };
 }
@@ -1059,6 +1060,132 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
   };
 }
 
+function finishResolvedLiveMatch(
+  state: CareerState,
+  resolution: ReturnType<typeof resolveFixture>,
+  live: LiveMatch,
+): Partial<CareerState> {
+  const sim = state.seasonSim;
+  const calendar = state.seasonCalendar;
+  const season = state.currentSeason;
+  if (!sim || !calendar || !season || !state.clubId) return state;
+  const club = getClub(state.clubId);
+  const fixture = calendar.fixtures[live.fixtureIndex];
+  if (!club || !fixture) return state;
+
+  const nextSim = { ...resolution.sim, fixtureIndex: live.fixtureIndex + 1 };
+  const nextCalendar = syncInternationalCalendar(calendar, nextSim);
+  const scored = live.goals > 0;
+  const openPlayScored = (live.openPlayGoals ?? 0) > 0;
+  const record: MatchRecord = { matchNumber: season.matches.length + 1, played: true, scored };
+  const paid = withWeeklyPay(season, state.careerEarnings, state.weeklyWage);
+  const updatedSeason: SeasonRecord = recordClubAppearanceStats(
+    {
+      ...paid.season,
+      matches: [...paid.season.matches, record],
+      goals: paid.season.goals + live.goals,
+      gamesPlayed: paid.season.gamesPlayed + 1,
+      leagueGoals: paid.season.leagueGoals + (fixture.kind === 'league' ? live.goals : 0),
+    },
+    fixture,
+    live.goals,
+    true,
+  );
+
+  const isInternational = fixture.kind === 'international';
+  let availability = state.availability;
+  let nationalTeam = state.nationalTeam;
+  if (isInternational && nationalTeam) {
+    nationalTeam = {
+      ...recordInternationalAppearance(
+        nationalTeam,
+        sim.internationalTournament,
+        fixture.internationalRound === 'qualifier',
+        live.goals,
+        isInternationalFinalsRound(fixture.internationalRound),
+      ),
+      availability: applyMatchResult(nationalTeam.availability, openPlayScored),
+    };
+  } else {
+    availability = applyMatchResult(availability, openPlayScored);
+  }
+
+  const withIntlSeason: SeasonRecord = isInternational
+    ? {
+        ...updatedSeason,
+        international: bumpInternationalSeason(
+          updatedSeason.international,
+          sim.internationalTournament,
+          fixture.internationalRound === 'qualifier',
+          live.goals,
+          isInternationalFinalsRound(fixture.internationalRound),
+        ),
+      }
+    : updatedSeason;
+
+  const counts = countsTowardCareerRecord(state.seasonNumber, state.role);
+  const nextCareerGoals = counts ? state.careerGoals + live.goals : state.careerGoals;
+  const nextCareerGames = counts ? state.careerGames + 1 : state.careerGames;
+  const selectedSim = withInternationalForm(
+    nextSim,
+    withIntlSeason,
+    state.clubId,
+    state.nationality,
+    nextCareerGoals,
+    nextCareerGames,
+  );
+  const complete = nextSim.fixtureIndex >= nextCalendar.fixtures.length;
+  const withHonours = complete
+    ? { ...selectedSim, honours: { ...selectedSim.honours, leagueChampion: canWinLeague(selectedSim, state.clubId) } }
+    : selectedSim;
+  const remainingAfter = remainingPlayableCount(nextCalendar, withHonours);
+  const injuryGamesRemaining = complete
+    ? 0
+    : (state.injuryGamesRemaining ?? 0) > 0
+      ? state.injuryGamesRemaining
+      : sitOutGamesAfterPlayedMatch(rollInjuryAbsence(remainingAfter));
+  const merged = {
+    ...state,
+    seasonSim: withHonours,
+    currentSeason: withIntlSeason,
+    formWindow: counts ? pushForm(state.formWindow, live.goals) : state.formWindow,
+  };
+  const awarded = complete ? attachSeasonAwards(merged) : { season: withIntlSeason, wpyResult: state.wpyResult };
+  const afterPhase = complete ? 'season-summary' : 'hub';
+  const recap = recapFromResolution({
+    headline: resolution.summary,
+    result: resolution.result,
+    aggregateLine: resolution.aggregateLine,
+    calendar: nextCalendar,
+    sim: withHonours,
+    playerGoals: live.goals,
+    chances: live.chancesTotal + (live.penaltyKick ? 1 : 0),
+    nationName: state.nationality ? getNation(state.nationality)?.name : undefined,
+    isFinal: isFinalFixture(fixture),
+    trophyName: trophyNameForFixture(fixture, sim.internationalTournament),
+    afterPhase,
+  });
+
+  return {
+    seasonSim: withHonours,
+    seasonCalendar: nextCalendar,
+    currentSeason: awarded.season,
+    availability,
+    nationalTeam,
+    liveMatch: null,
+    seasonStandings: buildSeasonStandings(withHonours.leagueTable, withHonours.europeanStanding),
+    lastMatchSummary: recap.lastMatchSummary,
+    lastMatchResult: recap.lastMatchResult,
+    formWindow: merged.formWindow,
+    careerGoals: counts ? state.careerGoals + live.goals : state.careerGoals,
+    careerGames: counts ? state.careerGames + 1 : state.careerGames,
+    careerEarnings: paid.careerEarnings,
+    injuryGamesRemaining,
+    phase: recap.lastMatchResult.isFinal ? 'match-result' : afterPhase,
+    wpyResult: awarded.wpyResult,
+  };
+}
+
 export const useCareerStore = create<CareerStore>()(
   persist(
     (set) => ({
@@ -1275,118 +1402,33 @@ export const useCareerStore = create<CareerStore>()(
           const fixture = calendar.fixtures[live.fixtureIndex];
           if (!club || !fixture) return state;
 
-          const resolution = resolveFixture(sim, fixture, club, live.goals);
-          const nextSim = { ...resolution.sim, fixtureIndex: live.fixtureIndex + 1 };
-          const nextCalendar = syncInternationalCalendar(calendar, nextSim);
-          const scored = live.goals > 0;
-          const openPlayScored = (live.openPlayGoals ?? 0) > 0;
-          const record: MatchRecord = { matchNumber: season.matches.length + 1, played: true, scored };
-          const paid = withWeeklyPay(season, state.careerEarnings, state.weeklyWage);
-          const updatedSeason: SeasonRecord = recordClubAppearanceStats(
-            {
-              ...paid.season,
-              matches: [...paid.season.matches, record],
-              goals: paid.season.goals + live.goals,
-              gamesPlayed: paid.season.gamesPlayed + 1,
-              leagueGoals: paid.season.leagueGoals + (fixture.kind === 'league' ? live.goals : 0),
-            },
-            fixture,
-            live.goals,
-            true,
-          );
-
-          const isInternational = fixture.kind === 'international';
-          let availability = state.availability;
-          let nationalTeam = state.nationalTeam;
-          if (isInternational && nationalTeam) {
-            nationalTeam = {
-              ...recordInternationalAppearance(
-                nationalTeam,
-                sim.internationalTournament,
-                fixture.internationalRound === 'qualifier',
-                live.goals,
-                isInternationalFinalsRound(fixture.internationalRound),
-              ),
-              availability: applyMatchResult(nationalTeam.availability, openPlayScored),
-            };
-          } else {
-            availability = applyMatchResult(availability, openPlayScored);
+          if (!live.penaltyKick) {
+            const peek = resolveFixture(sim, fixture, club, live.goals, Math.random, {
+              settlePenalties: false,
+            });
+            if (peek.needsPenalty) {
+              return {
+                liveMatch: {
+                  ...live,
+                  penaltyKick: true,
+                  goalsAtNinety: live.goals,
+                  ninetyScoreFor: peek.result.scoreFor,
+                  ninetyScoreAgainst: peek.result.scoreAgainst,
+                },
+                phase: 'match',
+              };
+            }
+            return finishResolvedLiveMatch(state, peek, live);
           }
 
-          const withIntlSeason: SeasonRecord = isInternational
-            ? {
-                ...updatedSeason,
-                international: bumpInternationalSeason(
-                  updatedSeason.international,
-                  sim.internationalTournament,
-                  fixture.internationalRound === 'qualifier',
-                  live.goals,
-                  isInternationalFinalsRound(fixture.internationalRound),
-                ),
-              }
-            : updatedSeason;
-
-          const counts = countsTowardCareerRecord(state.seasonNumber, state.role);
-          const nextCareerGoals = counts ? state.careerGoals + live.goals : state.careerGoals;
-          const nextCareerGames = counts ? state.careerGames + 1 : state.careerGames;
-          const selectedSim = withInternationalForm(
-            nextSim,
-            withIntlSeason,
-            state.clubId,
-            state.nationality,
-            nextCareerGoals,
-            nextCareerGames,
-          );
-          const complete = nextSim.fixtureIndex >= nextCalendar.fixtures.length;
-          const withHonours = complete
-            ? { ...selectedSim, honours: { ...selectedSim.honours, leagueChampion: canWinLeague(selectedSim, state.clubId) } }
-            : selectedSim;
-          const remainingAfter = remainingPlayableCount(nextCalendar, withHonours);
-          const injuryGamesRemaining = complete
-            ? 0
-            : (state.injuryGamesRemaining ?? 0) > 0
-              ? state.injuryGamesRemaining
-              : sitOutGamesAfterPlayedMatch(rollInjuryAbsence(remainingAfter));
-          const merged = {
-            ...state,
-            seasonSim: withHonours,
-            currentSeason: withIntlSeason,
-            formWindow: counts ? pushForm(state.formWindow, live.goals) : state.formWindow,
-          };
-          const awarded = complete ? attachSeasonAwards(merged) : { season: withIntlSeason, wpyResult: state.wpyResult };
-          const afterPhase = complete ? 'season-summary' : 'hub';
-          const recap = recapFromResolution({
-            headline: resolution.summary,
-            result: resolution.result,
-            aggregateLine: resolution.aggregateLine,
-            calendar: nextCalendar,
-            sim: withHonours,
-            playerGoals: live.goals,
-            chances: live.chancesTotal,
-            nationName: state.nationality ? getNation(state.nationality)?.name : undefined,
-            isFinal: isFinalFixture(fixture),
-            trophyName: trophyNameForFixture(fixture, sim.internationalTournament),
-            afterPhase,
+          const resolution = resolveFixture(sim, fixture, club, live.goals, Math.random, {
+            ninetyScore: {
+              for: live.ninetyScoreFor ?? live.goals,
+              against: live.ninetyScoreAgainst ?? live.goals,
+            },
+            penaltyScored: live.goals > (live.goalsAtNinety ?? 0),
           });
-
-          return {
-            seasonSim: withHonours,
-            seasonCalendar: nextCalendar,
-            currentSeason: awarded.season,
-            availability,
-            nationalTeam,
-            liveMatch: null,
-            seasonStandings: buildSeasonStandings(withHonours.leagueTable, withHonours.europeanStanding),
-            lastMatchSummary: recap.lastMatchSummary,
-            lastMatchResult: recap.lastMatchResult,
-            formWindow: merged.formWindow,
-            careerGoals: counts ? state.careerGoals + live.goals : state.careerGoals,
-            careerGames: counts ? state.careerGames + 1 : state.careerGames,
-            careerEarnings: paid.careerEarnings,
-            injuryGamesRemaining,
-            phase: recap.lastMatchResult.isFinal ? 'match-result' : afterPhase,
-            wpyResult: awarded.wpyResult,
-          };
+          return finishResolvedLiveMatch(state, resolution, live);
         }),
 
       acknowledgeMatchResult: () =>

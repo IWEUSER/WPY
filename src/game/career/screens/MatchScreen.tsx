@@ -55,8 +55,17 @@ export default function MatchScreen() {
         ? INTERNATIONAL_TOURNAMENTS[seasonSim.internationalTournament].name
         : null;
 
-  const chances = liveMatch?.chancesTotal ?? 1;
-  const subtitle = simulated
+  const penaltyKick = Boolean(liveMatch?.penaltyKick);
+  const ninetyLine =
+    liveMatch?.ninetyScoreFor != null && liveMatch?.ninetyScoreAgainst != null
+      ? `${liveMatch.ninetyScoreFor}\u2013${liveMatch.ninetyScoreAgainst}`
+      : null;
+  const chances = penaltyKick ? 1 : (liveMatch?.chancesTotal ?? 1);
+  const subtitle = penaltyKick
+    ? ninetyLine
+      ? `The tie is level ${ninetyLine} — take your penalty`
+      : 'The tie is level — take your penalty'
+    : simulated
     ? chances === 1
       ? 'One chance this game — make it count'
       : `${chances} chances this game`
@@ -73,7 +82,7 @@ export default function MatchScreen() {
         ? 'First of two legs'
         : null;
   const progressLabel = simulated && calendar && liveMatch
-    ? `${weekLabel}${competitionName ? ` · ${competitionName}` : ''}${venueLabel ? ` · ${venueLabel}` : ''}${tieStake ? ` · ${tieStake}` : ''} · ${chances} chance${chances === 1 ? '' : 's'}`
+    ? `${weekLabel}${competitionName ? ` · ${competitionName}` : ''}${venueLabel ? ` · ${venueLabel}` : ''}${tieStake ? ` · ${tieStake}` : ''}${penaltyKick ? ' · Penalty shootout' : ` · ${chances} chance${chances === 1 ? '' : 's'}`}`
     : weekLabel;
 
   const stadium = resolveCareerStadium({
@@ -97,7 +106,7 @@ export default function MatchScreen() {
 
   return (
     <ShootingGame
-      key={simulated ? `sim-${liveMatch?.fixtureIndex}-${chances}` : `match-${matchNumber}`}
+      key={simulated ? `sim-${liveMatch?.fixtureIndex}-${penaltyKick ? 'pen' : chances}` : `match-${matchNumber}`}
       title={title}
       subtitle={subtitle}
       progressLabel={progressLabel}
@@ -106,6 +115,7 @@ export default function MatchScreen() {
       clubStrength={club?.strength}
       opponentStrength={opponentStrength}
       allowPenalties={opening?.kind !== 'club-trial'}
+      forcePenalty={penaltyKick}
       stadium={stadium}
       opponentSkinPalette={appearanceRegionForNation(opponentNation)}
       onShotResolved={(result) => {

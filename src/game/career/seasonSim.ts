@@ -71,6 +71,7 @@ import {
   simulateClubMatch,
   simulateRestOfLeagueRound,
   applyPlayerGoalsFloor,
+  expectedScore,
   type ClubMatchResult,
   type EuropeanStanding,
   type LeagueStanding,
@@ -154,6 +155,11 @@ export interface LiveMatch {
   goals: number;
   /** Open-play goals only — penalties do not reset the drop window. */
   openPlayGoals?: number;
+  /** Extra kick after a knockout finished level. */
+  penaltyKick?: boolean;
+  goalsAtNinety?: number;
+  ninetyScoreFor?: number;
+  ninetyScoreAgainst?: number;
 }
 
 export interface HydrateSeasonParams {
@@ -223,7 +229,7 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
   });
   const campaign = internationalCampaignForSeason(intlSeason, nation?.confederation ?? clubConfederation);
   const tournament = campaign.tournament ?? null;
-  const clubOk = clubEligibleForNationalTeam(club.tier);
+  const clubOk = clubEligibleForNationalTeam(club.tier, nationId);
   const campaignActive = Boolean(
     !leagueOnly &&
       intlSeason >= 1 &&
@@ -800,6 +806,19 @@ export function nextPlayableFixture(
   return undefined;
 }
 
+/** Next calendar fixture Continue will actually resolve (includes 0-chance sit-outs). */
+export function nextActionableFixture(
+  calendar: SeasonCalendar,
+  sim: SeasonSimState,
+): CalendarFixture | undefined {
+  for (let i = sim.fixtureIndex; i < calendar.fixtures.length; i++) {
+    const fixture = calendar.fixtures[i];
+    if (shouldSkipFixture(fixture, sim)) continue;
+    return fixture;
+  }
+  return undefined;
+}
+
 export function remainingPlayableCount(calendar: SeasonCalendar, sim: SeasonSimState): number {
   let n = 0;
   for (let i = sim.fixtureIndex; i < calendar.fixtures.length; i++) {
@@ -1321,11 +1340,11 @@ export function trophyNameForFixture(
   return null;
 }
 
-function isTwoLeggedDecider(fixture: CalendarFixture): boolean {
+export function isTwoLeggedDecider(fixture: CalendarFixture): boolean {
   return (fixture.kind === 'continental-knockout' || fixture.kind === 'continental-semi-final') && fixture.leg === 2;
 }
 
-function isOneOffKnockout(fixture: CalendarFixture): boolean {
+export function isOneOffKnockout(fixture: CalendarFixture): boolean {
   if (fixture.kind === 'domestic-cup') return true;
   if (fixture.kind === 'playoff') return true;
   if (fixture.kind === 'continental-final') return true;
@@ -1415,17 +1434,39 @@ export function resolveFixture(
   playerClub: Club,
   playerGoals: number,
   rng: () => number = Math.random,
-): { sim: SeasonSimState; result: ClubMatchResult; summary: string; aggregateLine: string | null } {
+  opts?: {
+    settlePenalties?: boolean;
+    penaltyScored?: boolean;
+    ninetyScore?: { for: number; against: number };
+  },
+): {
+  sim: SeasonSimState;
+  result: ClubMatchResult;
+  summary: string;
+  aggregateLine: string | null;
+  needsPenalty?: boolean;
+} {
   const isHome = fixtureIsHome(fixture);
   const scored = playerGoals > 0;
   const isInternational = fixture.kind === 'international';
   const clubOpp = !isInternational && fixture.opponentId ? getClub(fixture.opponentId) : undefined;
+  const us = isInternational
+    ? (sim.nationId ? nationStrength(sim.nationId) : 70)
+    : playerClub.strength;
+  const them = isInternational
+    ? (fixture.opponentId ? nationStrength(fixture.opponentId) : 70)
+    : (clubOpp?.strength ?? 70);
+  const teamWinP = expectedScore(us + (isHome ? 3.5 : 0), them) * 0.92;
 
   let result: ClubMatchResult;
   const chances = fixture.playerChances;
-  if (isInternational) {
-    const us = sim.nationId ? nationStrength(sim.nationId) : 70;
-    const them = fixture.opponentId ? nationStrength(fixture.opponentId) : 70;
+  if (opts?.ninetyScore) {
+    result = {
+      scoreFor: opts.ninetyScore.for,
+      scoreAgainst: opts.ninetyScore.against,
+      outcome: 'draw',
+    };
+  } else if (isInternational) {
     result = simulateClubMatch({ clubStrength: us, opponentStrength: them, isHome }, rng, playerGoals, chances);
   } else {
     result = simulateClubMatch(
@@ -1447,15 +1488,36 @@ export function resolveFixture(
     result = { scoreFor: result.scoreAgainst, scoreAgainst: result.scoreAgainst, outcome: 'draw' };
   }
 
-  result = applyPlayerGoalsFloor(result, playerGoals);
-  if (isOneOffKnockout(fixture)) {
-    result = settleDrawOnPenalties(result, scored, rng);
+  if (!opts?.ninetyScore) {
+    result = applyPlayerGoalsFloor(result, playerGoals);
+  }
+  const settlePens = opts?.settlePenalties !== false;
+  const penaltyScored = opts?.penaltyScored ?? scored;
+  const goToPens = (draw: ClubMatchResult) => {
+    if (!settlePens) return { result: draw, needsPenalty: true as const };
+    return { result: settleDrawOnPenalties(draw, penaltyScored, rng, teamWinP), needsPenalty: false as const };
+  };
+  let needsPenalty = false;
+  if (isOneOffKnockout(fixture) && result.outcome === 'draw') {
+    const settled = goToPens(result);
+    result = settled.result;
+    needsPenalty = settled.needsPenalty;
   } else if (isTwoLeggedDecider(fixture)) {
     const aggFor = sim.knockoutAggFor + result.scoreFor;
     const aggAgainst = sim.knockoutAggAgainst + result.scoreAgainst;
     if (aggFor === aggAgainst) {
-      result = settleDrawOnPenalties({ ...result, outcome: 'draw' }, scored, rng);
+      const settled = goToPens({ ...result, outcome: 'draw' });
+      result = settled.result;
+      needsPenalty = settled.needsPenalty;
     }
+  }
+  if (needsPenalty) {
+    const playerNationName = sim.nationId ? getNation(sim.nationId)?.name : undefined;
+    const score = `${result.scoreFor}\u2013${result.scoreAgainst}`;
+    const summary = isInternational && playerNationName && fixture.opponentLabel
+      ? `${playerNationName} drew ${score} vs ${fixture.opponentLabel}`
+      : `Drew ${score}${fixture.opponentLabel ? ` vs ${fixture.opponentLabel}` : ''}`;
+    return { sim, result, summary, aggregateLine: continentalAggregateLine(fixture, sim, result), needsPenalty: true };
   }
 
   let next = { ...sim };
