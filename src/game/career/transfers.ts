@@ -678,7 +678,7 @@ function parallelTransfers(
           ? 'Out of contract: more clubs can bid because there is no fee. Loan wages still follow your value.'
           : 'Loan wages follow your value. Permanent fees follow the contract, not your market value.'
         : fee <= 0
-          ? 'Out of contract: more clubs can bid because there is no fee. You can stay where you are.'
+          ? 'Out of contract: more clubs can bid because there is no fee.'
           : 'These clubs can pay the transfer fee. You can stay where you are.',
       offers,
       true,
