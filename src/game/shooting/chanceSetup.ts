@@ -28,6 +28,17 @@ export const DEFENDER_CLOSE_STOP_GAP_NEAR_M = 1.4;
 /** How far off the ball→goal-centre line a close-range cover must stand. */
 const CLOSE_COVER_MIN_OFFSET_M = 1.65;
 const CLOSE_COVER_MAX_OFFSET_M = 2.85;
+/**
+ * Paired press / cover hold these offsets while closing so a lane stays open
+ * between them and around them toward the posts — not a wall on the six-yard
+ * shooting line.
+ */
+export const DUAL_PRESS_HOLD_OFFSET_M = 1.72;
+export const DUAL_COVER_HOLD_OFFSET_M = 2.42;
+/** Cover stays this many metres closer to goal than the press. */
+export const DUAL_COVER_STAGGER_M = 2.4;
+
+export type DefenderDuty = 'press' | 'cover';
 
 export interface DefenderPose {
   worldX: number;
@@ -35,6 +46,8 @@ export interface DefenderPose {
   z: number;
   /** Which post they shade: −1 left, +1 right from the shooter's view. */
   coverSide: -1 | 1;
+  /** Press closes nearer the ball; cover holds a deeper, wider lane. */
+  duty?: DefenderDuty;
   /** Walk-cycle phase, radians. */
   stride?: number;
   /** Stable skin tone for this chance. */
@@ -120,44 +133,73 @@ export function placeDefender(
   ballStartXRatio: number,
   rng: () => number = Math.random,
   palette: SkinPalette = 'any',
+  opts?: { wideLane?: boolean },
 ): DefenderPose {
   const ballWorldX = ballWorldXFromRatio(ballStartXRatio);
   const coverSide: -1 | 1 = rng() < 0.5 ? -1 : 1;
   const maxZ = shotDistanceM - DEFENDER_GAP_M;
 
   if (maxZ >= MIN_DEFENDER_Z_M) {
-    const t = 0.12 + rng() * 0.5;
+    const t = opts?.wideLane ? 0.48 + rng() * 0.38 : 0.12 + rng() * 0.5;
     const z = MIN_DEFENDER_Z_M + t * (maxZ - MIN_DEFENDER_Z_M);
-    const offset = 0.7 + rng() * 0.95;
+    const offset = opts?.wideLane ? 1.2 + rng() * 1.05 : 0.7 + rng() * 0.95;
     const worldX = clamp(lineToGoalCentreX(ballWorldX, shotDistanceM, z) + coverSide * offset, -7.5, 7.5);
     const look = pickPlayerLook(rng() * 1_000_000, palette);
-    return { worldX, z, coverSide, stride: 0, skinTone: look.skin, hairColor: look.hair };
+    return { worldX, z, coverSide, duty: 'press', stride: 0, skinTone: look.skin, hairColor: look.hair };
   }
 
   const z = clamp(Math.min(shotDistanceM * 0.38, 3.2), 1.55, Math.max(1.55, shotDistanceM - 1.15));
   const offset = CLOSE_COVER_MIN_OFFSET_M + rng() * (CLOSE_COVER_MAX_OFFSET_M - CLOSE_COVER_MIN_OFFSET_M);
   const worldX = clamp(lineToGoalCentreX(ballWorldX, shotDistanceM, z) + coverSide * offset, -3.45, 3.45);
   const look = pickPlayerLook(rng() * 1_000_000, palette);
-  return { worldX, z, coverSide, stride: 0, skinTone: look.skin, hairColor: look.hair };
+  return { worldX, z, coverSide, duty: 'press', stride: 0, skinTone: look.skin, hairColor: look.hair };
 }
 
-/** Point they rush — on the shooting line, a few metres in front of the ball. */
+export interface DefenderCloseOpts {
+  duty?: DefenderDuty;
+  /** Two-defender looks hold their lanes instead of collapsing onto the shooting line. */
+  paired?: boolean;
+}
+
+/** Point they rush — a few metres in front of the ball, on their own lane. */
 export function defenderCloseTarget(
   shotDistanceM: number,
   ballStartXRatio: number,
   coverSide: -1 | 1,
+  opts?: DefenderCloseOpts,
 ): { worldX: number; z: number } {
   const ballWorldX = ballWorldXFromRatio(ballStartXRatio);
   const near = !canKeepTenYardGap(shotDistanceM);
-  const stopGap = near ? DEFENDER_CLOSE_STOP_GAP_NEAR_M : DEFENDER_CLOSE_STOP_GAP_M;
-  const z = clamp(shotDistanceM - stopGap, 1.35, shotDistanceM - 0.9);
-  const lineX = lineToGoalCentreX(ballWorldX, shotDistanceM, z);
-  const offset = near ? 0.72 : 0.16;
-  return { worldX: clamp(lineX + coverSide * offset, -7.5, 7.5), z };
+  const paired = Boolean(opts?.paired || opts?.duty === 'cover');
+  const duty: DefenderDuty = opts?.duty ?? 'press';
+  const pressStop = near ? DEFENDER_CLOSE_STOP_GAP_NEAR_M : DEFENDER_CLOSE_STOP_GAP_M;
+  const pressZ = clamp(shotDistanceM - pressStop, 1.35, shotDistanceM - 0.9);
+  if (!paired) {
+    const lineX = lineToGoalCentreX(ballWorldX, shotDistanceM, pressZ);
+    const offset = near ? 0.72 : 0.16;
+    return { worldX: clamp(lineX + coverSide * offset, -7.5, 7.5), z: pressZ };
+  }
+  if (duty === 'cover') {
+    const z = clamp(pressZ - DUAL_COVER_STAGGER_M, MIN_DEFENDER_Z_M, Math.max(MIN_DEFENDER_Z_M, pressZ - 1.55));
+    const lineX = lineToGoalCentreX(ballWorldX, shotDistanceM, z);
+    const offset = near ? 1.35 : DUAL_COVER_HOLD_OFFSET_M;
+    return { worldX: clamp(lineX + coverSide * offset, -7.5, 7.5), z };
+  }
+  const lineX = lineToGoalCentreX(ballWorldX, shotDistanceM, pressZ);
+  const offset = near ? 1.25 : DUAL_PRESS_HOLD_OFFSET_M;
+  return { worldX: clamp(lineX + coverSide * offset, -7.5, 7.5), z: pressZ };
 }
 
+/**
+ * Mid-table keeps the current jog. Strong clubs and high-rank nations (their
+ * FIFA rank already maps onto this strength) close down faster.
+ */
 export function oppositionCloseSpeedScale(opponentStrength = 70): number {
-  return clamp(1 + (opponentStrength - 70) * 0.012, 0.9, 1.32);
+  if (opponentStrength <= 70) {
+    return clamp(1 + (opponentStrength - 70) * 0.012, 0.9, 1);
+  }
+  const t = (opponentStrength - 70) / 24;
+  return clamp(1 + t * 0.55, 1, 1.58);
 }
 
 export function defenderCloseSpeedMps(shotDistanceM: number, opponentStrength = 70): number {
@@ -172,8 +214,12 @@ export function advanceDefender(
   ballStartXRatio: number,
   dtSeconds: number,
   opponentStrength = 70,
+  paired = false,
 ): DefenderPose {
-  const target = defenderCloseTarget(shotDistanceM, ballStartXRatio, defender.coverSide);
+  const target = defenderCloseTarget(shotDistanceM, ballStartXRatio, defender.coverSide, {
+    duty: defender.duty ?? 'press',
+    paired: paired || defender.duty === 'cover',
+  });
   const dx = target.worldX - defender.worldX;
   const dz = target.z - defender.z;
   const dist = Math.hypot(dx, dz);
@@ -316,6 +362,8 @@ const SCOREABLE_AIMS: AimPoint[] = [
   { x: 0, y: 1.14 },
 ];
 
+const OUTSIDE_AIMS: AimPoint[] = SCOREABLE_AIMS.filter((aim) => Math.abs(aim.x) >= 0.72);
+
 /** True when at least one in-goal or lofted aim misses every defender. */
 export function chanceIsScoreable(
   distanceM: number,
@@ -328,9 +376,22 @@ export function chanceIsScoreable(
   );
 }
 
+/** True when a near-post or far-post aim misses every defender — a curl-around lane. */
+export function chanceHasOutsideLane(
+  distanceM: number,
+  ballStartXRatio: number,
+  defenders: DefenderPose[],
+): boolean {
+  if (defenders.length === 0) return true;
+  return OUTSIDE_AIMS.some((aim) =>
+    !defenders.some((defender) => shotLineHitsDefender(distanceM, ballStartXRatio, aim, defender)),
+  );
+}
+
 /**
- * Opposite-side cover for elite chances. Nudged wide if the pair would
- * close every shooting lane; omitted rather than create an unwinnable look.
+ * Opposite-side cover for elite chances. Staggered closer to goal and held
+ * wide so a pair never becomes a central wall. Nudged wider if the first
+ * try closes every shooting lane; omitted rather than create an unwinnable look.
  */
 export function placeCoverDefender(
   first: DefenderPose,
@@ -342,22 +403,37 @@ export function placeCoverDefender(
   if (!canKeepTenYardGap(shotDistanceM)) return null;
   const coverSide: -1 | 1 = first.coverSide === 1 ? -1 : 1;
   const ballWorldX = ballWorldXFromRatio(ballStartXRatio);
-  const z = clamp(first.z * 0.72, MIN_DEFENDER_Z_M, Math.max(MIN_DEFENDER_Z_M, first.z - 1.1));
+  const z = clamp(
+    first.z - DUAL_COVER_STAGGER_M,
+    MIN_DEFENDER_Z_M,
+    Math.max(MIN_DEFENDER_Z_M, first.z - 1.55),
+  );
   const tryOffset = (offset: number): DefenderPose => {
     const look = pickPlayerLook(rng() * 1_000_000, palette);
     return {
       worldX: clamp(lineToGoalCentreX(ballWorldX, shotDistanceM, z) + coverSide * offset, -7.5, 7.5),
       z,
       coverSide,
+      duty: 'cover',
       stride: 0,
       skinTone: look.skin,
       hairColor: look.hair,
     };
   };
-  const firstTry = tryOffset(1.85 + rng() * 0.7);
-  if (chanceIsScoreable(shotDistanceM, ballStartXRatio, [first, firstTry])) return firstTry;
-  const wide = tryOffset(2.65);
-  if (chanceIsScoreable(shotDistanceM, ballStartXRatio, [first, wide])) return wide;
+  const candidates = [
+    tryOffset(2.15 + rng() * 0.95),
+    tryOffset(3.05),
+    tryOffset(3.55),
+  ];
+  for (const cover of candidates) {
+    const pack = [first, cover];
+    if (
+      chanceIsScoreable(shotDistanceM, ballStartXRatio, pack)
+      && chanceHasOutsideLane(shotDistanceM, ballStartXRatio, pack)
+    ) {
+      return cover;
+    }
+  }
   return null;
 }
 
@@ -382,13 +458,13 @@ export function rollChanceSetup(options: RollChanceOptions = {}): ChanceSetup {
 
   const distanceM = options.forceDistanceM ?? randomShotDistanceM(rng);
   const ballStartXRatio = randomBallStartXRatio(rng);
-  const first = options.disableDefender
-    ? null
-    : placeDefender(distanceM, ballStartXRatio, rng, options.skinPalette ?? 'any');
   const wantCover = Boolean(
-    first
+    !options.disableDefender
     && (options.forceDualDefenders || opponentStrength >= ELITE_DUAL_DEFENDER_STRENGTH),
   );
+  const first = options.disableDefender
+    ? null
+    : placeDefender(distanceM, ballStartXRatio, rng, options.skinPalette ?? 'any', { wideLane: wantCover });
   const cover = wantCover && first
     ? placeCoverDefender(first, distanceM, ballStartXRatio, rng, options.skinPalette ?? 'any')
     : null;
