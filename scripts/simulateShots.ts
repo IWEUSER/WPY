@@ -25,11 +25,14 @@ import {
   DEFENDER_CLOSE_SPEED_MPS,
   DEFENDER_CLOSE_STOP_GAP_M,
   DEFENDER_GAP_M,
+  DUAL_COVER_HOLD_OFFSET_M,
+  DUAL_PRESS_HOLD_OFFSET_M,
   ELITE_DUAL_DEFENDER_STRENGTH,
   advanceDefender,
   ballWorldXFromRatio,
   canKeepTenYardGap,
   chanceDefenders,
+  chanceHasOutsideLane,
   chanceIsScoreable,
   defenderBlocksBall,
   defenderCloseSpeedMps,
@@ -63,6 +66,7 @@ import {
   shotSideForAim,
 } from '../src/game/shooting/shotEngine';
 import type { SwipeGesture } from '../src/game/shooting/types';
+import { nationStrength } from '../src/game/career/data/fifaRankings';
 
 const SIM_W = 390;
 const SIM_H = 844;
@@ -767,15 +771,23 @@ if (nearGap < 1.1) {
 console.log('\n--- Elite opposition: faster close-down, dual defenders still scoreable ---');
 const weakScale = oppositionCloseSpeedScale(52);
 const midScale = oppositionCloseSpeedScale(70);
+const strongScale = oppositionCloseSpeedScale(84);
 const eliteScale = oppositionCloseSpeedScale(94);
-console.log(`close-down scale weak=${weakScale.toFixed(2)} mid=${midScale.toFixed(2)} elite=${eliteScale.toFixed(2)}`);
-if (!(weakScale < midScale && midScale < eliteScale) || midScale < 0.99 || midScale > 1.01 || eliteScale < 1.2) {
-  console.error('FAIL: elite defenders must close faster than mid-table, without changing the mid-table jog');
+const argentinaScale = oppositionCloseSpeedScale(nationStrength('argentina'));
+console.log(
+  `close-down scale weak=${weakScale.toFixed(2)} mid=${midScale.toFixed(2)} strong=${strongScale.toFixed(2)} elite=${eliteScale.toFixed(2)} argentina=${argentinaScale.toFixed(2)}`,
+);
+if (!(weakScale < midScale && midScale < strongScale && strongScale < eliteScale) || midScale < 0.99 || midScale > 1.01 || eliteScale < 1.42 || eliteScale > 1.62) {
+  console.error('FAIL: elite and strong defenders must close faster than mid-table, without changing the mid-table jog');
+  process.exitCode = 1;
+}
+if (argentinaScale < strongScale) {
+  console.error('FAIL: a world-ranked international side must close at least as fast as a strong club');
   process.exitCode = 1;
 }
 const eliteSpeed = defenderCloseSpeedMps(18, 94);
 const midSpeed = defenderCloseSpeedMps(18, 70);
-if (!(eliteSpeed > midSpeed + 0.4) || Math.abs(midSpeed - DEFENDER_CLOSE_SPEED_MPS) > 0.05) {
+if (!(eliteSpeed > midSpeed + 0.9) || Math.abs(midSpeed - DEFENDER_CLOSE_SPEED_MPS) > 0.05) {
   console.error('FAIL: 18-yard elite close-down must be quicker than the current mid-table speed');
   process.exitCode = 1;
 }
@@ -791,6 +803,8 @@ if (eliteSettledGap + 1e-6 < DEFENDER_CLOSE_STOP_GAP_M - 0.05) {
 let dualFail = 0;
 let dualMissing = 0;
 let dualUnscoreable = 0;
+let dualNoOutside = 0;
+let dualCollapsed = 0;
 for (let i = 0; i < 200; i++) {
   const dist = 16 + (i % 8);
   const xRatio = 0.18 + (i % 7) * 0.1;
@@ -807,10 +821,16 @@ for (let i = 0; i < 200; i++) {
   }
   if (pack[0].coverSide === pack[1].coverSide) dualFail += 1;
   if (!chanceIsScoreable(setup.distanceM, setup.ballStartXRatio, pack)) dualUnscoreable += 1;
+  if (!chanceHasOutsideLane(setup.distanceM, setup.ballStartXRatio, pack)) dualNoOutside += 1;
+  const lateral = Math.abs(pack[0].worldX - pack[1].worldX);
+  const stagger = Math.abs(pack[0].z - pack[1].z);
+  if (lateral < 2.4 || stagger < 1.2) dualCollapsed += 1;
 }
-console.log(`elite dual: missing=${dualMissing}/200 same-side=${dualFail} unwinnable=${dualUnscoreable}`);
-if (dualMissing > 12 || dualFail > 0 || dualUnscoreable > 0) {
-  console.error('FAIL: elite open-play chances must add an opposite-side cover that still leaves a scoring lane');
+console.log(
+  `elite dual: missing=${dualMissing}/200 same-side=${dualFail} unwinnable=${dualUnscoreable} no-outside=${dualNoOutside} collapsed=${dualCollapsed}`,
+);
+if (dualMissing > 12 || dualFail > 0 || dualUnscoreable > 0 || dualNoOutside > 0 || dualCollapsed > 8) {
+  console.error('FAIL: elite open-play chances must add a wide, staggered cover that still leaves a scoring lane');
   process.exitCode = 1;
 }
 
@@ -829,10 +849,37 @@ if (ELITE_DUAL_DEFENDER_STRENGTH > 86) {
   process.exitCode = 1;
 }
 
-const first = placeDefender(18, 0.5, () => 0.2);
+const first = placeDefender(18, 0.5, () => 0.2, 'any', { wideLane: true });
 const eliteCover = placeCoverDefender(first, 18, 0.5, () => 0.8);
-if (!eliteCover || !chanceIsScoreable(18, 0.5, [first, eliteCover])) {
-  console.error('FAIL: a placed cover defender must leave at least one scoreable aim');
+if (!eliteCover || !chanceIsScoreable(18, 0.5, [first, eliteCover]) || !chanceHasOutsideLane(18, 0.5, [first, eliteCover])) {
+  console.error('FAIL: a placed cover defender must leave a scoreable lane around the pair');
+  process.exitCode = 1;
+}
+
+let pressNow = { ...first };
+let coverNow = { ...eliteCover };
+for (let i = 0; i < 400; i++) {
+  pressNow = advanceDefender(pressNow, 18, 0.5, 0.04, 94, true);
+  coverNow = advanceDefender(coverNow, 18, 0.5, 0.04, 94, true);
+}
+const settledPair = [pressNow, coverNow];
+const pressHold = defenderOffsetFromShootingLineM(pressNow, 18, 0.5);
+const coverHold = defenderOffsetFromShootingLineM(coverNow, 18, 0.5);
+const settledStagger = pressNow.z - coverNow.z;
+const settledLateral = Math.abs(pressNow.worldX - coverNow.worldX);
+console.log(
+  `dual close: pressOff=${pressHold.toFixed(2)} coverOff=${coverHold.toFixed(2)} stagger=${settledStagger.toFixed(2)} lateral=${settledLateral.toFixed(2)}`,
+);
+if (pressHold < DUAL_PRESS_HOLD_OFFSET_M - 0.15 || coverHold < DUAL_COVER_HOLD_OFFSET_M - 0.15) {
+  console.error('FAIL: a two-defender close-down must hold wide lanes, not collapse onto the shooting line');
+  process.exitCode = 1;
+}
+if (settledStagger < 1.4 || settledLateral < 3.2) {
+  console.error('FAIL: settled dual defenders must stay staggered and wide of each other');
+  process.exitCode = 1;
+}
+if (!chanceIsScoreable(18, 0.5, settledPair) || !chanceHasOutsideLane(18, 0.5, settledPair)) {
+  console.error('FAIL: after closing, a dual look must still leave a curl-around or through lane');
   process.exitCode = 1;
 }
 

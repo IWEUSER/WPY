@@ -27,6 +27,7 @@ import { groundForClub } from './grounds';
 import { normalizeHex } from './kitPalette';
 import { getClub } from '../career/data/clubs';
 import { clubKit } from '../career/data/clubKits';
+import { nationStrength } from '../career/data/fifaRankings';
 import { TOP_LEAGUES } from '../career/playerValue';
 import {
   advanceDefender,
@@ -222,6 +223,25 @@ function readDevDualDefenders(): boolean {
   return raw === '2' || raw === 'dual';
 }
 
+/** DEV: ?strength=94, ?opponent=man-city, or ?nation=france. */
+function readDevOpponentStrength(): number | undefined {
+  if (!import.meta.env.DEV) return undefined;
+  const q = new URLSearchParams(window.location.search);
+  const raw = q.get('strength');
+  if (raw) {
+    const n = Number(raw);
+    if (Number.isFinite(n)) return n;
+  }
+  const opponentId = q.get('opponent');
+  if (opponentId) {
+    const club = getClub(opponentId);
+    if (club) return club.strength;
+  }
+  const nationId = q.get('nation');
+  if (nationId) return nationStrength(nationId);
+  return undefined;
+}
+
 function nextChance(
   clubStrength?: number,
   skinPalette: SkinPalette = 'any',
@@ -233,7 +253,7 @@ function nextChance(
   const forceDistance = readDevDistance();
   return rollChanceSetup({
     clubStrength,
-    opponentStrength,
+    opponentStrength: opponentStrength ?? readDevOpponentStrength(),
     forcePenalty,
     forceDistanceM: forcePenalty ? undefined : (forceDistance ?? undefined),
     disableDefender: readDevDefenderOff(),
@@ -360,8 +380,8 @@ export default function ShootingGame({
   onCompleteRef.current = onComplete;
   const clubStrengthRef = useRef(clubStrength);
   clubStrengthRef.current = clubStrength;
-  const opponentStrengthRef = useRef(opponentStrength);
-  opponentStrengthRef.current = opponentStrength;
+  const opponentStrengthRef = useRef(opponentStrength ?? readDevOpponentStrength());
+  opponentStrengthRef.current = opponentStrength ?? readDevOpponentStrength();
   const skinPaletteRef = useRef(opponentSkinPalette);
   skinPaletteRef.current = opponentSkinPalette;
   const allowPenaltiesRef = useRef(allowPenalties);
@@ -587,6 +607,7 @@ export default function ShootingGame({
           const dt = anim.lastTickMs > 0 ? Math.min(0.05, (now - anim.lastTickMs) / 1000) : 0;
           anim.lastTickMs = now;
           if (anim.defenders.length > 0 && dt > 0) {
+            const paired = anim.defenders.length > 1;
             anim.defenders = anim.defenders.map((defender) =>
               advanceDefender(
                 defender,
@@ -594,6 +615,7 @@ export default function ShootingGame({
                 anim.ballStartXRatio,
                 dt,
                 opponentStrengthRef.current ?? 70,
+                paired,
               ),
             );
             anim.defender = anim.defenders[0] ?? null;
