@@ -79,6 +79,23 @@ function playOpeningMatch(goals: number) {
   store.getState().acknowledgeMatchResult();
 }
 
+function completeLiveMatch(openPlayGoals = 1) {
+  let guard = 0;
+  while (store.getState().liveMatch && guard < 8) {
+    const live = store.getState().liveMatch;
+    if (!live) break;
+    if (live.penaltyKick) {
+      store.getState().recordMatchChance(fakeShot(true));
+    } else if (live.chancesTaken < live.chancesTotal) {
+      for (let i = live.chancesTaken; i < live.chancesTotal; i++) {
+        store.getState().recordMatchChance(fakeShot(i < openPlayGoals));
+      }
+    }
+    store.getState().finishLiveMatch();
+    guard += 1;
+  }
+}
+
 function playSimSeason(scoreAll: boolean) {
   let guard = 0;
   while (guard++ < 160) {
@@ -302,13 +319,12 @@ store.getState().advance();
 const live = store.getState().liveMatch;
 const fixture = store.getState().seasonCalendar?.fixtures[live?.fixtureIndex ?? 0];
 console.log('first S2 live match', live, 'fixture', fixture?.kind, fixture?.opponentLabel, 'chances', live?.chancesTotal);
-
-if (live) {
-  for (let i = 0; i < live.chancesTotal; i++) {
-    store.getState().recordMatchChance(fakeShot(i === 0));
-  }
-  store.getState().finishLiveMatch();
+if (live && live.chancesTotal !== 1) {
+  console.error('Rising star Season 1 must get one chance in each game played');
+  process.exitCode = 1;
 }
+completeLiveMatch(1);
+if (store.getState().phase === 'match-result') store.getState().acknowledgeMatchResult();
 const after = store.getState();
 console.log('after first S2 match:', after.lastMatchSummary);
 console.log('league pos', after.seasonStandings?.league.find((r) => r.clubId === after.clubId)?.position, 'pts', after.seasonStandings?.league.find((r) => r.clubId === after.clubId)?.points);
@@ -464,9 +480,12 @@ if (cupFinalIndex == null || cupFinalIndex < 0 || !after.seasonSim || !after.sea
       fixtureIndex: cupFinalIndex,
       domesticCupStage: 'final',
     },
-    liveMatch: { fixtureIndex: cupFinalIndex, chancesTotal: 1, chancesTaken: 1, goals: 1 },
+    liveMatch: { fixtureIndex: cupFinalIndex, chancesTotal: 1, chancesTaken: 0, goals: 0, openPlayGoals: 0 },
+    lastMatchResult: null,
+    lastMatchSummary: null,
+    injuryGamesRemaining: 0,
   });
-  store.getState().finishLiveMatch();
+  completeLiveMatch(1);
   const finalState = store.getState();
   console.log('cup final phase', finalState.phase, finalState.lastMatchResult);
   if (finalState.phase !== 'match-result' || !finalState.lastMatchResult?.isFinal) {
