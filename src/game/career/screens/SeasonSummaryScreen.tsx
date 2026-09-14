@@ -5,7 +5,7 @@ import { formatEuros, formatWeeklyWage } from '../playerValue';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { formatInternationalSeason } from '../honoursDisplay';
 import { displaySeasonLabel, displaySeasonNumber } from '../seasonDisplay';
-import { defaultSquadStatus, describeSquadStatus, nextSquadStatusAfterSeason, SQUAD_STATUS_LABEL } from '../squadStatus';
+import { defaultSquadStatus, describeSquadStatus, nextSquadStatusAfterSeason, seasonOverridesRatioBar, SQUAD_STATUS_LABEL } from '../squadStatus';
 import { countLoanSpells, requiredGoalRatio, resolveSeasonTransition } from '../transfers';
 import { leagueMatchWeeks } from '../data/clubs';
 import { useCareerStore } from '../store';
@@ -227,22 +227,55 @@ export default function SeasonSummaryScreen() {
               This season: {SQUAD_STATUS_LABEL[squadStatus]}
             </p>
           )}
-          {role !== 'loan' && (() => {
-            const stayStatus = preview.immediate?.squadStatus
-              ?? preview.pendingTransfer?.stay?.squadStatus
-              ?? nextSquadStatusAfterSeason({
-                role: role === 'reserve' ? 'first-team' : role,
-                current: role === 'reserve' ? 'rotation' : squadStatus ?? defaultSquadStatus(role),
-                ratio,
-                gamesPlayed: season.gamesPlayed,
-                bar: threshold,
-              });
+          {(() => {
+            const stay = preview.pendingTransfer?.stay ?? preview.immediate;
+            const stayOffered = Boolean(stay) && (preview.immediate || preview.pendingTransfer?.allowDecline);
+            const loansOffered = (preview.pendingTransfer?.offers ?? []).some((o) => o.move === 'loan');
+            const forcedLoan = preview.pendingTransfer?.kind === 'loan' && !stayOffered;
+            if (forcedLoan) {
+              return (
+                <>
+                  <p className="mt-1 font-semibold">On loan: {SQUAD_STATUS_LABEL.starter}</p>
+                  <p className="mt-1 text-xs text-white/50">{describeSquadStatus('starter')}</p>
+                </>
+              );
+            }
             return (
               <>
-                <p className={`${role !== 'reserve' ? 'mt-1 ' : 'mt-1 '}font-semibold`}>
-                  Next season{preview.pendingTransfer ? ' if you stay' : ''}: {SQUAD_STATUS_LABEL[stayStatus]}
-                </p>
-                <p className="mt-1 text-xs text-white/50">{describeSquadStatus(stayStatus)}</p>
+                {stayOffered && stay?.squadStatus && (
+                  <>
+                    <p className="mt-1 font-semibold">
+                      Next season{preview.pendingTransfer ? ' if you stay' : ''}: {SQUAD_STATUS_LABEL[stay.squadStatus]}
+                    </p>
+                    <p className="mt-1 text-xs text-white/50">{describeSquadStatus(stay.squadStatus)}</p>
+                  </>
+                )}
+                {loansOffered && (
+                  <>
+                    <p className="mt-1 font-semibold">On loan: {SQUAD_STATUS_LABEL.starter}</p>
+                    <p className="mt-1 text-xs text-white/50">
+                      A loan is first-team football at the new club — not the role you would have if you stayed.
+                    </p>
+                  </>
+                )}
+                {!stayOffered && !loansOffered && role !== 'loan' && (() => {
+                  const stayStatus = nextSquadStatusAfterSeason({
+                    role: role === 'reserve' ? 'first-team' : role,
+                    current: role === 'reserve' ? 'rising-star' : squadStatus ?? defaultSquadStatus(role),
+                    ratio,
+                    gamesPlayed: season.gamesPlayed,
+                    bar: threshold,
+                    honoursClear: seasonOverridesRatioBar(season),
+                  });
+                  return (
+                    <>
+                      <p className="mt-1 font-semibold">
+                        Next season: {SQUAD_STATUS_LABEL[stayStatus]}
+                      </p>
+                      <p className="mt-1 text-xs text-white/50">{describeSquadStatus(stayStatus)}</p>
+                    </>
+                  );
+                })()}
               </>
             );
           })()}

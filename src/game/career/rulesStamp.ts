@@ -1,13 +1,13 @@
 import { currentCalendarWeek } from './calendar';
 import { getClub } from './data/clubs';
-import { clubContinentalCup } from './data/competitions';
-import { callUpRatio, qualifierExcludeIds } from './international';
+import { clubContinentalCup, internationalCalendarSeason } from './data/competitions';
+import { callUpRatio, isSelectedForNationalTeam, qualifierExcludeIds } from './international';
 import { buildSeasonStandings } from './matchEngine';
-import { hydrateSeason, type SeasonSimState } from './seasonSim';
+import { ensureInternationalGroup, hydrateSeason, type SeasonSimState } from './seasonSim';
 import type { CareerState } from './types';
 
 /** Bump when calendar generation, playable leagues, or cup rules change. */
-export const CURRENT_RULES_STAMP = 'pt-nl-tr-v1';
+export const CURRENT_RULES_STAMP = 'rising-star-v1';
 
 const SETUP_PHASES = new Set<string>(['menu', 'club-choice', 'nationality-choice']);
 
@@ -89,6 +89,27 @@ export function rebuildCurrentSeason(state: CareerState): Partial<CareerState> {
   const old = state.seasonSim;
   const sameTable = old.leagueTable.length === sim.leagueTable.length
     && old.leagueTable.every((row) => sim.leagueTable.some((next) => next.clubId === row.clubId));
+  const publicSeason = internationalCalendarSeason(state.seasonNumber, {
+    leagueOnly,
+    careerStart: state.careerStart,
+    role: state.role,
+  });
+  const selected = isSelectedForNationalTeam({
+    clubTier: club.tier,
+    careerGoalRatio: callUpRatio({
+      season: state.currentSeason,
+      careerGoals: state.careerGoals,
+      careerGames: state.careerGames,
+    }),
+    nationId: state.nationality,
+    publicSeason: publicSeason >= 1 ? publicSeason : null,
+    calendarWeek: week,
+  });
+  const nextIntlStage = selected
+    ? (old.internationalStage === 'not-selected' ? 'qualifying' : old.internationalStage)
+    : old.internationalStage === 'qualifying'
+      ? 'not-selected'
+      : old.internationalStage;
   const merged = advanceToWeek(
     {
       ...sim,
@@ -98,8 +119,8 @@ export function rebuildCurrentSeason(state: CareerState): Partial<CareerState> {
       europeanGroupPlayed: old.europeanGroupPlayed,
       knockoutAggFor: old.knockoutAggFor,
       knockoutAggAgainst: old.knockoutAggAgainst,
-      internationalStage: old.internationalStage,
-      internationalSelected: old.internationalSelected,
+      internationalStage: nextIntlStage,
+      internationalSelected: selected,
       qualifierPoints: old.qualifierPoints,
       qualifierPlayed: old.qualifierPlayed,
       qualifierCarryPoints: old.qualifierCarryPoints,
@@ -131,10 +152,12 @@ export function rebuildCurrentSeason(state: CareerState): Partial<CareerState> {
     calendar.fixtures.map((f) => f.week),
   );
 
+  const rebuilt = selected ? ensureInternationalGroup(merged, calendar, state.seasonNumber) : merged;
+
   return {
     seasonCalendar: calendar,
-    seasonSim: merged,
-    seasonStandings: buildSeasonStandings(merged.leagueTable, merged.europeanStanding),
+    seasonSim: rebuilt,
+    seasonStandings: buildSeasonStandings(rebuilt.leagueTable, rebuilt.europeanStanding),
     liveMatch: null,
     rulesStamp: CURRENT_RULES_STAMP,
   };

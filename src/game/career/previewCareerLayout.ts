@@ -234,11 +234,11 @@ export function applyCareerLayoutPreview(): void {
     : preview === 'galatasaray' || preview === 'match-galatasaray' ? 'turkey'
     : 'spain';
   const { calendar, sim } = hydrateSeason({
-    seasonNumber: preview === 'hub-qualifying' ? 1 : 4,
+    seasonNumber: preview === 'hub-qualifying' || preview === 'hub-rising-star' ? 1 : 4,
     club,
     careerGoalRatio: 0.78,
     nationId: previewNationId,
-    careerStart: preview === 'hub-qualifying' ? 'favourite-first-team' : undefined,
+    careerStart: preview === 'hub-qualifying' || preview === 'hub-rising-star' ? 'favourite-first-team' : undefined,
   });
   if (preview === 'mls') {
     sim.leagueTable = rankLeagueTable(
@@ -494,7 +494,17 @@ export function applyCareerLayoutPreview(): void {
     let completed = 0;
     for (let i = 0; i < calendar.fixtures.length; i++) {
       if (calendar.fixtures[i].kind === 'rest') continue;
-      if (completed % 3 === 2) {
+      if (completed % 3 !== 0) {
+        sim.fixtureIndex = i;
+        break;
+      }
+      completed += 1;
+    }
+  } else if (preview === 'hub-rising-star') {
+    let completed = 0;
+    for (let i = 0; i < calendar.fixtures.length; i++) {
+      if (calendar.fixtures[i].kind === 'rest') continue;
+      if (completed % 4 === 3) {
         sim.fixtureIndex = i;
         break;
       }
@@ -921,7 +931,7 @@ export function applyCareerLayoutPreview(): void {
                   ? 'match'
                   : 'hub',
     age: isTrialPreview || isYouthPreview || isYouthNextPreview || isClubTrialPreview || isReservePreview || preview === 'reserve-promo' ? 16 : preview === 'end' ? 36 : preview === 'championship-transfer' || preview === 'transfer-20' ? 20 : preview === 'first-team-miss' ? 17 : promoteSummary ? 22 : 19,
-    seasonNumber: isTrialPreview || isYouthPreview || isYouthNextPreview || isClubTrialPreview || isReservePreview || preview === 'hub-qualifying' || preview === 'reserve-promo' ? 1 : preview === 'end' ? 21 : promoteSummary ? 6 : 4,
+    seasonNumber: isTrialPreview || isYouthPreview || isYouthNextPreview || isClubTrialPreview || isReservePreview || preview === 'hub-qualifying' || preview === 'hub-rising-star' || preview === 'reserve-promo' ? 1 : preview === 'end' ? 21 : promoteSummary ? 6 : 4,
     clubId: isYouthPreview || isYouthNextPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : preview === 'match-psg' ? 'psg' : preview === 'benfica' || preview === 'rebuild' || preview === 'match-benfica' ? 'benfica' : preview === 'ajax' || preview === 'match-ajax' ? 'ajax' : preview === 'galatasaray' || preview === 'match-galatasaray' ? 'galatasaray' : preview === 'championship-transfer' || promoteSummary ? 'leicester' : preview === 'loan-summary' ? 'levante' : 'real-madrid',
     parentClubId: isYouthPreview || isYouthNextPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : preview === 'match-psg' ? 'psg' : preview === 'benfica' || preview === 'rebuild' || preview === 'match-benfica' ? 'benfica' : preview === 'ajax' || preview === 'match-ajax' ? 'ajax' : preview === 'galatasaray' || preview === 'match-galatasaray' ? 'galatasaray' : preview === 'championship-transfer' || promoteSummary ? 'leicester' : 'real-madrid',
     role: isReservePreview || isTrialPreview || isYouthPreview || isYouthNextPreview || isClubTrialPreview || preview === 'reserve-promo' ? 'reserve' : preview === 'loan-summary' ? 'loan' : 'first-team',
@@ -929,7 +939,7 @@ export function applyCareerLayoutPreview(): void {
       ? { shots: [], goals: 6, offeredClubIds: ['real-madrid', 'barcelona', 'atletico-madrid'] }
       : null,
     openingCampaign,
-    careerStart: isTrialRetryPreview || isTrialOffersPreview || preview === 'trial-drop' || preview === 'club-choice' ? 'favourite-trial' : isYouthPreview || isYouthNextPreview || isTrialPreview || isClubTrialPreview ? 'youth' : 'favourite-first-team',
+    careerStart: isTrialRetryPreview || isTrialOffersPreview || preview === 'trial-drop' || preview === 'club-choice' ? 'favourite-trial' : isYouthPreview || isYouthNextPreview || isTrialPreview || isClubTrialPreview ? 'youth' : preview === 'hub-rising-star' || preview === 'hub-qualifying' ? 'favourite-first-team' : 'favourite-first-team',
     seasonsAtCurrentClub: preview === 'end' ? 10 : promoteSummary ? 1 : 3,
     nationality: preview === 'mls' ? 'united-states' : preview === 'saudi' ? 'saudi-arabia' : preview === 'championship-transfer' ? 'england' : preview === 'benfica' || preview === 'rebuild' || preview === 'match-benfica' ? 'portugal' : preview === 'ajax' || preview === 'match-ajax' ? 'netherlands' : preview === 'galatasaray' || preview === 'match-galatasaray' ? 'turkey' : 'spain',
     nationalTeam,
@@ -1112,7 +1122,11 @@ export function applyCareerLayoutPreview(): void {
     injuryGamesRemaining: 0,
     intlQualifying: { tournament: 'euro', points: 7, played: 3 },
     pendingTransfer,
-    squadStatus: preview === 'hub-rotation' || preview === 'reserve-promo' ? 'rotation' : 'starter',
+    squadStatus: preview === 'hub-rising-star' || preview === 'reserve-promo'
+      ? 'rising-star'
+      : preview === 'hub-rotation'
+        ? 'reserve'
+        : 'starter',
     lastTransferRejection: preview === 'transfer-reject'
       ? 'You agreed terms with Manchester City. Real Madrid rejected the €80m bid — they will not sell a starter to Manchester City on that fee.'
       : null,

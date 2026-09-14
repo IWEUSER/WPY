@@ -11,7 +11,7 @@ import type { WpyResult } from './wpy';
 export type PlayerRole = 'reserve' | 'first-team' | 'loan';
 
 /** Playing time in the first-team / loan squad. Separate from contract role. */
-export type SquadStatus = 'starter' | 'rotation' | 'impact';
+export type SquadStatus = 'starter' | 'rising-star' | 'reserve' | 'impact';
 
 /**
  * Tracks the escalating "miss games -> get dropped" rule:
@@ -79,7 +79,7 @@ export interface SeasonRecord {
   seasonNumber: number;
   clubId: string;
   role: PlayerRole;
-  /** Playing-time status used for this season's league rotation. */
+  /** Playing-time status used for this season's league minutes. */
   squadStatus?: SquadStatus;
   /** Status locked in at season end for the following campaign. */
   nextSquadStatus?: SquadStatus;
@@ -195,7 +195,7 @@ export interface CareerState {
   clubId: string | null;
   parentClubId: string | null;
   role: PlayerRole;
-  /** League playing time: starter, rotation, or impact. Unused in the reserve year. */
+  /** League playing time: starter, rising-star, reserve, or impact. Unused in the academy year. */
   squadStatus: SquadStatus;
   /**
    * Set when the player agreed personal terms but the selling club rejected
@@ -283,7 +283,7 @@ export interface LastMatchResult {
   chances?: number | null;
   aggregateLine?: string | null;
   nextLine?: string | null;
-  /** Why the player sat the fixture out (injured, rotation, dropped, no chance). */
+  /** Why the player sat the fixture out (injured, reserve, dropped, no chance). */
   sitOutReason?: string | null;
 }
 

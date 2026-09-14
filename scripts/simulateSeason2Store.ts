@@ -346,12 +346,8 @@ const afterRatio =
     ? after.currentSeason.goals / after.currentSeason.gamesPlayed
     : 0;
 console.log('after first match intl selected', after.seasonSim?.internationalSelected, 'season ratio', afterRatio.toFixed(2));
-if (afterRatio >= 0.66 && !after.seasonSim?.internationalSelected) {
-  console.error('hitting the national bar this season must trigger a call-up');
-  process.exitCode = 1;
-}
-if (afterRatio < 0.66 && after.seasonSim?.internationalSelected) {
-  console.error('a season ratio below the national bar must not keep the player selected');
+if (after.seasonSim?.internationalSelected) {
+  console.error('Season 1 call-ups must wait until after week 20');
   process.exitCode = 1;
 }
 if (after.careerGames !== 1) {
@@ -656,10 +652,11 @@ store.getState().chooseNationality('england');
     || s.seasonNumber !== 1
     || s.age !== 17
     || s.contractYearsRemaining !== 2
+    || s.squadStatus !== 'rising-star'
     || !kinds.has('league')
     || !kinds.has('domestic-cup')
   ) {
-    console.error('Favourite first-team must start Season 1 at age 17 on a 2-year deal with the full calendar');
+    console.error('Favourite first-team must start Season 1 at age 17 on a 2-year deal as a Rising star with the full calendar');
     process.exitCode = 1;
   }
   const tournamentGames = (s.seasonCalendar?.fixtures ?? []).filter(

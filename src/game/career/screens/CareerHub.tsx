@@ -6,20 +6,21 @@ import { conferenceLabel, leagueDisplayName, mlsConferenceOf } from '../data/lea
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { describeAvailability, isAvailable } from '../availabilityEngine';
 import { describeInjury } from '../injury';
-import { clubEligibleForNationalTeam, callUpRatio, getNation, isSelectedForNationalTeam, selectionRatioForNation } from '../international';
-import type { SeasonStandings } from '../matchEngine';
-import { displaySeasonLabel } from '../seasonDisplay';
-import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
-import { conferenceTable, ensureInternationalGroup, fixtureTitle, internationalRoundLabel, nextActionableFixture, type SeasonSimState } from '../seasonSim';
-import { nextMatchBriefing, playerGoalsLine } from '../matchBriefing';
-import { groupPosition, sortGroupTable } from '../internationalTable';
 import {
+  chancesForSquadStatus,
   completedLeagueFixtureCount,
   describeRotationSitOut,
   describeSquadStatus,
   isSquadRotationSitOut,
   SQUAD_STATUS_LABEL,
 } from '../squadStatus';
+import { displaySeasonLabel, displaySeasonNumber } from '../seasonDisplay';
+import { clubEligibleForNationalTeam, callUpRatio, getNation, isSelectedForNationalTeam, SEASON_1_CALL_UP_MIN_WEEK, selectionRatioForNation } from '../international';
+import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
+import type { SeasonStandings } from '../matchEngine';
+import { conferenceTable, ensureInternationalGroup, fixtureTitle, internationalRoundLabel, nextActionableFixture, type SeasonSimState } from '../seasonSim';
+import { nextMatchBriefing, playerGoalsLine } from '../matchBriefing';
+import { groupPosition, sortGroupTable } from '../internationalTable';
 import { requiredGoalRatio } from '../transfers';
 import { saveNeedsRebuild } from '../rulesStamp';
 import { useCareerStore } from '../store';
@@ -97,7 +98,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
       completedLeagueFixtureCount(seasonCalendar, seasonSim.fixtureIndex),
     ),
   );
-  const noChance = (nextFixture?.playerChances ?? 1) <= 0;
+  const noChance = chancesForSquadStatus(squadStatus, nextFixture?.playerChances ?? 1) <= 0;
   const available = isAvailable(squadAvailability) && !injured && !rotatedOut && !noChance;
   const briefing = nextFixture
     ? nextMatchBriefing(nextFixture, seasonSim, {
@@ -117,6 +118,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const week = seasonCalendar && seasonSim
     ? currentCalendarWeek(seasonCalendar, seasonSim.fixtureIndex)
     : season.matches.length + 1;
+  const publicSeasonNumber = displaySeasonNumber(seasonNumber, { role, careerStart });
   const totalWeeks = seasonCalendar?.totalWeeks ?? leagueMatchWeeks(club.league);
   const marketValue = playerMarketValueFromSeasons({
     age,
@@ -308,6 +310,8 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
             dropped={Boolean(nationalTeam && !isAvailable(nationalTeam.availability))}
             selected={Boolean(seasonSimWithGroup?.internationalSelected)}
             includeTable={false}
+            publicSeason={publicSeasonNumber}
+            calendarWeek={week}
           />
         )}
 
@@ -340,6 +344,8 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
                 selected={Boolean(seasonSimWithGroup?.internationalSelected)}
                 includeTable
                 tableOnly
+                publicSeason={publicSeasonNumber}
+                calendarWeek={week}
               />
             )}
           </div>
@@ -471,6 +477,8 @@ function InternationalCard({
   selected,
   includeTable = true,
   tableOnly = false,
+  publicSeason = null,
+  calendarWeek = 99,
 }: {
   nationId: string;
   nationName: string;
@@ -483,10 +491,19 @@ function InternationalCard({
   selected: boolean;
   includeTable?: boolean;
   tableOnly?: boolean;
+  publicSeason?: number | null;
+  calendarWeek?: number;
 }) {
   const bar = selectionRatioForNation(nationId);
   const clubOk = clubEligibleForNationalTeam(clubTier, nationId);
-  const inForm = isSelectedForNationalTeam({ clubTier, careerGoalRatio: careerRatio, nationId });
+  const inForm = isSelectedForNationalTeam({
+    clubTier,
+    careerGoalRatio: careerRatio,
+    nationId,
+    publicSeason,
+    calendarWeek,
+  });
+  const waitingSeason1 = publicSeason === 1 && calendarWeek <= SEASON_1_CALL_UP_MIN_WEEK;
   const tournamentName = sim?.internationalTournament
     ? INTERNATIONAL_TOURNAMENTS[sim.internationalTournament].name
     : null;
@@ -494,6 +511,7 @@ function InternationalCard({
   const pos = group ? groupPosition(group, nationId) : 0;
   const campaignLine = (() => {
     if (!clubOk) return `Call-ups are for players at a higher club level.`;
+    if (waitingSeason1) return `Season 1 call-ups open after week ${SEASON_1_CALL_UP_MIN_WEEK}.`;
     if (!sim || !selected || !tournamentName) return `Not selected for ${nationName} this window.`;
     if (dropped) return `Dropped for this ${tournamentName} match.`;
     if (sim.internationalStage === 'qualifying') {
@@ -521,6 +539,9 @@ function InternationalCard({
   const statusLine = (() => {
     if (!clubOk) {
       return `Need a move to a higher-level club before ${nationName} will consider you.`;
+    }
+    if (waitingSeason1) {
+      return `International call-ups start after week ${SEASON_1_CALL_UP_MIN_WEEK} in Season 1.`;
     }
     if (inForm) return `Your ${careerRatio.toFixed(2)} goals/game is enough for ${nationName}.`;
     return `Need a ${bar.toFixed(2)} goals/game ratio for a call-up — currently ${careerRatio.toFixed(2)}.`;

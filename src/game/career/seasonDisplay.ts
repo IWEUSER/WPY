@@ -9,6 +9,14 @@ export function displaySeasonNumber(
   return seasonNumber - 1;
 }
 
+/** First public first-team season on every career path (age 17, then 18 in Season 2). */
+export function isFirstPublicSeason(
+  seasonNumber: number,
+  opts?: { role?: 'reserve' | 'first-team' | 'loan'; careerStart?: string | null },
+): boolean {
+  return displaySeasonNumber(seasonNumber, opts) === 1;
+}
+
 export function displaySeasonLabel(
   seasonNumber: number,
   opts?: { role?: 'reserve' | 'first-team' | 'loan'; careerStart?: string | null },
