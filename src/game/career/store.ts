@@ -203,7 +203,7 @@ function reviewedSquadFields(
     gamesPlayed: season.gamesPlayed,
     // Playing time follows the club the player is actually at. Parent first-team
     // bars are for the end-of-loan recall, not a mid-season drop on loan.
-    bar: state.role === 'reserve' ? club.reserveGoalRatio : club.firstTeamGoalRatio,
+    bar: club.firstTeamGoalRatio,
     honoursClear: seasonOverridesRatioBar(season),
   });
   return {
@@ -905,16 +905,17 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
       };
     }
     const reviewed = reviewedSquadFields(state, season, calendar, sim);
+    const hubSim = sim!;
     return {
       seasonSim: withInternationalForm(
-        sim,
+        hubSim,
         reviewed.currentSeason ?? season,
         state.clubId,
         state.nationality,
         state.careerGoals,
         careerGames,
         {
-          week: currentCalendarWeek(calendar, sim.fixtureIndex),
+          week: currentCalendarWeek(calendar, hubSim.fixtureIndex),
           seasonNumber: state.seasonNumber,
           role: state.role,
           careerStart: state.careerStart,
@@ -932,7 +933,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
       lastMatchSummary,
       lastMatchResult,
       injuryGamesRemaining,
-      seasonStandings: buildSeasonStandings(sim!.leagueTable, sim!.europeanStanding),
+      seasonStandings: buildSeasonStandings(hubSim.leagueTable, hubSim.europeanStanding),
       liveMatch: null,
       phase: 'hub',
     };
