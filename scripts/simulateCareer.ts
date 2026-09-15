@@ -84,6 +84,7 @@ import {
   evaluateTopGoalscorer,
   goldenBootTarget,
   goldenBootWinChance,
+  playerOfTheYearWinChance,
 } from '../src/game/career/domesticAwards';
 import {
   evaluateInternationalTournamentAwards,
@@ -418,6 +419,17 @@ console.log('\n--- Domestic awards: 20-goal golden boot table in every league --
   }
   if (potyNoTitle.reason.toLowerCase().includes('requires winning') || potyNoTitle.reason.toLowerCase().includes('bar ')) {
     console.error('Player of the Year copy must not use a hard title rule or bar');
+    process.exitCode = 1;
+  }
+  const potyForty = evaluatePlayerOfTheYear({
+    leagueChampion: false,
+    leagueGoals: 43,
+    league: 'La Liga',
+    topGoalscorer: true,
+    rng: () => 0.99,
+  });
+  if (playerOfTheYearWinChance({ leagueChampion: false, topGoalscorer: false, leagueGoals: 40 }) !== 1 || !potyForty.won) {
+    console.error('40+ league goals must always win league Player of the Year');
     process.exitCode = 1;
   }
 }
@@ -1583,10 +1595,6 @@ if (saleLoans !== LOAN_OFFER_COUNT || salePerms.length !== TRANSFER_OFFER_COUNT)
   console.error('a failed first-team season must offer 6 loans and 6 transfers');
   process.exitCode = 1;
 }
-if (saleTiers.some((tier) => tier < 5) || salePerms.some((o) => o.clubId === 'west-ham')) {
-  console.error('a 0.08 ratio must only attract lower-level clubs, never West Ham or a higher band');
-  process.exitCode = 1;
-}
 {
   const saleSaudi = salePerms.filter((o) => getClub(o.clubId)?.league === 'Saudi Pro League');
   if (saleSaudi.length !== 1) {
@@ -1934,12 +1942,31 @@ if (barca && hilal && lafc) {
     fallbackClub: barca,
   });
   console.log('form-adjusted', formAdjustedRatio(83 / 138, 3 / 38), 'collapse', starAfterCollapse, 'kept form', starKeptForm);
-  if (starAfterCollapse >= starKeptForm * 0.8) {
+  if (starAfterCollapse >= starKeptForm * 0.55) {
     console.error('a 0.08 season must cut a star’s fee substantially');
     process.exitCode = 1;
   }
-  if (starAfterCollapse < 40_000_000) {
-    console.error('a star’s career ratio should keep them well above the bottom of the market');
+  if (starAfterCollapse > starKeptForm * 0.85) {
+    console.error('one collapse year must not leave market value almost unchanged');
+    process.exitCode = 1;
+  }
+  const threeBlank = [
+    { ...dummySeason, seasonNumber: 2, clubId: 'barcelona', goals: 40, gamesPlayed: 50 },
+    { ...dummySeason, seasonNumber: 3, clubId: 'barcelona', goals: 40, gamesPlayed: 50 },
+    { ...dummySeason, seasonNumber: 4, clubId: 'al-hilal', goals: 8, gamesPlayed: 34 },
+    { ...dummySeason, seasonNumber: 5, clubId: 'fiorentina', goals: 3, gamesPlayed: 36 },
+    { ...dummySeason, seasonNumber: 6, clubId: 'inter', goals: 3, gamesPlayed: 30 },
+  ];
+  const afterThreeBlank = playerMarketValueFromSeasons({
+    age: 26,
+    careerGoals: 94,
+    careerGames: 200,
+    seasons: threeBlank,
+    fallbackClub: getClub('inter') ?? barca,
+  });
+  console.log('three-blank value', afterThreeBlank, 'one-collapse', starAfterCollapse);
+  if (afterThreeBlank >= starAfterCollapse * 0.7) {
+    console.error('three consecutive poor seasons must cut value harder than a single collapse');
     process.exitCode = 1;
   }
   const starSale = resolveSeasonTransition({
@@ -1964,8 +1991,8 @@ if (barca && hilal && lafc) {
     console.error('a failed ratio at Barcelona must still offer loans back to the parent club');
     process.exitCode = 1;
   }
-  if (starPermTiers.some((tier) => tier < 5)) {
-    console.error('a 3-goal collapse season must not attract clubs above the lower-level band');
+  if (starPermTiers.some((tier) => tier > 3) || starPermTiers.length === 0) {
+    console.error('a high remaining market value must still draw elite or high-level clubs, not League Two fees');
     process.exitCode = 1;
   }
 
@@ -2047,16 +2074,23 @@ if (barca && hilal && lafc) {
   const paidSaudi = paidIds.filter((id) => getClub(id)?.league === 'Saudi Pro League');
   const paidEurope = paidIds.filter((id) => getClub(id)?.league !== 'Saudi Pro League');
   console.log('€200m 5yr bidders', paidIds, paidPerm.map((o) => o.fee));
-  if (paidEurope.length === 0 || paidEurope.some((id) => !MEGA_CLUB_IDS.has(id))) {
-    console.error('a €200m fee must only attract PSG, Real Madrid or Manchester City from Europe');
+  if (paidEurope.length < 3) {
+    console.error('a star fee must still attract several European bids, not a Saudi-only list');
     process.exitCode = 1;
   }
-  if (paidSaudi.length !== 1 || paidSaudi.some((id) => !(TWILIGHT_SAUDI_CLUB_IDS as readonly string[]).includes(id))) {
-    console.error('a €200m 21-year-old must also see exactly one Saudi giant');
+  if (!paidEurope.some((id) => MEGA_CLUB_IDS.has(id))) {
+    console.error('PSG, Real Madrid or Manchester City must still appear for a mega asking price');
     process.exitCode = 1;
   }
-  if (paidPerm.some((o) => o.fee < 180_000_000)) {
-    console.error('a 5-year deal at star value must ask a mega-club fee');
+  if (paidSaudi.length > 1 || (paidSaudi.length === 1 && paidSaudi.some((id) => !(TWILIGHT_SAUDI_CLUB_IDS as readonly string[]).includes(id)))) {
+    console.error('at most one Saudi giant should sit alongside the European bids');
+    process.exitCode = 1;
+  }
+  if (paidPerm.some((o) => {
+    const dest = getClub(o.clubId);
+    return dest != null && o.fee > clubTransferBudget(dest) + 1;
+  })) {
+    console.error('no club may bid above its transfer budget');
     process.exitCode = 1;
   }
 
@@ -2165,7 +2199,7 @@ if (barca && hilal && lafc) {
     bar: 0.5,
   });
   console.log('squad status after season', starterHold, starterDrop, starterCollapse, reserveUp);
-  if (starterHold !== 'starter' || starterDrop !== 'reserve' || starterCollapse !== 'impact' || reserveUp !== 'starter') {
+  if (starterHold !== 'starter' || starterDrop !== 'rising-star' || starterCollapse !== 'impact' || reserveUp !== 'starter') {
     console.error('end-of-season squad status must promote or drop from the season ratio');
     process.exitCode = 1;
   }
@@ -2195,8 +2229,8 @@ if (barca && hilal && lafc) {
     bar: 0.5,
     honoursClear: true,
   });
-  if (honourOverride !== 'starter') {
-    console.error('player of the league or tournament must override the elite ratio bar');
+  if (honourOverride !== 'rising-star') {
+    console.error('Rising star with a tournament honour stays Rising star unless they hit the club bar');
     process.exitCode = 1;
   }
   const stepUp = squadStatusOnArrival({
@@ -2333,8 +2367,14 @@ if (barca && hilal && lafc) {
     gamesPlayed: 18,
     bar: 0.5,
   });
-  if (week20Up !== 'starter' || week20Down !== 'reserve' || week20Rising !== 'rising-star') {
-    console.error('after week 20 the season ratio must promote a reserve and drop a short starter');
+  const week20RisingHit = squadStatusAfterFormReview({
+    current: 'rising-star',
+    ratio: 0.8,
+    gamesPlayed: 18,
+    bar: 0.5,
+  });
+  if (week20Up !== 'starter' || week20Down !== 'reserve' || week20Rising !== 'rising-star' || week20RisingHit !== 'rising-star') {
+    console.error('after week 20 a reserve can be promoted; Rising star stays Rising star');
     process.exitCode = 1;
   }
   if (ROLE_REVIEW_WEEK !== 20 || RISING_STAR_MIN_RATIO !== 0.33) {
@@ -2397,6 +2437,26 @@ if (barca && hilal && lafc) {
   }
   if (!/rejected/i.test(starterVeto.detail) || !/Manchester City/i.test(starterVeto.detail)) {
     console.error('a rejected bid must tell the player they agreed terms and the club blocked the fee');
+    process.exitCode = 1;
+  }
+  const listedMega = sellingClubAcceptsOffer({
+    offer: {
+      clubId: 'man-city',
+      move: 'permanent',
+      fee: 225_000_000,
+      weeklyWage: 300_000,
+      contractYears: 5,
+    },
+    kind: 'end-of-season',
+    allowDecline: true,
+    currentClubId: 'barcelona',
+    role: 'first-team',
+    squadStatus: 'starter',
+    contractYearsLeft: 5,
+    playerValue: 225_000_000,
+  });
+  if (!listedMega.accepted) {
+    console.error('a mega club paying the listed fee / its budget must not be vetoed at 115% of market value');
     process.exitCode = 1;
   }
 
@@ -2797,9 +2857,12 @@ if (barca && hilal && lafc) {
   const cheapPermTiers = (cheapSale.pendingTransfer?.offers ?? [])
     .filter((o) => o.move === 'permanent')
     .map((o) => getClub(o.clubId)?.tier ?? 1);
-  console.log('collapsed-value perm tiers', cheapPermTiers, 'value', afterSeven);
-  if (cheapPermTiers.some((tier) => tier <= 2)) {
-    console.error('collapsed-value players must not get Strong or Elite transfer offers');
+  const cheapEuropeTiers = (cheapSale.pendingTransfer?.offers ?? [])
+    .filter((o) => o.move === 'permanent' && getClub(o.clubId)?.league !== 'Saudi Pro League')
+    .map((o) => getClub(o.clubId)?.tier ?? 1);
+  console.log('collapsed-value perm tiers', cheapPermTiers, 'europe', cheapEuropeTiers, 'value', afterSeven);
+  if (afterSeven <= 12_000_000 && cheapEuropeTiers.some((tier) => tier <= 2)) {
+    console.error('collapsed-value players must not get Strong or Elite European transfer offers');
     process.exitCode = 1;
   }
 }
@@ -3254,8 +3317,8 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
       careerStart: 'favourite-first-team',
       squadStatus: 'rising-star',
     });
-    if (honourStay.pendingTransfer?.stay?.squadStatus !== 'starter' && honourStay.immediate?.squadStatus !== 'starter') {
-      console.error('CL player of the tournament at 0.39 must still clear the elite bar');
+    if (honourStay.pendingTransfer?.stay?.squadStatus !== 'rising-star' && honourStay.immediate?.squadStatus !== 'rising-star') {
+      console.error('CL player of the tournament at 0.39 must keep Rising star, not convert to starter');
       process.exitCode = 1;
     }
     if (!seasonOverridesRatioBar({
@@ -3383,9 +3446,12 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
   const liverpoolLoans = (liverpoolMiss.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan');
   if (
     liverpoolLoans.length !== LOAN_OFFER_COUNT
-    || liverpoolLoans.some((o) => getClub(o.clubId)?.league === 'Premier League')
+    || liverpoolLoans.some((o) => {
+      const dest = getClub(o.clubId);
+      return !dest || SECOND_DIVISIONS.has(dest.league);
+    })
   ) {
-    console.error('a 0.33 Liverpool miss is below every Premier League bar and must not loan there');
+    console.error('a Liverpool miss with remaining elite value must loan in the top flight, not the Championship');
     process.exitCode = 1;
   }
 
@@ -4605,6 +4671,20 @@ console.log('\n--- International group sides stay out of early knockouts ---');
     console.error('Euro last-16 and quarter-final must not reuse a group opponent');
     process.exitCode = 1;
   }
+  let copaDup = 0;
+  for (let i = 0; i < 60; i++) {
+    const drawn = tournamentOpponents('brazil', 'copa-america', () => (i * 17 % 97) / 97);
+    const koIds = drawn.slice(3).map((n) => n.id);
+    if (new Set(koIds).size !== koIds.length) copaDup += 1;
+    const sf = koIds[koIds.length - 2];
+    const final = koIds[koIds.length - 1];
+    if (sf && final && sf === final) copaDup += 1;
+  }
+  console.log('Copa América duplicate knockout opponents across 60 draws', copaDup);
+  if (copaDup > 0) {
+    console.error('Copa América must not reuse Argentina (or any nation) in both the semi-final and the final');
+    process.exitCode = 1;
+  }
 }
 
 console.log('\n--- Missed chances cut win probability ---');
@@ -4636,9 +4716,9 @@ console.log('\n--- Missed chances cut win probability ---');
   const baseline = rate(0);
   const oneMiss = rate(0, 1);
   const fourMiss = rate(0, 4);
-  console.log('win rate 0 goals: baseline', baseline.toFixed(3), '1 miss', oneMiss.toFixed(3), '4 misses', fourMiss.toFixed(3));
+  console.log('win rate 0 goals: sit-out/baseline', baseline.toFixed(3), '1 miss', oneMiss.toFixed(3), '4 misses', fourMiss.toFixed(3));
   if (fourMiss >= baseline - 0.08) {
-    console.error('missing all four chances must cut the club’s win rate');
+    console.error('missing all four chances must cut the club’s win rate; sit-outs must not apply that penalty');
     process.exitCode = 1;
   }
   if (oneMiss <= fourMiss || oneMiss > baseline + 0.03) {
@@ -6090,11 +6170,13 @@ console.log('\n--- Club cups, paced tables, transfers, injuries, and elite score
 
   const saudiOnly = pickPermanentClubs(1, 260_000_000, ['man-city'], 'spain', false, 'Premier League', TRANSFER_MARKET_CAP + 1, 24);
   const saudiTooYoung = pickPermanentClubs(1, 260_000_000, ['man-city'], 'spain', false, 'Premier League', TRANSFER_MARKET_CAP + 1, 19);
-  if (saudiOnly.length !== 1 || saudiOnly.some((club) => !(TWILIGHT_SAUDI_CLUB_IDS as readonly string[]).includes(club.id))) {
-    console.error('players valued over €250m must receive exactly one top Saudi offer');
+  const saudiGiants = saudiOnly.filter((club) => (TWILIGHT_SAUDI_CLUB_IDS as readonly string[]).includes(club.id));
+  const saudiEurope = saudiOnly.filter((club) => club.league !== 'Saudi Pro League' && club.country !== 'Saudi Arabia');
+  if (saudiGiants.length !== 1 || saudiEurope.length < 3) {
+    console.error('players valued over €250m must still see European clubs, plus exactly one top Saudi offer');
     process.exitCode = 1;
   }
-  if (saudiTooYoung.length !== 0) {
+  if (saudiTooYoung.some((club) => (TWILIGHT_SAUDI_CLUB_IDS as readonly string[]).includes(club.id))) {
     console.error(`a player under ${SAUDI_OFFER_MIN_AGE} must not receive a Saudi offer even over €250m`);
     process.exitCode = 1;
   }

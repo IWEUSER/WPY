@@ -882,6 +882,45 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
     lastMatchResult = recap.lastMatchResult;
   };
 
+  const sitOutFinalResult = (): Partial<CareerState> => {
+    calendar = syncInternationalCalendar(calendar!, sim!);
+    const complete = sim!.fixtureIndex >= calendar.fixtures.length;
+    const withHonours = complete
+      ? { ...sim!, honours: { ...sim!.honours, leagueChampion: canWinLeague(sim!, state.clubId!) } }
+      : sim!;
+    const awarded = complete
+      ? attachSeasonAwards({
+          ...state,
+          seasonSim: withHonours,
+          seasonCalendar: calendar,
+          currentSeason: season,
+          availability,
+          nationalTeam,
+          formWindow,
+          careerGames,
+          careerEarnings,
+          injuryGamesRemaining,
+        })
+      : { season, wpyResult: state.wpyResult };
+    return {
+      seasonSim: withHonours,
+      seasonCalendar: calendar,
+      currentSeason: awarded.season,
+      availability,
+      nationalTeam,
+      careerGames,
+      careerEarnings,
+      formWindow,
+      lastMatchSummary,
+      lastMatchResult,
+      injuryGamesRemaining,
+      seasonStandings: buildSeasonStandings(withHonours.leagueTable, withHonours.europeanStanding),
+      liveMatch: null,
+      phase: 'match-result',
+      wpyResult: awarded.wpyResult,
+    };
+  };
+
   const sitOutHub = (): Partial<CareerState> => {
     calendar = syncInternationalCalendar(calendar!, sim!);
     const complete = sim!.fixtureIndex >= calendar.fixtures.length;
@@ -956,7 +995,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
     const isInternational = fixture.kind === 'international';
     const squad = isInternational ? nationalTeam?.availability : availability;
     if (injuryGamesRemaining > 0) {
-      const resolution = resolveFixture(sim, fixture, club, 0);
+      const resolution = resolveFixture(sim, fixture, club, 0, Math.random, { playerParticipated: false });
       sim = { ...resolution.sim, fixtureIndex: sim.fixtureIndex + 1 };
       const record: MatchRecord = { matchNumber: season.matches.length + 1, played: false, scored: null };
       const injuredPay = withWeeklyPay(season, careerEarnings, state.weeklyWage);
@@ -979,41 +1018,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
         calendar,
       );
       injuryGamesRemaining -= 1;
-      if (isFinalFixture(fixture)) {
-        const withHonours = complete
-          ? { ...sim, honours: { ...sim.honours, leagueChampion: canWinLeague(sim, state.clubId) } }
-          : sim;
-        const awarded = complete
-          ? attachSeasonAwards({
-              ...state,
-              seasonSim: withHonours,
-              currentSeason: season,
-              availability,
-              nationalTeam,
-              formWindow,
-              careerGames,
-              careerEarnings,
-              injuryGamesRemaining,
-            })
-          : { season, wpyResult: state.wpyResult };
-        return {
-          seasonSim: withHonours,
-          seasonCalendar: syncInternationalCalendar(calendar, withHonours),
-          currentSeason: awarded.season,
-          availability,
-          nationalTeam,
-          careerGames,
-          careerEarnings,
-          formWindow,
-          lastMatchSummary,
-          lastMatchResult,
-          injuryGamesRemaining,
-          seasonStandings: buildSeasonStandings(withHonours.leagueTable, withHonours.europeanStanding),
-          liveMatch: null,
-          phase: 'match-result',
-          wpyResult: awarded.wpyResult,
-        };
-      }
+      if (isFinalFixture(fixture)) return sitOutFinalResult();
       return sitOutHub();
     }
     const rotatedOut = isSquadRotationSitOut(
@@ -1027,7 +1032,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
       },
     );
     if (rotatedOut) {
-      const resolution = resolveFixture(sim, fixture, club, 0);
+      const resolution = resolveFixture(sim, fixture, club, 0, Math.random, { playerParticipated: false });
       sim = { ...resolution.sim, fixtureIndex: sim.fixtureIndex + 1 };
       const record: MatchRecord = { matchNumber: season.matches.length + 1, played: false, scored: null };
       const rotatedPay = withWeeklyPay(season, careerEarnings, state.weeklyWage);
@@ -1037,26 +1042,36 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
         resolution,
         fixture,
         'you were not selected',
-        'hub',
-        false,
+        sim.fixtureIndex >= calendar.fixtures.length ? 'season-summary' : 'hub',
+        isFinalFixture(fixture),
         sim,
         calendar,
       );
+      if (isFinalFixture(fixture)) return sitOutFinalResult();
       return sitOutHub();
     }
     if (squad && !isAvailable(squad)) {
-      const resolution = resolveFixture(sim, fixture, club, 0);
+      const resolution = resolveFixture(sim, fixture, club, 0, Math.random, { playerParticipated: false });
       sim = { ...resolution.sim, fixtureIndex: sim.fixtureIndex + 1 };
       const record: MatchRecord = { matchNumber: season.matches.length + 1, played: false, scored: null };
       const droppedPay = withWeeklyPay(season, careerEarnings, state.weeklyWage);
       season = { ...droppedPay.season, matches: [...droppedPay.season.matches, record] };
       careerEarnings = droppedPay.careerEarnings;
-      applySitOutRecap(resolution, fixture, 'you were dropped', 'hub', false, sim, calendar);
+      applySitOutRecap(
+        resolution,
+        fixture,
+        'you were dropped',
+        sim.fixtureIndex >= calendar.fixtures.length ? 'season-summary' : 'hub',
+        isFinalFixture(fixture),
+        sim,
+        calendar,
+      );
       if (isInternational && nationalTeam) {
         nationalTeam = { ...nationalTeam, availability: serveBannedGame(nationalTeam.availability) };
       } else {
         availability = serveBannedGame(availability);
       }
+      if (isFinalFixture(fixture)) return sitOutFinalResult();
       return sitOutHub();
     }
 
@@ -1065,7 +1080,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
       fixture.playerChances ?? 1,
     );
     if (chances <= 0) {
-      const resolution = resolveFixture(sim, fixture, club, 0);
+      const resolution = resolveFixture(sim, fixture, club, 0, Math.random, { playerParticipated: false });
       sim = { ...resolution.sim, fixtureIndex: sim.fixtureIndex + 1 };
       const record: MatchRecord = { matchNumber: season.matches.length + 1, played: true, scored: false };
       const noChancePay = withWeeklyPay(season, careerEarnings, state.weeklyWage);
@@ -1075,7 +1090,15 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
         careerGames += 1;
         formWindow = pushForm(formWindow, 0);
       }
-      applySitOutRecap(resolution, fixture, 'no chance this match', 'hub', false, sim, calendar);
+      applySitOutRecap(
+        resolution,
+        fixture,
+        'no chance this match',
+        sim.fixtureIndex >= calendar.fixtures.length ? 'season-summary' : 'hub',
+        isFinalFixture(fixture),
+        sim,
+        calendar,
+      );
       if (isInternational && nationalTeam) {
         nationalTeam = recordInternationalAppearance(
           nationalTeam,
@@ -1095,6 +1118,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
           ),
         };
       }
+      if (isFinalFixture(fixture)) return sitOutFinalResult();
       return sitOutHub();
     }
 

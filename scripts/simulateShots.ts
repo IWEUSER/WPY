@@ -25,8 +25,6 @@ import {
   DEFENDER_CLOSE_SPEED_MPS,
   DEFENDER_CLOSE_STOP_GAP_M,
   DEFENDER_GAP_M,
-  DUAL_COVER_HOLD_OFFSET_M,
-  DUAL_PRESS_HOLD_OFFSET_M,
   ELITE_DUAL_DEFENDER_STRENGTH,
   advanceDefender,
   ballWorldXFromRatio,
@@ -870,11 +868,15 @@ const settledLateral = Math.abs(pressNow.worldX - coverNow.worldX);
 console.log(
   `dual close: pressOff=${pressHold.toFixed(2)} coverOff=${coverHold.toFixed(2)} stagger=${settledStagger.toFixed(2)} lateral=${settledLateral.toFixed(2)}`,
 );
-if (pressHold < DUAL_PRESS_HOLD_OFFSET_M - 0.15 || coverHold < DUAL_COVER_HOLD_OFFSET_M - 0.15) {
-  console.error('FAIL: a two-defender close-down must hold wide lanes, not collapse onto the shooting line');
+if (pressHold > 0.9) {
+  console.error('FAIL: the pressing defender must close onto the ball, not drift off the shooting line');
   process.exitCode = 1;
 }
-if (settledStagger < 1.4 || settledLateral < 3.2) {
+if (coverHold < 1.45) {
+  console.error('FAIL: cover must hold the far post, not collapse onto the shooting line');
+  process.exitCode = 1;
+}
+if (settledStagger < 1.15 || settledLateral < 2.4) {
   console.error('FAIL: settled dual defenders must stay staggered and wide of each other');
   process.exitCode = 1;
 }

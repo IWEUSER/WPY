@@ -94,15 +94,22 @@ export const MEGA_CLUB_IDS = new Set(['psg', 'real-madrid', 'man-city']);
 export const MEGA_TRANSFER_FEE = 180_000_000;
 /** Elite clubs do not buy below this market value. */
 export const ELITE_TRANSFER_VALUE_FLOOR = 50_000_000;
+/** Hard ceiling on what even a mega club will pay — not a cap on the player's value. */
+export const MEGA_CLUB_TRANSFER_BUDGET = 250_000_000;
 
 /**
  * Ceiling on what a club will pay, keyed to recent fee ranges:
  * Ajax/PSV-level Eredivisie sides buy in the €15–25m band, not €60m;
  * MLS Designated Player fees sit around €6–12m; 2. Bundesliga mid-table
- * deals are a few million.
+ * deals are a few million. Player value can sit above this; the bid is
+ * min(asking fee, this budget).
  */
+/** Twilight Saudi giants can fund a European-star fee. Other SPL sides cannot. */
+const SAUDI_GIANT_IDS = new Set(['al-hilal', 'al-nassr', 'al-ittihad', 'al-ahli']);
+
 export function clubTransferBudget(club: Club): number {
-  if (MEGA_CLUB_IDS.has(club.id)) return 220_000_000;
+  if (MEGA_CLUB_IDS.has(club.id)) return MEGA_CLUB_TRANSFER_BUDGET;
+  if (SAUDI_GIANT_IDS.has(club.id)) return 180_000_000;
   const league = club.league;
   if (league === 'MLS') return club.tier <= 3 ? 12_000_000 : 6_000_000;
   if (league === 'Eredivisie' || league === 'Primeira Liga' || league === 'Super Lig') {
@@ -192,13 +199,13 @@ export function consecutiveSeasonsBelow(seasons: SeasonRecord[], threshold: numb
  */
 export function consecutivePoorFactor(failedSeasons: number): number {
   if (failedSeasons <= 0) return 1;
-  if (failedSeasons === 1) return 0.62;
-  if (failedSeasons === 2) return 0.36;
-  if (failedSeasons === 3) return 0.2;
-  if (failedSeasons === 4) return 0.11;
-  if (failedSeasons === 5) return 0.06;
-  if (failedSeasons === 6) return 0.035;
-  return 0.02;
+  if (failedSeasons === 1) return 0.5;
+  if (failedSeasons === 2) return 0.28;
+  if (failedSeasons === 3) return 0.14;
+  if (failedSeasons === 4) return 0.08;
+  if (failedSeasons === 5) return 0.045;
+  if (failedSeasons === 6) return 0.025;
+  return 0.015;
 }
 
 export function clubStrengthScale(club: Club): number {
@@ -300,14 +307,20 @@ export function leagueWeightedCareerRatio(
 }
 
 /**
- * Career ratio is the base. A collapse last season cuts the figure hard,
- * but a 0.08 year cannot wipe a 0.80 career down to the bottom of the market.
+ * Career ratio is the base. A collapse last season cuts hard, and a second
+ * or third blank year compounds via consecutivePoorFactor. A return to
+ * form still lifts value back toward the career number.
  */
-export function formAdjustedRatio(careerRatio: number, recentRatio: number | null): number {
+export function formAdjustedRatio(
+  careerRatio: number,
+  recentRatio: number | null,
+  consecutivePoor = 0,
+): number {
   if (recentRatio == null) return careerRatio;
-  const blended = careerRatio * 0.65 + recentRatio * 0.35;
+  const recentWeight = Math.min(0.88, 0.6 + consecutivePoor * 0.1);
+  const blended = careerRatio * (1 - recentWeight) + recentRatio * recentWeight;
   const collapsed = careerRatio > 0.2 && recentRatio < careerRatio * 0.4;
-  return Math.max(0, blended * (collapsed ? 0.7 : 1));
+  return Math.max(0, blended * (collapsed ? 0.55 : 1));
 }
 
 export function playerMarketValueFromSeasons(params: {
@@ -341,23 +354,27 @@ export function playerMarketValueFromSeasons(params: {
     return false;
   });
   const careerRatio = leagueWeightedCareerRatio(seasons, careerGoals, careerGames);
-  const ratio = formAdjustedRatio(careerRatio, lastSeasonLeagueAdjustedRatio(seasons));
+  const poorSeasons = consecutiveSeasonsBelow(seasons, 0.25);
+  const ratio = formAdjustedRatio(careerRatio, lastSeasonLeagueAdjustedRatio(seasons), poorSeasons);
   let weighted = 0;
   let weight = 0;
-  for (const season of seasons) {
-    if (!countsTowardCareerRecord(season.seasonNumber, season.role)) continue;
+  const counted = seasons.filter((season) => countsTowardCareerRecord(season.seasonNumber, season.role) && season.gamesPlayed > 0);
+  counted.forEach((season, index) => {
     const club = getClub(season.clubId);
-    if (!club || season.goals <= 0) continue;
-    weighted += clubLeagueScale(club, seasonLeague(season, club.league)) * season.goals;
-    weight += season.goals;
-  }
+    if (!club) return;
+    const fromEnd = counted.length - index;
+    const recency = Math.pow(0.55, Math.max(0, fromEnd - 1));
+    const sample = Math.max(season.gamesPlayed, 8);
+    weighted += clubLeagueScale(club, seasonLeague(season, club.league)) * sample * recency;
+    weight += sample * recency;
+  });
   const scale = weight > 0 ? weighted / weight : clubLeagueScale(fallbackClub);
   const weightedGoals = seasons.reduce((sum, season) => {
     if (!countsTowardCareerRecord(season.seasonNumber, season.role) || season.gamesPlayed <= 0) return sum;
     return sum + season.goals * leagueValueWeight(seasonLeague(season));
   }, 0);
   const base = valueFromScale(age, ratio, careerGoals, scale, careerGames, weightedGoals);
-  const poor = consecutivePoorFactor(consecutiveSeasonsBelow(seasons, 0.25));
+  const poor = consecutivePoorFactor(poorSeasons);
   const lastLeague = lastSeasonLeague(seasons) ?? fallbackClub.league;
   const floor = youngDivisionStarFloor({ age, league: lastLeague, seasons });
   const raw = Math.max(floor, base * poor);
@@ -391,9 +408,9 @@ function lastSeasonLeague(seasons: SeasonRecord[]): string | null {
   return null;
 }
 
-/** Which transfer band a fee belongs in. A €100m+ player is never tier 5. */
+/** Which transfer band a fee belongs in. A €50m+ player can still draw elite clubs. */
 export function tierForMarketValue(value: number): ClubTier {
-  if (value >= 70_000_000) return 1;
+  if (value >= ELITE_TRANSFER_VALUE_FLOOR) return 1;
   if (value >= 28_000_000) return 2;
   if (value >= 12_000_000) return 3;
   if (value >= 4_000_000) return 4;

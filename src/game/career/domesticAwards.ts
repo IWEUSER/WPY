@@ -78,6 +78,7 @@ export function playerOfTheYearWinChance(params: {
   leagueGoals: number;
 }): number {
   const { leagueChampion, topGoalscorer, leagueGoals } = params;
+  if (leagueGoals >= 40) return 1;
   const boot = goldenBootWinChance(leagueGoals);
   let chance = 0;
   if (topGoalscorer) {

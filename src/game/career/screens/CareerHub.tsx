@@ -320,6 +320,13 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
             nationName={nation.name}
             clubTier={club.tier}
             careerRatio={callUpRatio({ season, careerGoals, careerGames })}
+            careerToDateRatio={careerGames > 0 ? careerGoals / careerGames : 0}
+            lastSeasonRatio={
+              seasonHistory.length > 0 && seasonHistory[seasonHistory.length - 1]!.gamesPlayed > 0
+                ? seasonHistory[seasonHistory.length - 1]!.goals / seasonHistory[seasonHistory.length - 1]!.gamesPlayed
+                : null
+            }
+            seasonGames={season.gamesPlayed}
             sim={seasonSimWithGroup}
             caps={nationalTeam?.caps ?? 0}
             intlGoals={nationalTeam?.goals ?? 0}
@@ -354,6 +361,13 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
                 nationName={nation.name}
                 clubTier={club.tier}
                 careerRatio={callUpRatio({ season, careerGoals, careerGames })}
+                careerToDateRatio={careerGames > 0 ? careerGoals / careerGames : 0}
+                lastSeasonRatio={
+                  seasonHistory.length > 0 && seasonHistory[seasonHistory.length - 1]!.gamesPlayed > 0
+                    ? seasonHistory[seasonHistory.length - 1]!.goals / seasonHistory[seasonHistory.length - 1]!.gamesPlayed
+                    : null
+                }
+                seasonGames={season.gamesPlayed}
                 sim={seasonSimWithGroup}
                 caps={nationalTeam?.caps ?? 0}
                 intlGoals={nationalTeam?.goals ?? 0}
@@ -488,6 +502,9 @@ function InternationalCard({
   nationName,
   clubTier,
   careerRatio,
+  careerToDateRatio,
+  lastSeasonRatio,
+  seasonGames = 0,
   sim,
   caps,
   intlGoals,
@@ -503,6 +520,9 @@ function InternationalCard({
   nationName: string;
   clubTier: 1 | 2 | 3 | 4 | 5;
   careerRatio: number;
+  careerToDateRatio?: number;
+  lastSeasonRatio?: number | null;
+  seasonGames?: number;
   sim: SeasonSimState | null;
   caps: number;
   intlGoals: number;
@@ -570,6 +590,12 @@ function InternationalCard({
     if (inForm) return `Your ${careerRatio.toFixed(2)} goals/game is enough for ${nationName}.`;
     return `Need a ${bar.toFixed(2)} goals/game ratio for a call-up — currently ${careerRatio.toFixed(2)}.`;
   })();
+  const ratioBreakdown = (() => {
+    if (seasonGames >= 15) return null;
+    const careerLine = `Career ${(careerToDateRatio ?? careerRatio).toFixed(2)}`;
+    if (lastSeasonRatio == null) return careerLine;
+    return `${careerLine} · Last season ${lastSeasonRatio.toFixed(2)}`;
+  })();
 
   const showTable = includeTable && Boolean(group && sim?.internationalStage && sim.internationalStage !== 'not-selected');
 
@@ -608,6 +634,7 @@ function InternationalCard({
       <p className={`mt-1 text-sm font-semibold ${inForm ? 'text-emerald-300' : 'text-white/80'}`}>
         {statusLine}
       </p>
+      {ratioBreakdown && <p className="mt-1 text-xs text-white/55">{ratioBreakdown}</p>}
       {campaignLine && <p className="mt-1 text-xs text-emerald-200/80">{campaignLine}</p>}
       {group && pos > 0 && (
         <p className="mt-1 text-xs text-white/60">

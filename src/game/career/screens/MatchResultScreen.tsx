@@ -22,6 +22,11 @@ export default function MatchResultScreen() {
           <h1 className="mt-2 text-3xl font-black tracking-tight text-amber-100">You won the {result.trophyName}</h1>
           <p className="mt-4 text-lg font-semibold text-white/90">{headline}</p>
           {playerLine && <p className="mt-2 text-sm text-white/70">{playerLine}</p>}
+          {result.sitOutReason && (
+            <p className="mt-2 text-sm font-semibold text-amber-200">
+              You did not play — {result.sitOutReason}
+            </p>
+          )}
           {result.aggregateLine && <p className="mt-2 text-sm font-semibold text-emerald-200">{result.aggregateLine}</p>}
           {result.nextLine && <p className="mt-2 text-sm text-white/70">{result.nextLine}</p>}
           <p className="mt-3 text-sm text-amber-100/80">A night to remember. The dressing room is bouncing.</p>
@@ -33,6 +38,11 @@ export default function MatchResultScreen() {
           </p>
           <h1 className="mt-2 text-2xl font-extrabold">{headline}</h1>
           {playerLine && <p className="mt-3 text-sm text-white/70">{playerLine}</p>}
+          {result.sitOutReason && (
+            <p className="mt-2 text-sm font-semibold text-amber-200">
+              You did not play — {result.sitOutReason}
+            </p>
+          )}
           {result.aggregateLine && <p className="mt-2 text-sm font-semibold text-emerald-200">{result.aggregateLine}</p>}
           {result.nextLine && <p className="mt-2 text-sm text-white/70">{result.nextLine}</p>}
           {result.isFinal && result.trophyName && !result.won && (

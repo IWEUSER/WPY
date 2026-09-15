@@ -1504,6 +1504,8 @@ export function resolveFixture(
     settlePenalties?: boolean;
     penaltyScored?: boolean;
     ninetyScore?: { for: number; against: number };
+    /** Sit-outs must not count as missed chances. */
+    playerParticipated?: boolean;
   },
 ): {
   sim: SeasonSimState;
@@ -1525,7 +1527,7 @@ export function resolveFixture(
   const teamWinP = expectedScore(us + (isHome ? 3.5 : 0), them) * 0.92;
 
   let result: ClubMatchResult;
-  const chances = fixture.playerChances;
+  const chances = opts?.playerParticipated === false ? undefined : fixture.playerChances;
   if (opts?.ninetyScore) {
     result = {
       scoreFor: opts.ninetyScore.for,

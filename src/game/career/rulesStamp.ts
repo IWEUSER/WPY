@@ -36,11 +36,12 @@ export function migratedRulesStamp(state: Partial<CareerState>): string | null {
 }
 
 function advanceToWeek(sim: SeasonSimState, week: number, fixtureCount: number, weeks: number[]): SeasonSimState {
+  if (sim.fixtureIndex >= fixtureCount) return { ...sim, fixtureIndex: fixtureCount };
   let fixtureIndex = 0;
   while (fixtureIndex < fixtureCount && (weeks[fixtureIndex] ?? week) < week) {
     fixtureIndex += 1;
   }
-  return { ...sim, fixtureIndex };
+  return { ...sim, fixtureIndex: Math.max(fixtureIndex, Math.min(sim.fixtureIndex, fixtureCount)) };
 }
 
 /**
