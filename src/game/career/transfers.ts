@@ -7,8 +7,6 @@ import {
   DEFAULT_CONTRACT_YEARS,
   FIRST_CONTRACT_YEARS,
   ELITE_TRANSFER_VALUE_FLOOR,
-  MEGA_CLUB_IDS,
-  MEGA_TRANSFER_FEE,
   formAdjustedRatio,
   loanContractYearsRemaining,
   newContractYears,
@@ -46,9 +44,9 @@ export function tierForRatio(ratio: number): ClubTier {
 }
 
 /**
- * Who wants the player follows the goals-per-game ratio, never a better
- * club than that ratio has earned. Career and last-season ratios both
- * cap the band — the worse of the two wins.
+ * Who wants the player follows remaining transfer value first. A bad season
+ * can shift one band worse than that value, but a €100m player is not
+ * dumped to League Two on last year's ratio alone.
  */
 export function offerTierFromStanding(params: {
   ratio?: number;
@@ -58,7 +56,13 @@ export function offerTierFromStanding(params: {
   blockElite?: boolean;
 }): ClubTier {
   const last = params.ratio ?? params.careerRatio;
-  let tier = Math.max(tierForRatio(last), tierForRatio(params.careerRatio)) as ClubTier;
+  const ratioTier = Math.max(tierForRatio(last), tierForRatio(params.careerRatio)) as ClubTier;
+  let tier = ratioTier;
+  if (params.marketValue != null) {
+    const valueTier = tierForMarketValue(params.marketValue);
+    const softened = Math.min(ratioTier, (valueTier + 1) as ClubTier) as ClubTier;
+    tier = Math.max(valueTier, softened) as ClubTier;
+  }
   if (params.blockElite) tier = Math.max(tier, 2) as ClubTier;
   if ((params.marketValue ?? Number.POSITIVE_INFINITY) < ELITE_TRANSFER_VALUE_FLOOR) {
     tier = Math.max(tier, 2) as ClubTier;
@@ -181,6 +185,7 @@ export function canLoanToSameDivision(playerRatio: number, club: Club): boolean 
 export interface LoanPickExtras {
   marketValue?: number;
   honoursOverride?: boolean;
+  consecutivePoor?: number;
 }
 
 /**
@@ -211,13 +216,20 @@ export function pickLoanClubsForMiss(
   const effectiveRatio = extras.honoursOverride && leagueBars.length > 0
     ? Math.max(ratio, ...leagueBars)
     : ratio;
+  const value = extras.marketValue ?? 0;
+  const valueTier = value > 0 ? tierForMarketValue(value) : null;
+  const maxDrop = (extras.consecutivePoor ?? 0) >= 2 ? 2 : 1;
+  const fitsValue = (c: Club) => {
+    if (valueTier == null) return false;
+    return c.tier >= valueTier && c.tier <= Math.min(5, valueTier + maxDrop);
+  };
   const sameDivision = parentLeague
     ? withoutSaudi(CLUBS.filter(
         (c) =>
           c.playable !== false &&
           c.league === parentLeague &&
           !exclude.includes(c.id) &&
-          canLoanToSameDivision(effectiveRatio, c),
+          (canLoanToSameDivision(effectiveRatio, c) || fitsValue(c)),
       ))
     : [];
   const otherTopFlight = withoutSaudi(CLUBS.filter(
@@ -226,11 +238,9 @@ export function pickLoanClubsForMiss(
       !SECOND_DIVISIONS.has(c.league) &&
       c.league !== parentLeague &&
       !exclude.includes(c.id) &&
-      canLoanToSameDivision(effectiveRatio, c),
+      (canLoanToSameDivision(effectiveRatio, c) || fitsValue(c)),
   ));
-  const skipSecond = (extras.marketValue ?? 0) >= ELITE_TRANSFER_VALUE_FLOOR
-    && !parentAlreadySecond
-    && sameDivision.length > 0;
+  const skipSecond = valueTier != null && valueTier <= 3 && !parentAlreadySecond;
   const secondIn = (country: string | null) =>
     country
       ? withoutSaudi(CLUBS.filter(
@@ -339,11 +349,6 @@ export function pickPermanentClubs(
   marketValue?: number,
   age = 99,
 ): Club[] {
-  if ((marketValue ?? 0) > TRANSFER_MARKET_CAP) {
-    if (age < SAUDI_OFFER_MIN_AGE) return [];
-    const saudi = pickSaudiOfferClub(excludeIds);
-    return saudi ? [saudi] : [];
-  }
   if (qualityTier === 1 && (marketValue ?? 0) < ELITE_TRANSFER_VALUE_FLOOR) {
     qualityTier = 2;
   }
@@ -365,15 +370,6 @@ export function pickPermanentClubs(
     }
   }
   const country = countryForNationality(nationality);
-  if (fee >= MEGA_TRANSFER_FEE && !blockElite && qualityTier === 1) {
-    const megas = CLUBS.filter((c) => MEGA_CLUB_IDS.has(c.id) && !excludeIds.includes(c.id));
-    return attachOneSaudiOffer(
-      pickClubsBiasedToCountry(megas, Math.min(TRANSFER_OFFER_COUNT, megas.length), country, 0),
-      qualityTier,
-      excludeIds,
-      age,
-    );
-  }
   if (fee <= 0) {
     return attachOneSaudiOffer(
       pickClubsFromTier(qualityTier, TRANSFER_OFFER_COUNT, excludeIds, nationality),
@@ -544,7 +540,7 @@ export const TWILIGHT_MLS_CLUB_IDS = ['lafc', 'inter-miami', 'nycfc', 'la-galaxy
 export const TWILIGHT_SAUDI_CLUB_IDS = ['al-hilal', 'al-nassr', 'al-ittihad', 'al-ahli'] as const;
 /** Saudi money is off the table until the player turns 20. */
 export const SAUDI_OFFER_MIN_AGE = 20;
-/** European clubs will not bid above this asking price. */
+/** Saudi can join a packed elite list above this asking price. Not a cap on player value. */
 export const TRANSFER_MARKET_CAP = 250_000_000;
 
 /** Top-tier European weekly wage, used for twilight MLS and Saudi bids. */
@@ -754,6 +750,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     pickLoanClubsForMiss(loanRatio, nationality, LOAN_OFFER_COUNT, exclude, parentId, {
       marketValue: value,
       honoursOverride: honoursClear,
+      consecutivePoor: consecutiveSeasonsBelow(seasons, 0.25),
     });
   const withTwilight = (offers: ClubOfferTerms[]) =>
     withTwilightMlsOffers(offers, age, value, fee, [club.id, parentClubId]);
@@ -907,16 +904,22 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     blockElite,
   });
   const canStayRising = honoursClear || ratio >= RISING_STAR_MIN_RATIO;
-  const firstSeasonStayStatus: SquadStatus = ratioMet
-    ? nextSquadStatusAfterSeason({
-        role: 'first-team',
-        current: currentStatus === 'rising-star' ? 'rising-star' : currentStatus,
-        ratio,
-        gamesPlayed: season.gamesPlayed,
-        bar: threshold,
-        honoursClear,
-      })
-    : 'rising-star';
+  const firstSeasonStayStatus: SquadStatus = currentStatus === 'rising-star'
+    ? (ratioMet && ratio + 1e-9 >= threshold && season.gamesPlayed >= 12
+        ? 'starter'
+        : canStayRising
+          ? 'rising-star'
+          : 'reserve')
+    : ratioMet
+      ? nextSquadStatusAfterSeason({
+          role: 'first-team',
+          current: currentStatus,
+          ratio,
+          gamesPlayed: season.gamesPlayed,
+          bar: threshold,
+          honoursClear,
+        })
+      : 'rising-star';
 
   if (promoted) {
     return parallelTransfers(
@@ -1226,12 +1229,20 @@ export function sellingClubAcceptsOffer(params: {
     return { accepted: true, detail: '' };
   }
 
+  const destBudget = dest ? clubTransferBudget(dest) : 0;
+  const asking = transferFeeFromValue(params.playerValue, params.contractYearsLeft);
+  const listed = destBudget > 0 ? Math.min(asking, destBudget) : asking;
+  const meetsListed = params.offer.fee + 1e-6 >= listed * 0.97;
+  const maxedBudget = destBudget > 0 && params.offer.fee + 1e-6 >= destBudget * 0.97;
+  if (meetsListed || maxedBudget) {
+    return { accepted: true, detail: '' };
+  }
+
   const steppingUp = Boolean(dest && current && dest.tier < current.tier);
   const peerMove = Boolean(dest && current && dest.tier <= current.tier);
-  const listedFloor = params.playerValue * (params.squadStatus === 'reserve' || params.squadStatus === 'rising-star' ? 0.7 : 1.15);
 
   if (params.squadStatus === 'reserve' || params.squadStatus === 'rising-star') {
-    if (steppingUp && params.contractYearsLeft >= 3 && params.offer.fee < listedFloor) {
+    if (steppingUp && params.contractYearsLeft >= 3) {
       return {
         accepted: false,
         detail: `You agreed terms with ${destName}. ${clubName} rejected the ${feeLine} — they will not sell a ${params.squadStatus === 'rising-star' ? 'rising star' : 'reserve'} player up a level on that fee.`,
@@ -1240,8 +1251,7 @@ export function sellingClubAcceptsOffer(params: {
     return { accepted: true, detail: '' };
   }
 
-  // Starter with years left: listed-fee moves to a peer or better club are blocked.
-  if (peerMove && params.offer.fee < listedFloor) {
+  if (peerMove) {
     return {
       accepted: false,
       detail: `You agreed terms with ${destName}. ${clubName} rejected the ${feeLine} — they will not sell a starter to ${destName} on that fee.`,

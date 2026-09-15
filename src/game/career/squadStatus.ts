@@ -173,11 +173,11 @@ export function nextSquadStatusAfterSeason(params: {
   if (current === 'starter') {
     if (honours || (ratio >= bar && gamesPlayed >= 20)) return 'starter';
     if (badlyShort) return 'impact';
-    return 'reserve';
+    return 'rising-star';
   }
   if (current === 'rising-star') {
-    if (hit) return 'starter';
-    if (ratio >= RISING_STAR_MIN_RATIO && gamesPlayed >= 8) return 'rising-star';
+    if (!honours && ratio >= bar && gamesPlayed >= 18) return 'starter';
+    if (honours || (ratio >= RISING_STAR_MIN_RATIO && gamesPlayed >= 8)) return 'rising-star';
     return 'reserve';
   }
   if (current === 'reserve') {
@@ -202,12 +202,12 @@ export function squadStatusAfterFormReview(params: {
   const honours = Boolean(params.honoursClear);
   const sample = params.gamesPlayed >= 6;
   const hit = honours || (sample && params.ratio >= params.bar);
-  if (hit) return 'starter';
-  if (params.current === 'starter' && sample && params.ratio < params.bar) return 'reserve';
   if (params.current === 'rising-star') {
-    if (sample && params.ratio < RISING_STAR_MIN_RATIO) return 'reserve';
+    if (sample && params.ratio < RISING_STAR_MIN_RATIO && !honours) return 'reserve';
     return 'rising-star';
   }
+  if (hit) return 'starter';
+  if (params.current === 'starter' && sample && params.ratio < params.bar) return 'reserve';
   if (params.current === 'reserve' && sample && params.ratio < params.bar - 0.1) return 'impact';
   return params.current;
 }

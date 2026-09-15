@@ -29,14 +29,13 @@ export const DEFENDER_CLOSE_STOP_GAP_NEAR_M = 1.4;
 const CLOSE_COVER_MIN_OFFSET_M = 1.65;
 const CLOSE_COVER_MAX_OFFSET_M = 2.85;
 /**
- * Paired press / cover hold these offsets while closing so a lane stays open
- * between them and around them toward the posts — not a wall on the six-yard
- * shooting line.
+ * Paired press closes almost on the shooting line. Cover holds the far post,
+ * not a wide channel off the pitch that never affects the shot.
  */
-export const DUAL_PRESS_HOLD_OFFSET_M = 1.72;
-export const DUAL_COVER_HOLD_OFFSET_M = 2.42;
+export const DUAL_PRESS_HOLD_OFFSET_M = 0.28;
+export const DUAL_COVER_HOLD_OFFSET_M = 2.05;
 /** Cover stays this many metres closer to goal than the press. */
-export const DUAL_COVER_STAGGER_M = 2.4;
+export const DUAL_COVER_STAGGER_M = 1.85;
 
 export type DefenderDuty = 'press' | 'cover';
 
@@ -136,13 +135,14 @@ export function placeDefender(
   opts?: { wideLane?: boolean },
 ): DefenderPose {
   const ballWorldX = ballWorldXFromRatio(ballStartXRatio);
-  const coverSide: -1 | 1 = rng() < 0.5 ? -1 : 1;
+  const ballSide: -1 | 1 = ballWorldX >= 0 ? 1 : -1;
+  const coverSide: -1 | 1 = opts?.wideLane ? ballSide : rng() < 0.5 ? -1 : 1;
   const maxZ = shotDistanceM - DEFENDER_GAP_M;
 
   if (maxZ >= MIN_DEFENDER_Z_M) {
-    const t = opts?.wideLane ? 0.48 + rng() * 0.38 : 0.12 + rng() * 0.5;
+    const t = opts?.wideLane ? 0.42 + rng() * 0.32 : 0.12 + rng() * 0.5;
     const z = MIN_DEFENDER_Z_M + t * (maxZ - MIN_DEFENDER_Z_M);
-    const offset = opts?.wideLane ? 1.2 + rng() * 1.05 : 0.7 + rng() * 0.95;
+    const offset = opts?.wideLane ? 0.35 + rng() * 0.45 : 0.7 + rng() * 0.95;
     const worldX = clamp(lineToGoalCentreX(ballWorldX, shotDistanceM, z) + coverSide * offset, -7.5, 7.5);
     const look = pickPlayerLook(rng() * 1_000_000, palette);
     return { worldX, z, coverSide, duty: 'press', stride: 0, skinTone: look.skin, hairColor: look.hair };
@@ -174,19 +174,18 @@ export function defenderCloseTarget(
   const duty: DefenderDuty = opts?.duty ?? 'press';
   const pressStop = near ? DEFENDER_CLOSE_STOP_GAP_NEAR_M : DEFENDER_CLOSE_STOP_GAP_M;
   const pressZ = clamp(shotDistanceM - pressStop, 1.35, shotDistanceM - 0.9);
+  const farPostX = (FIFA.goalWidth / 2) * coverSide * 0.9;
   if (!paired) {
     const lineX = lineToGoalCentreX(ballWorldX, shotDistanceM, pressZ);
     const offset = near ? 0.72 : 0.16;
     return { worldX: clamp(lineX + coverSide * offset, -7.5, 7.5), z: pressZ };
   }
   if (duty === 'cover') {
-    const z = clamp(pressZ - DUAL_COVER_STAGGER_M, MIN_DEFENDER_Z_M, Math.max(MIN_DEFENDER_Z_M, pressZ - 1.55));
-    const lineX = lineToGoalCentreX(ballWorldX, shotDistanceM, z);
-    const offset = near ? 1.35 : DUAL_COVER_HOLD_OFFSET_M;
-    return { worldX: clamp(lineX + coverSide * offset, -7.5, 7.5), z };
+    const z = clamp(pressZ - DUAL_COVER_STAGGER_M, MIN_DEFENDER_Z_M, Math.max(MIN_DEFENDER_Z_M, pressZ - 1.15));
+    return { worldX: clamp(farPostX, -FIFA.goalWidth / 2, FIFA.goalWidth / 2), z };
   }
   const lineX = lineToGoalCentreX(ballWorldX, shotDistanceM, pressZ);
-  const offset = near ? 1.25 : DUAL_PRESS_HOLD_OFFSET_M;
+  const offset = near ? 0.22 : DUAL_PRESS_HOLD_OFFSET_M;
   return { worldX: clamp(lineX + coverSide * offset, -7.5, 7.5), z: pressZ };
 }
 
@@ -402,16 +401,16 @@ export function placeCoverDefender(
 ): DefenderPose | null {
   if (!canKeepTenYardGap(shotDistanceM)) return null;
   const coverSide: -1 | 1 = first.coverSide === 1 ? -1 : 1;
-  const ballWorldX = ballWorldXFromRatio(ballStartXRatio);
   const z = clamp(
     first.z - DUAL_COVER_STAGGER_M,
     MIN_DEFENDER_Z_M,
-    Math.max(MIN_DEFENDER_Z_M, first.z - 1.55),
+    Math.max(MIN_DEFENDER_Z_M, first.z - 1.15),
   );
-  const tryOffset = (offset: number): DefenderPose => {
+  const farPost = (FIFA.goalWidth / 2) * coverSide;
+  const tryOffset = (t: number): DefenderPose => {
     const look = pickPlayerLook(rng() * 1_000_000, palette);
     return {
-      worldX: clamp(lineToGoalCentreX(ballWorldX, shotDistanceM, z) + coverSide * offset, -7.5, 7.5),
+      worldX: clamp(farPost * t, -FIFA.goalWidth / 2, FIFA.goalWidth / 2),
       z,
       coverSide,
       duty: 'cover',
@@ -421,9 +420,9 @@ export function placeCoverDefender(
     };
   };
   const candidates = [
-    tryOffset(2.15 + rng() * 0.95),
-    tryOffset(3.05),
-    tryOffset(3.55),
+    tryOffset(0.82 + rng() * 0.1),
+    tryOffset(0.92),
+    tryOffset(0.72),
   ];
   for (const cover of candidates) {
     const pack = [first, cover];

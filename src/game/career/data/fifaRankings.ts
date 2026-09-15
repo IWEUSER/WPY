@@ -404,6 +404,22 @@ export function worldCupKnockoutRankCap(round: InternationalKnockoutRound): numb
   return knockoutRankCap(round, 'world-cup');
 }
 
+function unusedKnockoutPool(
+  pool: { id: string; name: string; confederation: Confederation }[],
+  used: Set<string>,
+  groupIds: Set<string>,
+  cap: number | undefined,
+  allowGroup: boolean,
+): { id: string; name: string; confederation: Confederation }[] {
+  const ranked = cap != null ? pool.filter((n) => fifaRank(n.id) <= cap) : pool;
+  const roundPool = ranked.length > 0 ? ranked : pool;
+  return roundPool.filter((n) => {
+    if (used.has(n.id)) return false;
+    if (!allowGroup && groupIds.has(n.id)) return false;
+    return true;
+  });
+}
+
 function drawKnockoutOpponents(
   nationId: string,
   rounds: InternationalKnockoutRound[],
@@ -415,18 +431,14 @@ function drawKnockoutOpponents(
   const picks: { id: string; name: string; confederation: Confederation }[] = [];
   for (const round of rounds) {
     const cap = options?.rankCapForRound?.(round);
-    const rankedPool = cap != null ? pool.filter((n) => fifaRank(n.id) <= cap) : pool;
-    const roundPool = rankedPool.length > 0 ? rankedPool : pool;
     const allowGroup = GROUP_REUSE_KNOCKOUT.has(round);
-    const eligible = roundPool.filter((n) => {
-      if (used.has(n.id)) return false;
-      if (!allowGroup && groupIds.has(n.id)) return false;
-      return true;
-    });
-    const unusedInCap = roundPool.filter((n) => !used.has(n.id));
-    const pickPool =
-      eligible.length > 0 ? eligible : unusedInCap.length > 0 ? unusedInCap : roundPool;
-    const pick = pickMixedRankOpponents(nationId, 1, pickPool, { rng: options?.rng })[0];
+    let eligible = unusedKnockoutPool(pool, used, groupIds, cap, allowGroup);
+    if (eligible.length === 0) eligible = unusedKnockoutPool(pool, used, groupIds, cap, true);
+    if (eligible.length === 0) eligible = unusedKnockoutPool(pool, used, groupIds, undefined, true);
+    if (eligible.length === 0) eligible = pool.filter((n) => !used.has(n.id));
+    const pick = eligible.length > 0
+      ? pickMixedRankOpponents(nationId, 1, eligible, { rng: options?.rng })[0]
+      : undefined;
     if (pick) {
       used.add(pick.id);
       picks.push(pick);
