@@ -147,14 +147,24 @@ function attachOneSaudiOffer(
   if (age < SAUDI_OFFER_MIN_AGE) {
     return without;
   }
-  const pool = CLUBS.filter(
+  const giants = TWILIGHT_SAUDI_CLUB_IDS
+    .map((id) => getClub(id))
+    .filter((club): club is Club => club != null && !excludeIds.includes(club.id));
+  const sameTier = CLUBS.filter(
     (club) =>
       isSaudiClub(club) &&
       club.playable !== false &&
       club.tier === qualityTier &&
       !excludeIds.includes(club.id),
   );
-  const saudi = shuffle(pool)[0];
+  const nearby = CLUBS.filter(
+    (club) =>
+      isSaudiClub(club) &&
+      club.playable !== false &&
+      Math.abs(club.tier - qualityTier) <= 1 &&
+      !excludeIds.includes(club.id),
+  );
+  const saudi = shuffle(giants)[0] ?? shuffle(sameTier)[0] ?? shuffle(nearby)[0];
   if (!saudi) {
     return without;
   }
@@ -219,8 +229,9 @@ export function pickLoanClubsForMiss(
   const value = extras.marketValue ?? 0;
   const valueTier = value > 0 ? tierForMarketValue(value) : null;
   const maxDrop = (extras.consecutivePoor ?? 0) >= 2 ? 2 : 1;
+  const relaxBar = value >= ELITE_TRANSFER_VALUE_FLOOR;
   const fitsValue = (c: Club) => {
-    if (valueTier == null) return false;
+    if (!relaxBar || valueTier == null) return false;
     return c.tier >= valueTier && c.tier <= Math.min(5, valueTier + maxDrop);
   };
   const sameDivision = parentLeague
@@ -240,7 +251,7 @@ export function pickLoanClubsForMiss(
       !exclude.includes(c.id) &&
       (canLoanToSameDivision(effectiveRatio, c) || fitsValue(c)),
   ));
-  const skipSecond = valueTier != null && valueTier <= 3 && !parentAlreadySecond;
+  const skipSecond = relaxBar && !parentAlreadySecond;
   const secondIn = (country: string | null) =>
     country
       ? withoutSaudi(CLUBS.filter(
@@ -563,15 +574,17 @@ function applyTwilightDestinations(
   for (const id of clubIds) {
     if (excludeIds.has(id) || !getClub(id)) continue;
     const existing = offers.find((offer) => offer.clubId === id);
+    const dest = getClub(id);
+    const listed = dest ? Math.min(fee, clubTransferBudget(dest)) : fee;
     if (existing) {
       existing.weeklyWage = Math.max(existing.weeklyWage, wage);
-      if (existing.move === 'permanent') existing.fee = fee;
+      if (existing.move === 'permanent') existing.fee = listed;
       continue;
     }
     offers.push({
       clubId: id,
       move: 'permanent',
-      fee,
+      fee: listed,
       weeklyWage: wage,
       contractYears: years,
     });
@@ -1159,7 +1172,7 @@ function withTwilightMlsOffers(
           next[replaceAt] = {
             clubId: saudi.id,
             move: 'permanent',
-            fee,
+            fee: Math.min(fee, clubTransferBudget(saudi)),
             weeklyWage: twilightStarWage(value),
             contractYears: newContractYears(age),
           };

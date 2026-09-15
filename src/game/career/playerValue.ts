@@ -104,8 +104,12 @@ export const MEGA_CLUB_TRANSFER_BUDGET = 250_000_000;
  * deals are a few million. Player value can sit above this; the bid is
  * min(asking fee, this budget).
  */
+/** Twilight Saudi giants can fund a European-star fee. Other SPL sides cannot. */
+const SAUDI_GIANT_IDS = new Set(['al-hilal', 'al-nassr', 'al-ittihad', 'al-ahli']);
+
 export function clubTransferBudget(club: Club): number {
   if (MEGA_CLUB_IDS.has(club.id)) return MEGA_CLUB_TRANSFER_BUDGET;
+  if (SAUDI_GIANT_IDS.has(club.id)) return 180_000_000;
   const league = club.league;
   if (league === 'MLS') return club.tier <= 3 ? 12_000_000 : 6_000_000;
   if (league === 'Eredivisie' || league === 'Primeira Liga' || league === 'Super Lig') {
@@ -404,9 +408,9 @@ function lastSeasonLeague(seasons: SeasonRecord[]): string | null {
   return null;
 }
 
-/** Which transfer band a fee belongs in. A €100m+ player is never tier 5. */
+/** Which transfer band a fee belongs in. A €50m+ player can still draw elite clubs. */
 export function tierForMarketValue(value: number): ClubTier {
-  if (value >= 70_000_000) return 1;
+  if (value >= ELITE_TRANSFER_VALUE_FLOOR) return 1;
   if (value >= 28_000_000) return 2;
   if (value >= 12_000_000) return 3;
   if (value >= 4_000_000) return 4;
