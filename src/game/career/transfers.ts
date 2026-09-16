@@ -9,6 +9,7 @@ import {
   ELITE_TRANSFER_VALUE_FLOOR,
   formAdjustedRatio,
   loanContractYearsRemaining,
+  mixedPermanentContractYears,
   newContractYears,
   playerMarketValueFromSeasons,
   RESERVE_WEEKLY_WAGE,
@@ -599,13 +600,14 @@ function offerTerms(
   age: number,
   contractYears?: number,
 ): ClubOfferTerms[] {
-  const years = contractYears ?? (move === 'loan' ? 1 : newContractYears(age));
-  return clubs.map((club) => ({
+  return clubs.map((club, index) => ({
     clubId: club.id,
     move,
     fee: move === 'loan' ? 0 : Math.min(fee, clubTransferBudget(club)),
     weeklyWage: weeklyWageForClub(club, value),
-    contractYears: years,
+    contractYears: move === 'loan'
+      ? (contractYears ?? 1)
+      : mixedPermanentContractYears(age, index, fee, contractYears),
   }));
 }
 
@@ -775,7 +777,9 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     if (ratio >= threshold || honoursClear) {
       return {
         headline: 'Promoted to the First Team!',
-        detail: `You hit ${threshold.toFixed(2)} goals/game in the reserves - ${club.name} want you in the first-team squad now as a Rising star.`,
+        detail: honoursClear
+          ? `A league or tournament honour this season counted as meeting ${club.name}'s ${threshold.toFixed(2)} reserve bar (${ratio.toFixed(2)} goals/game). They want you in the first-team squad now as a Rising star.`
+          : `You met the ${threshold.toFixed(2)} goals/game reserve bar (${ratio.toFixed(2)} this season) — ${club.name} want you in the first-team squad now as a Rising star.`,
         immediate: stayOn({
           role: 'first-team',
           contractYearsRemaining: FIRST_CONTRACT_YEARS,

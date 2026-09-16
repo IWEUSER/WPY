@@ -233,7 +233,7 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
   });
   const campaign = internationalCampaignForSeason(intlSeason, nation?.confederation ?? clubConfederation);
   const tournament = campaign.tournament ?? null;
-  const clubOk = clubEligibleForNationalTeam(club.tier, nationId);
+  const clubOk = clubEligibleForNationalTeam(club.tier, nationId, league);
   const campaignActive = Boolean(
     !leagueOnly &&
       intlSeason >= 1 &&
@@ -257,6 +257,7 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
         publicSeason,
         calendarWeek: 1,
         squadStatus: params.squadStatus ?? 'starter',
+        league,
       }),
   );
   const startsAtTournament =

@@ -169,6 +169,7 @@ function withInternationalForm(
     publicSeason: publicSeason >= 1 ? publicSeason : null,
     calendarWeek: ctx?.week ?? 1,
     squadStatus: ctx?.squadStatus ?? 'starter',
+    league: club.league,
   });
   if (selected === sim.internationalSelected) return sim;
   if (!selected) {
@@ -198,6 +199,7 @@ function reviewedSquadFields(
   }
   const week = currentCalendarWeek(calendar, sim.fixtureIndex);
   if (week <= ROLE_REVIEW_WEEK) return { squadStatus: current, currentSeason: season };
+  if (season.squadRoleReviewed) return { squadStatus: current, currentSeason: season };
   const club = state.clubId ? getClub(state.clubId) : undefined;
   if (!club) return { squadStatus: current, currentSeason: season };
   const ratio = season.gamesPlayed > 0 ? season.goals / season.gamesPlayed : 0;
@@ -212,7 +214,7 @@ function reviewedSquadFields(
   });
   return {
     squadStatus: next,
-    currentSeason: { ...season, squadStatus: next },
+    currentSeason: { ...season, squadStatus: next, squadRoleReviewed: true },
   };
 }
 

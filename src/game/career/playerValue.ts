@@ -80,6 +80,21 @@ export function newContractYears(age: number): number {
   return maxContractYearsForAge(age);
 }
 
+/** Early-career and free transfers mix 1–3 year deals across the offer list. */
+export function mixedPermanentContractYears(
+  age: number,
+  index: number,
+  fee = 1,
+  fallback?: number,
+): number {
+  const cap = maxContractYearsForAge(age);
+  if (fee <= 0 || age <= 21) {
+    const options = [1, 2, 3].filter((years) => years <= cap);
+    return options[index % Math.max(1, options.length)] ?? 1;
+  }
+  return Math.min(fallback ?? newContractYears(age), cap);
+}
+
 /** Full fee on a 5-year deal; expired / final year is a free transfer. */
 export function contractValueFactor(yearsRemaining: number): number {
   if (yearsRemaining >= 5) return 1;

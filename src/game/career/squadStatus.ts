@@ -119,8 +119,11 @@ export function isSquadRotationSitOut(
     seasonMatchCount?: number;
   },
 ): boolean {
-  if (role === 'reserve') return extra?.seasonMatchCount === 0;
+  // Academy / reserve-year football is every game except injury.
+  if (role === 'reserve') return false;
   if (fixtureKind === 'rest') return false;
+  // Rising star sits the first first-team appearance of a campaign.
+  if (squadStatus === 'rising-star' && extra?.seasonMatchCount === 0) return true;
   if (extra?.toughMinutes && (squadStatus === 'rising-star' || squadStatus === 'reserve')) {
     return shouldSitToughFixture(squadStatus, completedFixtures);
   }
@@ -191,6 +194,7 @@ export function nextSquadStatusAfterSeason(params: {
 /**
  * After week 20, this season's ratio (or a honour) promotes a reserve / rising
  * star into the XI, or drops a starter who is short of the bar.
+ * Applied once — later weeks must not cascade Rising star → Reserve → Impact.
  */
 export function squadStatusAfterFormReview(params: {
   current: SquadStatus;
