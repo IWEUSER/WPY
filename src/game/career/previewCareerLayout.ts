@@ -915,6 +915,8 @@ export function applyCareerLayoutPreview(): void {
           ? 'hub'
         : preview === 'record'
         ? 'career'
+        : preview === 'legacy'
+        ? 'legacy'
         : preview === 'club-choice'
         ? 'club-choice'
         : preview === 'transfer' || preview === 'expired' || preview === 'renew' || preview === 'championship-transfer' || isReserveLoansPreview || preview === 'first-team-miss' || preview === 'transfer-20' || preview === 'transfer-reject'
@@ -1172,5 +1174,81 @@ export function applyCareerLayoutPreview(): void {
     wpyResult: preview === 's1-summary' || preview === 'loan-summary'
       ? { won: false, reason: '' }
       : undefined,
+  });
+
+  if (preview === 'legacy') applyLegacyRecordsOverlay();
+}
+
+/** DEV overlay: mixed 100+ / listed / top-10 boards on the Legacy screen. */
+function applyLegacyRecordsOverlay(): void {
+  const state = useCareerStore.getState();
+  const counted = state.seasonHistory.filter((season) => season.role !== 'reserve');
+  const firstTeam = counted[0] ?? state.currentSeason;
+  if (!firstTeam) return;
+  const history = [
+    ...state.seasonHistory.filter((season) => season.role === 'reserve'),
+    {
+      ...firstTeam,
+      seasonNumber: Math.max(2, firstTeam.seasonNumber),
+      role: 'first-team' as const,
+      league: 'La Liga',
+      clubId: 'real-madrid',
+      leagueGoals: 80,
+      cupGoals: 14,
+      domesticGoals: 94,
+      continentalStats: [{ cup: 'ucl' as const, games: 13, goals: 140 }],
+      international: {
+        tournament: 'world-cup' as const,
+        qualifyingGames: 10,
+        qualifyingGoals: 8,
+        qualifyingOutcome: 'qualified' as const,
+        finalsGames: 7,
+        finalsGoals: 16,
+        tournamentOutcome: 'champion' as const,
+        playerOfTheTournament: true,
+        topGoalscorer: true,
+      },
+    },
+  ];
+  useCareerStore.setState({
+    phase: 'legacy',
+    legacyReturnPhase: 'hub',
+    clubId: 'real-madrid',
+    clubLeague: 'La Liga',
+    nationality: 'spain',
+    seasonHistory: history,
+    currentSeason: state.currentSeason
+      ? {
+          ...state.currentSeason,
+          clubId: 'real-madrid',
+          league: 'La Liga',
+          role: 'first-team',
+          leagueGoals: 0,
+          cupGoals: 0,
+          continentalStats: [],
+        }
+      : null,
+    nationalTeam: {
+      nationId: 'spain',
+      availability: createAvailability(),
+      caps: 40,
+      goals: 42,
+      byCompetition: [
+        {
+          tournament: 'world-cup',
+          qualifyingGames: 10,
+          qualifyingGoals: 8,
+          finalsGames: 7,
+          finalsGoals: 16,
+        },
+        {
+          tournament: 'euro',
+          qualifyingGames: 0,
+          qualifyingGoals: 0,
+          finalsGames: 6,
+          finalsGoals: 5,
+        },
+      ],
+    },
   });
 }
