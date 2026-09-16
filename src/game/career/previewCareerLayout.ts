@@ -512,6 +512,33 @@ export function applyCareerLayoutPreview(): void {
       }
       completed += 1;
     }
+    if (sim.europeanStanding) sim.europeanStanding.stage = 'group';
+    sim.domesticCupStage = 'round-of-16';
+    sim.internationalTournament = 'euro';
+    sim.internationalSelected = true;
+    sim.internationalStage = 'group';
+  } else if (preview === 'hub') {
+    if (sim.europeanStanding) sim.europeanStanding.stage = 'group';
+    sim.domesticCupStage = 'round-of-16';
+    sim.internationalTournament = 'euro';
+    sim.internationalSelected = true;
+    sim.internationalStage = 'group';
+  } else if (preview === 's1-summary') {
+    sim.leagueTable = rankLeagueTable(
+      sim.leagueTable.map((row, i) => {
+        if (row.clubId === 'man-city') {
+          return { ...row, played: 19, won: 12, drawn: 4, lost: 3, goalsFor: 42, goalsAgainst: 18, points: 40 };
+        }
+        return { ...row, played: 19, won: 8, drawn: 4, lost: 7, goalsFor: 24, goalsAgainst: 22, points: Math.max(6, 48 - i * 2) };
+      }),
+    );
+    sim.domesticCup = 'fa-cup';
+    sim.domesticCupStage = 'quarter-final';
+    if (sim.europeanStanding) sim.europeanStanding.stage = 'group';
+    sim.internationalTournament = 'world-cup';
+    sim.internationalStage = 'group';
+    sim.internationalSelected = true;
+    sim.internationalReached = 'group';
   } else if (preview === 'hub-sitout') {
     const cupIdx = calendar.fixtures.findIndex((f) => f.kind === 'domestic-cup');
     if (cupIdx >= 0) {
@@ -956,8 +983,8 @@ export function applyCareerLayoutPreview(): void {
       ? { phase: 0, windowFails: 2, bannedGamesRemaining: 0 }
       : createAvailability(),
     seasonHistory: preview === 'championship-transfer' ? champSeasons.slice(0, 2) : preview === 's1-summary' || preview === 'hub-rising-star' || preview === 'hub-rotation' || preview === 'hub-qualifying' ? [] : history,
-    careerGoals: preview === 'end' ? 312 : preview === 'championship-transfer' ? 72 : preview === 's1-summary' ? 22 : preview === 'hub-rising-star' ? 2 : preview === 'hub-rotation' ? 1 : 58,
-    careerGames: preview === 'end' ? 540 : preview === 'championship-transfer' ? 138 : preview === 's1-summary' ? 40 : preview === 'hub-rising-star' ? 3 : preview === 'hub-rotation' ? 2 : 76,
+    careerGoals: preview === 'end' ? 312 : preview === 'championship-transfer' ? 72 : preview === 's1-summary' ? 10 : preview === 'hub-rising-star' ? 2 : preview === 'hub-rotation' ? 1 : 58,
+    careerGames: preview === 'end' ? 540 : preview === 'championship-transfer' ? 138 : preview === 's1-summary' ? 19 : preview === 'hub-rising-star' ? 3 : preview === 'hub-rotation' ? 2 : 76,
     seasonCalendar: isReservePreview
       ? reserveSeason?.calendar ?? null
       : isTrialPreview || isYouthPreview || isYouthNextPreview || isClubTrialPreview
@@ -1030,15 +1057,33 @@ export function applyCareerLayoutPreview(): void {
               role: 'first-team',
               squadStatus: 'rising-star',
               matches: [],
-              goals: 22,
-              gamesPlayed: 40,
+              goals: 10,
+              gamesPlayed: 19,
               ratioMet: false,
               age: 17,
-              leagueGoals: 12,
+              leagueGoals: 8,
+              leagueGames: 16,
+              cupGames: 3,
+              cupGoals: 2,
+              domesticGames: 19,
+              domesticGoals: 10,
               trophies: [],
               topGoalscorer: false,
               playerOfTheYear: false,
               wonWpy: false,
+              earnings: 1_800_000,
+              league: 'Premier League',
+              international: {
+                tournament: 'world-cup',
+                qualifyingGames: 0,
+                qualifyingGoals: 0,
+                qualifyingOutcome: 'none',
+                finalsGames: 3,
+                finalsGoals: 1,
+                tournamentOutcome: 'group',
+                playerOfTheTournament: false,
+                topGoalscorer: false,
+              },
             })
         : promoteSummary
           ? season({
@@ -1108,7 +1153,7 @@ export function applyCareerLayoutPreview(): void {
               topGoalscorer: false,
             },
           }),
-    lastMatchSummary: preview === 'hub-rising-star' || preview === 'hub-rotation' || preview === 's1-summary'
+    lastMatchSummary: preview === 'hub-rotation' || preview === 's1-summary'
       ? null
       : isYouthNextPreview
       ? 'Spain won 2–0 · 1 goal from 1 chance'
@@ -1117,7 +1162,7 @@ export function applyCareerLayoutPreview(): void {
       : preview === 'result-pens'
       ? 'Spain drew 1–1 vs France (won 5–4 on penalties) · through to the quarter-finals · 1 goal from 2 chances'
       : 'Spain won 2–0 vs Italy · 2 goals from 2 chances',
-    lastMatchResult: isYouthNextPreview || preview === 'hub-rising-star' || preview === 'hub-rotation' || preview === 's1-summary'
+    lastMatchResult: isYouthNextPreview || preview === 'hub-rotation' || preview === 's1-summary'
       ? null
       : preview === 'hub-ucl-leg2'
       ? {

@@ -9,10 +9,10 @@ import {
   chancesForSquadStatus,
   completedLeagueFixtureCount,
   describeRotationSitOut,
-  describeSquadStatus,
   isSquadRotationSitOut,
   isToughMinutesFixture,
   SQUAD_STATUS_LABEL,
+  squadRoleRatioGuide,
 } from '../squadStatus';
 import { displaySeasonLabel, displaySeasonNumber } from '../seasonDisplay';
 import { clubEligibleForNationalTeam, callUpRatio, getNation, isSelectedForNationalTeam, SEASON_1_CALL_UP_MIN_WEEK, selectionRatioForNation } from '../international';
@@ -22,6 +22,7 @@ import { conferenceTable, ensureInternationalGroup, fixtureTitle, internationalR
 import { nextMatchBriefing, playerGoalsLine } from '../matchBriefing';
 import { groupPosition, sortGroupTable } from '../internationalTable';
 import { requiredGoalRatio } from '../transfers';
+import { competitionStageLabel } from '../honoursDisplay';
 import { saveNeedsRebuild } from '../rulesStamp';
 import { useCareerStore } from '../store';
 import { DATA_CARD, DATA_INSET } from './dataUi';
@@ -178,8 +179,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
 
       <div className={DATA_CARD} style={{ borderLeft: `4px solid ${kit.primary}` }}>
         <p className="text-xs uppercase tracking-wide text-white/40">
-          {displaySeasonLabel(seasonNumber, { role, careerStart })} · {ROLE_LABEL[role]}
-          {role !== 'reserve' ? ` · ${SQUAD_STATUS_LABEL[squadStatus]}` : ''}
+          {displaySeasonLabel(seasonNumber, { role, careerStart })}
           {` · Week ${week} of ${totalWeeks}`}
         </p>
         <h1 className="font-display text-2xl font-bold">{club.name}</h1>
@@ -187,11 +187,13 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
           {club.country} · {leagueDisplayName(clubLeague ?? club.league)}
           {mlsConferenceOf(club.id) ? ` · ${conferenceLabel(mlsConferenceOf(club.id))}` : ''}
         </p>
-        {nation && <p className="mt-1 text-xs text-white/50">International: {nation.name}</p>}
+        <div className={`mt-2 inline-flex ${DATA_INSET} px-3 py-1.5`}>
+          <span className="text-sm font-semibold">
+            {role === 'reserve' ? ROLE_LABEL.reserve : SQUAD_STATUS_LABEL[squadStatus]}
+          </span>
+        </div>
+        {nation && <p className="mt-2 text-xs text-white/50">International: {nation.name}</p>}
         {parentClub && <p className="mt-1 text-xs text-white/40">On loan from {parentClub.name}</p>}
-        {role !== 'reserve' && (
-          <p className="mt-1 text-xs text-white/50">{describeSquadStatus(squadStatus)}</p>
-        )}
         {role !== 'reserve' && (
           <p className="mt-1 text-xs text-white/50">
             Market value {formatEuros(marketValue)}
@@ -230,17 +232,17 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
       )}
 
       {briefing && (
-        <div className={`mt-4 ${DATA_CARD}`}>
+        <div className={`mt-3 ${DATA_CARD} p-3`}>
           <p className="text-xs uppercase tracking-wide text-white/40">Next match</p>
-          <h2 className="mt-1 font-display text-2xl font-bold leading-tight">{briefing.opponent}</h2>
-          <p className="mt-1 text-sm text-white/70">
+          <h2 className="mt-0.5 font-display text-lg font-bold leading-tight">{briefing.opponent}</h2>
+          <p className="mt-0.5 text-sm text-white/70">
             {[briefing.venue, briefing.competition].filter(Boolean).join(' · ')}
           </p>
           {briefing.stake && (
-            <p className="mt-2 text-sm font-semibold text-emerald-300">{briefing.stake}</p>
+            <p className="mt-1 text-sm font-semibold text-emerald-300">{briefing.stake}</p>
           )}
           <div
-            className={`mt-3 rounded-xl px-3 py-2 text-sm font-semibold ${
+            className={`mt-2 rounded-xl px-3 py-1.5 text-sm font-semibold ${
               available ? 'bg-emerald-500/15 text-emerald-300' : 'bg-red-500/15 text-red-300'
             }`}
           >
@@ -252,7 +254,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
       <button
         type="button"
         onClick={advance}
-        className="mt-4 w-full rounded-2xl bg-emerald-500 px-6 py-4 text-lg font-bold text-black shadow-lg shadow-emerald-500/20 transition active:scale-[0.98]"
+        className="mt-3 w-full rounded-2xl bg-emerald-500 px-6 py-3.5 text-lg font-bold text-black shadow-lg shadow-emerald-500/20 transition active:scale-[0.98]"
       >
         {available ? (nextFixture ? 'Play Next Match' : 'End of season') : 'Continue'}
         {!briefing && nextFixture ? (
@@ -270,12 +272,16 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
 
       {!briefing && (
         <div
-          className={`mt-4 rounded-xl px-4 py-3 text-sm font-semibold ${
+          className={`mt-3 rounded-xl px-4 py-3 text-sm font-semibold ${
             available ? 'bg-emerald-500/15 text-emerald-300' : 'bg-red-500/15 text-red-300'
           }`}
         >
           {squadLine}
         </div>
+      )}
+
+      {(lastMatchResult || lastMatchSummary) && (
+        <LastMatchRecap result={lastMatchResult} fallback={lastMatchSummary} />
       )}
 
       {week > 0 && (
@@ -295,10 +301,6 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         </div>
       )}
 
-      {(lastMatchResult || lastMatchSummary) && (
-        <LastMatchRecap result={lastMatchResult} fallback={lastMatchSummary} />
-      )}
-
       <div className="mt-5 flex flex-col gap-5">
         <div className={DATA_CARD}>
           <div className="mb-2 flex items-baseline justify-between">
@@ -314,10 +316,29 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
             />
           </div>
           <p className="mt-2 text-xs text-white/50">
+            Currently {ratio.toFixed(2)} goals/game
             {onLoan && parentClub
-              ? `Need ${threshold.toFixed(2)} goals/game to return to ${parentClub.name}'s first team · currently ${ratio.toFixed(2)}`
-              : `Need ${threshold.toFixed(2)} goals/game to ${role === 'first-team' ? 'keep your place' : 'earn a promotion'} · currently ${ratio.toFixed(2)}`}
+              ? ` · ${threshold.toFixed(2)} to return to ${parentClub.name}'s first team`
+              : ''}
           </p>
+          {(() => {
+            const guide = squadRoleRatioGuide(
+              role === 'reserve' ? 'reserve' : squadStatus,
+              onLoan && parentClub ? parentClub.firstTeamGoalRatio : club.firstTeamGoalRatio,
+            );
+            return (
+              <div className="mt-2 space-y-1 text-xs text-white/55">
+                <p>
+                  {guide.keepLabel}: {guide.keepRatio.toFixed(2)} to keep this role
+                </p>
+                {guide.nextLabel && guide.nextRatio != null && (
+                  <p>
+                    {guide.nextLabel}: {guide.nextRatio.toFixed(2)} to move up
+                  </p>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {nation && role !== 'reserve' && (
@@ -357,7 +378,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
                 clubId={club.id}
                 cupName={seasonSim?.domesticCup ? DOMESTIC_CUPS[seasonSim.domesticCup]?.name ?? null : null}
                 cupStage={seasonSim?.domesticCupStage ?? null}
-                sim={seasonSim}
+                sim={seasonSimWithGroup}
                 nested
               />
             )}
@@ -450,28 +471,33 @@ function StandingsCard({
   const overall = standings.league.find((r) => r.clubId === clubId);
   const us = conferenceRow ?? overall;
   const europe = standings.europeanStanding;
-  const stageLabel: Record<string, string> = {
-    group: 'Group stage',
-    'round-of-16': 'Round of 16',
-    'quarter-final': 'Quarter-final',
-    'semi-final': 'Semi-final',
-    final: 'Final',
-    eliminated: 'Eliminated',
-    champion: 'Champions',
-    'not-entered': '—',
-    pending: '—',
-  };
-  const cupHeadline = europe
-    ? { stage: stageLabel[europe.stage] ?? europe.stage, name: CONTINENTAL_CUPS[europe.cup]?.name ?? europe.cup }
-    : sim?.leaguesCupStage && sim.leaguesCupStage !== 'not-entered'
-      ? { stage: stageLabel[sim.leaguesCupStage] ?? sim.leaguesCupStage, name: 'Leagues Cup' }
-      : cupName && cupStage && cupStage !== 'not-entered'
-        ? { stage: stageLabel[cupStage] ?? cupStage, name: cupName }
-        : { stage: '—', name: 'Cup' };
-  const extraCup =
-    cupName && cupStage && cupStage !== 'not-entered' && cupHeadline.name !== cupName
-      ? `${cupName}: ${stageLabel[cupStage] ?? cupStage}`
-      : null;
+  const competitions: { name: string; stage: string }[] = [];
+  if (europe) {
+    competitions.push({
+      name: CONTINENTAL_CUPS[europe.cup]?.name ?? europe.cup,
+      stage: competitionStageLabel(europe.stage),
+    });
+  } else if (sim?.leaguesCupStage && sim.leaguesCupStage !== 'not-entered') {
+    competitions.push({
+      name: 'Leagues Cup',
+      stage: competitionStageLabel(sim.leaguesCupStage),
+    });
+  }
+  if (cupName && cupStage && cupStage !== 'not-entered' && !competitions.some((c) => c.name === cupName)) {
+    competitions.push({
+      name: cupName,
+      stage: competitionStageLabel(cupStage),
+    });
+  }
+  const intlName = sim?.internationalTournament
+    ? INTERNATIONAL_TOURNAMENTS[sim.internationalTournament]?.name
+    : null;
+  if (intlName && sim?.internationalSelected && sim.internationalStage && sim.internationalStage !== 'not-selected') {
+    competitions.push({
+      name: intlName,
+      stage: competitionStageLabel(sim.internationalReached ?? sim.internationalStage),
+    });
+  }
 
   return (
     <div className={nested ? '' : DATA_CARD}>
@@ -493,10 +519,20 @@ function StandingsCard({
             </p>
           )}
         </div>
-        <div>
-          <p className="text-lg font-bold leading-tight">{cupHeadline.stage}</p>
-          <p className="text-[10px] uppercase tracking-wide text-white/40">{cupHeadline.name}</p>
-          {extraCup && <p className="mt-1 text-xs text-white/50">{extraCup}</p>}
+        <div className="space-y-3">
+          {competitions.length === 0 ? (
+            <div>
+              <p className="text-sm font-semibold leading-tight">Cup</p>
+              <p className="mt-0.5 text-[10px] uppercase tracking-wide text-white/40">—</p>
+            </div>
+          ) : (
+            competitions.map((comp) => (
+              <div key={comp.name}>
+                <p className="text-sm font-semibold leading-tight">{comp.name}</p>
+                <p className="mt-0.5 text-[10px] uppercase tracking-wide text-white/40">{comp.stage}</p>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>

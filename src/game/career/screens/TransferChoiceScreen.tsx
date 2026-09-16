@@ -70,6 +70,7 @@ export default function TransferChoiceScreen() {
   const clubId = useCareerStore((s) => s.clubId);
   const lastTransferRejection = useCareerStore((s) => s.lastTransferRejection);
   const resolveTransferChoice = useCareerStore((s) => s.resolveTransferChoice);
+  const currentSeason = useCareerStore((s) => s.currentSeason);
 
   const currentClub = clubId ? getClub(clubId) : undefined;
   if (!pending) return null;
@@ -86,6 +87,9 @@ export default function TransferChoiceScreen() {
   const showStay = Boolean(pending.allowDecline && pending.stay && stayClub && !outOfContract);
   const nextIfStay = pending.stay?.squadStatus ?? defaultSquadStatus('first-team');
   const fromClub = clubId ? getClub(clubId) : undefined;
+  const playerRatio = currentSeason && currentSeason.gamesPlayed > 0
+    ? currentSeason.goals / currentSeason.gamesPlayed
+    : undefined;
   const likelyFor = (offer: ClubOfferTerms): SquadStatus => {
     if (offer.renewal || offer.clubId === clubId) return nextIfStay;
     return squadStatusOnArrival({
@@ -93,20 +97,15 @@ export default function TransferChoiceScreen() {
       toClub: getClub(offer.clubId),
       move: offer.move,
       nextIfStay,
+      playerRatio,
     });
   };
 
   return (
     <div className="flex h-full w-full flex-col items-center gap-6 overflow-y-auto px-6 py-[max(1.5rem,env(safe-area-inset-top))] text-center text-white">
       <div>
-        <p className="text-sm text-white/50">{KIND_LABEL[pending.kind] ?? 'Clubs'}</p>
-        <h1 className="font-display text-2xl font-bold">Choose your club</h1>
-        <p className="mt-2 max-w-sm text-sm text-white/60">{pending.detail}</p>
-        {pending.kind !== 'trial-offers' && pending.kind !== 'loan' && (
-          <p className="mt-2 max-w-sm text-xs text-white/45">
-            You accept personal terms first. Your club then accepts or rejects the fee.
-          </p>
-        )}
+        <h1 className="font-display text-2xl font-bold">Choose your next move</h1>
+        <p className="mt-2 max-w-sm text-sm text-white/60">{KIND_LABEL[pending.kind] ?? 'Clubs'}</p>
       </div>
 
       {(lastTransferRejection || pending.rejectionDetail) && (

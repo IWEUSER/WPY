@@ -213,20 +213,60 @@ export function squadStatusAfterFormReview(params: {
 }
 
 /**
- * Playing time after a move. A step up (lower tier number) starts as reserve.
- * A loan is first-team football. Same or weaker club: starter.
- * Academy promotion is Rising star.
+ * Playing time after a move. Loans are first-team football.
+ * Permanent moves use last-season ratio against the destination bar:
+ * starter if you meet it, Rising star if you hold 0.33, otherwise reserve.
+ * Without a ratio, a step up still starts as reserve.
  */
+export function squadRoleRatioGuide(status: SquadStatus, clubBar: number): {
+  keepLabel: string;
+  keepRatio: number;
+  nextLabel: string | null;
+  nextRatio: number | null;
+} {
+  if (status === 'starter') {
+    return { keepLabel: 'Starter', keepRatio: clubBar, nextLabel: null, nextRatio: null };
+  }
+  if (status === 'rising-star') {
+    return {
+      keepLabel: 'Rising star',
+      keepRatio: RISING_STAR_MIN_RATIO,
+      nextLabel: 'Starter',
+      nextRatio: clubBar,
+    };
+  }
+  if (status === 'reserve') {
+    return {
+      keepLabel: 'Reserve',
+      keepRatio: Math.max(0, clubBar - 0.1),
+      nextLabel: 'Starter',
+      nextRatio: clubBar,
+    };
+  }
+  return {
+    keepLabel: 'Impact',
+    keepRatio: 0,
+    nextLabel: 'Reserve',
+    nextRatio: Math.max(0, clubBar - 0.1),
+  };
+}
+
 export function squadStatusOnArrival(params: {
   fromClub: Club | null | undefined;
   toClub: Club | null | undefined;
   move: 'loan' | 'permanent' | 'promotion' | 'stay' | 'recall';
   nextIfStay: SquadStatus;
+  playerRatio?: number;
 }): SquadStatus {
   if (params.move === 'stay') return params.nextIfStay;
   if (params.move === 'recall') return 'reserve';
   if (params.move === 'loan') return 'starter';
   if (params.move === 'promotion') return 'rising-star';
+  if (params.toClub && params.playerRatio != null) {
+    if (params.playerRatio + 1e-9 >= params.toClub.firstTeamGoalRatio) return 'starter';
+    if (params.playerRatio >= RISING_STAR_MIN_RATIO) return 'rising-star';
+    return 'reserve';
+  }
   if (!params.fromClub || !params.toClub) return 'starter';
   if (params.toClub.tier < params.fromClub.tier) return 'reserve';
   return 'starter';

@@ -1120,6 +1120,44 @@ export function drawDefender(
   ctx.restore();
 }
 
+/** Full-body player for identity / kit display. Feet at (x, feetY). */
+export function drawStandingOutfielder(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  feetY: number,
+  heightPx: number,
+  kit: DefenderKit,
+  look: { skin: string; hair?: string },
+) {
+  const H = heightPx / 8;
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(x, feetY + H * 0.08, H * 0.85, H * 0.2, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.fill();
+  ctx.translate(x, feetY - 4 * H);
+  drawHumanoid(
+    ctx,
+    H,
+    {
+      skin: look.skin,
+      hair: look.hair,
+      shirt: kit.shirt ?? '#1d4ed8',
+      shirtDark: kit.shirtDark ?? '#1e3a8a',
+      shorts: kit.shorts ?? '#f8fafc',
+      socks: kit.socks ?? kit.shorts ?? '#1e1e1e',
+      boot: '#1a1a1a',
+      stripe: kit.stripe,
+      pattern: kit.pattern ?? 'solid',
+      sleeves: kit.sleeves,
+    },
+    0.35,
+    undefined,
+    'walk',
+  );
+  ctx.restore();
+}
+
 export function drawBall(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, rotation: number) {
   ctx.save();
   ctx.translate(x, y);

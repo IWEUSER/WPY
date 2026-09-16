@@ -84,6 +84,29 @@ export function seasonRatio(season: Pick<SeasonRecord, 'goals' | 'gamesPlayed'>)
   return season.gamesPlayed > 0 ? season.goals / season.gamesPlayed : 0;
 }
 
+export function competitionStageLabel(stage: string | null | undefined): string {
+  if (!stage || stage === 'not-entered' || stage === 'pending' || stage === 'none') return '—';
+  const labels: Record<string, string> = {
+    group: 'Group stage',
+    'round-of-32': 'Round of 32',
+    'round-of-16': 'Round of 16',
+    'quarter-final': 'Quarter-final',
+    'semi-final': 'Semi-final',
+    'third-place': 'Third-place play-off',
+    final: 'Final',
+    eliminated: 'Eliminated',
+    champion: 'Champions',
+    qualifying: 'Qualifying',
+    'failed-qualifying': 'Did not qualify',
+    qualified: 'Qualified',
+    friendly: 'Friendlies',
+    'not-selected': 'Not selected',
+    'did-not-qualify': 'Did not qualify',
+    ongoing: 'In progress',
+  };
+  return labels[stage] ?? stage;
+}
+
 export function tournamentOutcomeLabel(outcome: TournamentSeasonOutcome): string | null {
   switch (outcome) {
     case 'champion':

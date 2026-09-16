@@ -2042,6 +2042,9 @@ export const useCareerStore = create<CareerStore>()(
                   toClub: nextClub,
                   move: clubId === state.parentClubId && state.role === 'loan' ? 'recall' : 'permanent',
                   nextIfStay,
+                  playerRatio: state.currentSeason && state.currentSeason.gamesPlayed > 0
+                    ? state.currentSeason.goals / state.currentSeason.gamesPlayed
+                    : undefined,
                 });
 
           return {
