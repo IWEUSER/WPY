@@ -100,7 +100,7 @@ export default function LegacyScreen() {
           <BoardCard
             key={board.def.id}
             board={board}
-            open={openId === board.def.id}
+            open={openId === board.def.id || board.reveal === 'top10'}
             onToggle={() => setOpenId((id) => (id === board.def.id ? null : board.def.id))}
           />
         ))}

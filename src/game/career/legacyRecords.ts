@@ -238,21 +238,21 @@ export function historicalTotals(first: number, last: number, count = LEGACY_TAB
   totals[0] = first;
   totals[count - 1] = last;
   const canStrict = first - last >= count - 1;
-  for (let i = 1; i < count - 1; i += 1) {
-    const t = i / (count - 1);
-    const eased = 1 - (1 - t) ** 1.28;
-    let value = Math.round(first - (first - last) * eased);
-    if (canStrict) {
+  if (canStrict) {
+    for (let i = 1; i < count - 1; i += 1) {
+      const t = i / (count - 1);
+      const eased = 1 - (1 - t) ** 1.28;
       const maxAllowed = totals[i - 1]! - 1;
       const minNeeded = last + (count - 1 - i);
-      value = Math.min(maxAllowed, Math.max(minNeeded, value));
-    } else {
-      value = Math.min(totals[i - 1]!, Math.max(last, value));
+      totals[i] = Math.min(maxAllowed, Math.max(minNeeded, Math.round(first - (first - last) * eased)));
     }
-    totals[i] = value;
+    if ((totals[count - 2] ?? last) <= last) totals[count - 2] = last + 1;
+    return totals;
   }
-  if (canStrict && (totals[count - 2] ?? last) <= last) {
-    totals[count - 2] = last + 1;
+  let value = first;
+  for (let i = 1; i < count - 1; i += 1) {
+    if (value > last) value -= 1;
+    totals[i] = value;
   }
   return totals;
 }
@@ -432,10 +432,16 @@ export function revealForRank(rank: number): LegacyReveal {
 
 function combinedTopTable(playerGoals: number, historical: HistoricalScorer[]): LegacyTableRow[] {
   const ahead = historical.filter((row) => row.goals > playerGoals);
+  const tied = historical.filter((row) => row.goals === playerGoals);
+  const behind = historical.filter((row) => row.goals < playerGoals);
   const youRow = { name: PLAYER_RECORD_NAME, goals: playerGoals, you: true };
-  const behind = historical.filter((row) => row.goals <= playerGoals);
-  const rest = Math.max(0, LEGACY_TOP_N - (ahead.length + 1));
-  const combined = [...ahead.map((row) => ({ ...row, you: false })), youRow, ...behind.slice(0, rest).map((row) => ({ ...row, you: false }))];
+  const before = [...ahead, ...tied].slice(0, Math.max(0, LEGACY_TOP_N - 1));
+  const remaining = Math.max(0, LEGACY_TOP_N - (before.length + 1));
+  const combined = [
+    ...before.map((row) => ({ ...row, you: false })),
+    youRow,
+    ...behind.slice(0, remaining).map((row) => ({ ...row, you: false })),
+  ];
   return combined.map((row) => ({
     rank: 1 + combined.filter((other) => other.goals > row.goals).length,
     name: row.name,

@@ -169,6 +169,9 @@ const clGoals = playerGoalsForBoard(cl, {
 assert(clGoals === 17, `UCL board should ignore Europa goals, got ${clGoals}`);
 
 const wc = boards.find((b) => b.id === 'tournament:world-cup')!;
+const wcLadder = historicalLadder(wc);
+assert(wcLadder[0]!.goals === 16, 'World Cup record should be 16');
+assert(wcLadder[1]!.goals === 15, 'World Cup 2nd should be 15, not a pile of 16s');
 const team: NationalTeamState = {
   ...emptyTeam(),
   goals: 40,
