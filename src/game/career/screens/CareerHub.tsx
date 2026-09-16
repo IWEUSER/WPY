@@ -62,6 +62,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const rulesStamp = useCareerStore((s) => s.rulesStamp);
   const advance = useCareerStore((s) => s.advance);
   const openCareerRecord = useCareerStore((s) => s.openCareerRecord);
+  const openLegacy = useCareerStore((s) => s.openLegacy);
   const rebuildThisSeason = useCareerStore((s) => s.rebuildThisSeason);
 
   const club = clubId ? getClub(clubId) : undefined;
@@ -156,10 +157,23 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         <button type="button" onClick={onOpenMenu} className="text-xs text-white/40 underline underline-offset-2">
           Menu
         </button>
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={openCareerRecord} className="text-xs text-white/40 underline underline-offset-2">
-            Career
-          </button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center rounded-full bg-black/30 p-0.5 ring-1 ring-white/10">
+            <button
+              type="button"
+              onClick={openCareerRecord}
+              className="rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white/70"
+            >
+              Career
+            </button>
+            <button
+              type="button"
+              onClick={openLegacy}
+              className="rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-200"
+            >
+              Legacy
+            </button>
+          </div>
           <span className="text-xs text-white/40">Age {age}</span>
         </div>
       </div>

@@ -20,6 +20,7 @@ export default function CareerEndScreen() {
   const careerEarnings = useCareerStore((s) => s.careerEarnings);
   const resetCareer = useCareerStore((s) => s.resetCareer);
   const returnToMenu = useCareerStore((s) => s.returnToMenu);
+  const openLegacy = useCareerStore((s) => s.openLegacy);
   const careerStart = useCareerStore((s) => s.careerStart);
 
   const seen = new Set<number>();
@@ -116,6 +117,16 @@ export default function CareerEndScreen() {
 
       <HonoursPills title="Trophies" items={trophies} empty="No trophies won" tone="trophy" />
       <HonoursPills title="Awards" items={awards} empty="No awards won" tone="award" />
+
+      <button
+        type="button"
+        onClick={openLegacy}
+        className={`mt-4 w-full ${DATA_CARD} text-left`}
+      >
+        <p className="text-xs uppercase tracking-wide text-amber-200/70">All-time records</p>
+        <p className="mt-1 text-lg font-extrabold">Legacy</p>
+        <p className="mt-1 text-sm text-white/55">See where this career ranks against the all-time scoring boards.</p>
+      </button>
 
       <div className="mt-5 flex flex-col gap-3">
         {[...seasons].reverse().map((season) => (

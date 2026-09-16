@@ -9,12 +9,12 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: false,
-      includeAssets: ['favicon.png', 'apple-touch-icon.png'],
+      includeAssets: ['favicon.png', 'apple-touch-icon.png', 'logo.png'],
       manifest: {
         id: '/',
-        name: 'World Player of the Year',
-        short_name: 'WPY',
-        description: 'Swipe to shoot your way through a shot-scoring mini-game career.',
+        name: 'Football Legacy',
+        short_name: 'Legacy',
+        description: 'Swipe to shoot through a 20-season career and chase all-time scoring records.',
         theme_color: '#1a3324',
         background_color: '#18261d',
         display: 'standalone',

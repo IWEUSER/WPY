@@ -702,6 +702,7 @@ function initialState(): CareerState {
     intlQualifying: null,
     lastSuperCupOpponentId: null,
     rulesStamp: CURRENT_RULES_STAMP,
+    legacyReturnPhase: null,
   };
 }
 
@@ -830,6 +831,8 @@ interface CareerActions {
   continueAfterSeason: () => void;
   resolveTransferChoice: (clubId: string | null) => void;
   openCareerRecord: () => void;
+  openLegacy: () => void;
+  returnFromLegacy: () => void;
   returnToHub: () => void;
   resetCareer: () => void;
   returnToMenu: () => void;
@@ -2067,6 +2070,24 @@ export const useCareerStore = create<CareerStore>()(
 
       openCareerRecord: () => set({ phase: 'career' }),
 
+      openLegacy: () =>
+        set((state) => ({
+          phase: 'legacy',
+          legacyReturnPhase: state.phase === 'legacy' ? state.legacyReturnPhase ?? null : state.phase,
+        })),
+
+      returnFromLegacy: () =>
+        set((state) => {
+          const back = state.legacyReturnPhase;
+          const phase =
+            back && back !== 'legacy'
+              ? back
+              : state.clubId
+                ? 'hub'
+                : 'menu';
+          return { phase, legacyReturnPhase: null };
+        }),
+
       returnToHub: () =>
         set((state) => ({
           phase: state.clubId ? 'hub' : 'menu',
@@ -2233,6 +2254,7 @@ function migrateCareerPersist(persisted: unknown): CareerState {
           previousChampionClubId: state.previousChampionClubId ?? null,
           qualifiedContinentalCup: state.qualifiedContinentalCup ?? null,
           lastSuperCupOpponentId: state.lastSuperCupOpponentId ?? null,
+          legacyReturnPhase: state.legacyReturnPhase ?? null,
           squadStatus: (() => {
             const status = normalizeSquadStatus(state.squadStatus, state.role ?? 'reserve');
             if (

@@ -183,6 +183,7 @@ export type CareerPhase =
   | 'season-summary'
   | 'transfer-choice'
   | 'career'
+  | 'legacy'
   | 'career-end'
   | 'match-result';
 
@@ -269,6 +270,8 @@ export interface CareerState {
    * remaining fixtures without wiping career history.
    */
   rulesStamp?: string | null;
+  /** Screen to restore after closing the all-time records list. */
+  legacyReturnPhase?: CareerPhase | null;
 }
 
 export interface LastMatchResult {

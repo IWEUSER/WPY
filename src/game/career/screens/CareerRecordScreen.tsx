@@ -32,6 +32,7 @@ export default function CareerRecordScreen() {
   const seasonCalendar = useCareerStore((s) => s.seasonCalendar);
   const seasonSim = useCareerStore((s) => s.seasonSim);
   const returnToHub = useCareerStore((s) => s.returnToHub);
+  const openLegacy = useCareerStore((s) => s.openLegacy);
   const careerStart = useCareerStore((s) => s.careerStart);
 
   const seasons: Array<SeasonRecord & { inProgress?: boolean }> = [
@@ -62,7 +63,12 @@ export default function CareerRecordScreen() {
         <button type="button" onClick={returnToHub} className="text-xs text-white/40 underline underline-offset-2">
           Back
         </button>
-        <span className="text-xs uppercase tracking-wide text-white/40">Career record</span>
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={openLegacy} className="text-xs font-semibold uppercase tracking-wide text-amber-200/80">
+            Legacy
+          </button>
+          <span className="text-xs uppercase tracking-wide text-white/40">Career record</span>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-2">

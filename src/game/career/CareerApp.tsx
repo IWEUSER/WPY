@@ -7,6 +7,7 @@ import ClubOfferScreen from './screens/ClubOfferScreen';
 import NationalityScreen from './screens/NationalityScreen';
 import CareerHub from './screens/CareerHub';
 import CareerRecordScreen from './screens/CareerRecordScreen';
+import LegacyScreen from './screens/LegacyScreen';
 import CareerEndScreen from './screens/CareerEndScreen';
 import MatchScreen from './screens/MatchScreen';
 import SeasonSummaryScreen from './screens/SeasonSummaryScreen';
@@ -116,6 +117,8 @@ export default function CareerApp() {
       );
     case 'career':
       return <CareerRecordScreen />;
+    case 'legacy':
+      return <LegacyScreen />;
     case 'career-end':
       return <CareerEndScreen />;
     default:
