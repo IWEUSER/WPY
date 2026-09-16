@@ -272,7 +272,11 @@ export default function SeasonSummaryScreen() {
         );
       })()}
 
-      <p className="max-w-sm text-sm text-white/60">{age >= RETIREMENT_AGE ? 'This was your final season.' : preview.detail}</p>
+      {age >= RETIREMENT_AGE ? (
+        <p className="max-w-sm text-sm text-white/60">This was your final season.</p>
+      ) : showRisingStarTrack ? null : (
+        <p className="max-w-sm text-sm text-white/60">{preview.detail}</p>
+      )}
 
       {legacyHighlights.length > 0 && (
         <div className="flex w-full max-w-sm flex-col gap-2">

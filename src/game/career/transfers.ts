@@ -966,7 +966,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     return attachCurrentClubRenewal(
       {
         headline,
-        detail: `${detail} Stay, take a loan in a matching division, or transfer — each club is capped at what it can pay.`,
+        detail,
         pendingTransfer: pendingFromOffers(
           'loan-or-transfer',
           fee <= 0
