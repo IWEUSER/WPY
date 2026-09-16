@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { GAME_TITLE } from '../../branding';
-import { careerLegacyBoards, type LegacyBoardView, type LegacyReveal } from '../legacyRecords';
+import { careerLegacyBoards, goalsLabel, type LegacyBoardView, type LegacyReveal } from '../legacyRecords';
 import { countsTowardCareerRecord } from '../seasonDisplay';
 import { useCareerStore } from '../store';
 import { DATA_CARD, DATA_TILE } from './dataUi';
@@ -151,17 +151,17 @@ function statusLine(board: LegacyBoardView, playerName: string): string {
     if (board.playerGoals <= 0) {
       return `${board.tenthGoals} to enter the sourced top ${Math.min(10, board.historical.length)}`;
     }
-    return `${board.playerGoals} goals · ${board.goalsToTop10} more to enter`;
+    return `${goalsLabel(board.playerGoals)} · ${board.goalsToTop10} more to enter`;
   }
-  if (board.rank === 1) return `Record · ${playerName} · ${board.playerGoals} goals`;
-  return `${board.rankLabel} · ${playerName} · ${board.playerGoals} goals`;
+  if (board.rank === 1) return `Record · ${playerName} · ${goalsLabel(board.playerGoals)}`;
+  return `${board.rankLabel} · ${playerName} · ${goalsLabel(board.playerGoals)}`;
 }
 
 function BoardDetail({ board, playerName }: { board: LegacyBoardView; playerName: string }) {
   if (board.reveal === 'outside') {
     return (
       <p className="mt-3 text-xs text-white/45">
-        The sourced top {Math.min(10, board.historical.length)} starts at {board.tenthGoals} goals.
+        The sourced top {Math.min(10, board.historical.length)} starts at {goalsLabel(board.tenthGoals)}.
       </p>
     );
   }

@@ -12,7 +12,6 @@ export default function CareerEndScreen() {
   const current = useCareerStore((s) => s.currentSeason);
   const careerGoals = useCareerStore((s) => s.careerGoals);
   const careerGames = useCareerStore((s) => s.careerGames);
-  const nationalTeam = useCareerStore((s) => s.nationalTeam);
   const clubId = useCareerStore((s) => s.clubId);
   const resetCareer = useCareerStore((s) => s.resetCareer);
   const returnToMenu = useCareerStore((s) => s.returnToMenu);
@@ -28,11 +27,7 @@ export default function CareerEndScreen() {
   });
   const domestic = aggregateDomesticSplit(seasons);
   const continental = aggregateContinental(seasons);
-  const intlGames = nationalTeam?.caps ?? 0;
-  const intlGoals = nationalTeam?.goals ?? 0;
-  const totalGames = careerGames + intlGames;
-  const totalGoals = careerGoals + intlGoals;
-  const ratio = totalGames > 0 ? totalGoals / totalGames : 0;
+  const ratio = careerGames > 0 ? careerGoals / careerGames : 0;
   const lastClub = clubId ? getClub(clubId) : undefined;
   const lastSeason = seasons[seasons.length - 1];
   const name = playerName?.trim() || 'Player';
@@ -47,11 +42,10 @@ export default function CareerEndScreen() {
       </p>
 
       <div className="mt-5 grid grid-cols-3 gap-2">
-        <StatTile value={String(totalGames)} label="All games" />
-        <StatTile value={String(totalGoals)} label="All goals" />
-        <StatTile value={ratio.toFixed(2)} label="All ratio" />
+        <StatTile value={String(careerGames)} label="Club games" />
+        <StatTile value={String(careerGoals)} label="Club goals" />
+        <StatTile value={ratio.toFixed(2)} label="Club ratio" />
       </div>
-      <p className="mt-2 text-center text-[11px] text-white/40">Club and country combined</p>
 
       <div className={`mt-3 ${DATA_CARD} text-sm`}>
         <p className="text-xs uppercase tracking-wide text-white/40">Club</p>

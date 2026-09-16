@@ -8,7 +8,7 @@ import { displaySeasonLabel, displaySeasonNumber } from '../seasonDisplay';
 import { defaultSquadStatus, describeSquadStatus, nextSquadStatusAfterSeason, seasonOverridesRatioBar, SQUAD_STATUS_LABEL } from '../squadStatus';
 import { countLoanSpells, requiredGoalRatio, resolveSeasonTransition } from '../transfers';
 import { leagueMatchWeeks } from '../data/clubs';
-import { inputWithoutSeason, seasonLegacyHighlights } from '../legacyRecords';
+import { goalsLabel, inputWithoutSeason, seasonLegacyHighlights } from '../legacyRecords';
 import { useCareerStore } from '../store';
 import { DATA_CARD, DATA_INSET, DATA_TILE } from './dataUi';
 
@@ -358,7 +358,7 @@ export default function SeasonSummaryScreen() {
                 {name} · {item.rankLabel} · {item.title}
               </p>
               <p className="mt-1 text-xs text-white/55">
-                {item.subtitle} · {item.playerGoals} goals
+                {item.subtitle} · {goalsLabel(item.playerGoals)}
               </p>
             </div>
           ))}

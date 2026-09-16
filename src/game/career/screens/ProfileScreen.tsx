@@ -1,7 +1,7 @@
 import { getClub } from '../data/clubs';
 import { currentCalendarWeek } from '../calendar';
 import { careerAwardCounts, careerTrophyCounts } from '../honoursDisplay';
-import { identityLegacyBoards } from '../legacyRecords';
+import { goalsLabel, identityLegacyBoards } from '../legacyRecords';
 import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
 import { countsTowardCareerRecord } from '../seasonDisplay';
 import { getNation } from '../international';
@@ -101,7 +101,7 @@ export default function ProfileScreen() {
         <section className={`mt-4 ${DATA_CARD}`}>
           <p className="text-xs uppercase tracking-wide text-white/40">International</p>
           <p className="mt-1 text-lg font-bold">
-            {nationalTeam.caps} caps · {nationalTeam.goals} goals
+            {nationalTeam.caps} cap{nationalTeam.caps === 1 ? '' : 's'} · {goalsLabel(nationalTeam.goals)}
           </p>
           <p className="mt-1 text-xs text-white/45">{nation?.name ?? 'National team'}</p>
         </section>
@@ -124,7 +124,7 @@ export default function ProfileScreen() {
                 </span>
                 <span className="shrink-0 text-right text-amber-200">
                   {board.rankLabel}
-                  <span className="block text-[10px] text-white/50">{board.playerGoals} goals</span>
+                  <span className="block text-[10px] text-white/50">{goalsLabel(board.playerGoals)}</span>
                 </span>
               </li>
             ))}

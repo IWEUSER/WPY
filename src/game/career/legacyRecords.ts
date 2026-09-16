@@ -545,3 +545,7 @@ export function seasonLegacyHighlights(
 export function defaultPlayerName(): string {
   return 'Player';
 }
+
+export function goalsLabel(n: number): string {
+  return `${n} goal${n === 1 ? '' : 's'}`;
+}
