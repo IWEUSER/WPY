@@ -8,6 +8,7 @@ import { displaySeasonLabel, displaySeasonNumber } from '../seasonDisplay';
 import { defaultSquadStatus, describeSquadStatus, nextSquadStatusAfterSeason, seasonOverridesRatioBar, SQUAD_STATUS_LABEL } from '../squadStatus';
 import { countLoanSpells, requiredGoalRatio, resolveSeasonTransition } from '../transfers';
 import { leagueMatchWeeks } from '../data/clubs';
+import { inputWithoutSeason, seasonLegacyHighlights } from '../legacyRecords';
 import { useCareerStore } from '../store';
 import { DATA_CARD, DATA_INSET, DATA_TILE } from './dataUi';
 
@@ -27,6 +28,8 @@ export default function SeasonSummaryScreen() {
   const seasonStandings = useCareerStore((s) => s.seasonStandings);
   const wpyResult = useCareerStore((s) => s.wpyResult);
   const nationality = useCareerStore((s) => s.nationality);
+  const nationalTeam = useCareerStore((s) => s.nationalTeam);
+  const playerName = useCareerStore((s) => s.playerName);
   const seasonHistory = useCareerStore((s) => s.seasonHistory);
   const continueAfterSeason = useCareerStore((s) => s.continueAfterSeason);
   const contractYearsRemaining = useCareerStore((s) => s.contractYearsRemaining);
@@ -99,6 +102,15 @@ export default function SeasonSummaryScreen() {
     seasonSim.internationalStage === 'failed-qualifying'
       ? `Did not qualify for the ${INTERNATIONAL_TOURNAMENTS[seasonSim.internationalTournament].name}`
       : null;
+
+  const legacyInput = {
+    seasons: [...seasonHistory, season],
+    nationalTeam,
+    nationality,
+    playerName,
+  };
+  const legacyHighlights = seasonLegacyHighlights(inputWithoutSeason(legacyInput, season), legacyInput, season);
+  const name = playerName?.trim() || 'You';
 
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-6 overflow-y-auto px-6 py-10 text-center text-white">
@@ -331,6 +343,27 @@ export default function SeasonSummaryScreen() {
       })()}
 
       <p className="max-w-sm text-sm text-white/60">{age >= RETIREMENT_AGE ? 'This was your final season.' : preview.detail}</p>
+
+      {legacyHighlights.length > 0 && (
+        <div className="flex w-full max-w-sm flex-col gap-2">
+          {legacyHighlights.map((item) => (
+            <div
+              key={`${item.kind}-${item.title}-${item.subtitle}`}
+              className="rounded-2xl border border-amber-200/25 bg-amber-400/10 px-4 py-3 text-left text-sm text-amber-100"
+            >
+              <p className="text-xs uppercase tracking-wide text-amber-200/70">
+                {item.kind === 'season' ? 'Season record' : 'All-time top 10'}
+              </p>
+              <p className="mt-1 font-semibold">
+                {name} · {item.rankLabel} · {item.title}
+              </p>
+              <p className="mt-1 text-xs text-white/55">
+                {item.subtitle} · {item.playerGoals} goals
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
 
       <button
         type="button"

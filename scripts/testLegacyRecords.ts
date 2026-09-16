@@ -1,19 +1,19 @@
 /**
- * All-time scoring boards: fictional 99-name ladders and rank reveal.
+ * Sourced all-time scoring boards: rank + totals only, no names.
  * Run with: npm run test:legacy
  */
+import { LEAGUE_CAREER, LEAGUE_SEASON, nationOverallTotals } from '../src/game/career/data/legacyRecordTotals';
 import {
-  allLegacyBoards,
   careerLegacyBoards,
-  historicalLadder,
-  historicalTotals,
-  LEGACY_TABLE_SIZE,
+  identityLegacyBoards,
+  inputWithoutSeason,
   LEGACY_TOP_N,
-  leagueBoardId,
   ordinal,
+  participatedLegacyBoards,
   playerGoalsForBoard,
   rankForGoals,
   revealForRank,
+  seasonLegacyHighlights,
   viewForBoard,
   type LegacyCareerInput,
 } from '../src/game/career/legacyRecords';
@@ -79,85 +79,90 @@ const emptyTeam = (nationId = 'england'): NationalTeamState => ({
   byCompetition: [],
 });
 
-const boards = allLegacyBoards();
-assert(boards.length >= 20, `expected a full record catalogue, got ${boards.length}`);
-assert(boards.some((b) => b.kind === 'league' && b.title === 'Premier League'), 'missing Premier League board');
-assert(boards.some((b) => b.kind === 'champions-league'), 'missing Champions League board');
-assert(boards.some((b) => b.id === 'cup:fa-cup'), 'missing FA Cup board');
-assert(boards.some((b) => b.id === 'tournament:world-cup'), 'missing World Cup board');
-assert(boards.some((b) => b.id === 'international:all-time'), 'missing all-time international board');
+assert(LEAGUE_CAREER['Premier League']?.[0] === 260, 'PL record should be 260');
+assert(LEAGUE_CAREER['Premier League']?.length === 10, 'PL career ladder should be a sourced top 10');
+assert(LEAGUE_SEASON['Premier League']?.[0] === 36, 'PL single-season record should be 36');
+assert(LEAGUE_CAREER['La Liga']?.[0] === 474, 'La Liga record should be 474');
+assert(nationOverallTotals('england')[0] === 85, 'England record should be 85');
+assert(nationOverallTotals('portugal')[0] === 146, 'Portugal record should be 146');
+assert(nationOverallTotals('san-marino')[0] === 8, 'San Marino should use the sourced record holder only');
+assert(nationOverallTotals('san-marino').length === 1, 'tiny nations must not invent a top 10');
 
-for (const def of boards) {
-  const ladder = historicalLadder(def);
-  assert(ladder.length === LEGACY_TABLE_SIZE, `${def.id} should have ${LEGACY_TABLE_SIZE} names`);
-  assert(ladder[0]!.goals >= ladder[ladder.length - 1]!.goals, `${def.id} totals should not rise`);
-  const names = new Set(ladder.map((row) => row.name));
-  assert(names.size === ladder.length, `${def.id} names must be unique`);
-  for (const row of ladder) {
-    const hay = row.name.toLowerCase();
-    for (const banned of BANNED) {
-      if (hay.includes(banned)) fail(`${def.id} leaked a real player name: ${row.name}`);
-    }
-  }
-}
+const plCareer = {
+  id: 'league:career:premier-league',
+  domain: 'club' as const,
+  span: 'career' as const,
+  title: 'Premier League',
+  subtitle: 'All-time league goals',
+  group: 'league' as const,
+};
+const plSeason = {
+  ...plCareer,
+  id: 'league:season:premier-league',
+  span: 'season' as const,
+  subtitle: 'Single-season league goals',
+};
 
-const pl = boards.find((b) => b.id === leagueBoardId('Premier League'))!;
-const plLadder = historicalLadder(pl);
-assert(plLadder[0]!.goals === 260, `PL record should be 260, got ${plLadder[0]!.goals}`);
-assert(plLadder[98]!.goals === 54, `PL 99th should be 54, got ${plLadder[98]!.goals}`);
+const outside = viewForBoard(plCareer, { seasons: [], nationalTeam: null });
+assert(outside.reveal === 'outside', '0 goals should sit outside the sourced top 10');
+assert(outside.table === null, 'outside the top 10 must not show a table');
+assert(outside.goalsToTop10 === 162, `need 162 to enter PL top 10, got ${outside.goalsToTop10}`);
 
-const outside = viewForBoard(pl, { seasons: [], nationalTeam: null });
-assert(outside.reveal === 'outside', '0 goals should be 100+');
-assert(outside.rankLabel === '100+', `0 goals label should be 100+, got ${outside.rankLabel}`);
-assert(outside.table === null, '100+ must not show the 1-10 table');
-assert(outside.goalsToEnter === 54, `need 54 to enter, got ${outside.goalsToEnter}`);
-
-const listed = viewForBoard(pl, {
-  seasons: [season({ clubId: 'arsenal', league: 'Premier League', leagueGoals: 54 })],
+const listed = viewForBoard(plCareer, {
+  seasons: [season({ clubId: 'arsenal', league: 'Premier League', leagueGoals: 161, leagueGames: 30 })],
   nationalTeam: null,
 });
-assert(listed.reveal === 'listed', `54 PL goals should list inside 99, got ${listed.reveal} rank ${listed.rank}`);
-assert(listed.rank === 99, `matching 99th should be 99th, got ${listed.rank}`);
-assert(listed.table === null, '11-99 must not show names');
-assert(listed.rankLabel === '99th', listed.rankLabel);
+assert(listed.reveal === 'outside', `161 PL goals should stay outside, got ${listed.reveal} rank ${listed.rank}`);
+assert(listed.table === null, 'outside top 10 must not list historical names');
 
-const almostTop = viewForBoard(pl, {
-  seasons: [season({ clubId: 'arsenal', league: 'Premier League', leagueGoals: plLadder[9]!.goals - 1 })],
-  nationalTeam: null,
-});
-assert(almostTop.reveal === 'listed', 'one below 10th should stay listed');
-assert(almostTop.goalsToTop10 === 1, `need 1 more to reach top 10, got ${almostTop.goalsToTop10}`);
-
-const top10 = viewForBoard(pl, {
-  seasons: [season({ clubId: 'arsenal', league: 'Premier League', leagueGoals: plLadder[9]!.goals })],
+const top10 = viewForBoard(plCareer, {
+  seasons: [season({ clubId: 'arsenal', league: 'Premier League', leagueGoals: 162, leagueGames: 30 })],
   nationalTeam: null,
 });
 assert(top10.reveal === 'top10', `matching 10th should unlock the table, got ${top10.reveal} ${top10.rank}`);
-assert(top10.table?.length === LEGACY_TOP_N, 'top 10 table should have 10 rows');
-assert(top10.table?.some((row) => row.you), 'top 10 table must include You');
-assert(top10.table?.[0]?.rank === 1, 'table should start at 1st');
+assert(top10.rank === 10, `162 should be 10th, got ${top10.rank}`);
+assert(top10.table?.some((row) => row.you), 'top 10 table must include the player row');
+assert(top10.table?.every((row) => !('name' in row)), 'table rows must not carry a name field');
 
-const record = viewForBoard(pl, {
-  seasons: [season({ clubId: 'arsenal', league: 'Premier League', leagueGoals: 400 })],
+const record = viewForBoard(plCareer, {
+  seasons: [season({ clubId: 'arsenal', league: 'Premier League', leagueGoals: 400, leagueGames: 30 })],
   nationalTeam: null,
 });
 assert(record.rank === 1, '400 PL goals should be 1st');
 assert(record.table?.[0]?.you, 'record holder should sit 1st');
 assert(record.table?.[0]?.goals === 400, '1st row should show the player total');
 
-const otherLeague = viewForBoard(pl, {
-  seasons: [season({ clubId: 'bayern', league: 'Bundesliga', leagueGoals: 400 })],
+const otherLeague = viewForBoard(plCareer, {
+  seasons: [season({ clubId: 'bayern', league: 'Bundesliga', leagueGoals: 400, leagueGames: 30 })],
   nationalTeam: null,
 });
 assert(otherLeague.playerGoals === 0, 'Bundesliga goals must not count on the Premier League board');
 
-const cl = boards.find((b) => b.kind === 'champions-league')!;
+const seasonBoard = viewForBoard(plSeason, {
+  seasons: [
+    season({ clubId: 'arsenal', league: 'Premier League', leagueGoals: 36, leagueGames: 38 }),
+    season({ clubId: 'arsenal', league: 'Premier League', seasonNumber: 3, leagueGoals: 12, leagueGames: 30 }),
+  ],
+  nationalTeam: null,
+});
+assert(seasonBoard.playerGoals === 36, `single-season board uses the best season, got ${seasonBoard.playerGoals}`);
+assert(seasonBoard.rank === 1, '36 should equal the PL season record');
+
+const cl = {
+  id: 'continental:career:ucl',
+  domain: 'club' as const,
+  span: 'career' as const,
+  title: 'Champions League',
+  subtitle: 'All-time tournament goals',
+  group: 'continental' as const,
+};
 const clGoals = playerGoalsForBoard(cl, {
   seasons: [
     season({
       clubId: 'arsenal',
       league: 'Premier League',
       leagueGoals: 20,
+      leagueGames: 30,
       continentalStats: [
         { cup: 'ucl', games: 12, goals: 17 },
         { cup: 'uel', games: 8, goals: 9 },
@@ -168,50 +173,131 @@ const clGoals = playerGoalsForBoard(cl, {
 });
 assert(clGoals === 17, `UCL board should ignore Europa goals, got ${clGoals}`);
 
-const wc = boards.find((b) => b.id === 'tournament:world-cup')!;
-const wcLadder = historicalLadder(wc);
-assert(wcLadder[0]!.goals === 16, 'World Cup record should be 16');
-assert(wcLadder[1]!.goals === 15, 'World Cup 2nd should be 15, not a pile of 16s');
 const team: NationalTeamState = {
   ...emptyTeam(),
+  caps: 30,
   goals: 40,
   byCompetition: [
     { ...emptyCompetitionRecord('world-cup'), qualifyingGoals: 12, finalsGoals: 8, qualifyingGames: 10, finalsGames: 7 },
     { ...emptyCompetitionRecord('euro'), qualifyingGoals: 4, finalsGoals: 3, qualifyingGames: 6, finalsGames: 5 },
   ],
 };
-const wcView = viewForBoard(wc, { seasons: [], nationalTeam: team });
+
+const wc = {
+  id: 'nation-tournament:career:england:world-cup',
+  domain: 'nation' as const,
+  span: 'career' as const,
+  title: 'England · World Cup',
+  subtitle: 'All-time tournament goals',
+  group: 'nation' as const,
+};
+const wcView = viewForBoard(wc, { seasons: [], nationalTeam: team, nationality: 'england' });
 assert(wcView.playerGoals === 8, `World Cup board should use finals only, got ${wcView.playerGoals}`);
+assert(wcView.rank === 2, `8 England World Cup goals should be 2nd, got ${wcView.rank}`);
 
-const intl = boards.find((b) => b.id === 'international:all-time')!;
-const intlView = viewForBoard(intl, { seasons: [], nationalTeam: team });
+const intl = {
+  id: 'nation-overall:england',
+  domain: 'nation' as const,
+  span: 'career' as const,
+  title: 'England',
+  subtitle: 'All-time international goals',
+  group: 'nation' as const,
+};
+const intlView = viewForBoard(intl, { seasons: [], nationalTeam: team, nationality: 'england' });
 assert(intlView.playerGoals === 40, `all-time international should use cap goals, got ${intlView.playerGoals}`);
+assert(intlView.rank === 6, `40 England goals should be 6th, got ${intlView.rank}`);
 
-const cup = boards.find((b) => b.id === 'cup:fa-cup')!;
+const cup = {
+  id: 'cup:career:fa-cup',
+  domain: 'club' as const,
+  span: 'career' as const,
+  title: 'FA Cup',
+  subtitle: 'All-time cup goals',
+  group: 'cup' as const,
+};
 const cupGoals = playerGoalsForBoard(cup, {
   seasons: [
-    season({ clubId: 'arsenal', league: 'Premier League', leagueGoals: 10, cupGoals: 6 }),
-    season({ clubId: 'barcelona', league: 'La Liga', leagueGoals: 10, cupGoals: 9 }),
+    season({ clubId: 'arsenal', league: 'Premier League', leagueGoals: 10, leagueGames: 30, cupGames: 5, cupGoals: 6 }),
+    season({ clubId: 'barcelona', league: 'La Liga', leagueGoals: 10, leagueGames: 30, cupGames: 5, cupGoals: 9 }),
   ],
   nationalTeam: null,
 });
 assert(cupGoals === 6, `FA Cup should ignore Copa del Rey goals, got ${cupGoals}`);
 
 assert(ordinal(1) === '1st' && ordinal(2) === '2nd' && ordinal(3) === '3rd' && ordinal(11) === '11th', 'ordinals');
-assert(revealForRank(1) === 'top10' && revealForRank(10) === 'top10', 'top 10 band');
-assert(revealForRank(11) === 'listed' && revealForRank(99) === 'listed', 'listed band');
-assert(revealForRank(100) === 'outside', '100+ band');
+assert(revealForRank(1, LEAGUE_CAREER['Premier League']!) === 'top10', 'top 10 band');
+assert(revealForRank(10, LEAGUE_CAREER['Premier League']!) === 'top10', '10th is top 10');
+assert(revealForRank(11, LEAGUE_CAREER['Premier League']!) === 'outside', '11th is outside');
+assert(rankForGoals(9, LEAGUE_CAREER['Premier League']!) > LEGACY_TOP_N, 'below 10th is outside');
 
-const totals = historicalTotals(10, 10);
-assert(totals[0] === 10 && totals[98] === 10, 'flat ladders stay at the record total');
-assert(rankForGoals(9, historicalLadder(pl)) > LEGACY_TABLE_SIZE, 'below 99th is 100+');
-
-const input: LegacyCareerInput = {
-  seasons: [season({ clubId: 'arsenal', league: 'Premier League', leagueGoals: 54, cupGoals: 12 })],
-  nationalTeam: team,
-  currentLeague: 'Premier League',
+const plOnly: LegacyCareerInput = {
+  seasons: [season({ clubId: 'arsenal', league: 'Premier League', leagueGoals: 20, leagueGames: 30, cupGames: 4, cupGoals: 2 })],
+  nationalTeam: emptyTeam(),
+  nationality: 'england',
 };
-const career = careerLegacyBoards(input);
-assert(career.some((board) => board.reveal === 'listed'), 'a 54-goal PL season should appear on a board');
+const participated = participatedLegacyBoards(plOnly);
+assert(participated.some((def) => def.id === 'league:career:premier-league'), 'PL appearance should unlock the PL board');
+assert(!participated.some((def) => def.id.includes('la-liga')), 'unplayed leagues must stay hidden');
+assert(!participated.some((def) => def.id.includes('world-cup')), 'unplayed tournaments must stay hidden');
+assert(!participated.some((def) => def.group === 'nation'), 'zero caps must hide nation boards');
 
-console.log(`legacy records ok · ${boards.length} boards · PL 1st ${plLadder[0]!.name} ${plLadder[0]!.goals}`);
+const withCaps: LegacyCareerInput = {
+  ...plOnly,
+  nationalTeam: team,
+};
+const nationBoards = participatedLegacyBoards(withCaps);
+assert(nationBoards.some((def) => def.id === 'nation-overall:england'), 'caps should unlock England overall');
+assert(nationBoards.some((def) => def.id.includes('world-cup')), 'World Cup finals should unlock that board');
+assert(!nationBoards.some((def) => def.id.includes('copa-america')), 'England must not show Copa América');
+
+const identity = identityLegacyBoards({
+  seasons: [season({ clubId: 'arsenal', league: 'Premier League', leagueGoals: 162, leagueGames: 30 })],
+  nationalTeam: null,
+});
+assert(identity.some((board) => board.def.id === 'league:career:premier-league'), 'identity shows sourced top-10 ranks');
+assert(identity.every((board) => board.reveal === 'top10'), 'identity legacy box is top 10 only');
+
+const currentSeason = season({
+  clubId: 'arsenal',
+  league: 'Premier League',
+  leagueGoals: 36,
+  leagueGames: 38,
+  seasonNumber: 4,
+});
+const previous: LegacyCareerInput = {
+  seasons: [season({ clubId: 'arsenal', league: 'Premier League', leagueGoals: 12, leagueGames: 30 })],
+  nationalTeam: null,
+};
+const after: LegacyCareerInput = {
+  seasons: [...previous.seasons, currentSeason],
+  nationalTeam: null,
+};
+const highlights = seasonLegacyHighlights(previous, after, currentSeason);
+assert(
+  highlights.some((item) => item.kind === 'season' && item.playerGoals === 36),
+  'a 36-goal PL season should show as a season record',
+);
+assert(
+  !highlights.some((item) => item.kind === 'all-time' && item.title === 'Premier League' && item.subtitle.includes('All-time')),
+  '12 + 36 = 48 must not claim an all-time PL top 10',
+);
+
+const allTimeSeason = season({ clubId: 'arsenal', league: 'Premier League', leagueGoals: 162, leagueGames: 38, seasonNumber: 5 });
+const allTimeAfter: LegacyCareerInput = { seasons: [allTimeSeason], nationalTeam: null };
+const allTimeHighlights = seasonLegacyHighlights({ seasons: [], nationalTeam: null }, allTimeAfter, allTimeSeason);
+assert(
+  allTimeHighlights.some((item) => item.kind === 'all-time'),
+  'breaking into the all-time top 10 should show on the season review',
+);
+
+const stripped = inputWithoutSeason(allTimeAfter, allTimeSeason);
+assert(stripped.seasons.length === 0, 'removing the only season should leave an empty career');
+
+for (const board of careerLegacyBoards(withCaps)) {
+  const blob = JSON.stringify(board).toLowerCase();
+  for (const banned of BANNED) {
+    if (blob.includes(banned)) fail(`${board.def.id} leaked a real or fictional name: ${banned}`);
+  }
+}
+
+console.log(`legacy records ok · ${participated.length} PL boards · England WC 8 goals is ${wcView.rankLabel}`);

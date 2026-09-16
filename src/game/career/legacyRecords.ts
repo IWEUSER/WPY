@@ -1,54 +1,62 @@
-import { TARGET_LEAGUE_SIZE, getClub } from './data/clubs';
+import { getClub } from './data/clubs';
 import {
-  CONTINENTAL_TOURNAMENT_FOR_CONFEDERATION,
+  CONTINENTAL_CUPS,
   DOMESTIC_CUPS,
   INTERNATIONAL_TOURNAMENTS,
+  SUPER_CUP,
   domesticCupForCountry,
-  type Confederation,
+  type ContinentalCupId,
   type DomesticCupId,
   type InternationalTournamentId,
 } from './data/competitions';
+import {
+  CLUB_OVERALL,
+  CONTINENTAL_CAREER,
+  CONTINENTAL_SEASON,
+  CUP_CAREER,
+  CUP_SEASON,
+  LEAGUE_CAREER,
+  LEAGUE_SEASON,
+  LEGACY_TOP_N,
+  OVERALL_CLUB_CAREER,
+  nationOverallTotals,
+  nationTournamentLadders,
+} from './data/legacyRecordTotals';
 import { leagueDisplayName } from './data/leagueFormat';
+import { getNation } from './international';
 import { countsTowardCareerRecord } from './seasonDisplay';
 import { aggregateContinental } from './seasonStats';
 import type { NationalTeamState } from './international';
 import type { SeasonRecord } from './types';
 
-export const LEGACY_TABLE_SIZE = 99;
-export const LEGACY_TOP_N = 10;
-export const PLAYER_RECORD_NAME = 'You';
+export { LEGACY_TOP_N };
 
-export type LegacyBoardKind = 'league' | 'champions-league' | 'national-cup' | 'tournament' | 'international';
-export type LegacyReveal = 'outside' | 'listed' | 'top10';
-
-export interface HistoricalScorer {
-  name: string;
-  goals: number;
-}
+export type LegacySpan = 'career' | 'season';
+export type LegacyDomain = 'club' | 'nation';
+export type LegacyReveal = 'outside' | 'top10';
 
 export interface LegacyBoardDef {
   id: string;
-  kind: LegacyBoardKind;
+  domain: LegacyDomain;
+  span: LegacySpan;
   title: string;
   subtitle: string;
-  group: 'league' | 'club' | 'national' | 'international';
+  group: 'club-overall' | 'league' | 'cup' | 'continental' | 'nation';
 }
 
 export interface LegacyTableRow {
   rank: number;
-  name: string;
   goals: number;
   you: boolean;
 }
 
 export interface LegacyBoardView {
   def: LegacyBoardDef;
-  historical: HistoricalScorer[];
+  historical: number[];
   playerGoals: number;
   rank: number;
   reveal: LegacyReveal;
   rankLabel: string;
-  goalsToEnter: number;
   goalsToTop10: number;
   tenthGoals: number;
   table: LegacyTableRow[] | null;
@@ -57,164 +65,8 @@ export interface LegacyBoardView {
 export interface LegacyCareerInput {
   seasons: SeasonRecord[];
   nationalTeam: NationalTeamState | null;
-  currentLeague?: string | null;
-  nationalityConfederation?: Confederation | null;
-}
-
-const LEAGUE_SCALE: Record<string, { first: number; last: number }> = {
-  'Premier League': { first: 260, last: 54 },
-  Championship: { first: 202, last: 48 },
-  'La Liga': { first: 308, last: 72 },
-  'La Liga 2': { first: 196, last: 52 },
-  'Serie A': { first: 274, last: 68 },
-  'Serie B': { first: 188, last: 46 },
-  Bundesliga: { first: 318, last: 74 },
-  '2. Bundesliga': { first: 176, last: 44 },
-  'Ligue 1': { first: 288, last: 70 },
-  'Ligue 2': { first: 168, last: 42 },
-  'Primeira Liga': { first: 278, last: 66 },
-  Eredivisie: { first: 272, last: 64 },
-  'Super Lig': { first: 242, last: 56 },
-  'Saudi Pro League': { first: 148, last: 36 },
-  MLS: { first: 172, last: 40 },
-};
-
-const CUP_SCALE: Record<DomesticCupId, { first: number; last: number }> = {
-  'fa-cup': { first: 44, last: 12 },
-  'copa-del-rey': { first: 56, last: 14 },
-  'coppa-italia': { first: 48, last: 12 },
-  'dfb-pokal': { first: 52, last: 13 },
-  'coupe-de-france': { first: 50, last: 13 },
-  'kings-cup': { first: 38, last: 10 },
-  'us-open-cup': { first: 34, last: 9 },
-  'taca-de-portugal': { first: 46, last: 12 },
-  'knvb-beker': { first: 42, last: 11 },
-  'turkish-cup': { first: 40, last: 11 },
-};
-
-const TOURNAMENT_SCALE: Partial<Record<InternationalTournamentId, { first: number; last: number }>> = {
-  'world-cup': { first: 16, last: 4 },
-  euro: { first: 14, last: 3 },
-  'copa-america': { first: 17, last: 4 },
-  afcon: { first: 18, last: 4 },
-  'asian-cup': { first: 16, last: 3 },
-  'gold-cup': { first: 18, last: 4 },
-  'ofc-nations-cup': { first: 14, last: 3 },
-  'nations-league': { first: 10, last: 3 },
-};
-
-const CHAMPIONS_LEAGUE_SCALE = { first: 140, last: 22 };
-const INTERNATIONAL_SCALE = { first: 109, last: 38 };
-
-const TOURNAMENT_BOARDS: InternationalTournamentId[] = [
-  'world-cup',
-  'euro',
-  'copa-america',
-  'afcon',
-  'asian-cup',
-  'gold-cup',
-  'ofc-nations-cup',
-  'nations-league',
-];
-
-type NameCulture =
-  | 'english'
-  | 'spanish'
-  | 'italian'
-  | 'german'
-  | 'french'
-  | 'portuguese'
-  | 'dutch'
-  | 'turkish'
-  | 'arabic'
-  | 'american'
-  | 'south-american'
-  | 'african'
-  | 'east-asian'
-  | 'oceanic'
-  | 'european';
-
-const NAMES: Record<NameCulture, { first: string[]; last: string[] }> = {
-  english: {
-    first: ['Callum', 'Reece', 'Finley', 'Harvey', 'Owen', 'Ellis', 'Rhys', 'Kieran', 'Brody', 'Ewan', 'Nolan', 'Quinn', 'Alfie', 'Fraser', 'Keir', 'Bram', 'Leighton', 'Corin', 'Dorian', 'Travis', 'Malachi', 'Soren', 'Arlo', 'Jed', 'Kit'],
-    last: ['Hargreaves', 'Whittaker', 'Croft', 'Pendleton', 'Ashford', 'Millward', 'Hawthorne', 'Langley', 'Pritchard', 'Colburn', 'Westbrook', 'Dunlevy', 'Fairclough', 'Thacker', 'Bexley', 'Calloway', 'Drayton', 'Fenwick', 'Halstead', 'Ingram', 'Kestrel', 'Rowanlea', 'Stanhope', 'Aldridge', 'Bramwell'],
-  },
-  spanish: {
-    first: ['Mateo', 'Iker', 'Unai', 'Biel', 'Aitor', 'Gorka', 'Izan', 'Oriol', 'Ander', 'Ekaitz', 'Gaizka', 'Asier', 'Julen', 'Oier', 'Peio', 'Nil', 'Pol', 'Quim', 'Unax', 'Jon', 'Ibai', 'Markel', 'Eneko', 'Hodei', 'Aritz'],
-    last: ['Palomares', 'Cifuentes', 'Arriaga', 'Larralde', 'Campuzano', 'Recalde', 'Villacorta', 'Najarro', 'Zalduegi', 'Igartua', 'Basterra', 'Valduerna', 'Otxoa', 'Lezaun', 'Sarrion', 'Urdiain', 'Goiko', 'Elizondo', 'Madariaga', 'Lizarraga', 'Aranburu', 'Etxaide', 'Iribarren', 'Lopetegi', 'Zubiri'],
-  },
-  italian: {
-    first: ['Luca', 'Matteo', 'Nicolo', 'Davide', 'Simone', 'Alessio', 'Federico', 'Lorenzo', 'Riccardo', 'Gabriele', 'Tommaso', 'Edoardo', 'Samuele', 'Mattia', 'Andrea', 'Pietro', 'Giulio', 'Daniele', 'Emanuele', 'Filippo', 'Stefano', 'Marco', 'Paolo', 'Enrico', 'Cesare'],
-    last: ['Ferretti', 'Bellucci', 'Moretti', 'Rinaldi', 'Galli', 'Martini', 'Vitale', 'Sartori', 'De Santis', 'Palumbo', 'Caruso', 'Greco', 'Fontana', 'Serra', 'Longo', 'Costa', 'Barbieri', 'Testa', 'Monti', 'Ferrara', 'Lombardi', 'Giordano', 'Marchetti', 'Bianchi', 'Rizzo'],
-  },
-  german: {
-    first: ['Jonas', 'Lukas', 'Niklas', 'Tobias', 'Florian', 'Jan', 'Felix', 'Moritz', 'Tim', 'Nils', 'Leon', 'Paul', 'Finn', 'Jannik', 'Hannes', 'Lars', 'Sven', 'Erik', 'Ole', 'Mats', 'Ben', 'Maximilian', 'Kilian', 'Soeren', 'Timo'],
-    last: ['Hartmann', 'Schreiber', 'Krueger', 'Hofmann', 'Schuster', 'Wolf', 'Keller', 'Schumacher', 'Vogel', 'Richter', 'Baumann', 'Lorenz', 'Hahn', 'Pohl', 'Engel', 'Otto', 'Gunter', 'Seidel', 'Bergmann', 'Franke', 'Albrecht', 'Peters', 'Sommer', 'Graf', 'Wendt'],
-  },
-  french: {
-    first: ['Hugo', 'Louis', 'Arthur', 'Jules', 'Raphael', 'Leo', 'Adam', 'Mael', 'Noah', 'Gabin', 'Enzo', 'Nathan', 'Theo', 'Maxime', 'Baptiste', 'Mathis', 'Antoine', 'Clement', 'Adrien', 'Quentin', 'Valentin', 'Tristan', 'Loic', 'Yann', 'Killian'],
-    last: ['Moreau', 'Fournier', 'Girard', 'Bonnet', 'Dupont', 'Lambert', 'Fontaine', 'Rousseau', 'Vincent', 'Masson', 'Lefevre', 'Faure', 'Andre', 'Mercier', 'Blanc', 'Guerin', 'Boyer', 'Garnier', 'Chevalier', 'Francois', 'Leclerc', 'Gaillard', 'Perrin', 'Morin', 'Rolland'],
-  },
-  portuguese: {
-    first: ['Tiago', 'Diogo', 'Rui', 'Nuno', 'Goncalo', 'Bruno', 'Pedro', 'Miguel', 'Joao', 'Andre', 'Ricardo', 'Sergio', 'Paulo', 'Carlos', 'Luis', 'Filipe', 'Hugo', 'Vitor', 'Renato', 'Daniel', 'Eduardo', 'Fernando', 'Mario', 'Helder', 'Ivo'],
-    last: ['Ferreira', 'Carvalho', 'Almeida', 'Rodrigues', 'Pereira', 'Oliveira', 'Costa', 'Martins', 'Sousa', 'Fernandes', 'Lopes', 'Marques', 'Teixeira', 'Correia', 'Pinto', 'Gomes', 'Ribeiro', 'Mendes', 'Nunes', 'Cardoso', 'Rocha', 'Dias', 'Neves', 'Cunha', 'Barros'],
-  },
-  dutch: {
-    first: ['Daan', 'Sem', 'Luuk', 'Bram', 'Finn', 'Milan', 'Lars', 'Thijs', 'Sven', 'Jens', 'Koen', 'Niels', 'Tim', 'Max', 'Stijn', 'Ruben', 'Thomas', 'Jesse', 'Mees', 'Wout', 'Guus', 'Jasper', 'Cas', 'Teun', 'Mats'],
-    last: ['Visser', 'Bakker', 'Smit', 'Meijer', 'Bos', 'Vos', 'Dekker', 'Dijkstra', 'Peters', 'Hendriks', 'Van Loon', 'Van den Berg', 'Mulder', 'De Vries', 'Jacobs', 'Vermeer', 'Schouten', 'Willems', 'Kuiper', 'Postma', 'Brouwer', 'Koster', 'Prins', 'Hofman', 'Veenstra'],
-  },
-  turkish: {
-    first: ['Emre', 'Cem', 'Burak', 'Ozan', 'Kaan', 'Eren', 'Yigit', 'Arda', 'Mert', 'Can', 'Deniz', 'Baran', 'Kerem', 'Onur', 'Serkan', 'Hakan', 'Umut', 'Tolga', 'Berk', 'Alp', 'Tuna', 'Ege', 'Kuzey', 'Doruk', 'Sarp'],
-    last: ['Yilmaz', 'Kaya', 'Demir', 'Celik', 'Sahin', 'Yildiz', 'Aydin', 'Ozturk', 'Aslan', 'Kurt', 'Koc', 'Arslan', 'Dogan', 'Kilic', 'Acar', 'Polat', 'Erdogan', 'Gunes', 'Aksoy', 'Cetinkaya', 'Karaca', 'Yavuz', 'Tas', 'Yalcin', 'Ucar'],
-  },
-  arabic: {
-    first: ['Omar', 'Youssef', 'Hassan', 'Karim', 'Nasser', 'Faisal', 'Tariq', 'Ziad', 'Samir', 'Majid', 'Walid', 'Bassam', 'Adel', 'Rami', 'Anas', 'Ibrahim', 'Hamza', 'Khalid', 'Sami', 'Nabil', 'Jamal', 'Faris', 'Lutfi', 'Zakariya', 'Idris'],
-    last: ['Al Harbi', 'Al Qahtani', 'Al Mutairi', 'Al Shamrani', 'Al Dosari', 'Al Otaibi', 'Al Ghamdi', 'Al Zahrani', 'Al Harthi', 'Al Subaie', 'Al Anzi', 'Al Johani', 'Al Qahtan', 'Al Malki', 'Al Shehri', 'Al Amri', 'Al Harbiya', 'Al Fahad', 'Al Nemer', 'Al Rashid', 'Al Bishi', 'Al Qaht', 'Al Jaber', 'Al Harthiya', 'Al Dossari'],
-  },
-  american: {
-    first: ['Mason', 'Caleb', 'Wyatt', 'Grayson', 'Hunter', 'Colton', 'Parker', 'Carson', 'Bryson', 'Jace', 'Kayden', 'Easton', 'Ryder', 'Sawyer', 'Bentley', 'Tucker', 'Hayden', 'Gage', 'Dalton', 'Reid', 'Nash', 'Grant', 'Chase', 'Blake', 'Cole'],
-    last: ['Hendricks', 'Whitfield', 'Caldwell', 'Brennan', 'McAllister', 'Sutherland', 'Harrington', 'Prescott', 'Langford', 'McCrae', 'Donovan', 'Fletcher', 'Graves', 'Holloway', 'Kincaid', 'Lawson', 'Maddox', 'Nashwell', 'Oakley', 'Patterson', 'Quincy', 'Ramsey', 'Sinclair', 'Tanner', 'Vaughn'],
-  },
-  'south-american': {
-    first: ['Thiago', 'Mateo', 'Santiago', 'Nicolas', 'Tomas', 'Agustin', 'Facundo', 'Joaquin', 'Gonzalo', 'Franco', 'Lucas', 'Bruno', 'Diego', 'Emiliano', 'Valentino', 'Benja', 'Iker', 'Gael', 'Bautista', 'Lautaro', 'Maximo', 'Enzo', 'Pablo', 'Rafael', 'Camilo'],
-    last: ['Bustos', 'Caceres', 'Delgado', 'Espinoza', 'Figueroa', 'Godoy', 'Herrera', 'Ibarra', 'Juarez', 'Ledesma', 'Molina', 'Nunez', 'Ojeda', 'Paredes', 'Quiroga', 'Rivas', 'Sosa', 'Toledo', 'Urrutia', 'Vargas', 'Acosta', 'Benitez', 'Correa', 'Duarte', 'Echeverria'],
-  },
-  african: {
-    first: ['Kwame', 'Kofi', 'Amadou', 'Idriss', 'Mamadou', 'Sekou', 'Ousmane', 'Abdoulaye', 'Ibrahima', 'Cheikh', 'Youssouf', 'Bakary', 'Moussa', 'Saliou', 'Kalidou', 'Ismael', 'Boubacar', 'Lamine', 'Pape', 'Modou', 'Teboho', 'Sipho', 'Thabo', 'Kabelo', 'Tendai'],
-    last: ['Diallo', 'Traore', 'Coulibaly', 'Keita', 'Camara', 'Toure', 'Sylla', 'Bah', 'Sow', 'Ndiaye', 'Fall', 'Diop', 'Gueye', 'Thiam', 'Faye', 'Cisse', 'Ba', 'Ndao', 'Ndoye', 'Coly', 'Dlamini', 'Ncube', 'Molefe', 'Khumalo', 'Nkrumah'],
-  },
-  'east-asian': {
-    first: ['Hiro', 'Kaito', 'Ren', 'Sora', 'Haruto', 'Yuki', 'Minjun', 'Jisoo', 'Hyun', 'Taeyang', 'Wei', 'Jun', 'Hao', 'Chen', 'Bo', 'Kenji', 'Daiki', 'Riku', 'Sota', 'Yuto', 'Minho', 'Joon', 'Seojun', 'Haneul', 'Liang'],
-    last: ['Takahashi', 'Yamamoto', 'Kobayashi', 'Watanabe', 'Nakamura', 'Kimura', 'Hayashi', 'Park', 'Choi', 'Jung', 'Kang', 'Yoon', 'Han', 'Lim', 'Seo', 'Zhang', 'Liu', 'Huang', 'Zhou', 'Wu', 'Xu', 'Sun', 'Ma', 'Guo', 'He'],
-  },
-  oceanic: {
-    first: ['Tane', 'Wiremu', 'Hemi', 'Manaia', 'Kauri', 'Liam', 'Jack', 'Hunter', 'Cooper', 'Mason', 'Sione', 'Tevita', 'Lisiate', 'Mikaele', 'Aisea', 'Finn', 'Archie', 'Hamish', 'Angus', 'Callan', 'Niko', 'Jett', 'Zane', 'Beau', 'Cruz'],
-    last: ['Williams', 'Thompson', 'Ngata', 'Rangi', 'Hohepa', 'Patel', 'Singh', 'Tuigamala', 'Fotu', 'Havea', 'Asofa', 'MacLeod', 'Fraser', 'Campbell', 'Stewart', 'Walsh', 'Brennan', 'OConnor', 'Murphy', 'Kelly', 'Taumalolo', 'Vaka', 'Latu', 'Pulu', 'Finau'],
-  },
-  european: {
-    first: ['Luka', 'Marko', 'Ivan', 'Petar', 'Nikola', 'Stefan', 'Milan', 'Andrei', 'Vlad', 'Tomas', 'Jakub', 'Piotr', 'Michal', 'Adam', 'Erik', 'Oskar', 'Viktor', 'Nikolai', 'Dmitri', 'Alexandru', 'Cristian', 'Gabriel', 'Mateusz', 'Bartosz', 'Kacper'],
-    last: ['Novak', 'Horvat', 'Kovac', 'Jovanovic', 'Petrovic', 'Popescu', 'Ionescu', 'Nowak', 'Kowalski', 'Wisniewski', 'Dvorak', 'Svoboda', 'Horvath', 'Nagy', 'Toth', 'Larsen', 'Nielsen', 'Johansson', 'Lindberg', 'Korhonen', 'Nieminen', 'Ivanov', 'Smirnov', 'Popov', 'Volkov'],
-  },
-};
-
-function hashString(value: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < value.length; i += 1) {
-    h ^= value.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
-function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+  nationality?: string | null;
+  playerName?: string | null;
 }
 
 export function ordinal(n: number): string {
@@ -232,161 +84,6 @@ export function ordinal(n: number): string {
   }
 }
 
-export function historicalTotals(first: number, last: number, count = LEGACY_TABLE_SIZE): number[] {
-  if (count <= 1) return [first];
-  const totals: number[] = new Array(count);
-  totals[0] = first;
-  totals[count - 1] = last;
-  const canStrict = first - last >= count - 1;
-  if (canStrict) {
-    for (let i = 1; i < count - 1; i += 1) {
-      const t = i / (count - 1);
-      const eased = 1 - (1 - t) ** 1.28;
-      const maxAllowed = totals[i - 1]! - 1;
-      const minNeeded = last + (count - 1 - i);
-      totals[i] = Math.min(maxAllowed, Math.max(minNeeded, Math.round(first - (first - last) * eased)));
-    }
-    if ((totals[count - 2] ?? last) <= last) totals[count - 2] = last + 1;
-    return totals;
-  }
-  let value = first;
-  for (let i = 1; i < count - 1; i += 1) {
-    if (value > last) value -= 1;
-    totals[i] = value;
-  }
-  return totals;
-}
-
-function cultureForBoard(def: LegacyBoardDef): NameCulture {
-  if (def.kind === 'league') {
-    if (def.title.includes('Premier') || def.title === 'Championship') return 'english';
-    if (def.title.includes('La Liga')) return 'spanish';
-    if (def.title.includes('Serie')) return 'italian';
-    if (def.title.includes('Bundesliga')) return 'german';
-    if (def.title.includes('Ligue')) return 'french';
-    if (def.title.includes('Primeira')) return 'portuguese';
-    if (def.title === 'Eredivisie') return 'dutch';
-    if (def.title.includes('Super Lig')) return 'turkish';
-    if (def.title.includes('Saudi') || def.title.includes('Roshn')) return 'arabic';
-    if (def.title === 'MLS') return 'american';
-  }
-  if (def.kind === 'national-cup') {
-    if (def.id.includes('fa-cup')) return 'english';
-    if (def.id.includes('copa-del-rey')) return 'spanish';
-    if (def.id.includes('coppa')) return 'italian';
-    if (def.id.includes('dfb')) return 'german';
-    if (def.id.includes('coupe')) return 'french';
-    if (def.id.includes('kings-cup')) return 'arabic';
-    if (def.id.includes('us-open')) return 'american';
-    if (def.id.includes('taca')) return 'portuguese';
-    if (def.id.includes('knvb')) return 'dutch';
-    if (def.id.includes('turkish')) return 'turkish';
-  }
-  if (def.kind === 'tournament') {
-    if (def.id.endsWith('euro') || def.id.endsWith('nations-league')) return 'european';
-    if (def.id.includes('copa-america')) return 'south-american';
-    if (def.id.includes('afcon')) return 'african';
-    if (def.id.includes('asian-cup')) return 'east-asian';
-    if (def.id.includes('gold-cup')) return 'american';
-    if (def.id.includes('ofc')) return 'oceanic';
-    return 'european';
-  }
-  if (def.kind === 'champions-league') return 'european';
-  return 'european';
-}
-
-function uniqueNames(culture: NameCulture, count: number, seed: string): string[] {
-  const pool = NAMES[culture];
-  const rng = mulberry32(hashString(`${seed}:${culture}`));
-  const used = new Set<string>();
-  const names: string[] = [];
-  let guard = 0;
-  while (names.length < count && guard < count * 40) {
-    guard += 1;
-    const first = pool.first[Math.floor(rng() * pool.first.length)]!;
-    const last = pool.last[Math.floor(rng() * pool.last.length)]!;
-    const name = `${first} ${last}`;
-    if (used.has(name)) continue;
-    used.add(name);
-    names.push(name);
-  }
-  let extra = 1;
-  while (names.length < count) {
-    names.push(`${pool.first[names.length % pool.first.length]} ${pool.last[names.length % pool.last.length]} ${extra}`);
-    extra += 1;
-  }
-  return names;
-}
-
-export function historicalLadder(def: LegacyBoardDef): HistoricalScorer[] {
-  const scale = scaleForBoard(def);
-  const totals = historicalTotals(scale.first, scale.last);
-  const names = uniqueNames(cultureForBoard(def), totals.length, def.id);
-  return totals.map((goals, i) => ({ name: names[i]!, goals }));
-}
-
-function scaleForBoard(def: LegacyBoardDef): { first: number; last: number } {
-  if (def.kind === 'league') {
-    const league = Object.keys(LEAGUE_SCALE).find((name) => def.id === leagueBoardId(name));
-    return (league ? LEAGUE_SCALE[league] : { first: 180, last: 40 })!;
-  }
-  if (def.kind === 'national-cup') {
-    const cupId = def.id.replace('cup:', '') as DomesticCupId;
-    return CUP_SCALE[cupId] ?? { first: 40, last: 10 };
-  }
-  if (def.kind === 'champions-league') return CHAMPIONS_LEAGUE_SCALE;
-  if (def.kind === 'international') return INTERNATIONAL_SCALE;
-  const tournament = def.id.replace('tournament:', '') as InternationalTournamentId;
-  return TOURNAMENT_SCALE[tournament] ?? { first: 12, last: 3 };
-}
-
-export function leagueBoardId(league: string): string {
-  return `league:${league.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
-}
-
-export function allLegacyBoards(): LegacyBoardDef[] {
-  const leagues: LegacyBoardDef[] = Object.keys(TARGET_LEAGUE_SIZE).map((league) => ({
-    id: leagueBoardId(league),
-    kind: 'league',
-    title: leagueDisplayName(league),
-    subtitle: 'All-time league goals',
-    group: 'league',
-  }));
-  const cups: LegacyBoardDef[] = (Object.keys(DOMESTIC_CUPS) as DomesticCupId[]).map((id) => ({
-    id: `cup:${id}`,
-    kind: 'national-cup',
-    title: DOMESTIC_CUPS[id].name,
-    subtitle: 'All-time national cup goals',
-    group: 'national',
-  }));
-  const tournaments: LegacyBoardDef[] = TOURNAMENT_BOARDS.map((id) => ({
-    id: `tournament:${id}`,
-    kind: 'tournament',
-    title: INTERNATIONAL_TOURNAMENTS[id].name,
-    subtitle: 'All-time tournament goals',
-    group: 'international',
-  }));
-  return [
-    ...leagues,
-    {
-      id: 'continental:ucl',
-      kind: 'champions-league',
-      title: 'Champions League',
-      subtitle: 'All-time club goals',
-      group: 'club',
-    },
-    ...cups,
-    ...tournaments,
-    {
-      id: 'international:all-time',
-      kind: 'international',
-      title: 'International goals',
-      subtitle: 'All-time caps scoring',
-      group: 'international',
-    },
-  ];
-}
-
 export function seasonLeagueName(season: SeasonRecord): string | null {
   return season.league ?? getClub(season.clubId)?.league ?? null;
 }
@@ -395,112 +92,456 @@ export function countedSeasons(seasons: SeasonRecord[]): SeasonRecord[] {
   return seasons.filter((season) => countsTowardCareerRecord(season.seasonNumber, season.role));
 }
 
-export function playerGoalsForBoard(def: LegacyBoardDef, input: LegacyCareerInput): number {
-  const seasons = countedSeasons(input.seasons);
-  if (def.kind === 'league') {
-    const league = Object.keys(TARGET_LEAGUE_SIZE).find((name) => leagueBoardId(name) === def.id);
-    if (!league) return 0;
-    return seasons.reduce((sum, season) => sum + (seasonLeagueName(season) === league ? season.leagueGoals ?? 0 : 0), 0);
-  }
-  if (def.kind === 'champions-league') {
-    return aggregateContinental(seasons).find((row) => row.cup === 'ucl')?.goals ?? 0;
-  }
-  if (def.kind === 'national-cup') {
-    const cupId = def.id.replace('cup:', '') as DomesticCupId;
-    return seasons.reduce((sum, season) => {
-      const club = getClub(season.clubId);
-      if (!club || domesticCupForCountry(club.country) !== cupId) return sum;
-      return sum + (season.cupGoals ?? 0);
-    }, 0);
-  }
-  if (def.kind === 'tournament') {
-    const tournament = def.id.replace('tournament:', '') as InternationalTournamentId;
-    return input.nationalTeam?.byCompetition.find((row) => row.tournament === tournament)?.finalsGoals ?? 0;
-  }
-  return input.nationalTeam?.goals ?? 0;
+function slugLeague(league: string): string {
+  return league.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 }
 
-export function rankForGoals(playerGoals: number, historical: HistoricalScorer[]): number {
-  return 1 + historical.filter((row) => row.goals > playerGoals).length;
+function appearance(games: number | undefined, goals: number): boolean {
+  return (games ?? 0) > 0 || goals > 0;
 }
 
-export function revealForRank(rank: number): LegacyReveal {
-  if (rank <= LEGACY_TOP_N) return 'top10';
-  if (rank <= LEGACY_TABLE_SIZE) return 'listed';
+export function rankForGoals(playerGoals: number, historical: number[]): number {
+  if (historical.length === 0) return Number.POSITIVE_INFINITY;
+  return 1 + historical.filter((goals) => goals > playerGoals).length;
+}
+
+export function revealForRank(rank: number, historical: number[]): LegacyReveal {
+  if (historical.length === 0) return 'outside';
+  const cutoff = Math.min(LEGACY_TOP_N, historical.length);
+  if (rank <= cutoff) return 'top10';
   return 'outside';
 }
 
-function combinedTopTable(playerGoals: number, historical: HistoricalScorer[]): LegacyTableRow[] {
-  const ahead = historical.filter((row) => row.goals > playerGoals);
-  const tied = historical.filter((row) => row.goals === playerGoals);
-  const behind = historical.filter((row) => row.goals < playerGoals);
-  const youRow = { name: PLAYER_RECORD_NAME, goals: playerGoals, you: true };
-  const before = [...ahead, ...tied].slice(0, Math.max(0, LEGACY_TOP_N - 1));
+function tenthTotal(historical: number[]): number {
+  if (historical.length === 0) return 0;
+  return historical[Math.min(LEGACY_TOP_N, historical.length) - 1] ?? historical[historical.length - 1] ?? 0;
+}
+
+function combinedTopTable(playerGoals: number, historical: number[]): LegacyTableRow[] {
+  const ahead = historical.filter((goals) => goals > playerGoals);
+  const tied = historical.filter((goals) => goals === playerGoals);
+  const behind = historical.filter((goals) => goals < playerGoals);
+  const beforeCount = Math.min(ahead.length + tied.length, Math.max(0, LEGACY_TOP_N - 1));
+  const before = [...ahead, ...tied].slice(0, beforeCount);
   const remaining = Math.max(0, LEGACY_TOP_N - (before.length + 1));
-  const combined = [
-    ...before.map((row) => ({ ...row, you: false })),
-    youRow,
-    ...behind.slice(0, remaining).map((row) => ({ ...row, you: false })),
-  ];
+  const combined = [...before.map((goals) => ({ goals, you: false })), { goals: playerGoals, you: true }, ...behind.slice(0, remaining).map((goals) => ({ goals, you: false }))];
   return combined.map((row) => ({
     rank: 1 + combined.filter((other) => other.goals > row.goals).length,
-    name: row.name,
     goals: row.goals,
     you: row.you,
   }));
 }
 
+function continentalGames(season: SeasonRecord, cup: string): number {
+  return season.continentalStats?.find((row) => row.cup === cup)?.games ?? 0;
+}
+
+function continentalGoals(season: SeasonRecord, cup: string): number {
+  return season.continentalStats?.find((row) => row.cup === cup)?.goals ?? 0;
+}
+
+function playedLeague(seasons: SeasonRecord[], league: string): boolean {
+  return seasons.some((season) => seasonLeagueName(season) === league && appearance(season.leagueGames, season.leagueGoals ?? 0));
+}
+
+function playedCup(seasons: SeasonRecord[], cupId: DomesticCupId): boolean {
+  return seasons.some((season) => {
+    const club = getClub(season.clubId);
+    if (!club || domesticCupForCountry(club.country) !== cupId) return false;
+    return appearance(season.cupGames, season.cupGoals ?? 0);
+  });
+}
+
+function playedContinental(seasons: SeasonRecord[], cup: string): boolean {
+  return seasons.some((season) => appearance(continentalGames(season, cup), continentalGoals(season, cup)));
+}
+
+function playedClub(seasons: SeasonRecord[], clubId: string): boolean {
+  return seasons.some((season) => season.clubId === clubId && (season.gamesPlayed > 0 || season.goals > 0));
+}
+
+function playedNation(team: NationalTeamState | null): boolean {
+  return Boolean(team && team.caps > 0);
+}
+
+function playedNationTournament(team: NationalTeamState | null, tournament: InternationalTournamentId): boolean {
+  const row = team?.byCompetition.find((item) => item.tournament === tournament);
+  return Boolean(row && (row.finalsGames > 0 || row.finalsGoals > 0));
+}
+
+export function playerGoalsForBoard(def: LegacyBoardDef, input: LegacyCareerInput): number {
+  const seasons = countedSeasons(input.seasons);
+  if (def.id === 'club:overall') {
+    return seasons.reduce((sum, season) => sum + season.goals, 0);
+  }
+  if (def.id.startsWith('club-overall:')) {
+    const clubId = def.id.slice('club-overall:'.length);
+    const clubSeasons = seasons.filter((season) => season.clubId === clubId);
+    if (def.span === 'season') {
+      return clubSeasons.reduce((best, season) => Math.max(best, season.goals), 0);
+    }
+    return clubSeasons.reduce((sum, season) => sum + season.goals, 0);
+  }
+  if (def.id.startsWith('league:')) {
+    const rest = def.id.slice('league:'.length);
+    const [span, ...leagueParts] = rest.split(':');
+    const league = Object.keys(LEAGUE_CAREER).find((name) => slugLeague(name) === leagueParts.join(':'));
+    if (!league) return 0;
+    const values = seasons.map((season) => (seasonLeagueName(season) === league ? season.leagueGoals ?? 0 : 0));
+    return span === 'season' ? values.reduce((best, goals) => Math.max(best, goals), 0) : values.reduce((sum, goals) => sum + goals, 0);
+  }
+  if (def.id.startsWith('cup:')) {
+    const [, span, cupId] = def.id.split(':') as [string, LegacySpan, DomesticCupId];
+    const values = seasons.map((season) => {
+      const club = getClub(season.clubId);
+      if (!club || domesticCupForCountry(club.country) !== cupId) return 0;
+      return season.cupGoals ?? 0;
+    });
+    return span === 'season' ? values.reduce((best, goals) => Math.max(best, goals), 0) : values.reduce((sum, goals) => sum + goals, 0);
+  }
+  if (def.id.startsWith('continental:')) {
+    const [, span, cup] = def.id.split(':');
+    if (span === 'season') {
+      return seasons.reduce((best, season) => Math.max(best, continentalGoals(season, cup)), 0);
+    }
+    if (cup === 'super-cup') {
+      return seasons.reduce((sum, season) => sum + continentalGoals(season, 'super-cup'), 0);
+    }
+    return aggregateContinental(seasons).find((row) => row.cup === cup)?.goals ?? 0;
+  }
+  if (def.id.startsWith('nation-overall:')) {
+    return input.nationalTeam?.goals ?? 0;
+  }
+  if (def.id.startsWith('nation-tournament:')) {
+    const parts = def.id.split(':');
+    const span = parts[1] as LegacySpan;
+    const tournament = parts[3] as InternationalTournamentId;
+    if (span === 'season') {
+      return countedSeasons(input.seasons).reduce((best, season) => {
+        if (season.international?.tournament !== tournament) return best;
+        return Math.max(best, season.international.finalsGoals ?? 0);
+      }, 0);
+    }
+    return input.nationalTeam?.byCompetition.find((row) => row.tournament === tournament)?.finalsGoals ?? 0;
+  }
+  return 0;
+}
+
+function thisSeasonGoalsForBoard(def: LegacyBoardDef, season: SeasonRecord): number {
+  if (!countsTowardCareerRecord(season.seasonNumber, season.role)) return 0;
+  if (def.id === 'club:overall') return season.goals;
+  if (def.id.startsWith('club-overall:')) {
+    const clubId = def.id.slice('club-overall:'.length);
+    return season.clubId === clubId ? season.goals : 0;
+  }
+  if (def.id.startsWith('league:')) {
+    const rest = def.id.slice('league:'.length);
+    const [, ...leagueParts] = rest.split(':');
+    const league = Object.keys(LEAGUE_CAREER).find((name) => slugLeague(name) === leagueParts.join(':'));
+    return seasonLeagueName(season) === league ? season.leagueGoals ?? 0 : 0;
+  }
+  if (def.id.startsWith('cup:')) {
+    const cupId = def.id.split(':')[2] as DomesticCupId;
+    const club = getClub(season.clubId);
+    if (!club || domesticCupForCountry(club.country) !== cupId) return 0;
+    return season.cupGoals ?? 0;
+  }
+  if (def.id.startsWith('continental:')) {
+    const cup = def.id.split(':')[2];
+    return continentalGoals(season, cup);
+  }
+  if (def.id.startsWith('nation-overall:')) return 0;
+  if (def.id.startsWith('nation-tournament:')) {
+    const tournament = def.id.split(':')[3] as InternationalTournamentId;
+    if (season.international?.tournament !== tournament) return 0;
+    return season.international.finalsGoals ?? 0;
+  }
+  return 0;
+}
+
+function historicalFor(def: LegacyBoardDef): number[] {
+  if (def.id === 'club:overall') return OVERALL_CLUB_CAREER;
+  if (def.id.startsWith('club-overall:')) {
+    return CLUB_OVERALL[def.id.slice('club-overall:'.length)] ?? [];
+  }
+  if (def.id.startsWith('league:')) {
+    const rest = def.id.slice('league:'.length);
+    const [span, ...leagueParts] = rest.split(':');
+    const league = Object.keys(LEAGUE_CAREER).find((name) => slugLeague(name) === leagueParts.join(':'));
+    if (!league) return [];
+    return (span === 'season' ? LEAGUE_SEASON : LEAGUE_CAREER)[league] ?? [];
+  }
+  if (def.id.startsWith('cup:')) {
+    const [, span, cupId] = def.id.split(':');
+    return (span === 'season' ? CUP_SEASON : CUP_CAREER)[cupId] ?? [];
+  }
+  if (def.id.startsWith('continental:')) {
+    const [, span, cup] = def.id.split(':');
+    return (span === 'season' ? CONTINENTAL_SEASON : CONTINENTAL_CAREER)[cup] ?? [];
+  }
+  if (def.id.startsWith('nation-overall:')) {
+    return nationOverallTotals(def.id.slice('nation-overall:'.length));
+  }
+  if (def.id.startsWith('nation-tournament:')) {
+    const parts = def.id.split(':');
+    const span = parts[1] as LegacySpan;
+    const nationId = parts[2];
+    const tournament = parts[3];
+    const ladders = nationTournamentLadders(nationId, tournament);
+    return (span === 'season' ? ladders?.season : ladders?.career) ?? [];
+  }
+  return [];
+}
+
 export function viewForBoard(def: LegacyBoardDef, input: LegacyCareerInput): LegacyBoardView {
-  const historical = historicalLadder(def);
+  const historical = historicalFor(def);
   const playerGoals = playerGoalsForBoard(def, input);
   const rank = rankForGoals(playerGoals, historical);
-  const reveal = revealForRank(rank);
-  const last = historical[historical.length - 1]?.goals ?? 0;
-  const tenth = historical[LEGACY_TOP_N - 1]?.goals ?? last;
+  const reveal = revealForRank(rank, historical);
+  const tenth = tenthTotal(historical);
   return {
     def,
     historical,
     playerGoals,
     rank,
     reveal,
-    rankLabel: rank > LEGACY_TABLE_SIZE ? '100+' : ordinal(rank),
-    goalsToEnter: Math.max(0, last - playerGoals),
+    rankLabel: reveal === 'outside' ? `Outside top ${Math.min(LEGACY_TOP_N, Math.max(1, historical.length))}` : ordinal(rank),
     goalsToTop10: Math.max(0, tenth - playerGoals),
     tenthGoals: tenth,
     table: reveal === 'top10' ? combinedTopTable(playerGoals, historical) : null,
   };
 }
 
-export function careerLegacyBoards(input: LegacyCareerInput): LegacyBoardView[] {
-  return allLegacyBoards().map((def) => viewForBoard(def, input));
-}
-
-export function chaseBoardIds(input: LegacyCareerInput): string[] {
+function clubIdsPlayed(seasons: SeasonRecord[]): string[] {
   const ids: string[] = [];
-  if (input.currentLeague) ids.push(leagueBoardId(input.currentLeague));
-  ids.push('continental:ucl');
-  ids.push('international:all-time');
-  ids.push('tournament:world-cup');
-  if (input.nationalityConfederation) {
-    const continental = CONTINENTAL_TOURNAMENT_FOR_CONFEDERATION[input.nationalityConfederation];
-    ids.push(`tournament:${continental}`);
+  for (const season of countedSeasons(seasons)) {
+    if (!playedClub([season], season.clubId)) continue;
+    if (!ids.includes(season.clubId)) ids.push(season.clubId);
   }
-  if (input.currentLeague) {
-    const sample = countedSeasons(input.seasons).find((season) => seasonLeagueName(season) === input.currentLeague)
-      ?? input.seasons.find((season) => seasonLeagueName(season) === input.currentLeague);
-    const country = sample ? getClub(sample.clubId)?.country : null;
-    const cup = country ? domesticCupForCountry(country) : null;
-    if (cup) ids.push(`cup:${cup}`);
-  }
-  return [...new Set(ids)];
+  return ids;
 }
 
-export function featuredLegacyBoards(input: LegacyCareerInput): LegacyBoardView[] {
-  const all = careerLegacyBoards(input);
-  const featured = new Set(chaseBoardIds(input));
-  const picked = all.filter((board) => featured.has(board.def.id));
-  const extras = all
-    .filter((board) => !featured.has(board.def.id) && board.reveal !== 'outside')
-    .sort((a, b) => a.rank - b.rank);
-  return [...picked, ...extras];
+export function participatedLegacyBoards(input: LegacyCareerInput): LegacyBoardDef[] {
+  const seasons = countedSeasons(input.seasons);
+  const defs: LegacyBoardDef[] = [];
+  const nationId = input.nationalTeam?.nationId ?? input.nationality ?? null;
+  const nation = nationId ? getNation(nationId) : undefined;
+
+  if (seasons.some((season) => season.gamesPlayed > 0 || season.goals > 0)) {
+    defs.push({
+      id: 'club:overall',
+      domain: 'club',
+      span: 'career',
+      title: 'Club goals',
+      subtitle: 'All-time career total',
+      group: 'club-overall',
+    });
+  }
+
+  for (const clubId of clubIdsPlayed(seasons)) {
+    if (!CLUB_OVERALL[clubId]) continue;
+    const club = getClub(clubId);
+    defs.push({
+      id: `club-overall:${clubId}`,
+      domain: 'club',
+      span: 'career',
+      title: club?.name ?? clubId,
+      subtitle: 'All-time club goals',
+      group: 'club-overall',
+    });
+  }
+
+  for (const league of Object.keys(LEAGUE_CAREER)) {
+    if (!playedLeague(seasons, league)) continue;
+    const title = leagueDisplayName(league);
+    defs.push({
+      id: `league:career:${slugLeague(league)}`,
+      domain: 'club',
+      span: 'career',
+      title,
+      subtitle: 'All-time league goals',
+      group: 'league',
+    });
+    defs.push({
+      id: `league:season:${slugLeague(league)}`,
+      domain: 'club',
+      span: 'season',
+      title,
+      subtitle: 'Single-season league goals',
+      group: 'league',
+    });
+  }
+
+  for (const cupId of Object.keys(CUP_CAREER) as DomesticCupId[]) {
+    if (!playedCup(seasons, cupId)) continue;
+    const title = DOMESTIC_CUPS[cupId].name;
+    defs.push({
+      id: `cup:career:${cupId}`,
+      domain: 'club',
+      span: 'career',
+      title,
+      subtitle: 'All-time cup goals',
+      group: 'cup',
+    });
+    defs.push({
+      id: `cup:season:${cupId}`,
+      domain: 'club',
+      span: 'season',
+      title,
+      subtitle: 'Single-season cup goals',
+      group: 'cup',
+    });
+  }
+
+  const continentalKeys = [...Object.keys(CONTINENTAL_CUPS), SUPER_CUP.id];
+  for (const cup of continentalKeys) {
+    if (!playedContinental(seasons, cup)) continue;
+    const title = cup === 'super-cup' ? SUPER_CUP.name : CONTINENTAL_CUPS[cup as ContinentalCupId].name;
+    defs.push({
+      id: `continental:career:${cup}`,
+      domain: 'club',
+      span: 'career',
+      title,
+      subtitle: 'All-time tournament goals',
+      group: 'continental',
+    });
+    defs.push({
+      id: `continental:season:${cup}`,
+      domain: 'club',
+      span: 'season',
+      title,
+      subtitle: 'Single-season tournament goals',
+      group: 'continental',
+    });
+  }
+
+  if (nationId && playedNation(input.nationalTeam)) {
+    const nationName = nation?.name ?? nationId;
+    if (nationOverallTotals(nationId).length > 0) {
+      defs.push({
+        id: `nation-overall:${nationId}`,
+        domain: 'nation',
+        span: 'career',
+        title: nationName,
+        subtitle: 'All-time international goals',
+        group: 'nation',
+      });
+    }
+    const tournaments = new Set<InternationalTournamentId>();
+    for (const row of input.nationalTeam?.byCompetition ?? []) {
+      if (playedNationTournament(input.nationalTeam, row.tournament)) tournaments.add(row.tournament);
+    }
+    for (const tournament of tournaments) {
+      const ladders = nationTournamentLadders(nationId, tournament);
+      const title = `${nationName} · ${INTERNATIONAL_TOURNAMENTS[tournament]?.name ?? tournament}`;
+      if (ladders?.career?.length) {
+        defs.push({
+          id: `nation-tournament:career:${nationId}:${tournament}`,
+          domain: 'nation',
+          span: 'career',
+          title,
+          subtitle: 'All-time tournament goals',
+          group: 'nation',
+        });
+      }
+      if (ladders?.season?.length) {
+        defs.push({
+          id: `nation-tournament:season:${nationId}:${tournament}`,
+          domain: 'nation',
+          span: 'season',
+          title,
+          subtitle: 'Single-tournament goals',
+          group: 'nation',
+        });
+      }
+    }
+  }
+
+  return defs.filter((def) => historicalFor(def).length > 0);
+}
+
+export function careerLegacyBoards(input: LegacyCareerInput): LegacyBoardView[] {
+  return participatedLegacyBoards(input).map((def) => viewForBoard(def, input));
+}
+
+export function identityLegacyBoards(input: LegacyCareerInput): LegacyBoardView[] {
+  return careerLegacyBoards(input).filter((board) => board.reveal === 'top10');
+}
+
+export interface SeasonLegacyHighlight {
+  title: string;
+  subtitle: string;
+  rankLabel: string;
+  playerGoals: number;
+  kind: 'season' | 'all-time';
+}
+
+export function inputWithoutSeason(input: LegacyCareerInput, season: SeasonRecord): LegacyCareerInput {
+  const seasons = countedSeasons(input.seasons).filter(
+    (row) => !(row.seasonNumber === season.seasonNumber && row.clubId === season.clubId && row.role === season.role),
+  );
+  const intl = season.international;
+  const team = input.nationalTeam;
+  if (!team || !intl) return { ...input, seasons };
+  return {
+    ...input,
+    seasons,
+    nationalTeam: {
+      ...team,
+      caps: Math.max(0, team.caps - (intl.qualifyingGames ?? 0) - (intl.finalsGames ?? 0)),
+      goals: Math.max(0, team.goals - (intl.qualifyingGoals ?? 0) - (intl.finalsGoals ?? 0)),
+      byCompetition: team.byCompetition.map((row) => {
+        if (row.tournament !== intl.tournament) return row;
+        return {
+          ...row,
+          qualifyingGames: Math.max(0, row.qualifyingGames - (intl.qualifyingGames ?? 0)),
+          qualifyingGoals: Math.max(0, row.qualifyingGoals - (intl.qualifyingGoals ?? 0)),
+          finalsGames: Math.max(0, row.finalsGames - (intl.finalsGames ?? 0)),
+          finalsGoals: Math.max(0, row.finalsGoals - (intl.finalsGoals ?? 0)),
+        };
+      }),
+    },
+  };
+}
+
+export function seasonLegacyHighlights(
+  previous: LegacyCareerInput,
+  current: LegacyCareerInput,
+  thisSeason: SeasonRecord,
+): SeasonLegacyHighlight[] {
+  const after = careerLegacyBoards(current);
+  const beforeById = new Map(careerLegacyBoards(previous).map((board) => [board.def.id, board]));
+  const highlights: SeasonLegacyHighlight[] = [];
+  for (const board of after) {
+    if (board.reveal !== 'top10') continue;
+    if (board.def.span === 'season') {
+      const seasonGoals = thisSeasonGoalsForBoard(board.def, thisSeason);
+      if (seasonGoals <= 0) continue;
+      const seasonRank = rankForGoals(seasonGoals, board.historical);
+      if (revealForRank(seasonRank, board.historical) !== 'top10') continue;
+      if (seasonGoals !== board.playerGoals) continue;
+      highlights.push({
+        title: board.def.title,
+        subtitle: board.def.subtitle,
+        rankLabel: ordinal(seasonRank),
+        playerGoals: seasonGoals,
+        kind: 'season',
+      });
+      continue;
+    }
+    const before = beforeById.get(board.def.id);
+    if (before?.reveal === 'top10') continue;
+    highlights.push({
+      title: board.def.title,
+      subtitle: board.def.subtitle,
+      rankLabel: board.rankLabel,
+      playerGoals: board.playerGoals,
+      kind: 'all-time',
+    });
+  }
+  return highlights;
+}
+
+export function defaultPlayerName(): string {
+  return 'Player';
 }

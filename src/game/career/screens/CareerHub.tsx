@@ -16,7 +16,7 @@ import {
 } from '../squadStatus';
 import { displaySeasonLabel, displaySeasonNumber } from '../seasonDisplay';
 import { clubEligibleForNationalTeam, callUpRatio, getNation, isSelectedForNationalTeam, SEASON_1_CALL_UP_MIN_WEEK, selectionRatioForNation } from '../international';
-import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
+import { formatEuros, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
 import type { SeasonStandings } from '../matchEngine';
 import { conferenceTable, ensureInternationalGroup, fixtureTitle, internationalRoundLabel, nextActionableFixture, type SeasonSimState } from '../seasonSim';
 import { nextMatchBriefing, playerGoalsLine } from '../matchBriefing';
@@ -52,8 +52,6 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const careerGames = useCareerStore((s) => s.careerGames);
   const seasonHistory = useCareerStore((s) => s.seasonHistory);
   const nationalTeam = useCareerStore((s) => s.nationalTeam);
-  const careerEarnings = useCareerStore((s) => s.careerEarnings);
-  const weeklyWage = useCareerStore((s) => s.weeklyWage);
   const contractYearsRemaining = useCareerStore((s) => s.contractYearsRemaining);
   const clubLeague = useCareerStore((s) => s.clubLeague);
   const seasonSponsorship = useCareerStore((s) => s.seasonSponsorship);
@@ -62,7 +60,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const rulesStamp = useCareerStore((s) => s.rulesStamp);
   const advance = useCareerStore((s) => s.advance);
   const openCareerRecord = useCareerStore((s) => s.openCareerRecord);
-  const openLegacy = useCareerStore((s) => s.openLegacy);
+  const openProfile = useCareerStore((s) => s.openProfile);
   const rebuildThisSeason = useCareerStore((s) => s.rebuildThisSeason);
 
   const club = clubId ? getClub(clubId) : undefined;
@@ -168,10 +166,10 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
             </button>
             <button
               type="button"
-              onClick={openLegacy}
+              onClick={openProfile}
               className="rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-200"
             >
-              Legacy
+              Profile
             </button>
           </div>
           <span className="text-xs text-white/40">Age {age}</span>
@@ -198,12 +196,6 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
           <p className="mt-1 text-xs text-white/50">
             Market value {formatEuros(marketValue)}
             {` · Transfer fee ${transferFee <= 0 ? 'Free' : formatEuros(transferFee)}`}
-          </p>
-        )}
-        {(careerEarnings > 0 || weeklyWage > 0) && (
-          <p className="mt-1 text-xs text-white/50">
-            Earnings {formatEuros(careerEarnings)}
-            {weeklyWage > 0 ? ` · ${formatWeeklyWage(weeklyWage)}` : ''}
           </p>
         )}
         {seasonSponsorship > 0 && (
