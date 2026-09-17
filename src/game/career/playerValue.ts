@@ -57,7 +57,7 @@ export const FIRST_CONTRACT_YEARS = 2;
 export const RESERVE_CONTRACT_YEARS = FIRST_CONTRACT_YEARS;
 /** Academy / reserve wage — the same on every path. */
 export const RESERVE_WEEKLY_WAGE = 1000;
-/** Reserve-year and public-season-1 loans stay one year. */
+/** Every loan is one season — never a multi-year loan deal. */
 export const YOUTH_LOAN_YEARS = 1;
 /** Public Season 1 stays at the youth value until week 21, on every career path. */
 export const SEASON_1_VALUE_LOCK_WEEKS = 20;
@@ -149,14 +149,13 @@ export function nextContractYearsRemaining(yearsRemaining: number, age: number):
   return yearsRemaining <= 1 ? newContractYears(age) : yearsRemaining - 1;
 }
 
-/** Reserve year and the first public season on loan are always one-year deals. */
+/** Loans are always one season, at every age and career stage. */
 export function loanContractYearsRemaining(
-  seasonNumber: number,
-  yearsRemaining: number,
-  age: number,
+  _seasonNumber?: number,
+  _yearsRemaining?: number,
+  _age?: number,
 ): number {
-  if (seasonNumber <= 2) return YOUTH_LOAN_YEARS;
-  return nextContractYearsRemaining(yearsRemaining, age);
+  return YOUTH_LOAN_YEARS;
 }
 
 export function isSeason1ValueLocked(

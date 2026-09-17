@@ -109,6 +109,22 @@ export default function SeasonSummaryScreen() {
     : domesticName
       ? competitionStageLabel(seasonSim?.domesticCupStage)
       : '—';
+  const europe = seasonStandings?.europeanStanding;
+  const clubIntlName = europe
+    ? (CONTINENTAL_CUPS[europe.cup]?.name ?? europe.cup)
+    : seasonSim?.honours.continentalChampion
+      ? CONTINENTAL_CUPS[seasonSim.honours.continentalChampion].name
+      : seasonSim?.leaguesCupStage && seasonSim.leaguesCupStage !== 'not-entered'
+        ? CONTINENTAL_CUPS['leagues-cup'].name
+        : null;
+  const clubIntlOutcome = (() => {
+    if (seasonSim?.honours.continentalChampion) return 'Champions';
+    if (europe) return competitionStageLabel(europe.stage);
+    if (seasonSim?.leaguesCupStage && seasonSim.leaguesCupStage !== 'not-entered') {
+      return competitionStageLabel(seasonSim.leaguesCupStage);
+    }
+    return '—';
+  })();
   const intlName = season.international?.tournament
     ? INTERNATIONAL_TOURNAMENTS[season.international.tournament]?.name
     : seasonSim?.internationalTournament
@@ -188,6 +204,10 @@ export default function SeasonSummaryScreen() {
           <div className="flex items-baseline justify-between gap-3">
             <span className="text-white/55">{domesticName ?? 'Domestic cup'}</span>
             <span className="font-semibold">{domesticOutcome}</span>
+          </div>
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-white/55">{clubIntlName ?? 'Club international'}</span>
+            <span className="font-semibold">{clubIntlOutcome}</span>
           </div>
           <div className="flex items-baseline justify-between gap-3">
             <span className="text-white/55">{intlName ?? 'International'}</span>

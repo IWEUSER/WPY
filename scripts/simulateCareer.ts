@@ -13,7 +13,7 @@ import {
 } from '../src/game/career/chanceEngine';
 import { assignClubTier, CLUBS, clubsForSeason, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, leagueMatchWeeks, playableClubsGroupedByLeague, SECOND_DIVISIONS, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
 import { playoffGamesFromOpening, playoffOpeningForPosition } from '../src/game/career/data/leagueFormat';
-import { clubTransferBudget, consecutivePoorFactor, contractValueFactor, ELITE_TRANSFER_VALUE_FLOOR, FIRST_CONTRACT_YEARS, firstTopFlightValueCap, formAdjustedRatio, isSeason1ValueLocked, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, playerMarketValue, playerMarketValueFromSeasons, seasonalSponsorship, tierForMarketValue, transferFeeFromValue, weeklyWageForClub, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
+import { clubTransferBudget, consecutivePoorFactor, contractValueFactor, ELITE_TRANSFER_VALUE_FLOOR, FIRST_CONTRACT_YEARS, firstTopFlightValueCap, formAdjustedRatio, isSeason1ValueLocked, leagueValueWeight, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, playerMarketValue, playerMarketValueFromSeasons, seasonalSponsorship, tierForMarketValue, TOP_LEAGUES, transferFeeFromValue, weeklyWageForClub, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { nationKit } from '../src/game/career/data/nationColours';
 import { reserveStadium, resolveCareerStadium, resolveMatchStadium, trialStadium } from '../src/game/career/matchVenue';
@@ -77,7 +77,7 @@ import {
 } from '../src/game/career/trial';
 import { nextYouthKnockoutRound, pickYouthGroupOpponents, pickYouthKnockoutOpponent, youthMaxGames } from '../src/game/career/youthTournament';
 import { chancesForSquadStatus, describeSquadStatus, isSquadRotationSitOut, isToughMinutesFixture, nextSquadStatusAfterSeason, openingSquadStatus, RISING_STAR_MIN_RATIO, ROLE_REVIEW_WEEK, seasonOverridesRatioBar, shouldSitLeagueFixture, shouldSitToughFixture, squadStatusAfterFormReview, squadStatusOnArrival } from '../src/game/career/squadStatus';
-import { consecutiveLoanSpells, LOAN_OFFER_COUNT, SAUDI_OFFER_MIN_AGE, TRANSFER_MARKET_CAP, TRANSFER_OFFER_COUNT, offerFormRatio, offerTierFromStanding, pickLoanClubsForMiss, pickPermanentClubs, requiredGoalRatio, resolveSeasonTransition, sellingClubAcceptsOffer, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, trialFailTransferPending, tierForRatio } from '../src/game/career/transfers';
+import { consecutiveLoanSpells, LOAN_OFFER_COUNT, SAUDI_OFFER_MIN_AGE, TRANSFER_MARKET_CAP, TRANSFER_OFFER_COUNT, offerFormRatio, offerTierFromStanding, pickLoanClubsForMiss, pickLoanClubsFromOrigin, pickPermanentClubs, requiredGoalRatio, resolveSeasonTransition, sellingClubAcceptsOffer, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, trialFailTransferPending, tierForRatio } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
 import {
   evaluatePlayerOfTheYear,
@@ -3244,6 +3244,155 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
   }
 
   {
+    const barca = getClub('barcelona')!;
+    const arsenal = getClub('arsenal')!;
+    const palace = getClub('crystal-palace')!;
+    const leicester = getClub('leicester')!;
+    const barcaLoans = pickLoanClubsFromOrigin(barca, LOAN_OFFER_COUNT, [barca.id], 'spain');
+    const arsenalLoans = pickLoanClubsFromOrigin(arsenal, LOAN_OFFER_COUNT, [arsenal.id], 'england');
+    const palaceLoans = pickLoanClubsFromOrigin(palace, LOAN_OFFER_COUNT, [palace.id], 'england');
+    const leicesterLoans = pickLoanClubsFromOrigin(leicester, LOAN_OFFER_COUNT, [leicester.id], 'england');
+    console.log('origin loans Barca', barcaLoans.map((c) => `${c.id}:${c.league}:${c.tier}`));
+    console.log('origin loans Arsenal', arsenalLoans.map((c) => `${c.id}:${c.league}:${c.tier}`));
+    console.log('origin loans Palace', palaceLoans.map((c) => `${c.id}:${c.league}:${c.tier}`));
+    console.log('origin loans Leicester', leicesterLoans.map((c) => `${c.id}:${c.league}:${c.country}`));
+    if (
+      barcaLoans.length !== LOAN_OFFER_COUNT
+      || barcaLoans.some((c) => c.league !== 'La Liga' || c.tier < 3 || c.id === 'barcelona')
+    ) {
+      console.error('a 0.33+ Barcelona rising star must loan to lower-scale La Liga clubs, not Segunda');
+      process.exitCode = 1;
+    }
+    if (
+      arsenalLoans.length !== LOAN_OFFER_COUNT
+      || arsenalLoans.some((c) => c.league !== 'Premier League' || c.tier < 3 || c.id === 'arsenal')
+    ) {
+      console.error('a 0.33+ Arsenal rising star must loan to lower-scale Premier League clubs, not the Championship');
+      process.exitCode = 1;
+    }
+    if (
+      palaceLoans.length !== LOAN_OFFER_COUNT
+      || palaceLoans.some((c) => c.league !== 'Championship')
+    ) {
+      console.error('a 0.33+ Palace rising star must loan to Championship clubs');
+      process.exitCode = 1;
+    }
+    if (
+      leicesterLoans.length !== LOAN_OFFER_COUNT
+      || leicesterLoans.some((c) => {
+        const weight = leagueValueWeight(c.league);
+        return TOP_LEAGUES.has(c.league) || SECOND_DIVISIONS.has(c.league) || weight + 1e-9 < leagueValueWeight('MLS');
+      })
+    ) {
+      console.error('a 0.33+ Championship rising star must loan to a lower-league country with MLS as the floor');
+      process.exitCode = 1;
+    }
+
+    const risingS1 = resolveSeasonTransition({
+      season: { ...dummySeason, seasonNumber: 1, clubId: 'arsenal', goals: 10, gamesPlayed: 28, league: 'Premier League' },
+      role: 'first-team',
+      clubId: 'arsenal',
+      parentClubId: 'arsenal',
+      seasonsAtCurrentClub: 0,
+      age: 18,
+      careerGoals: 10,
+      careerGames: 28,
+      nationality: 'england',
+      loansUsed: 0,
+      contractYearsRemaining: 5,
+      careerStart: 'favourite-first-team',
+      squadStatus: 'rising-star',
+      clubLeague: 'Premier League',
+    });
+    const risingS1Loans = (risingS1.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan');
+    const risingS1Perms = (risingS1.pendingTransfer?.offers ?? []).filter((o) => o.move === 'permanent' && !o.renewal);
+    const risingValue = playerMarketValueFromSeasons({
+      age: 18,
+      careerGoals: 10,
+      careerGames: 28,
+      seasons: [{ ...dummySeason, seasonNumber: 1, clubId: 'arsenal', goals: 10, gamesPlayed: 28, league: 'Premier League' }],
+      fallbackClub: arsenal,
+      contractYearsRemaining: 5,
+      seasonNumber: 1,
+      calendarWeek: 99,
+      careerStart: 'favourite-first-team',
+      role: 'first-team',
+    });
+    console.log(
+      'Arsenal 0.35 S1',
+      risingS1.headline,
+      'stay',
+      Boolean(risingS1.pendingTransfer?.stay),
+      'value',
+      risingValue,
+      'loan leagues',
+      risingS1Loans.map((o) => `${o.clubId}:${getClub(o.clubId)?.league}:${o.contractYears}`),
+      'perm fees',
+      risingS1Perms.map((o) => `${o.clubId}:${o.fee}`),
+    );
+    if (!risingS1.pendingTransfer?.stay || !risingS1.pendingTransfer.allowDecline) {
+      console.error('Season 1 at 0.33+ must still allow a Rising star stay');
+      process.exitCode = 1;
+    }
+    if (
+      risingS1Loans.length !== LOAN_OFFER_COUNT
+      || risingS1Loans.some((o) => getClub(o.clubId)?.league !== 'Premier League' || o.contractYears !== 1)
+    ) {
+      console.error('Season 1 Arsenal 0.33+ loans must be 1-year Premier League moves, not lower-level clubs');
+      process.exitCode = 1;
+    }
+    if (risingValue >= 10_000_000 && risingS1Perms.some((o) => o.fee > 0 && o.fee < 4_000_000)) {
+      console.error('a €10m+ player must not receive cheap ~€2.5m bids that ignore market value');
+      process.exitCode = 1;
+    }
+    if (risingS1Perms.length > 0 && risingS1Perms.every((o) => (getClub(o.clubId)?.tier ?? 5) >= 5)) {
+      console.error('permanent bids for a valuable Rising star must follow market-value clubs, not only lower-level sides');
+      process.exitCode = 1;
+    }
+
+    const risingS2 = resolveSeasonTransition({
+      season: { ...dummySeason, seasonNumber: 2, clubId: 'arsenal', goals: 10, gamesPlayed: 28, league: 'Premier League' },
+      role: 'first-team',
+      clubId: 'arsenal',
+      parentClubId: 'arsenal',
+      seasonsAtCurrentClub: 1,
+      age: 18,
+      careerGoals: 20,
+      careerGames: 56,
+      nationality: 'england',
+      loansUsed: 0,
+      contractYearsRemaining: 4,
+      careerStart: 'favourite-first-team',
+      squadStatus: 'rising-star',
+      clubLeague: 'Premier League',
+      seasonHistory: [{ ...dummySeason, seasonNumber: 1, clubId: 'arsenal', goals: 10, gamesPlayed: 28, league: 'Premier League' }],
+    });
+    const risingS2Loans = (risingS2.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan');
+    console.log(
+      'Arsenal 0.35 S2',
+      risingS2.headline,
+      'stay',
+      Boolean(risingS2.pendingTransfer?.stay),
+      'decline',
+      risingS2.pendingTransfer?.allowDecline,
+      'loan years',
+      risingS2Loans.map((o) => o.contractYears),
+    );
+    if (risingS2.pendingTransfer?.stay || risingS2.pendingTransfer?.allowDecline) {
+      console.error('Season 2 at 0.33+ must force a loan or transfer, not a stay');
+      process.exitCode = 1;
+    }
+    if (risingS2Loans.length === 0 || risingS2Loans.some((o) => o.contractYears !== 1)) {
+      console.error('Season 2 loans must only ever be 1 season, not multi-year deals');
+      process.exitCode = 1;
+    }
+    if (risingS2Loans.some((o) => getClub(o.clubId)?.league !== 'Premier League')) {
+      console.error('Season 2 Arsenal 0.33+ loans must still follow the origin club’s top-flight level');
+      process.exitCode = 1;
+    }
+  }
+
+  {
     const s1Pick = isSelectedForNationalTeam({
       clubTier: 1,
       careerGoalRatio: 0.8,
@@ -4462,8 +4611,8 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     console.error('the first professional contract is 2 years; season-1 loans stay 1 year');
     process.exitCode = 1;
   }
-  if (loanContractYearsRemaining(5, 5, 22) !== 4) {
-    console.error('later-career loans should still tick the remaining years down');
+  if (loanContractYearsRemaining(5, 5, 22) !== 1 || loanContractYearsRemaining(8, 1, 28) !== 1) {
+    console.error('loans must only ever be one season, including later-career windows');
     process.exitCode = 1;
   }
   const earlyS1 = playerMarketValueFromSeasons({

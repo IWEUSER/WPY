@@ -47,6 +47,14 @@ export function promotionTarget(league: string): string | null {
   return PROMOTION_TARGET[league] ?? null;
 }
 
+/** Top flight → the second-tier league that feeds it, when that pyramid exists. */
+export function secondDivisionOf(topLeague: string): string | null {
+  for (const [second, top] of Object.entries(PROMOTION_TARGET)) {
+    if (top === topLeague) return second;
+  }
+  return null;
+}
+
 export function earnedPromotion(league: string, position: number | null | undefined): boolean {
   return Boolean(promotionTarget(league) && position != null && position <= 2);
 }
