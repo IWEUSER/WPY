@@ -432,7 +432,14 @@ function valueFromScale(
     careerGames != null && careerGames >= 50
       ? Math.min(1.2, 0.9 + (careerGames - 50) / 280)
       : 1;
-  const raw = BARCELONA_ANCHOR_VALUE * scale * ratioScale * ageValueFactor(age) * volume * proven;
+  /** Appearances-only path: the 200m Barcelona 0.9 anchor stays on playerMarketValue(). */
+  const sampleVolume = careerGames != null
+    ? Math.min(1.12, Math.max(0.12, 0.34 + volumeGoals / 100))
+    : volume;
+  const experience = careerGames != null
+    ? Math.min(1, 0.22 + careerGames / 95)
+    : 1;
+  const raw = BARCELONA_ANCHOR_VALUE * scale * ratioScale * ageValueFactor(age) * sampleVolume * proven * experience;
   return Math.max(100_000, Math.round(raw / 100_000) * 100_000);
 }
 

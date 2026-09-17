@@ -2771,7 +2771,129 @@ if (barca && hilal && lafc) {
   });
   console.log('€20m / 1.2 offer tier', hotButCheap, 'elite floor', ELITE_TRANSFER_VALUE_FLOOR);
   if (hotButCheap < 2) {
-    console.error('elite clubs must not bid below €50m market value');
+    console.error('elite clubs must not bid below €50m market value on a paid transfer');
+    process.exitCode = 1;
+  }
+  const freeHotCheap = offerTierFromStanding({
+    ratio: 1.2,
+    careerRatio: 1.2,
+    marketValue: 20_000_000,
+    fee: 0,
+  });
+  if (freeHotCheap > 1) {
+    console.error('a free agent with an elite ratio should still attract elite clubs');
+    process.exitCode = 1;
+  }
+  const midRatioHighValue = offerTierFromStanding({
+    ratio: 0.53,
+    careerRatio: 0.53,
+    marketValue: 88_000_000,
+    fee: 40_000_000,
+  });
+  console.log('0.53 ratio / €88m offer tier', midRatioHighValue);
+  if (midRatioHighValue <= 2) {
+    console.error('a 0.53 season must not draw Strong or Elite clubs even with a high market value');
+    process.exitCode = 1;
+  }
+  const freeEliteForm = offerTierFromStanding({
+    ratio: 0.72,
+    careerRatio: 0.65,
+    marketValue: 144_000_000,
+    fee: 0,
+  });
+  if (freeEliteForm > 1) {
+    console.error('a 0.72 last season on a free transfer should attract Elite clubs');
+    process.exitCode = 1;
+  }
+  const city = getClub('man-city');
+  if (city) {
+    const s1Value = playerMarketValueFromSeasons({
+      age: 17,
+      careerGoals: 10,
+      careerGames: 19,
+      seasons: [{ ...dummySeason, seasonNumber: 1, clubId: 'man-city', league: 'Premier League', role: 'first-team', goals: 10, gamesPlayed: 19 }],
+      fallbackClub: city,
+      seasonNumber: 1,
+      calendarWeek: 99,
+    });
+    const s2Value = playerMarketValueFromSeasons({
+      age: 18,
+      careerGoals: 33,
+      careerGames: 51,
+      seasons: [
+        { ...dummySeason, seasonNumber: 1, clubId: 'man-city', league: 'Premier League', role: 'first-team', goals: 10, gamesPlayed: 19 },
+        { ...dummySeason, seasonNumber: 2, clubId: 'man-city', league: 'Premier League', role: 'first-team', goals: 23, gamesPlayed: 32 },
+      ],
+      fallbackClub: city,
+      seasonNumber: 2,
+      calendarWeek: 99,
+    });
+    console.log('City 10/19 value', s1Value, '33/51 value', s2Value);
+    if (s1Value > 40_000_000) {
+      console.error('19 games and 10 goals in season 1 must not be worth ~€88m');
+      process.exitCode = 1;
+    }
+    if (s2Value > 110_000_000) {
+      console.error('51 games and 33 goals at 18 must not already sit at €144m');
+      process.exitCode = 1;
+    }
+    const s1Offers = resolveSeasonTransition({
+      season: { ...dummySeason, seasonNumber: 1, clubId: 'man-city', league: 'Premier League', role: 'first-team', goals: 10, gamesPlayed: 19 },
+      role: 'first-team',
+      clubId: 'man-city',
+      parentClubId: 'man-city',
+      seasonsAtCurrentClub: 0,
+      age: 17,
+      careerGoals: 10,
+      careerGames: 19,
+      nationality: 'england',
+      loansUsed: 0,
+      contractYearsRemaining: 2,
+      careerStart: 'favourite-first-team',
+      squadStatus: 'rising-star',
+    });
+    const s1PermTiers = (s1Offers.pendingTransfer?.offers ?? [])
+      .filter((o) => o.move === 'permanent')
+      .map((o) => getClub(o.clubId)?.tier ?? 5);
+    console.log('season 1 0.53 perm tiers', s1PermTiers);
+    if (s1PermTiers.some((tier) => tier <= 2)) {
+      console.error('a 0.53 season 1 must not produce Strong or Elite transfer offers');
+      process.exitCode = 1;
+    }
+    const s2OutOfContract = resolveSeasonTransition({
+      season: { ...dummySeason, seasonNumber: 2, clubId: 'man-city', league: 'Premier League', role: 'first-team', goals: 23, gamesPlayed: 32 },
+      role: 'first-team',
+      clubId: 'man-city',
+      parentClubId: 'man-city',
+      seasonsAtCurrentClub: 1,
+      age: 18,
+      careerGoals: 33,
+      careerGames: 51,
+      nationality: 'england',
+      loansUsed: 0,
+      seasonHistory: [{ ...dummySeason, seasonNumber: 1, clubId: 'man-city', league: 'Premier League', role: 'first-team', goals: 10, gamesPlayed: 19 }],
+      contractYearsRemaining: 0,
+      careerStart: 'favourite-first-team',
+      squadStatus: 'rising-star',
+    });
+    const s2FreeTiers = (s2OutOfContract.pendingTransfer?.offers ?? [])
+      .filter((o) => o.move === 'permanent')
+      .map((o) => getClub(o.clubId)?.tier ?? 5);
+    console.log('season 2 0.72 free perm tiers', s2FreeTiers);
+    if (!s2FreeTiers.some((tier) => tier === 1)) {
+      console.error('a 0.72 season on a free transfer should include Elite clubs');
+      process.exitCode = 1;
+    }
+  }
+  const strongArrival = squadStatusOnArrival({
+    fromClub: getClub('man-city'),
+    toClub: getClub('arsenal'),
+    move: 'permanent',
+    nextIfStay: 'rising-star',
+    playerRatio: 0.53,
+  });
+  if (strongArrival !== 'rising-star') {
+    console.error('a 0.53 ratio must not arrive as a starter at a Strong club');
     process.exitCode = 1;
   }
   const richEnough = offerTierFromStanding({

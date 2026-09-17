@@ -3,11 +3,10 @@ import { getClub } from '../data/clubs';
 import { leagueDisplayName } from '../data/leagueFormat';
 import { formatEuros, formatWeeklyWage } from '../playerValue';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
-import { formatInternationalSeason } from '../honoursDisplay';
+import { awardLabels, competitionStageLabel, tournamentOutcomeLabel } from '../honoursDisplay';
 import { displaySeasonLabel, displaySeasonNumber } from '../seasonDisplay';
-import { defaultSquadStatus, describeSquadStatus, nextSquadStatusAfterSeason, seasonOverridesRatioBar, SQUAD_STATUS_LABEL } from '../squadStatus';
+import { RISING_STAR_MIN_RATIO, seasonOverridesRatioBar, seasonRatioClearsBar } from '../squadStatus';
 import { countLoanSpells, requiredGoalRatio, resolveSeasonTransition } from '../transfers';
-import { leagueMatchWeeks } from '../data/clubs';
 import { goalsLabel, inputWithoutSeason, seasonLegacyHighlights } from '../legacyRecords';
 import { useCareerStore } from '../store';
 import { DATA_CARD, DATA_INSET, DATA_TILE } from './dataUi';
@@ -23,7 +22,6 @@ export default function SeasonSummaryScreen() {
   const careerGoals = useCareerStore((s) => s.careerGoals);
   const careerGames = useCareerStore((s) => s.careerGames);
   const seasonNumber = useCareerStore((s) => s.seasonNumber);
-  const seasonCalendar = useCareerStore((s) => s.seasonCalendar);
   const seasonSim = useCareerStore((s) => s.seasonSim);
   const seasonStandings = useCareerStore((s) => s.seasonStandings);
   const wpyResult = useCareerStore((s) => s.wpyResult);
@@ -44,8 +42,6 @@ export default function SeasonSummaryScreen() {
   const parentClub = getClub(parentClubId);
   const ratio = season.gamesPlayed > 0 ? season.goals / season.gamesPlayed : 0;
   const threshold = requiredGoalRatio(role, club, parentClub);
-  const scheduled = seasonCalendar?.fixtures.length ?? leagueMatchWeeks(club.league);
-  const gamesMissed = Math.max(0, scheduled - season.gamesPlayed);
   const us = seasonStandings?.league.find((r) => r.clubId === clubId);
 
   const preview = resolveSeasonTransition({
@@ -95,13 +91,49 @@ export default function SeasonSummaryScreen() {
   if (season.international?.topGoalscorer && season.international.tournament) {
     honours.push(`${INTERNATIONAL_TOURNAMENTS[season.international.tournament].name} top goalscorer`);
   }
-  const intlLine = formatInternationalSeason(season.international);
+  const awards = [
+    ...awardLabels(season),
+    ...(season.wonWpy || wpyResult?.won ? ['World Player of the Year'] : []),
+  ];
   const missedTournament =
     seasonSim?.internationalSelected &&
     seasonSim.internationalTournament &&
     seasonSim.internationalStage === 'failed-qualifying'
       ? `Did not qualify for the ${INTERNATIONAL_TOURNAMENTS[seasonSim.internationalTournament].name}`
       : null;
+
+  const leaguePlace = us && us.played > 0 ? `${us.position}${ordinal(us.position)}` : '—';
+  const domesticName = seasonSim?.domesticCup ? DOMESTIC_CUPS[seasonSim.domesticCup]?.name : null;
+  const domesticOutcome = seasonSim?.honours.domesticCup
+    ? 'Champions'
+    : domesticName
+      ? competitionStageLabel(seasonSim?.domesticCupStage)
+      : '—';
+  const intlName = season.international?.tournament
+    ? INTERNATIONAL_TOURNAMENTS[season.international.tournament]?.name
+    : seasonSim?.internationalTournament
+      ? INTERNATIONAL_TOURNAMENTS[seasonSim.internationalTournament]?.name
+      : null;
+  const intlOutcome = (() => {
+    if (season.international?.tournamentOutcome && season.international.tournamentOutcome !== 'none') {
+      return tournamentOutcomeLabel(season.international.tournamentOutcome)
+        ?? competitionStageLabel(season.international.tournamentOutcome);
+    }
+    if (missedTournament) return 'Did not qualify';
+    if (seasonSim?.internationalSelected) {
+      return competitionStageLabel(seasonSim.internationalReached ?? seasonSim.internationalStage);
+    }
+    return 'Not selected';
+  })();
+  const starterMet = seasonRatioClearsBar({
+    ratio,
+    gamesPlayed: season.gamesPlayed,
+    bar: threshold,
+    season,
+  });
+  const risingKept = seasonOverridesRatioBar(season) || ratio >= RISING_STAR_MIN_RATIO;
+  const publicSeason = displaySeasonNumber(seasonNumber, { role, careerStart });
+  const showRisingStarTrack = publicSeason === 1 || publicSeason === 2 || squadStatus === 'rising-star';
 
   const legacyInput = {
     seasons: [...seasonHistory, season],
@@ -132,29 +164,36 @@ export default function SeasonSummaryScreen() {
             <p className="text-[10px] uppercase tracking-wide text-white/40">Played</p>
           </div>
           <div className={DATA_TILE}>
-            <p className="text-xl font-bold">{gamesMissed}</p>
-            <p className="text-[10px] uppercase tracking-wide text-white/40">Missed</p>
+            <p className="text-xl font-bold">{ratio.toFixed(2)}</p>
+            <p className="text-[10px] uppercase tracking-wide text-white/40">Ratio</p>
           </div>
         </div>
-        <p className="mt-3 text-sm font-semibold text-white/80">
-          Ratio: {ratio.toFixed(2)} / {threshold.toFixed(2)} required
-        </p>
         {(season.earnings ?? 0) > 0 && (
-          <p className="mt-1 text-xs text-white/50">
+          <p className="mt-3 text-xs text-white/50">
             Earned {formatEuros(season.earnings ?? 0)} this season
             {(season.sponsorship ?? seasonSponsorship) > 0
               ? ` · ${formatEuros(season.sponsorship ?? seasonSponsorship)} sponsorship`
               : ''}
           </p>
         )}
-        {us && (
-          <p className="mt-2 text-xs text-white/50">
-            Finished {us.position}{ordinal(us.position)} · {us.points} pts
-            {seasonStandings?.europeanStanding
-              ? ` · ${CONTINENTAL_CUPS[seasonStandings.europeanStanding.cup].name}: ${seasonStandings.europeanStanding.stage}`
-              : ''}
-          </p>
-        )}
+      </div>
+
+      <div className={`w-full max-w-sm ${DATA_CARD} text-left`}>
+        <p className="text-xs uppercase tracking-wide text-white/40">Tournament outcomes</p>
+        <div className="mt-2 space-y-2 text-sm">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-white/55">League</span>
+            <span className="font-semibold">{leaguePlace}</span>
+          </div>
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-white/55">{domesticName ?? 'Domestic cup'}</span>
+            <span className="font-semibold">{domesticOutcome}</span>
+          </div>
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-white/55">{intlName ?? 'International'}</span>
+            <span className="font-semibold">{intlOutcome}</span>
+          </div>
+        </div>
       </div>
 
       {honours.length > 0 && (
@@ -163,164 +202,55 @@ export default function SeasonSummaryScreen() {
         </div>
       )}
 
-      {intlLine && (
-        <div className={`w-full max-w-sm ${DATA_INSET} text-sm text-white/70`}>
-          <p className="font-semibold text-white/90">{intlLine.name}</p>
-          {intlLine.qualifying && <p className="mt-1 text-xs text-white/50">{intlLine.qualifying}</p>}
-          {intlLine.tournament && <p className="mt-1 text-xs text-white/50">{intlLine.tournament}</p>}
-          {intlLine.awards.length > 0 && (
-            <p className="mt-1 text-xs text-sky-200/80">{intlLine.awards.join(' · ')}</p>
-          )}
-        </div>
-      )}
-
-      {missedTournament && (
-        <div className={`w-full max-w-sm ${DATA_INSET} text-sm text-white/60`}>
-          {missedTournament}
-        </div>
-      )}
-
-      <div className="flex w-full max-w-sm flex-col gap-3">
-        <div
-          className={`rounded-2xl border px-4 py-3 text-sm ${
-            season.playerOfTheYear || season.topGoalscorer
-              ? 'border-emerald-300/25 bg-emerald-500/10 text-emerald-200'
-              : 'border-white/16 bg-[#0c1410] text-white/60'
-          }`}
-        >
-          <p className="text-xs uppercase tracking-wide text-white/40">Domestic awards</p>
-          <p className="mt-1 font-semibold">
-            {season.playerOfTheYear || season.topGoalscorer
-              ? [
-                  season.playerOfTheYear ? 'Player of the Year' : null,
-                  season.topGoalscorer ? 'Top goalscorer' : null,
-                ].filter(Boolean).join(' · ')
-              : 'Not this season.'}
-          </p>
-          {season.playerOfTheYearReason && <p className="mt-1 text-xs">{season.playerOfTheYearReason}</p>}
-          {season.topGoalscorerReason && <p className="mt-1 text-xs">{season.topGoalscorerReason}</p>}
-        </div>
-        <div
-          className={`rounded-2xl border px-4 py-3 text-sm ${
-            season.clubPlayerOfTheTournament
-              ? 'border-emerald-300/25 bg-emerald-500/10 text-emerald-200'
-              : 'border-white/16 bg-[#0c1410] text-white/60'
-          }`}
-        >
-          <p className="text-xs uppercase tracking-wide text-white/40">Club international</p>
-          <p className="mt-1 font-semibold">
-            {season.clubPlayerOfTheTournament ? 'Player of the Tournament.' : 'Not this season.'}
-          </p>
-          {season.clubPlayerOfTheTournamentReason ? (
-            <p className="mt-1 text-xs">{season.clubPlayerOfTheTournamentReason}</p>
-          ) : null}
-        </div>
+      <div
+        className={`w-full max-w-sm rounded-2xl border px-4 py-3 text-left text-sm ${
+          awards.length > 0
+            ? 'border-sky-300/25 bg-sky-500/10 text-sky-100'
+            : 'border-white/16 bg-[#0c1410] text-white/60'
+        }`}
+      >
+        <p className="text-xs uppercase tracking-wide text-white/40">Awards</p>
+        {awards.length === 0 ? (
+          <p className="mt-1 font-semibold">No awards yet</p>
+        ) : (
+          <ul className="mt-2 space-y-1">
+            {awards.map((name) => (
+              <li key={name} className="font-semibold">{name}</li>
+            ))}
+          </ul>
+        )}
       </div>
 
-      {wpyResult && (
-        <div
-          className={`w-full max-w-sm rounded-2xl border px-4 py-3 text-sm ${
-            wpyResult.won
-              ? 'border-amber-200/25 bg-amber-400/15 text-amber-200'
-              : 'border-white/16 bg-[#0c1410] text-white/60'
-          }`}
-        >
-          <p className="text-xs uppercase tracking-wide text-white/40">World Player of the Year</p>
-          <p className="mt-1 font-semibold">{wpyResult.won ? 'You won it.' : 'Not this season.'}</p>
-          {wpyResult.reason ? <p className="mt-1 text-xs">{wpyResult.reason}</p> : null}
-        </div>
-      )}
-
       {role !== 'reserve' || preview.immediate?.role === 'first-team' ? (
-        <div className={`w-full max-w-sm ${DATA_INSET} text-sm text-white/80`}>
-          <p className="text-xs uppercase tracking-wide text-white/40">Squad role</p>
-          {role !== 'reserve' && (
-            <p className="mt-1 font-semibold">
-              This season: {SQUAD_STATUS_LABEL[squadStatus]}
+        <div className={`w-full max-w-sm ${DATA_INSET} text-left text-sm text-white/80`}>
+          <p className="text-xs uppercase tracking-wide text-white/40">Club status</p>
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <div>
+              <p className="font-semibold">Starter {threshold.toFixed(2)}</p>
+              <p className="mt-0.5 text-xs text-white/50">
+                {ratio.toFixed(2)} goals/game this season
+              </p>
+            </div>
+            <StatusMark ok={starterMet} />
+          </div>
+          {showRisingStarTrack && (
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="font-semibold">Rising star {RISING_STAR_MIN_RATIO.toFixed(2)}</p>
+                <p className="mt-0.5 text-xs text-white/50">
+                  {risingKept
+                    ? `Retained for Season ${(publicSeason ?? 1) + 1}`
+                    : 'Below the minimum to stay as a Rising star'}
+                </p>
+              </div>
+              <StatusMark ok={risingKept} />
+            </div>
+          )}
+          {!risingKept && showRisingStarTrack && (
+            <p className="mt-3 text-xs text-white/55">
+              You can stay as a reserve team player, or take a loan or transfer if offers come through when you continue.
             </p>
           )}
-          {(() => {
-            const stay = preview.pendingTransfer?.stay ?? preview.immediate;
-            const stayOffered = Boolean(stay) && (preview.immediate || preview.pendingTransfer?.allowDecline);
-            const loansOffered = (preview.pendingTransfer?.offers ?? []).some((o) => o.move === 'loan');
-            const forcedLoan = preview.pendingTransfer?.kind === 'loan' && !stayOffered;
-            const parentName = parentClub?.name ?? 'your parent club';
-            if (role === 'loan') {
-              const recalled = stay?.clubId === parentClubId;
-              return (
-                <>
-                  {recalled ? (
-                    <>
-                      <p className="mt-1 font-semibold">
-                        If you return to {parentName}: {SQUAD_STATUS_LABEL.reserve}
-                      </p>
-                      <p className="mt-1 text-xs text-white/50">
-                        A recall is a reserve role at {parentName} — you will not stay at {club.name}.
-                      </p>
-                    </>
-                  ) : (
-                    <p className="mt-1 text-xs text-white/50">
-                      You will not stay at {club.name}. Next season is with {parentName} or another club.
-                    </p>
-                  )}
-                  {loansOffered && (
-                    <>
-                      <p className="mt-1 font-semibold">On loan: {SQUAD_STATUS_LABEL.starter}</p>
-                      <p className="mt-1 text-xs text-white/50">
-                        A further loan is first-team football at the new club.
-                      </p>
-                    </>
-                  )}
-                </>
-              );
-            }
-            if (forcedLoan) {
-              return (
-                <>
-                  <p className="mt-1 font-semibold">On loan: {SQUAD_STATUS_LABEL.starter}</p>
-                  <p className="mt-1 text-xs text-white/50">{describeSquadStatus('starter')}</p>
-                </>
-              );
-            }
-            return (
-              <>
-                {stayOffered && stay?.squadStatus && (
-                  <>
-                    <p className="mt-1 font-semibold">
-                      Next season{preview.pendingTransfer ? ' if you stay' : ''}: {SQUAD_STATUS_LABEL[stay.squadStatus]}
-                    </p>
-                    <p className="mt-1 text-xs text-white/50">{describeSquadStatus(stay.squadStatus)}</p>
-                  </>
-                )}
-                {loansOffered && (
-                  <>
-                    <p className="mt-1 font-semibold">On loan: {SQUAD_STATUS_LABEL.starter}</p>
-                    <p className="mt-1 text-xs text-white/50">
-                      A loan is first-team football at the new club — not the role you would have if you stayed.
-                    </p>
-                  </>
-                )}
-                {!stayOffered && !loansOffered && (() => {
-                  const stayStatus = nextSquadStatusAfterSeason({
-                    role: role === 'reserve' ? 'first-team' : role,
-                    current: role === 'reserve' ? 'rising-star' : squadStatus ?? defaultSquadStatus(role),
-                    ratio,
-                    gamesPlayed: season.gamesPlayed,
-                    bar: threshold,
-                    honoursClear: seasonOverridesRatioBar(season),
-                  });
-                  return (
-                    <>
-                      <p className="mt-1 font-semibold">
-                        Next season: {SQUAD_STATUS_LABEL[stayStatus]}
-                      </p>
-                      <p className="mt-1 text-xs text-white/50">{describeSquadStatus(stayStatus)}</p>
-                    </>
-                  );
-                })()}
-              </>
-            );
-          })()}
         </div>
       ) : null}
 
@@ -342,7 +272,11 @@ export default function SeasonSummaryScreen() {
         );
       })()}
 
-      <p className="max-w-sm text-sm text-white/60">{age >= RETIREMENT_AGE ? 'This was your final season.' : preview.detail}</p>
+      {age >= RETIREMENT_AGE ? (
+        <p className="max-w-sm text-sm text-white/60">This was your final season.</p>
+      ) : showRisingStarTrack ? null : (
+        <p className="max-w-sm text-sm text-white/60">{preview.detail}</p>
+      )}
 
       {legacyHighlights.length > 0 && (
         <div className="flex w-full max-w-sm flex-col gap-2">
@@ -375,6 +309,19 @@ export default function SeasonSummaryScreen() {
           : `Continue to ${displaySeasonNumber(seasonNumber + 1, { role: role === 'reserve' ? 'first-team' : role, careerStart }) === null ? 'the first team' : `Season ${displaySeasonNumber(seasonNumber + 1, { role: role === 'reserve' ? 'first-team' : role, careerStart })}`}`}
       </button>
     </div>
+  );
+}
+
+function StatusMark({ ok }: { ok: boolean }) {
+  return (
+    <span
+      className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+        ok ? 'bg-emerald-400 text-black' : 'bg-red-500/85 text-white'
+      }`}
+      aria-label={ok ? 'Met' : 'Not met'}
+    >
+      {ok ? '✓' : '✕'}
+    </span>
   );
 }
 

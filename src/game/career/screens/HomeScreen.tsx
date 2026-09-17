@@ -52,7 +52,7 @@ export default function HomeScreen({ onPractice }: { onPractice: () => void }) {
         />
         <h1 className="font-brand mt-5 text-4xl leading-none text-white sm:text-5xl">{GAME_TITLE}</h1>
         <p className="mt-3 text-sm text-white/55">{GAME_TAGLINE}</p>
-        <p className="mt-2 text-[11px] uppercase tracking-wide text-emerald-300/80">Copa · Value · 15 Sep</p>
+        <p className="mt-2 text-[11px] uppercase tracking-wide text-emerald-300/80">Identity · Records · 17 Sep</p>
       </div>
 
       <div className="flex w-full max-w-xs flex-col gap-3">

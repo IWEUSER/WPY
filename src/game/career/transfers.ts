@@ -44,9 +44,9 @@ export function tierForRatio(ratio: number): ClubTier {
 }
 
 /**
- * Who wants the player follows remaining transfer value first. A bad season
- * can shift one band worse than that value, but a €100m player is not
- * dumped to League Two on last year's ratio alone.
+ * Who wants the player follows last season's goals-per-game. Market value
+ * does not pull a mid-table ratio up to Strong/Elite. Paid elite bids still
+ * need the €50m floor; a free agent with an elite ratio can draw Elite clubs.
  */
 export function offerTierFromStanding(params: {
   ratio?: number;
@@ -54,17 +54,13 @@ export function offerTierFromStanding(params: {
   marketValue?: number;
   currentTier?: ClubTier;
   blockElite?: boolean;
+  fee?: number;
 }): ClubTier {
   const last = params.ratio ?? params.careerRatio;
-  const ratioTier = Math.max(tierForRatio(last), tierForRatio(params.careerRatio)) as ClubTier;
-  let tier = ratioTier;
-  if (params.marketValue != null) {
-    const valueTier = tierForMarketValue(params.marketValue);
-    const softened = Math.min(ratioTier, (valueTier + 1) as ClubTier) as ClubTier;
-    tier = Math.max(valueTier, softened) as ClubTier;
-  }
+  let tier = tierForRatio(last);
   if (params.blockElite) tier = Math.max(tier, 2) as ClubTier;
-  if ((params.marketValue ?? Number.POSITIVE_INFINITY) < ELITE_TRANSFER_VALUE_FLOOR) {
+  const paid = (params.fee ?? 1) > 0;
+  if (paid && (params.marketValue ?? Number.POSITIVE_INFINITY) < ELITE_TRANSFER_VALUE_FLOOR) {
     tier = Math.max(tier, 2) as ClubTier;
   }
   return tier;
@@ -226,21 +222,13 @@ export function pickLoanClubsForMiss(
   const effectiveRatio = extras.honoursOverride && leagueBars.length > 0
     ? Math.max(ratio, ...leagueBars)
     : ratio;
-  const value = extras.marketValue ?? 0;
-  const valueTier = value > 0 ? tierForMarketValue(value) : null;
-  const maxDrop = (extras.consecutivePoor ?? 0) >= 2 ? 2 : 1;
-  const relaxBar = value >= ELITE_TRANSFER_VALUE_FLOOR;
-  const fitsValue = (c: Club) => {
-    if (!relaxBar || valueTier == null) return false;
-    return c.tier >= valueTier && c.tier <= Math.min(5, valueTier + maxDrop);
-  };
   const sameDivision = parentLeague
     ? withoutSaudi(CLUBS.filter(
         (c) =>
           c.playable !== false &&
           c.league === parentLeague &&
           !exclude.includes(c.id) &&
-          (canLoanToSameDivision(effectiveRatio, c) || fitsValue(c)),
+          canLoanToSameDivision(effectiveRatio, c),
       ))
     : [];
   const otherTopFlight = withoutSaudi(CLUBS.filter(
@@ -249,9 +237,9 @@ export function pickLoanClubsForMiss(
       !SECOND_DIVISIONS.has(c.league) &&
       c.league !== parentLeague &&
       !exclude.includes(c.id) &&
-      (canLoanToSameDivision(effectiveRatio, c) || fitsValue(c)),
+      canLoanToSameDivision(effectiveRatio, c),
   ));
-  const skipSecond = relaxBar && !parentAlreadySecond;
+  const skipSecond = parentAlreadySecond;
   const secondIn = (country: string | null) =>
     country
       ? withoutSaudi(CLUBS.filter(
@@ -360,7 +348,7 @@ export function pickPermanentClubs(
   marketValue?: number,
   age = 99,
 ): Club[] {
-  if (qualityTier === 1 && (marketValue ?? 0) < ELITE_TRANSFER_VALUE_FLOOR) {
+  if (fee > 0 && qualityTier === 1 && (marketValue ?? 0) < ELITE_TRANSFER_VALUE_FLOOR) {
     qualityTier = 2;
   }
   if (fromLeague && SECOND_DIVISIONS.has(fromLeague)) {
@@ -413,12 +401,6 @@ export function pickPermanentClubs(
         pool = fillFrom(pool, allIn(tier), TRANSFER_OFFER_COUNT);
       }
       if (pool.length > 0) break;
-    }
-  }
-  if (pool.length < TRANSFER_OFFER_COUNT && fee > 0 && qualityTier <= 3) {
-    for (let tier = (qualityTier - 1) as ClubTier; tier >= 1; tier = (tier - 1) as ClubTier) {
-      pool = fillFrom(pool, affordable(tier), TRANSFER_OFFER_COUNT);
-      if (pool.length >= TRANSFER_OFFER_COUNT) break;
     }
   }
   if (pool.length < TRANSFER_OFFER_COUNT && qualityTier === 1) {
@@ -839,6 +821,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
           careerRatio: careerGames > 0 ? careerGoals / careerGames : ratio,
           marketValue: value,
           blockElite,
+          fee,
         }),
         false,
         age,
@@ -854,10 +837,11 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     const exclude = [club.id, parentClub?.id ?? ''];
     const formRatio = offerFormRatio({ lastSeason: season, careerGoals, careerGames });
     const saleTier = offerTierFromStanding({
-      ratio: formRatio,
-      careerRatio: formRatio,
+      ratio,
+      careerRatio: careerGames > 0 ? careerGoals / careerGames : ratio,
       marketValue: value,
       blockElite,
+      fee,
     });
     const transfers = pickPermanentClubs(saleTier, fee, exclude, nationality, blockElite, club.league, value, age);
     const canLoanAgain = loansUsed < MAX_CONSECUTIVE_LOANS;
@@ -911,10 +895,11 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
   });
   const formRatio = offerFormRatio({ lastSeason: season, careerGoals, careerGames });
   const ratioTier = offerTierFromStanding({
-    ratio: formRatio,
-    careerRatio: formRatio,
+    ratio,
+    careerRatio: careerGames > 0 ? careerGoals / careerGames : ratio,
     marketValue: value,
     blockElite,
+    fee,
   });
   const canStayRising = honoursClear || ratio >= RISING_STAR_MIN_RATIO;
   const firstSeasonStayStatus: SquadStatus = currentStatus === 'rising-star'
@@ -981,7 +966,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     return attachCurrentClubRenewal(
       {
         headline,
-        detail: `${detail} Stay, take a loan in a matching division, or transfer — each club is capped at what it can pay.`,
+        detail,
         pendingTransfer: pendingFromOffers(
           'loan-or-transfer',
           fee <= 0

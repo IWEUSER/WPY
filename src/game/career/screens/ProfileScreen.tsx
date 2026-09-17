@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { getClub } from '../data/clubs';
 import { currentCalendarWeek } from '../calendar';
 import { careerAwardCounts, careerTrophyCounts } from '../honoursDisplay';
@@ -6,8 +7,32 @@ import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons, transferFe
 import { countsTowardCareerRecord } from '../seasonDisplay';
 import { getNation } from '../international';
 import { useCareerStore } from '../store';
-import { DATA_CARD, DATA_TILE } from './dataUi';
+import { DATA_CARD } from './dataUi';
+import { AwardIcon, EarningsIcon, RecordsIcon, TrophyIcon, WageIcon } from './careerIcons';
 import { HonoursPills } from './HonoursPills';
+import { PlayerKitPortrait } from './PlayerKitPortrait';
+
+function IdentityBox({
+  title,
+  icon,
+  children,
+  className = '',
+}: {
+  title: string;
+  icon?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`${DATA_CARD} ${className}`}>
+      <p className="flex items-center gap-2 text-xs uppercase tracking-wide text-white/40">
+        {icon}
+        {title}
+      </p>
+      {children}
+    </section>
+  );
+}
 
 export default function ProfileScreen() {
   const history = useCareerStore((s) => s.seasonHistory);
@@ -80,15 +105,15 @@ export default function ProfileScreen() {
         {` · Age ${age}`}
       </p>
 
+      <PlayerKitPortrait name={name} club={club} nation={nation} />
+
       <div className="mt-4 grid grid-cols-2 gap-2">
-        <div className={DATA_TILE}>
-          <p className="text-lg font-bold">{formatEuros(careerEarnings)}</p>
-          <p className="text-[10px] uppercase tracking-wide text-white/40">Earnings</p>
-        </div>
-        <div className={DATA_TILE}>
-          <p className="text-lg font-bold">{weeklyWage > 0 ? formatWeeklyWage(weeklyWage) : '—'}</p>
-          <p className="text-[10px] uppercase tracking-wide text-white/40">Wage</p>
-        </div>
+        <IdentityBox title="Earnings" icon={<EarningsIcon className="h-3.5 w-3.5" />} className="mt-0">
+          <p className="mt-1 text-lg font-bold">{formatEuros(careerEarnings)}</p>
+        </IdentityBox>
+        <IdentityBox title="Wage" icon={<WageIcon className="h-3.5 w-3.5" />} className="mt-0">
+          <p className="mt-1 text-lg font-bold">{weeklyWage > 0 ? formatWeeklyWage(weeklyWage) : '—'}</p>
+        </IdentityBox>
       </div>
       {value != null && (
         <p className="mt-2 text-center text-xs text-white/45">
@@ -98,21 +123,37 @@ export default function ProfileScreen() {
       )}
 
       {nationalTeam && (
-        <section className={`mt-4 ${DATA_CARD}`}>
-          <p className="text-xs uppercase tracking-wide text-white/40">International</p>
+        <IdentityBox title="International" className="mt-3">
           <p className="mt-1 text-lg font-bold">
             {nationalTeam.caps} cap{nationalTeam.caps === 1 ? '' : 's'} · {goalsLabel(nationalTeam.goals)}
           </p>
           <p className="mt-1 text-xs text-white/45">{nation?.name ?? 'National team'}</p>
-        </section>
+        </IdentityBox>
       )}
 
-      <HonoursPills title="Trophies" items={trophies} empty="No trophies yet" tone="trophy" />
-      <HonoursPills title="Awards" items={awards} empty="No awards yet" tone="award" />
+      <HonoursPills
+        title="Trophies"
+        items={trophies}
+        empty="No trophies yet"
+        tone="trophy"
+        icon={<TrophyIcon className="h-3.5 w-3.5" />}
+      />
+      <HonoursPills
+        title="Awards"
+        items={awards}
+        empty="No awards yet"
+        tone="award"
+        icon={<AwardIcon className="h-3.5 w-3.5" />}
+      />
 
-      {legacy.length > 0 && (
-        <section className="mt-3 rounded-2xl border border-amber-200/25 bg-amber-400/10 p-4">
-          <p className="text-xs uppercase tracking-wide text-amber-200/70">Legacy</p>
+      <button type="button" onClick={openLegacy} className={`mt-3 w-full text-left ${DATA_CARD}`}>
+        <p className="flex items-center gap-2 text-xs uppercase tracking-wide text-white/40">
+          <RecordsIcon className="h-3.5 w-3.5" />
+          Records
+        </p>
+        {legacy.length === 0 ? (
+          <p className="mt-2 text-sm text-white/50">No records yet</p>
+        ) : (
           <ul className="mt-2 space-y-2">
             {legacy.map((board) => (
               <li key={board.def.id} className="flex items-baseline justify-between gap-3 text-sm">
@@ -129,13 +170,8 @@ export default function ProfileScreen() {
               </li>
             ))}
           </ul>
-        </section>
-      )}
-
-      <button type="button" onClick={openLegacy} className={`mt-4 w-full ${DATA_CARD} text-left`}>
-        <p className="text-xs uppercase tracking-wide text-amber-200/70">Records</p>
-        <p className="mt-1 text-lg font-extrabold">Tournaments played</p>
-        <p className="mt-1 text-sm text-white/55">All-time boards for competitions you have appeared in.</p>
+        )}
+        <p className="mt-2 text-xs text-white/45">All-time boards for competitions you have appeared in.</p>
       </button>
     </div>
   );
