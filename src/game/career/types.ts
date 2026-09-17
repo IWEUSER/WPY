@@ -177,12 +177,15 @@ export type CareerPhase =
   | 'club-offer'
   | 'opening-brief'
   | 'nationality-choice'
+  | 'player-name'
   | 'club-choice'
   | 'hub'
   | 'match'
   | 'season-summary'
   | 'transfer-choice'
   | 'career'
+  | 'profile'
+  | 'legacy'
   | 'career-end'
   | 'match-result';
 
@@ -216,6 +219,8 @@ export interface CareerState {
   /** Chosen international nationality — picked before the U16 tournament.
    * Call-ups later use goal ratio + club level. */
   nationality: string | null;
+  /** Display name chosen after nationality. Older saves default to Player. */
+  playerName?: string | null;
   /** Caps, goals, and the same miss-streak drop rule as club football, scoped
    * to the national team. Null until a nationality is chosen. */
   nationalTeam: NationalTeamState | null;
@@ -269,6 +274,10 @@ export interface CareerState {
    * remaining fixtures without wiping career history.
    */
   rulesStamp?: string | null;
+  /** Screen to restore after closing the all-time records list. */
+  legacyReturnPhase?: CareerPhase | null;
+  /** Screen to restore after closing the career identity page. */
+  profileReturnPhase?: CareerPhase | null;
 }
 
 export interface LastMatchResult {

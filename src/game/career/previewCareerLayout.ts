@@ -915,6 +915,12 @@ export function applyCareerLayoutPreview(): void {
           ? 'hub'
         : preview === 'record'
         ? 'career'
+        : preview === 'profile'
+        ? 'profile'
+        : preview === 'player-name'
+        ? 'player-name'
+        : preview === 'legacy'
+        ? 'legacy'
         : preview === 'club-choice'
         ? 'club-choice'
         : preview === 'transfer' || preview === 'expired' || preview === 'renew' || preview === 'championship-transfer' || isReserveLoansPreview || preview === 'first-team-miss' || preview === 'transfer-20' || preview === 'transfer-reject'
@@ -944,6 +950,7 @@ export function applyCareerLayoutPreview(): void {
     careerStart: isTrialRetryPreview || isTrialOffersPreview || preview === 'trial-drop' || preview === 'club-choice' ? 'favourite-trial' : isYouthPreview || isYouthNextPreview || isTrialPreview || isClubTrialPreview ? 'youth' : preview === 'hub-rising-star' || preview === 'hub-qualifying' || preview === 's1-summary' ? 'favourite-first-team' : 'favourite-first-team',
     seasonsAtCurrentClub: preview === 'end' ? 10 : preview === 's1-summary' ? 0 : promoteSummary ? 1 : 3,
     nationality: preview === 'mls' ? 'united-states' : preview === 'saudi' ? 'saudi-arabia' : preview === 'championship-transfer' || preview === 's1-summary' ? 'england' : preview === 'benfica' || preview === 'rebuild' || preview === 'match-benfica' ? 'portugal' : preview === 'ajax' || preview === 'match-ajax' ? 'netherlands' : preview === 'galatasaray' || preview === 'match-galatasaray' ? 'turkey' : 'spain',
+    playerName: preview === 'player-name' ? null : 'Alex Rivera',
     nationalTeam,
     availability: preview === 'hub-ucl-leg2'
       ? { phase: 0, windowFails: 2, bannedGamesRemaining: 0 }
@@ -1040,11 +1047,11 @@ export function applyCareerLayoutPreview(): void {
               role: 'first-team',
               squadStatus: 'starter',
               matches: [],
-              goals: 21,
+              goals: 33,
               gamesPlayed: 48,
               ratioMet: true,
               age: 22,
-              leagueGoals: 20,
+              leagueGoals: 32,
               leagueGames: 46,
               cupGames: 2,
               cupGoals: 1,
@@ -1056,8 +1063,8 @@ export function applyCareerLayoutPreview(): void {
               playerOfTheYear: true,
               clubPlayerOfTheTournament: false,
               clubPlayerOfTheTournamentReason: '',
-              topGoalscorerReason: '20 league goals in Championship, but another striker took the golden boot.',
-              playerOfTheYearReason: 'Won Championship Player of the Year with 20 league goals.',
+              topGoalscorerReason: '32 league goals in Championship, but another striker took the golden boot.',
+              playerOfTheYearReason: 'Won Championship Player of the Year with 32 league goals.',
               wonWpy: false,
               earnings: 1_200_000,
               sponsorship: 0,
@@ -1172,5 +1179,88 @@ export function applyCareerLayoutPreview(): void {
     wpyResult: preview === 's1-summary' || preview === 'loan-summary'
       ? { won: false, reason: '' }
       : undefined,
+  });
+
+  if (preview === 'legacy' || preview === 'profile') applyLegacyRecordsOverlay(preview);
+}
+
+/** DEV overlay: mixed outside / top-10 sourced boards. */
+function applyLegacyRecordsOverlay(preview: string): void {
+  const state = useCareerStore.getState();
+  const counted = state.seasonHistory.filter((season) => season.role !== 'reserve');
+  const firstTeam = counted[0] ?? state.currentSeason;
+  if (!firstTeam) return;
+  const history = [
+    ...state.seasonHistory.filter((season) => season.role === 'reserve'),
+    {
+      ...firstTeam,
+      seasonNumber: Math.max(2, firstTeam.seasonNumber),
+      role: 'first-team' as const,
+      league: 'La Liga',
+      clubId: 'real-madrid',
+      leagueGames: 38,
+      leagueGoals: 40,
+      cupGames: 6,
+      cupGoals: 8,
+      domesticGames: 44,
+      domesticGoals: 48,
+      goals: 60,
+      gamesPlayed: 57,
+      continentalStats: [{ cup: 'ucl' as const, games: 13, goals: 55 }],
+      international: {
+        tournament: 'world-cup' as const,
+        qualifyingGames: 10,
+        qualifyingGoals: 8,
+        qualifyingOutcome: 'qualified' as const,
+        finalsGames: 7,
+        finalsGoals: 9,
+        tournamentOutcome: 'champion' as const,
+        playerOfTheTournament: true,
+        topGoalscorer: true,
+      },
+    },
+  ];
+  useCareerStore.setState({
+    phase: preview === 'profile' ? 'profile' : 'legacy',
+    legacyReturnPhase: 'profile',
+    profileReturnPhase: 'hub',
+    playerName: 'Alex Rivera',
+    clubId: 'real-madrid',
+    clubLeague: 'La Liga',
+    nationality: 'spain',
+    seasonHistory: history,
+    currentSeason: state.currentSeason
+      ? {
+          ...state.currentSeason,
+          clubId: 'real-madrid',
+          league: 'La Liga',
+          role: 'first-team',
+          leagueGoals: 0,
+          cupGoals: 0,
+          continentalStats: [],
+        }
+      : null,
+    nationalTeam: {
+      nationId: 'spain',
+      availability: createAvailability(),
+      caps: 40,
+      goals: 42,
+      byCompetition: [
+        {
+          tournament: 'world-cup',
+          qualifyingGames: 10,
+          qualifyingGoals: 8,
+          finalsGames: 7,
+          finalsGoals: 9,
+        },
+        {
+          tournament: 'euro',
+          qualifyingGames: 0,
+          qualifyingGoals: 0,
+          finalsGames: 6,
+          finalsGoals: 5,
+        },
+      ],
+    },
   });
 }

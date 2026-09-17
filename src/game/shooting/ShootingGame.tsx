@@ -855,7 +855,7 @@ export default function ShootingGame({
     <div className="relative flex h-full w-full flex-col">
       <header className="z-10 flex items-center justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 text-white">
         <div>
-          <h1 className="font-display text-lg font-bold sm:text-xl">{title ?? 'World Player of the Year'}</h1>
+          <h1 className="font-display text-lg font-bold sm:text-xl">{title ?? 'Football Legacy'}</h1>
           <p className="text-xs text-white/50">{subtitle ?? 'Swipe the ball to shoot'}</p>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {progressLabel && (

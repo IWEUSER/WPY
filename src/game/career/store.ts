@@ -679,6 +679,7 @@ function initialState(): CareerState {
     careerGames: 0,
     pendingTransfer: null,
     nationality: null,
+    playerName: null,
     nationalTeam: null,
     seasonCalendar: null,
     seasonStandings: null,
@@ -702,6 +703,8 @@ function initialState(): CareerState {
     intlQualifying: null,
     lastSuperCupOpponentId: null,
     rulesStamp: CURRENT_RULES_STAMP,
+    legacyReturnPhase: null,
+    profileReturnPhase: null,
   };
 }
 
@@ -821,6 +824,7 @@ interface CareerActions {
   finishTrial: () => void;
   chooseClub: (clubId: string) => void;
   chooseNationality: (nationId: string) => void;
+  confirmPlayerName: (name: string) => void;
   advance: () => void;
   recordMatchChance: (result: ShotResult) => void;
   finishLiveMatch: () => void;
@@ -830,6 +834,10 @@ interface CareerActions {
   continueAfterSeason: () => void;
   resolveTransferChoice: (clubId: string | null) => void;
   openCareerRecord: () => void;
+  openProfile: () => void;
+  returnFromProfile: () => void;
+  openLegacy: () => void;
+  returnFromLegacy: () => void;
   returnToHub: () => void;
   resetCareer: () => void;
   returnToMenu: () => void;
@@ -1353,8 +1361,11 @@ export const useCareerStore = create<CareerStore>()(
 
       backFromSetup: () =>
         set((state) => {
+          if (state.phase === 'player-name') {
+            return { phase: 'nationality-choice', playerName: null };
+          }
           if (state.phase === 'nationality-choice' && isFavouriteStart(state.careerStart)) {
-            return { phase: 'club-choice', nationality: null, nationalTeam: null };
+            return { phase: 'club-choice', nationality: null, nationalTeam: null, playerName: null };
           }
           return {
             phase: 'menu',
@@ -1363,6 +1374,7 @@ export const useCareerStore = create<CareerStore>()(
             parentClubId: null,
             nationality: null,
             nationalTeam: null,
+            playerName: null,
             openingCampaign: null,
           };
         }),
@@ -1416,13 +1428,24 @@ export const useCareerStore = create<CareerStore>()(
         set((state) => beginSignedCareer(clubId, 'reserve', state.nationality, state.careerStart)),
 
       chooseNationality: (nationId) =>
+        set({
+          nationality: nationId,
+          nationalTeam: createNationalTeamState(nationId),
+          phase: 'player-name',
+        }),
+
+      confirmPlayerName: (name) =>
         set((state) => {
-          const nationalTeam = createNationalTeamState(nationId);
+          const playerName = name.replace(/\s+/g, ' ').trim();
+          const nationId = state.nationality;
+          if (!nationId) return { playerName, phase: 'nationality-choice' };
+          const nationalTeam = state.nationalTeam ?? createNationalTeamState(nationId);
           if (state.careerStart === 'favourite-trial' && state.clubId) {
             const club = getClub(state.clubId);
-            if (!club) return { nationality: nationId, nationalTeam };
+            if (!club) return { playerName, nationality: nationId, nationalTeam };
             const opening = beginFavouriteClubTrial(club);
             return {
+              playerName,
               nationality: nationId,
               nationalTeam,
               openingCampaign: opening,
@@ -1439,6 +1462,7 @@ export const useCareerStore = create<CareerStore>()(
               nationality: nationId,
               nationalTeam,
               ...beginSignedCareer(state.clubId, 'reserve', nationId, state.careerStart),
+              playerName,
             };
           }
           if (state.careerStart === 'favourite-first-team' && state.clubId) {
@@ -1446,13 +1470,15 @@ export const useCareerStore = create<CareerStore>()(
               nationality: nationId,
               nationalTeam,
               ...beginSignedCareer(state.clubId, 'first-team', nationId, state.careerStart),
+              playerName,
             };
           }
           if (state.clubId && !isFavouriteStart(state.careerStart)) {
-            return { nationality: nationId, nationalTeam, phase: 'hub' };
+            return { playerName, nationality: nationId, nationalTeam, phase: 'hub' };
           }
           const opening = createYouthCampaign(nationId);
           return {
+            playerName,
             nationality: nationId,
             nationalTeam,
             careerStart: state.careerStart ?? 'youth',
@@ -2067,6 +2093,44 @@ export const useCareerStore = create<CareerStore>()(
 
       openCareerRecord: () => set({ phase: 'career' }),
 
+      openProfile: () =>
+        set((state) => ({
+          phase: 'profile',
+          profileReturnPhase: state.phase === 'profile' ? state.profileReturnPhase ?? null : state.phase,
+        })),
+
+      returnFromProfile: () =>
+        set((state) => {
+          const back = state.profileReturnPhase;
+          const phase =
+            back && back !== 'profile' && back !== 'legacy'
+              ? back
+              : state.age >= RETIREMENT_AGE
+                ? 'career-end'
+                : state.clubId
+                  ? 'hub'
+                  : 'menu';
+          return { phase, profileReturnPhase: null };
+        }),
+
+      openLegacy: () =>
+        set((state) => ({
+          phase: 'legacy',
+          legacyReturnPhase: state.phase === 'legacy' ? state.legacyReturnPhase ?? null : state.phase,
+        })),
+
+      returnFromLegacy: () =>
+        set((state) => {
+          const back = state.legacyReturnPhase;
+          const phase =
+            back && back !== 'legacy'
+              ? back
+              : state.clubId
+                ? 'hub'
+                : 'menu';
+          return { phase, legacyReturnPhase: null };
+        }),
+
       returnToHub: () =>
         set((state) => ({
           phase: state.clubId ? 'hub' : 'menu',
@@ -2078,7 +2142,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 34,
+      version: 35,
       migrate: (persisted) => {
         try {
           return migrateCareerPersist(persisted);
@@ -2142,6 +2206,7 @@ function migrateCareerPersist(persisted: unknown): CareerState {
             : null,
           careerStart: state.careerStart ?? null,
           nationality: state.nationality ?? null,
+          playerName: state.playerName?.trim() ? state.playerName : 'Player',
           nationalTeam: state.nationalTeam
             ? {
                 ...state.nationalTeam,
@@ -2233,6 +2298,8 @@ function migrateCareerPersist(persisted: unknown): CareerState {
           previousChampionClubId: state.previousChampionClubId ?? null,
           qualifiedContinentalCup: state.qualifiedContinentalCup ?? null,
           lastSuperCupOpponentId: state.lastSuperCupOpponentId ?? null,
+          legacyReturnPhase: state.legacyReturnPhase ?? null,
+          profileReturnPhase: state.profileReturnPhase ?? null,
           squadStatus: (() => {
             const status = normalizeSquadStatus(state.squadStatus, state.role ?? 'reserve');
             if (

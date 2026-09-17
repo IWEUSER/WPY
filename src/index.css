@@ -31,3 +31,9 @@ body {
   font-family: "Nunito", "Trebuchet MS", "Segoe UI", sans-serif;
   letter-spacing: 0.01em;
 }
+
+.font-brand {
+  font-family: "Oswald", "Nunito", "Trebuchet MS", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}

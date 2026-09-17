@@ -1,26 +1,23 @@
 import { getClub } from '../data/clubs';
-import { INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
-import { awardLabels, careerAwardCounts, careerTrophyCounts, formatInternationalSeason, seasonClubName, seasonLeagueLabel } from '../honoursDisplay';
-import { formatEuros } from '../playerValue';
+import { formatInternationalSeason, seasonClubName, seasonLeagueLabel } from '../honoursDisplay';
 import { countsTowardCareerRecord, displaySeasonLabel } from '../seasonDisplay';
 import { aggregateContinental, aggregateDomesticSplit, seasonDomesticSplit } from '../seasonStats';
 import { useCareerStore } from '../store';
 import type { SeasonRecord } from '../types';
 import { DATA_CARD, DATA_TILE } from './dataUi';
-import { HonoursPills } from './HonoursPills';
-import StatsTable, { ClubCompetitionTable, InternationalSeasonBlock } from './StatsTable';
+import { ClubCompetitionTable, InternationalSeasonBlock } from './StatsTable';
 
 export default function CareerEndScreen() {
   const history = useCareerStore((s) => s.seasonHistory);
   const current = useCareerStore((s) => s.currentSeason);
   const careerGoals = useCareerStore((s) => s.careerGoals);
   const careerGames = useCareerStore((s) => s.careerGames);
-  const nationalTeam = useCareerStore((s) => s.nationalTeam);
   const clubId = useCareerStore((s) => s.clubId);
-  const careerEarnings = useCareerStore((s) => s.careerEarnings);
   const resetCareer = useCareerStore((s) => s.resetCareer);
   const returnToMenu = useCareerStore((s) => s.returnToMenu);
+  const openProfile = useCareerStore((s) => s.openProfile);
   const careerStart = useCareerStore((s) => s.careerStart);
+  const playerName = useCareerStore((s) => s.playerName);
 
   const seen = new Set<number>();
   const seasons = [...history, ...(current ? [current] : [])].filter((s) => {
@@ -28,42 +25,26 @@ export default function CareerEndScreen() {
     seen.add(s.seasonNumber);
     return true;
   });
-  const wpyWins = seasons.filter((s) => s.wonWpy);
   const domestic = aggregateDomesticSplit(seasons);
   const continental = aggregateContinental(seasons);
-  const intlGames = nationalTeam?.caps ?? 0;
-  const intlGoals = nationalTeam?.goals ?? 0;
-  const totalGames = careerGames + intlGames;
-  const totalGoals = careerGoals + intlGoals;
-  const ratio = totalGames > 0 ? totalGoals / totalGames : 0;
-  const sponsorship = seasons.reduce((sum, s) => sum + (s.sponsorship ?? 0), 0);
-  const trophies = careerTrophyCounts(seasons);
-  const awards = careerAwardCounts(seasons);
+  const ratio = careerGames > 0 ? careerGoals / careerGames : 0;
   const lastClub = clubId ? getClub(clubId) : undefined;
   const lastSeason = seasons[seasons.length - 1];
+  const name = playerName?.trim() || 'Player';
 
   return (
     <div className="flex h-full w-full flex-col overflow-y-auto px-5 py-[max(1.25rem,env(safe-area-inset-top))] pb-10 text-white">
       <p className="text-xs uppercase tracking-wide text-white/40">Career complete</p>
-      <h1 className="mt-1 text-2xl font-extrabold">Retired at 36</h1>
+      <h1 className="mt-1 text-2xl font-extrabold">{name} retired at 36</h1>
       <p className="mt-2 text-sm text-white/60">
         {lastClub ? `${lastClub.name}` : 'Your career'}
         {lastSeason ? ` · last season ${displaySeasonLabel(lastSeason.seasonNumber, { role: lastSeason.role, careerStart })}` : ''}
       </p>
 
       <div className="mt-5 grid grid-cols-3 gap-2">
-        <StatTile value={String(totalGames)} label="All games" />
-        <StatTile value={String(totalGoals)} label="All goals" />
-        <StatTile value={ratio.toFixed(2)} label="All ratio" />
-      </div>
-      <p className="mt-2 text-center text-[11px] text-white/40">Club and country combined</p>
-
-      <div className={`mt-3 ${DATA_CARD} text-sm`}>
-        <p className="text-xs uppercase tracking-wide text-white/40">Earnings</p>
-        <p className="mt-1 text-lg font-bold">{formatEuros(careerEarnings)}</p>
-        {sponsorship > 0 && (
-          <p className="mt-1 text-xs text-white/50">including {formatEuros(sponsorship)} in sponsorships</p>
-        )}
+        <StatTile value={String(careerGames)} label="Club games" />
+        <StatTile value={String(careerGoals)} label="Club goals" />
+        <StatTile value={ratio.toFixed(2)} label="Club ratio" />
       </div>
 
       <div className={`mt-3 ${DATA_CARD} text-sm`}>
@@ -71,51 +52,15 @@ export default function CareerEndScreen() {
         <ClubCompetitionTable split={domestic} continental={continental} alwaysShowEuropean />
       </div>
 
-      {nationalTeam && (
-        <div className={`mt-3 ${DATA_CARD}`}>
-          <p className="text-xs uppercase tracking-wide text-white/40">International</p>
-          <p className="mt-1 text-lg font-bold">
-            {nationalTeam.caps} caps · {nationalTeam.goals} goals
-          </p>
-          {(nationalTeam.byCompetition ?? []).map((row) => (
-            <div key={row.tournament} className="mt-2">
-              <p className="text-xs font-semibold text-white/70">
-                {INTERNATIONAL_TOURNAMENTS[row.tournament]?.name ?? row.tournament}
-              </p>
-              <StatsTable
-                rows={[
-                  { label: 'Qualifying', games: row.qualifyingGames, goals: row.qualifyingGoals },
-                  { label: 'Tournament', games: row.finalsGames, goals: row.finalsGoals },
-                ]}
-              />
-            </div>
-          ))}
-          {seasons
-            .filter((s) => formatInternationalSeason(s.international))
-            .map((s) => {
-              const line = formatInternationalSeason(s.international);
-              if (!line) return null;
-              return (
-                <div key={`intl-${s.seasonNumber}`} className="mt-3">
-                  <InternationalSeasonBlock
-                    title={`${displaySeasonLabel(s.seasonNumber, { role: s.role, careerStart })} · ${line.name}`}
-                    record={s.international}
-                  />
-                </div>
-              );
-            })}
-        </div>
-      )}
-
-      <div className="mt-3 rounded-2xl border border-amber-200/25 bg-amber-400/10 p-4">
-        <p className="text-xs uppercase tracking-wide text-amber-200/70">World Player of the Year</p>
-        <p className="mt-1 text-2xl font-extrabold text-amber-200">
-          {wpyWins.length} title{wpyWins.length === 1 ? '' : 's'}
-        </p>
-      </div>
-
-      <HonoursPills title="Trophies" items={trophies} empty="No trophies won" tone="trophy" />
-      <HonoursPills title="Awards" items={awards} empty="No awards won" tone="award" />
+      <button
+        type="button"
+        onClick={openProfile}
+        className={`mt-4 w-full ${DATA_CARD} text-left`}
+      >
+        <p className="text-xs uppercase tracking-wide text-amber-200/70">Career identity</p>
+        <p className="mt-1 text-lg font-extrabold">Profile</p>
+        <p className="mt-1 text-sm text-white/55">Earnings, caps, trophies, awards, and records.</p>
+      </button>
 
       <div className="mt-5 flex flex-col gap-3">
         {[...seasons].reverse().map((season) => (
@@ -148,7 +93,6 @@ function StatTile({ value, label }: { value: string; label: string }) {
 
 function SeasonCard({ season }: { season: SeasonRecord }) {
   const club = getClub(season.clubId);
-  const awards = awardLabels(season);
   const careerStart = useCareerStore((s) => s.careerStart);
   return (
     <article className={DATA_CARD} style={club ? { borderLeft: `4px solid ${club.color}` } : undefined}>
@@ -161,10 +105,7 @@ function SeasonCard({ season }: { season: SeasonRecord }) {
         split={seasonDomesticSplit(season)}
         continental={season.continentalStats ?? []}
       />
-      {(season.trophies ?? []).length > 0 && (
-        <p className="mt-1 text-xs text-emerald-300">{(season.trophies ?? []).join(' · ')}</p>
-      )}
-      {season.international && (
+      {season.international && formatInternationalSeason(season.international) && (
         <div className="mt-2">
           <InternationalSeasonBlock
             title={formatInternationalSeason(season.international)?.name ?? 'International'}
@@ -172,7 +113,6 @@ function SeasonCard({ season }: { season: SeasonRecord }) {
           />
         </div>
       )}
-      {awards.length > 0 && <p className="mt-1 text-xs text-white/50">{awards.join(' · ')}</p>}
     </article>
   );
 }
