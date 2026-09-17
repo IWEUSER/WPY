@@ -13,7 +13,6 @@ import { continentalQualificationForNextSeason } from './europeanQualification';
 import {
   DEFAULT_CONTRACT_YEARS,
   FIRST_CONTRACT_YEARS,
-  loanContractYearsRemaining,
   newContractYears,
   playerMarketValue,
   playerMarketValueFromSeasons,
@@ -1993,9 +1992,7 @@ export const useCareerStore = create<CareerStore>()(
             role,
           );
           const dealYears = takeLoan
-            ? (offer?.contractYears && offer.contractYears > 0
-              ? offer.contractYears
-              : loanContractYearsRemaining(state.seasonNumber, state.contractYearsRemaining, state.age))
+            ? 1
             : (offer?.contractYears && offer.contractYears > 0
               ? offer.contractYears
               : newContractYears(state.age));
@@ -2282,13 +2279,13 @@ function migrateCareerPersist(persisted: unknown): CareerState {
           weeklyWage: state.weeklyWage ?? 0,
           careerEarnings: state.careerEarnings ?? 0,
           contractYears:
-            (state.role === 'loan' && (state.seasonNumber ?? 1) <= 2)
+            state.role === 'loan'
               ? YOUTH_LOAN_YEARS
               : (state.seasonNumber ?? 1) === 1
                 ? FIRST_CONTRACT_YEARS
                 : (state.contractYears ?? DEFAULT_CONTRACT_YEARS),
           contractYearsRemaining:
-            (state.role === 'loan' && (state.seasonNumber ?? 1) <= 2)
+            state.role === 'loan'
               ? YOUTH_LOAN_YEARS
               : (state.seasonNumber ?? 1) === 1
                 ? FIRST_CONTRACT_YEARS
