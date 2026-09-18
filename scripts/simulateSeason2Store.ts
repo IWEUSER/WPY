@@ -320,10 +320,19 @@ if (s2.contractYearsRemaining !== 2) {
 }
 
 store.getState().advance();
+if (store.getState().phase === 'match-result') {
+  console.log('S2 first match sit-out', store.getState().lastMatchResult?.sitOutReason);
+  if (!store.getState().lastMatchResult?.sitOutReason) {
+    console.error('Rising star Season 1 must sit the opening first-team match');
+    process.exitCode = 1;
+  }
+  store.getState().acknowledgeMatchResult();
+  store.getState().advance();
+}
 const live = store.getState().liveMatch;
 const fixture = store.getState().seasonCalendar?.fixtures[live?.fixtureIndex ?? 0];
 console.log('first S2 live match', live, 'fixture', fixture?.kind, fixture?.opponentLabel, 'chances', live?.chancesTotal);
-if (live && live.chancesTotal !== 1) {
+if (!live || live.chancesTotal !== 1) {
   console.error('Rising star Season 1 must get one chance in each game played');
   process.exitCode = 1;
 }
@@ -354,10 +363,10 @@ if (reserveEarnings <= 0 || reserveEarnings !== s1Wages + reserveSponsorship) {
   );
   process.exitCode = 1;
 }
-const expectedCareer = reserveEarnings + after.weeklyWage + after.seasonSponsorship;
+const expectedCareer = reserveEarnings + after.weeklyWage * 2 + after.seasonSponsorship;
 if (after.careerEarnings !== expectedCareer) {
   console.error(
-    `career earnings ${after.careerEarnings} should be reserve ${reserveEarnings} + one week ${after.weeklyWage} + S2 sponsorship ${after.seasonSponsorship}`,
+    `career earnings ${after.careerEarnings} should be reserve ${reserveEarnings} + sit-out week + played week ${after.weeklyWage} + S2 sponsorship ${after.seasonSponsorship}`,
   );
   process.exitCode = 1;
 }

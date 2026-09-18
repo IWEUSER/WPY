@@ -961,7 +961,9 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     if (ratio >= threshold || honoursClear) {
       return {
         headline: 'Promoted to the First Team!',
-        detail: `You hit ${threshold.toFixed(2)} goals/game in the reserves - ${club.name} want you in the first-team squad now as a Rising star.`,
+        detail: honoursClear
+          ? `A league or tournament honour this season counted as meeting ${club.name}'s ${threshold.toFixed(2)} reserve bar (${ratio.toFixed(2)} goals/game). They want you in the first-team squad now as a Rising star.`
+          : `You met the ${threshold.toFixed(2)} goals/game reserve bar (${ratio.toFixed(2)} this season) — ${club.name} want you in the first-team squad now as a Rising star.`,
         immediate: stayOn({
           role: 'first-team',
           contractYearsRemaining: FIRST_CONTRACT_YEARS,

@@ -107,6 +107,7 @@ export function rebuildCurrentSeason(state: CareerState): Partial<CareerState> {
     publicSeason: publicSeason >= 1 ? publicSeason : null,
     calendarWeek: week,
     squadStatus: state.squadStatus,
+    league: club.league,
   });
   const nextIntlStage = selected
     ? internationalStageWhenSelected({

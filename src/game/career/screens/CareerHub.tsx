@@ -15,7 +15,7 @@ import {
   squadRoleRatioGuide,
 } from '../squadStatus';
 import { displaySeasonLabel, displaySeasonNumber } from '../seasonDisplay';
-import { clubEligibleForNationalTeam, callUpRatio, getNation, isSelectedForNationalTeam, SEASON_1_CALL_UP_MIN_WEEK, selectionRatioForNation } from '../international';
+import { clubEligibleForNationalTeam, callUpLeagueRequirement, callUpRatio, getNation, isSelectedForNationalTeam, SEASON_1_CALL_UP_MIN_WEEK, selectionRatioForNation } from '../international';
 import { formatEuros, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
 import type { SeasonStandings } from '../matchEngine';
 import { conferenceTable, ensureInternationalGroup, fixtureTitle, internationalRoundLabel, nextActionableFixture, type SeasonSimState } from '../seasonSim';
@@ -179,7 +179,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
 
       <div className={DATA_CARD} style={{ borderLeft: `4px solid ${kit.primary}` }}>
         <p className="text-xs uppercase tracking-wide text-white/40">
-          {displaySeasonLabel(seasonNumber, { role, careerStart })}
+          {displaySeasonLabel(seasonNumber, { role, careerStart })} · {ROLE_LABEL[role]}
           {` · Week ${week} of ${totalWeeks}`}
         </p>
         <h1 className="font-display text-2xl font-bold">{club.name}</h1>
@@ -346,6 +346,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
             nationId={nationality!}
             nationName={nation.name}
             clubTier={club.tier}
+            league={clubLeague ?? club.league}
             careerRatio={callUpRatio({ season, careerGoals, careerGames })}
             careerToDateRatio={careerGames > 0 ? careerGoals / careerGames : 0}
             lastSeasonRatio={
@@ -387,6 +388,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
                 nationId={nationality!}
                 nationName={nation.name}
                 clubTier={club.tier}
+                league={clubLeague ?? club.league}
                 careerRatio={callUpRatio({ season, careerGoals, careerGames })}
                 careerToDateRatio={careerGames > 0 ? careerGoals / careerGames : 0}
                 lastSeasonRatio={
@@ -543,6 +545,7 @@ function InternationalCard({
   nationId,
   nationName,
   clubTier,
+  league,
   careerRatio,
   careerToDateRatio,
   lastSeasonRatio,
@@ -561,6 +564,7 @@ function InternationalCard({
   nationId: string;
   nationName: string;
   clubTier: 1 | 2 | 3 | 4 | 5;
+  league?: string | null;
   careerRatio: number;
   careerToDateRatio?: number;
   lastSeasonRatio?: number | null;
@@ -577,7 +581,7 @@ function InternationalCard({
   squadStatus?: SquadStatus;
 }) {
   const bar = selectionRatioForNation(nationId);
-  const clubOk = clubEligibleForNationalTeam(clubTier, nationId);
+  const clubOk = clubEligibleForNationalTeam(clubTier, nationId, league);
   const inForm = isSelectedForNationalTeam({
     clubTier,
     careerGoalRatio: careerRatio,
@@ -585,6 +589,7 @@ function InternationalCard({
     publicSeason,
     calendarWeek,
     squadStatus,
+    league,
   });
   const waitingSeason1 = publicSeason === 1 && calendarWeek <= SEASON_1_CALL_UP_MIN_WEEK;
   const tournamentName = sim?.internationalTournament
@@ -593,7 +598,7 @@ function InternationalCard({
   const group = sim?.internationalGroup;
   const pos = group ? groupPosition(group, nationId) : 0;
   const campaignLine = (() => {
-    if (!clubOk) return `Call-ups are for players at a higher club level.`;
+    if (!clubOk) return `Call-ups are from ${callUpLeagueRequirement(nationId)}.`;
     if (waitingSeason1) return `Season 1 call-ups open after week ${SEASON_1_CALL_UP_MIN_WEEK}.`;
     if (!sim || !selected || !tournamentName) return `Not selected for ${nationName} this window.`;
     if (dropped) return `Dropped for this ${tournamentName} match.`;
@@ -621,7 +626,7 @@ function InternationalCard({
 
   const statusLine = (() => {
     if (!clubOk) {
-      return `Need a move to a higher-level club before ${nationName} will consider you.`;
+      return `Need a move to ${callUpLeagueRequirement(nationId)} before ${nationName} will consider you.`;
     }
     if (squadStatus && squadStatus !== 'starter') {
       return `Call-ups are for starters — currently ${SQUAD_STATUS_LABEL[squadStatus]}.`;

@@ -1,9 +1,9 @@
 import { createAvailability } from './availabilityEngine';
 import type { Confederation, InternationalTournamentId } from './data/competitions';
-import { clubsInCountry, type ClubTier } from './data/clubs';
+import { clubsInCountry, SECOND_DIVISIONS, type ClubTier } from './data/clubs';
 import { fifaRank } from './data/fifaRankings';
 import { NATIONS, getNation, type Nation } from './data/nations';
-import { VALUE_FORM_MIN_GAMES } from './playerValue';
+import { TOP_LEAGUES, VALUE_FORM_MIN_GAMES } from './playerValue';
 import type { AvailabilityState, InternationalSeasonRecord, SeasonRecord, SquadStatus } from './types';
 
 export type { Nation };
@@ -93,8 +93,28 @@ export const MAX_CLUB_TIER_FOR_SELECTION: ClubTier = 3;
 export const TOP_NATION_SELECTION_RATIO = 0.66;
 
 /**
+ * Call-ups follow the league, not the club. Second divisions are never
+ * selected. Top-20 nations also need a big-five league — a 0.66 ratio at
+ * Benfica or Ajax is not enough for Spain.
+ */
+export function leagueEligibleForNationalTeam(league: string | null | undefined, nationId?: string | null): boolean {
+  if (!league) return false;
+  if (SECOND_DIVISIONS.has(league)) return false;
+  const rank = nationId ? fifaRank(nationId) : 99;
+  if (rank <= 20) return TOP_LEAGUES.has(league);
+  return true;
+}
+
+export function callUpLeagueRequirement(nationId: string): string {
+  const rank = fifaRank(nationId);
+  if (rank <= 20) return 'the Premier League, La Liga, Serie A, Bundesliga or Ligue 1';
+  return 'a top division';
+}
+
+/**
  * Only the best countries insist on a certain club level. Albania and
  * other mid/low FIFA sides will call a player from any playable club.
+ * @deprecated Use leagueEligibleForNationalTeam — call-ups are by league.
  */
 export function maxClubTierForNation(nationId: string | null | undefined): ClubTier {
   if (!nationId) return MAX_CLUB_TIER_FOR_SELECTION;
@@ -116,7 +136,12 @@ export function selectionRatioForTier(_clubTier: ClubTier): number {
   return TOP_NATION_SELECTION_RATIO;
 }
 
-export function clubEligibleForNationalTeam(clubTier: ClubTier, nationId?: string | null): boolean {
+export function clubEligibleForNationalTeam(
+  clubTier: ClubTier,
+  nationId?: string | null,
+  league?: string | null,
+): boolean {
+  if (league) return leagueEligibleForNationalTeam(league, nationId);
   return clubTier <= maxClubTierForNation(nationId);
 }
 
@@ -126,8 +151,8 @@ export const SEASON_1_CALL_UP_MIN_WEEK = 20;
 /**
  * Call-up uses the ratio passed in (career until this season has a real
  * sample, then this season). Only first-team starters are called.
- * Top nations still need a proper club; weaker nations will pick a
- * lower-league striker. Season 1 waits until after week 20.
+ * League decides eligibility, not the club: second divisions are out,
+ * and top nations need a big-five league. Season 1 waits until after week 20.
  */
 export function isSelectedForNationalTeam(params: {
   clubTier: ClubTier;
@@ -136,13 +161,14 @@ export function isSelectedForNationalTeam(params: {
   publicSeason?: number | null;
   calendarWeek?: number;
   squadStatus?: SquadStatus | null;
+  league?: string | null;
 }): boolean {
   if (!params.nationId) return false;
   if ((params.squadStatus ?? 'starter') !== 'starter') return false;
   if (params.publicSeason === 1 && (params.calendarWeek ?? 0) <= SEASON_1_CALL_UP_MIN_WEEK) {
     return false;
   }
-  if (!clubEligibleForNationalTeam(params.clubTier, params.nationId)) return false;
+  if (!clubEligibleForNationalTeam(params.clubTier, params.nationId, params.league)) return false;
   return params.careerGoalRatio >= selectionRatioForNation(params.nationId);
 }
 

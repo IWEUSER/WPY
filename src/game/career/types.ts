@@ -81,6 +81,8 @@ export interface SeasonRecord {
   role: PlayerRole;
   /** Playing-time status used for this season's league minutes. */
   squadStatus?: SquadStatus;
+  /** Week-20 form review already ran — do not cascade roles later in the season. */
+  squadRoleReviewed?: boolean;
   /** Status locked in at season end for the following campaign. */
   nextSquadStatus?: SquadStatus;
   matches: MatchRecord[];
