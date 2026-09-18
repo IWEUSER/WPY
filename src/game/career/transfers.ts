@@ -9,9 +9,10 @@ import {
   ELITE_TRANSFER_VALUE_FLOOR,
   formAdjustedRatio,
   leagueValueWeight,
+  MIN_ACCEPTED_FEE_RATIO,
   newContractYears,
   playerMarketValueFromSeasons,
-  RESERVE_WEEKLY_WAGE,
+  RESERVE_CONTRACT_YEARS,
   seasonCountsTowardForm,
   tierForMarketValue,
   TOP_LEAGUES,
@@ -47,9 +48,9 @@ export function tierForRatio(ratio: number): ClubTier {
 }
 
 /**
- * Last-season ratio still decides a step-up "bigger club" window. Permanent
- * bids in a sale/loan window follow market value via `transferOfferTier`.
- * Paid elite bids still need the €50m floor.
+ * Last-season or career ratio decides the club band. A high market value
+ * alone cannot pull Elite/Strong bids when the player has not hit that
+ * ratio this season or on aggregate. Paid elite bids still need the €50m floor.
  */
 export function offerTierFromStanding(params: {
   ratio?: number;
@@ -59,8 +60,10 @@ export function offerTierFromStanding(params: {
   blockElite?: boolean;
   fee?: number;
 }): ClubTier {
-  const last = params.ratio ?? params.careerRatio;
-  let tier = tierForRatio(last);
+  const last = params.ratio ?? 0;
+  const career = params.careerRatio ?? 0;
+  const best = Math.max(last, career);
+  let tier = tierForRatio(best);
   if (params.blockElite) tier = Math.max(tier, 2) as ClubTier;
   const paid = (params.fee ?? 1) > 0;
   if (paid && (params.marketValue ?? Number.POSITIVE_INFINITY) < ELITE_TRANSFER_VALUE_FLOOR) {
@@ -305,19 +308,21 @@ function pickSeasonLoanClubs(
   );
 }
 
-/** Who can pay follows listed market value, not last season's goals-per-game. */
+/** Who bids follows last-season or career ratio; value only enforces the elite floor. */
 export function transferOfferTier(params: {
   marketValue: number;
+  lastRatio?: number;
+  careerRatio?: number;
   blockElite?: boolean;
   fee?: number;
 }): ClubTier {
-  let tier = tierForMarketValue(params.marketValue);
-  if (params.blockElite) tier = Math.max(tier, 2) as ClubTier;
-  const paid = (params.fee ?? 1) > 0;
-  if (paid && params.marketValue < ELITE_TRANSFER_VALUE_FLOOR) {
-    tier = Math.max(tier, 2) as ClubTier;
-  }
-  return tier;
+  return offerTierFromStanding({
+    ratio: params.lastRatio,
+    careerRatio: params.careerRatio ?? 0,
+    marketValue: params.marketValue,
+    blockElite: params.blockElite,
+    fee: params.fee,
+  });
 }
 
 export interface LoanPickExtras {
@@ -415,7 +420,7 @@ export function pickLoanClubsForMiss(
 }
 
 function canPayFee(club: Club, fee: number): boolean {
-  return fee <= 0 || clubTransferBudget(club) >= fee;
+  return fee <= 0 || clubTransferBudget(club) >= fee * MIN_ACCEPTED_FEE_RATIO;
 }
 
 /**
@@ -523,22 +528,19 @@ export function pickPermanentClubs(
     return into;
   };
   let pool = affordable(qualityTier);
-  if (pool.length < TRANSFER_OFFER_COUNT) {
-    pool = fillFrom(pool, allIn(qualityTier), TRANSFER_OFFER_COUNT);
-  }
   if (pool.length === 0 && fee > 0) {
     for (let tier = (qualityTier + 1) as ClubTier; tier <= 5; tier = (tier + 1) as ClubTier) {
       pool = affordable(tier);
-      if (pool.length < TRANSFER_OFFER_COUNT) {
-        pool = fillFrom(pool, allIn(tier), TRANSFER_OFFER_COUNT);
-      }
       if (pool.length > 0) break;
     }
+  }
+  if (fee <= 0 && pool.length < TRANSFER_OFFER_COUNT) {
+    pool = fillFrom(pool, allIn(qualityTier), TRANSFER_OFFER_COUNT);
   }
   if (pool.length < TRANSFER_OFFER_COUNT && qualityTier === 1) {
     const seen = new Set(pool.map((club) => club.id));
     for (const club of withoutSaudi(tierPool(1, excludeIds))) {
-      if (seen.has(club.id)) continue;
+      if (seen.has(club.id) || !canPayFee(club, fee)) continue;
       pool.push(club);
       if (pool.length >= TRANSFER_OFFER_COUNT) break;
     }
@@ -547,7 +549,7 @@ export function pickPermanentClubs(
     return attachOneSaudiOffer([], qualityTier, excludeIds, age);
   }
   const extraHome = withoutSaudi(nearbyTierClubs(qualityTier, excludeIds).filter(
-    (c) => clubTransferBudget(c) >= fee,
+    (c) => canPayFee(c, fee),
   ));
   const minHome = country && pool.some((c) => c.country === country) ? 1 : 0;
   return attachOneSaudiOffer(
@@ -574,7 +576,7 @@ export interface ClubOfferTerms {
   contractYears: number;
   /** Current-club re-sign. Stay without this offer ticks the existing deal down one year. */
   renewal?: boolean;
-  /** Playing-time role at the destination. Loans keep current-club wages. */
+  /** Playing-time role at the destination. Loan wages follow that club's starter band. */
   squadStatus?: SquadStatus;
 }
 
@@ -743,19 +745,13 @@ function offerTerms(
 ): ClubOfferTerms[] {
   const years = move === 'loan' ? 1 : newContractYears(age);
   const allowRisingStar = extras?.allowRisingStar !== false;
-  const loanWage =
-    extras?.currentWeeklyWage && extras.currentWeeklyWage > 0
-      ? extras.currentWeeklyWage
-      : extras?.originClub
-        ? weeklyWageForSquadStatus(extras.originClub, value, 'starter', extras.originClub.league)
-        : undefined;
   return clubs.map((club) => {
     if (move === 'loan') {
       return {
         clubId: club.id,
         move,
         fee: 0,
-        weeklyWage: loanWage ?? weeklyWageForClub(club, value),
+        weeklyWage: weeklyWageForSquadStatus(club, value, 'starter', club.league),
         contractYears: 1,
         squadStatus: 'starter' as const,
       };
@@ -850,9 +846,7 @@ function parallelTransfers(
     pendingTransfer: pendingFromOffers(
       includeLoans ? 'loan-or-transfer' : 'end-of-season',
       includeLoans
-        ? fee <= 0
-          ? 'Out of contract: more clubs can bid because there is no fee. Loan wages stay at your current salary.'
-          : 'Loan destinations follow the club you are leaving. Loan wages stay at your current salary. Permanent fees follow your market value.'
+        ? 'Loan destinations follow the club you are leaving. Loan wages follow each destination. Permanent fees follow your market value.'
         : fee <= 0
           ? 'Out of contract: more clubs can bid because there is no fee.'
           : 'These clubs can pay the transfer fee. You can stay where you are.',
@@ -948,7 +942,15 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     withTwilightMlsOffers(offers, age, value, fee, [club.id, parentClubId]);
   const permYears = newContractYears(age);
   const loanYears = 1;
-  const transferTier = transferOfferTier({ marketValue: value, blockElite, fee });
+  const careerRatio = careerGames > 0 ? careerGoals / careerGames : 0;
+  const transferTier = transferOfferTier({
+    marketValue: value,
+    lastRatio: ratio,
+    careerRatio,
+    blockElite,
+    fee,
+  });
+  const canOfferLoans = fee > 0;
   const offerExtras: OfferTermExtras = {
     currentWeeklyWage: params.weeklyWage,
     originClub: club,
@@ -959,9 +961,10 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
   if (role === 'reserve') {
     const threshold = club.reserveGoalRatio;
     if (ratio >= threshold || honoursClear) {
+      const honoursOnly = honoursClear && ratio + 1e-9 < threshold;
       return {
         headline: 'Promoted to the First Team!',
-        detail: honoursClear
+        detail: honoursOnly
           ? `A league or tournament honour this season counted as meeting ${club.name}'s ${threshold.toFixed(2)} reserve bar (${ratio.toFixed(2)} goals/game). They want you in the first-team squad now as a Rising star.`
           : `You met the ${threshold.toFixed(2)} goals/game reserve bar (${ratio.toFixed(2)} this season) — ${club.name} want you in the first-team squad now as a Rising star.`,
         immediate: stayOn({
@@ -982,7 +985,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
           clubId: c.id,
           move: 'loan' as const,
           fee: 0,
-          weeklyWage: RESERVE_WEEKLY_WAGE,
+          weeklyWage: weeklyWageForSquadStatus(c, value, 'starter', c.league),
           contractYears: 1,
           squadStatus: 'starter' as const,
         })),
@@ -1007,9 +1010,10 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
         playerRatio: ratio,
       });
       const recallLabel = SQUAD_STATUS_LABEL[recallStatus].toLowerCase();
+      const honoursOnly = honoursClear && ratio + 1e-9 < returnBar;
       return parallelTransfers(
         `${parentClub.name} want you back — into the first-team squad as a ${recallLabel}.`,
-        honoursClear
+        honoursOnly
           ? `A league or tournament honour this season overrode ${parentClub.name}'s ${returnBar.toFixed(2)} first-team bar.`
           : `${ratio.toFixed(2)} goals/game on loan cleared ${parentClub.name}'s first-team bar of ${returnBar.toFixed(2)}.`,
         stayOn({
@@ -1042,7 +1046,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
 
     const exclude = [club.id, parentClub?.id ?? ''];
     const transfers = pickPermanentClubs(transferTier, fee, exclude, nationality, blockElite, club.league, value, age);
-    const canLoanAgain = loansUsed < MAX_CONSECUTIVE_LOANS;
+    const canLoanAgain = canOfferLoans && loansUsed < MAX_CONSECUTIVE_LOANS;
     const loans = canLoanAgain
       ? loanPick(exclude, club)
       : [];
@@ -1056,9 +1060,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
         detail: `${ratio.toFixed(2)} goals/game was below their ${returnBar.toFixed(2)} first-team bar. Choose another loan or a permanent move.`,
         pendingTransfer: pendingFromOffers(
           'loan-or-transfer',
-          fee <= 0
-            ? 'Out of contract: more clubs can bid for free.'
-            : 'A second consecutive loan is the last one at this club. After that you must move permanently.',
+          'A second consecutive loan is the last one at this club. After that you must move permanently.',
           offers,
           false,
         ),
@@ -1120,7 +1122,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       nationality,
       [club.id],
       transferTier,
-      true,
+      canOfferLoans,
       age,
       blockElite,
       loanYears,
@@ -1136,21 +1138,22 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
 
   if (firstPublic) {
     const transfers = pickPermanentClubs(transferTier, fee, [club.id], nationality, blockElite, currentLeague, value, age);
-    const loans = loanPick([club.id], club);
+    const loans = canOfferLoans ? loanPick([club.id], club) : [];
     const offers = withTwilight([
       ...offerTerms(loans, 'loan', value, 0, age, loanYears, offerExtras),
       ...offerTerms(transfers, 'permanent', value, fee, age, permYears, offerExtras),
     ]);
     const stay = canStayRising ? stayOn({ squadStatus: firstSeasonStayStatus }) : undefined;
+    const honoursOnly = honoursClear && !(season.gamesPlayed > 0 && ratio + 1e-9 >= threshold);
     const headline = ratioMet
-      ? honoursClear
+      ? honoursOnly
         ? 'Honours overrode the finishing ratio'
         : 'Place secured'
       : canStayRising
         ? 'Stay as a Rising star — or move on'
         : `${club.name} will not keep you as a Rising star`;
     const detail = ratioMet
-      ? honoursClear
+      ? honoursOnly
         ? `Top goalscorer or player of the league/tournament this season counted as meeting ${club.name}'s ${threshold.toFixed(2)} bar.`
         : `You maintained ${threshold.toFixed(2)} goals/game at ${club.name}.`
       : canStayRising
@@ -1161,10 +1164,12 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
         headline,
         detail,
         pendingTransfer: pendingFromOffers(
-          'loan-or-transfer',
-          fee <= 0
-            ? 'Out of contract: more clubs can bid because there is no fee. Loan wages stay at your current salary.'
-            : 'Loan destinations follow the club you are leaving. Loan wages stay at your current salary. Permanent fees follow your market value.',
+          loans.length > 0 ? 'loan-or-transfer' : 'end-of-season',
+          loans.length > 0
+            ? 'Loan destinations follow the club you are leaving. Loan wages follow each destination. Permanent fees follow your market value.'
+            : fee <= 0
+              ? 'Out of contract: more clubs can bid because there is no fee.'
+              : 'These clubs can pay the transfer fee. You can stay where you are.',
           offers,
           Boolean(stay),
           stay,
@@ -1179,7 +1184,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
 
   if (!ratioMet && !graceActive) {
     const transfers = pickPermanentClubs(transferTier, fee, [club.id], nationality, blockElite, currentLeague, value, age);
-    const canLoan = loansUsed < MAX_CONSECUTIVE_LOANS;
+    const canLoan = canOfferLoans && loansUsed < MAX_CONSECUTIVE_LOANS;
     const loans = canLoan ? loanPick([club.id], club) : [];
     const offers = withTwilight([
       ...offerTerms(loans, 'loan', value, 0, age, loanYears, offerExtras),
@@ -1191,9 +1196,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
         detail: `Your ratio slipped to ${ratio.toFixed(2)} goals/game, below the ${threshold.toFixed(2)} they expect. A loan keeps ${club.name} as your parent club so you can win your place back.`,
         pendingTransfer: pendingFromOffers(
           'loan-or-transfer',
-          fee <= 0
-            ? 'Out of contract: more clubs can bid because there is no fee.'
-            : 'Loan destinations follow the club you are leaving. Permanent fees follow your market value.',
+          'Loan destinations follow the club you are leaving. Permanent fees follow your market value.',
           offers,
           false,
         ),
@@ -1249,7 +1252,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       nationality,
       [club.id],
       transferTier,
-      graceActive && !ratioMet,
+      canOfferLoans && graceActive && !ratioMet,
       age,
       blockElite,
       loanYears,
@@ -1410,9 +1413,6 @@ export function sellingClubAcceptsOffer(params: {
   if (params.offer.fee <= 0 || params.contractYearsLeft <= 1 || params.role === 'reserve') {
     return { accepted: true, detail: '' };
   }
-  if (params.remainingPermanentOffers === 0) {
-    return { accepted: true, detail: '' };
-  }
 
   const feeLine = `€${Math.round(params.offer.fee / 1_000_000)}m bid`;
 
@@ -1420,35 +1420,15 @@ export function sellingClubAcceptsOffer(params: {
     return { accepted: true, detail: '' };
   }
 
-  const destBudget = dest ? clubTransferBudget(dest) : 0;
   const asking = transferFeeFromValue(params.playerValue, params.contractYearsLeft);
-  const listed = destBudget > 0 ? Math.min(asking, destBudget) : asking;
-  const meetsListed = params.offer.fee + 1e-6 >= listed * 0.97;
-  const maxedBudget = destBudget > 0 && params.offer.fee + 1e-6 >= destBudget * 0.97;
-  if (meetsListed || maxedBudget) {
+  const meetsAsking = asking <= 0 || params.offer.fee + 1e-6 >= asking * MIN_ACCEPTED_FEE_RATIO;
+  if (meetsAsking) {
     return { accepted: true, detail: '' };
   }
-
-  const steppingUp = Boolean(dest && current && dest.tier < current.tier);
-  const peerMove = Boolean(dest && current && dest.tier <= current.tier);
-
-  if (params.squadStatus === 'reserve' || params.squadStatus === 'rising-star') {
-    if (steppingUp && params.contractYearsLeft >= 3) {
-      return {
-        accepted: false,
-        detail: `You agreed terms with ${destName}. ${clubName} rejected the ${feeLine} — they will not sell a ${params.squadStatus === 'rising-star' ? 'rising star' : 'reserve'} player up a level on that fee.`,
-      };
-    }
-    return { accepted: true, detail: '' };
-  }
-
-  if (peerMove) {
-    return {
-      accepted: false,
-      detail: `You agreed terms with ${destName}. ${clubName} rejected the ${feeLine} — they will not sell a starter to ${destName} on that fee.`,
-    };
-  }
-  return { accepted: true, detail: '' };
+  return {
+    accepted: false,
+    detail: `You agreed terms with ${destName}. ${clubName} rejected the ${feeLine} — you are too expensive for that bid.`,
+  };
 }
 
 /** After both trial bands fail, clubs at the best-ratio band offer a reserve deal. */
@@ -1471,13 +1451,13 @@ export function trialFailTransferPending(params: {
   const band = TIER_LABEL[tier].toLowerCase();
   return pendingFromOffers(
     'trial-offers',
-    `Your best trial ratio was ${params.bestRatio.toFixed(2)}. ${band} clubs want to sign you on a 2-year reserve deal.`,
+    `Your best trial ratio was ${params.bestRatio.toFixed(2)}. ${band} clubs want to sign you on a ${RESERVE_CONTRACT_YEARS}-year reserve deal.`,
     clubs.map((club) => ({
       clubId: club.id,
       move: 'permanent' as const,
       fee: 0,
-      weeklyWage: RESERVE_WEEKLY_WAGE,
-      contractYears: FIRST_CONTRACT_YEARS,
+      weeklyWage: weeklyWageForSquadStatus(club, 0, 'reserve'),
+      contractYears: RESERVE_CONTRACT_YEARS,
     })),
     false,
   );
@@ -1508,7 +1488,7 @@ export function forcedLoanPending(params: {
       clubId: c.id,
       move: 'loan' as const,
       fee: 0,
-      weeklyWage: RESERVE_WEEKLY_WAGE,
+      weeklyWage: weeklyWageForSquadStatus(c, 0, 'starter', c.league),
       contractYears: 1,
       squadStatus: 'starter' as const,
     })),

@@ -644,7 +644,7 @@ function InternationalCard({
     return `${careerLine} · Last season ${lastSeasonRatio.toFixed(2)}`;
   })();
 
-  const showTable = includeTable && Boolean(group && sim?.internationalStage && sim.internationalStage !== 'not-selected');
+  const showTable = includeTable && Boolean(group);
 
   if (tableOnly) {
     if (!showTable || !group) return null;

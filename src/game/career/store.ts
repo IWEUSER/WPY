@@ -17,9 +17,8 @@ import {
   playerMarketValue,
   playerMarketValueFromSeasons,
   RESERVE_CONTRACT_YEARS,
-  RESERVE_WEEKLY_WAGE,
   seasonalSponsorship,
-  weeklyWageForClub,
+  weeklyWageForSquadStatus,
   YOUTH_LOAN_YEARS,
 } from './playerValue';
 import { evaluatePlayerOfTheYear, evaluateTopGoalscorer } from './domesticAwards';
@@ -170,8 +169,14 @@ function withInternationalForm(
     squadStatus: ctx?.squadStatus ?? 'starter',
     league: club.league,
   });
+  const keepQualifyingCampaign =
+    sim.internationalStage === 'qualifying' &&
+    ((sim.qualifierCarryPlayed ?? 0) > 0 ||
+      (sim.internationalGroup?.kind === 'qualifying' &&
+        sim.internationalGroup.rows.some((row) => row.played > 0)));
   if (selected === sim.internationalSelected) return sim;
   if (!selected) {
+    if (keepQualifyingCampaign) return sim;
     return {
       ...sim,
       internationalSelected: false,
@@ -778,12 +783,15 @@ function beginSignedCareer(
   const seasonNumber = 1;
   const age = role === 'first-team' ? STARTING_AGE + 1 : STARTING_AGE;
   const dealYears = role === 'reserve' ? RESERVE_CONTRACT_YEARS : FIRST_CONTRACT_YEARS;
-  const weeklyWage =
-    role === 'reserve'
-      ? RESERVE_WEEKLY_WAGE
-      : club
-        ? weeklyWageForClub(club, playerMarketValue({ age, ratio: 0.3, careerGoals: 0, club }))
-        : 3000;
+  const weeklyWage = club
+    ? weeklyWageForSquadStatus(
+        club,
+        playerMarketValue({ age, ratio: 0.3, careerGoals: 0, club }),
+        role === 'reserve' ? 'reserve' : openingSquadStatus(role),
+      )
+    : role === 'reserve'
+      ? 1000
+      : 3000;
   return {
     clubId,
     parentClubId: clubId,
