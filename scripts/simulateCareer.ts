@@ -91,9 +91,22 @@ import {
   internationalAwardWinChance,
 } from '../src/game/career/internationalAwards';
 import { formatInternationalSeason, awardLabels, careerAwardCounts, careerTrophyCounts, formatGamesGoals, seasonLeagueLabel } from '../src/game/career/honoursDisplay';
+import { formatLiveBuildStamp, LIVE_SHIP_LABEL, liveMenuStamp } from '../src/game/branding';
 import type { CareerState, SeasonRecord } from '../src/game/career/types';
 
 const N = 50000;
+
+{
+  const stamped = liveMenuStamp('2026-09-18T18:30:00.000Z');
+  if (formatLiveBuildStamp('2026-09-18T18:30:00.000Z') !== '18 Sep 18:30 UTC') {
+    console.error('live build stamp must print a UTC clock');
+    process.exitCode = 1;
+  }
+  if (stamped !== `${LIVE_SHIP_LABEL} · 18 Sep 18:30 UTC` || !stamped.includes('Youth')) {
+    console.error('the first menu stamp must name the ship and the build clock');
+    process.exitCode = 1;
+  }
+}
 
 function average(values: number[]): number {
   return values.reduce((a, b) => a + b, 0) / values.length;
