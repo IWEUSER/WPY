@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { GAME_LOGO_SRC, GAME_TAGLINE, GAME_TITLE } from '../../branding';
+import { GAME_LOGO_SRC, GAME_TAGLINE, GAME_TITLE, liveMenuStamp } from '../../branding';
 import { getClub } from '../data/clubs';
 import { displaySeasonLabel } from '../seasonDisplay';
 import { useCareerStore } from '../store';
@@ -52,7 +52,7 @@ export default function HomeScreen({ onPractice }: { onPractice: () => void }) {
         />
         <h1 className="font-brand mt-5 text-4xl leading-none text-white sm:text-5xl">{GAME_TITLE}</h1>
         <p className="mt-3 text-sm text-white/55">{GAME_TAGLINE}</p>
-        <p className="mt-2 text-[11px] uppercase tracking-wide text-emerald-300/80">Identity · Records · 17 Sep</p>
+        <p className="mt-2 text-[11px] uppercase tracking-wide text-emerald-300/80">{liveMenuStamp()}</p>
       </div>
 
       <div className="flex w-full max-w-xs flex-col gap-3">
