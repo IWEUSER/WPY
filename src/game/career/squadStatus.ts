@@ -1,6 +1,7 @@
 import type { CalendarFixture, SeasonCalendar } from './calendar';
-import { getClub, type Club } from './data/clubs';
+import { getClub, SECOND_DIVISIONS, type Club } from './data/clubs';
 import { nationStrength } from './data/fifaRankings';
+import { leagueValueWeight } from './playerValue';
 import type { PlayerRole, SeasonRecord, SquadStatus } from './types';
 
 export const SQUAD_STATUS_LABEL: Record<SquadStatus, string> = {
@@ -162,10 +163,13 @@ export function nextSquadStatusAfterSeason(params: {
   gamesPlayed: number;
   bar: number;
   honoursClear?: boolean;
+  /** Rising star exists only through public Season 2. After that it becomes starter or reserve. */
+  allowRisingStar?: boolean;
 }): SquadStatus {
   if (params.role === 'reserve') return 'rising-star';
   const { current, ratio, gamesPlayed, bar } = params;
   const honours = Boolean(params.honoursClear);
+  const allowRisingStar = params.allowRisingStar !== false;
   const badlyShort = !honours && (ratio < bar - 0.1 || gamesPlayed < 10);
   const hit = honours || (ratio >= bar && gamesPlayed >= 12);
   const strongHit = honours || (ratio >= bar + 0.02 && gamesPlayed >= 18);
@@ -173,11 +177,14 @@ export function nextSquadStatusAfterSeason(params: {
   if (current === 'starter') {
     if (honours || (ratio >= bar && gamesPlayed >= 20)) return 'starter';
     if (badlyShort) return 'impact';
-    return 'rising-star';
+    return allowRisingStar ? 'rising-star' : 'reserve';
   }
   if (current === 'rising-star') {
     if (!honours && ratio >= bar && gamesPlayed >= 18) return 'starter';
-    if (honours || (ratio >= RISING_STAR_MIN_RATIO && gamesPlayed >= 8)) return 'rising-star';
+    if (honours || (ratio >= RISING_STAR_MIN_RATIO && gamesPlayed >= 8)) {
+      if (allowRisingStar) return 'rising-star';
+      return honours || (ratio >= bar && gamesPlayed >= 12) ? 'starter' : 'reserve';
+    }
     return 'reserve';
   }
   if (current === 'reserve') {
@@ -210,6 +217,21 @@ export function squadStatusAfterFormReview(params: {
   if (params.current === 'starter' && sample && params.ratio < params.bar) return 'reserve';
   if (params.current === 'reserve' && sample && params.ratio < params.bar - 0.1) return 'impact';
   return params.current;
+}
+
+/**
+ * A parent-club recall is only a reserve role when the loan was a step down
+ * (second division, or a weaker-weighted league). Same-division loans that
+ * hit the parent starter bar return as a starter.
+ */
+export function isLowerDivisionLoan(
+  fromClub: Club | null | undefined,
+  toClub: Club | null | undefined,
+): boolean {
+  if (!fromClub || !toClub) return false;
+  if (fromClub.league === toClub.league) return false;
+  if (SECOND_DIVISIONS.has(fromClub.league) && !SECOND_DIVISIONS.has(toClub.league)) return true;
+  return leagueValueWeight(fromClub.league) + 1e-9 < leagueValueWeight(toClub.league);
 }
 
 /**
@@ -257,14 +279,23 @@ export function squadStatusOnArrival(params: {
   move: 'loan' | 'permanent' | 'promotion' | 'stay' | 'recall';
   nextIfStay: SquadStatus;
   playerRatio?: number;
+  allowRisingStar?: boolean;
 }): SquadStatus {
   if (params.move === 'stay') return params.nextIfStay;
-  if (params.move === 'recall') return 'reserve';
+  if (params.move === 'recall') {
+    if (isLowerDivisionLoan(params.fromClub, params.toClub)) return 'reserve';
+    if (params.toClub && params.playerRatio != null) {
+      if (params.playerRatio + 1e-9 >= params.toClub.firstTeamGoalRatio) return 'starter';
+      return 'reserve';
+    }
+    return 'starter';
+  }
   if (params.move === 'loan') return 'starter';
   if (params.move === 'promotion') return 'rising-star';
+  const allowRisingStar = params.allowRisingStar !== false;
   if (params.toClub && params.playerRatio != null) {
     if (params.playerRatio + 1e-9 >= params.toClub.firstTeamGoalRatio) return 'starter';
-    if (params.playerRatio >= RISING_STAR_MIN_RATIO) return 'rising-star';
+    if (allowRisingStar && params.playerRatio >= RISING_STAR_MIN_RATIO) return 'rising-star';
     return 'reserve';
   }
   if (!params.fromClub || !params.toClub) return 'starter';

@@ -25,9 +25,11 @@ export function trophyLabels(
 
 export function awardLabels(season: SeasonRecord): string[] {
   const labels: string[] = [];
-  if (season.topGoalscorer) labels.push('Top goalscorer');
-  if (season.playerOfTheYear) labels.push('Player of the Year');
-  if (season.clubPlayerOfTheTournament) labels.push('Club Player of the Tournament');
+  if (season.topGoalscorer) labels.push('League top goalscorer');
+  if (season.playerOfTheYear) labels.push('League player of the year');
+  if (season.clubPlayerOfTheTournament) {
+    labels.push(`${clubTournamentAwardName(season)} Player of the Tournament`);
+  }
   const intl = season.international;
   if (intl?.playerOfTheTournament && intl.tournament) {
     const name = INTERNATIONAL_TOURNAMENTS[intl.tournament]?.name ?? intl.tournament;
@@ -38,6 +40,20 @@ export function awardLabels(season: SeasonRecord): string[] {
     labels.push(`${name} top goalscorer`);
   }
   return labels;
+}
+
+function clubTournamentAwardName(season: SeasonRecord): string {
+  const id = season.continentalChampion;
+  if (id && CONTINENTAL_CUPS[id]) return CONTINENTAL_CUPS[id].name;
+  for (const cup of Object.values(CONTINENTAL_CUPS)) {
+    if (season.trophies?.includes(cup.name)) return cup.name;
+  }
+  const rows = (season.continentalStats ?? []).filter((row) => row.cup !== 'super-cup');
+  const only = rows.length === 1 ? rows[0] : undefined;
+  if (only && only.cup !== 'super-cup' && CONTINENTAL_CUPS[only.cup as keyof typeof CONTINENTAL_CUPS]) {
+    return CONTINENTAL_CUPS[only.cup as keyof typeof CONTINENTAL_CUPS].name;
+  }
+  return 'Continental';
 }
 
 export interface CountedHonour {

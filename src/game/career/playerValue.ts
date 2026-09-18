@@ -1,6 +1,6 @@
 import { clampStrength, getClub, SECOND_DIVISIONS, type Club, type ClubTier } from './data/clubs';
 import { countsTowardCareerRecord, displaySeasonNumber } from './seasonDisplay';
-import type { PlayerRole, SeasonRecord } from './types';
+import type { PlayerRole, SeasonRecord, SquadStatus } from './types';
 
 /** 18 at Barcelona with a 0.9 ratio is the €200m anchor. */
 export const BARCELONA_ANCHOR_VALUE = 200_000_000;
@@ -57,6 +57,8 @@ export const FIRST_CONTRACT_YEARS = 2;
 export const RESERVE_CONTRACT_YEARS = FIRST_CONTRACT_YEARS;
 /** Academy / reserve wage — the same on every path. */
 export const RESERVE_WEEKLY_WAGE = 1000;
+/** Rising-star deals pay a fraction of the destination's starter band. */
+export const RISING_STAR_WAGE_FACTOR = 0.45;
 /** Every loan is one season — never a multi-year loan deal. */
 export const YOUTH_LOAN_YEARS = 1;
 /** Public Season 1 stays at the youth value until week 21, on every career path. */
@@ -446,6 +448,21 @@ function valueFromScale(
  * Weekly wage. Premier League clubs pay a high English band no matter the
  * club's size. Saudi clubs pay like a top European side; MLS stays below that.
  */
+/** Starter, Rising star, and reserve wages so transfer offers are not all the same band. */
+export function weeklyWageForSquadStatus(
+  club: Club,
+  marketValue: number,
+  status: SquadStatus,
+  playingLeague?: string | null,
+): number {
+  if (status === 'reserve' || status === 'impact') return RESERVE_WEEKLY_WAGE;
+  const full = weeklyWageForClub(club, marketValue, playingLeague);
+  if (status === 'rising-star') {
+    return Math.max(RESERVE_WEEKLY_WAGE, Math.round((full * RISING_STAR_WAGE_FACTOR) / 500) * 500);
+  }
+  return full;
+}
+
 export function weeklyWageForClub(club: Club, marketValue: number, playingLeague?: string | null): number {
   const league = playingLeague ?? club.league;
   const t = (clampStrength(club.strength) - 52) / 42;

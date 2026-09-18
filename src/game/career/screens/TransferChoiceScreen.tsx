@@ -92,6 +92,7 @@ export default function TransferChoiceScreen() {
     : undefined;
   const likelyFor = (offer: ClubOfferTerms): SquadStatus => {
     if (offer.renewal || offer.clubId === clubId) return nextIfStay;
+    if (offer.squadStatus) return offer.squadStatus;
     return squadStatusOnArrival({
       fromClub,
       toClub: getClub(offer.clubId),
@@ -139,7 +140,12 @@ export default function TransferChoiceScreen() {
                 <p className="mt-1 text-xs text-white/70">
                   {renewalOffer && stayYears != null
                     ? `Keep the current deal · ${stayYears} year${stayYears === 1 ? '' : 's'} left`
-                    : 'Stay at this club'}
+                    : pending.stay?.clubId && pending.stay.clubId !== clubId
+                      ? 'Return to parent club'
+                      : 'Stay at this club'}
+                  {pending.stay?.weeklyWage != null && pending.stay.weeklyWage > 0
+                    ? ` · ${formatWeeklyWage(pending.stay.weeklyWage)}`
+                    : ''}
                   {` · ${SQUAD_STATUS_LABEL[nextIfStay]}`}
                 </p>
               </div>

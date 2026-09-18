@@ -112,6 +112,8 @@ export interface SeasonRecord {
   /** Club continental Player of the Tournament (must win the cup at ≥ 0.7). */
   clubPlayerOfTheTournament?: boolean;
   clubPlayerOfTheTournamentReason?: string | null;
+  /** Continental cup won this season, when the club lifted it. */
+  continentalChampion?: ContinentalCupId | null;
   /** Weekly wage × 52 for this season. */
   earnings?: number;
   /** One-off seasonal boot / shirt deal. */
