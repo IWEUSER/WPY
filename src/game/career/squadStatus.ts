@@ -1,6 +1,7 @@
 import type { CalendarFixture, SeasonCalendar } from './calendar';
-import { getClub, type Club } from './data/clubs';
+import { getClub, SECOND_DIVISIONS, type Club } from './data/clubs';
 import { nationStrength } from './data/fifaRankings';
+import { leagueValueWeight } from './playerValue';
 import type { PlayerRole, SeasonRecord, SquadStatus } from './types';
 
 export const SQUAD_STATUS_LABEL: Record<SquadStatus, string> = {
@@ -165,10 +166,13 @@ export function nextSquadStatusAfterSeason(params: {
   gamesPlayed: number;
   bar: number;
   honoursClear?: boolean;
+  /** Rising star exists only through public Season 2. After that it becomes starter or reserve. */
+  allowRisingStar?: boolean;
 }): SquadStatus {
   if (params.role === 'reserve') return 'rising-star';
   const { current, ratio, gamesPlayed, bar } = params;
   const honours = Boolean(params.honoursClear);
+  const allowRisingStar = params.allowRisingStar !== false;
   const badlyShort = !honours && (ratio < bar - 0.1 || gamesPlayed < 10);
   const hit = honours || (ratio >= bar && gamesPlayed >= 12);
   const strongHit = honours || (ratio >= bar + 0.02 && gamesPlayed >= 18);
@@ -176,11 +180,14 @@ export function nextSquadStatusAfterSeason(params: {
   if (current === 'starter') {
     if (honours || (ratio >= bar && gamesPlayed >= 20)) return 'starter';
     if (badlyShort) return 'impact';
-    return 'rising-star';
+    return allowRisingStar ? 'rising-star' : 'reserve';
   }
   if (current === 'rising-star') {
     if (!honours && ratio >= bar && gamesPlayed >= 18) return 'starter';
-    if (honours || (ratio >= RISING_STAR_MIN_RATIO && gamesPlayed >= 8)) return 'rising-star';
+    if (honours || (ratio >= RISING_STAR_MIN_RATIO && gamesPlayed >= 8)) {
+      if (allowRisingStar) return 'rising-star';
+      return honours || (ratio >= bar && gamesPlayed >= 12) ? 'starter' : 'reserve';
+    }
     return 'reserve';
   }
   if (current === 'reserve') {
@@ -217,20 +224,84 @@ export function squadStatusAfterFormReview(params: {
 }
 
 /**
- * Playing time after a move. A step up (lower tier number) starts as reserve.
- * A loan is first-team football. Same or weaker club: starter.
- * Academy promotion is Rising star.
+ * A parent-club recall is only a reserve role when the loan was a step down
+ * (second division, or a weaker-weighted league). Same-division loans that
+ * hit the parent starter bar return as a starter.
  */
+export function isLowerDivisionLoan(
+  fromClub: Club | null | undefined,
+  toClub: Club | null | undefined,
+): boolean {
+  if (!fromClub || !toClub) return false;
+  if (fromClub.league === toClub.league) return false;
+  if (SECOND_DIVISIONS.has(fromClub.league) && !SECOND_DIVISIONS.has(toClub.league)) return true;
+  return leagueValueWeight(fromClub.league) + 1e-9 < leagueValueWeight(toClub.league);
+}
+
+/**
+ * Playing time after a move. Loans are first-team football.
+ * Permanent moves use last-season ratio against the destination bar:
+ * starter if you meet it, Rising star if you hold 0.33, otherwise reserve.
+ * Without a ratio, a step up still starts as reserve.
+ */
+export function squadRoleRatioGuide(status: SquadStatus, clubBar: number): {
+  keepLabel: string;
+  keepRatio: number;
+  nextLabel: string | null;
+  nextRatio: number | null;
+} {
+  if (status === 'starter') {
+    return { keepLabel: 'Starter', keepRatio: clubBar, nextLabel: null, nextRatio: null };
+  }
+  if (status === 'rising-star') {
+    return {
+      keepLabel: 'Rising star',
+      keepRatio: RISING_STAR_MIN_RATIO,
+      nextLabel: 'Starter',
+      nextRatio: clubBar,
+    };
+  }
+  if (status === 'reserve') {
+    return {
+      keepLabel: 'Reserve',
+      keepRatio: Math.max(0, clubBar - 0.1),
+      nextLabel: 'Starter',
+      nextRatio: clubBar,
+    };
+  }
+  return {
+    keepLabel: 'Impact',
+    keepRatio: 0,
+    nextLabel: 'Reserve',
+    nextRatio: Math.max(0, clubBar - 0.1),
+  };
+}
+
 export function squadStatusOnArrival(params: {
   fromClub: Club | null | undefined;
   toClub: Club | null | undefined;
   move: 'loan' | 'permanent' | 'promotion' | 'stay' | 'recall';
   nextIfStay: SquadStatus;
+  playerRatio?: number;
+  allowRisingStar?: boolean;
 }): SquadStatus {
   if (params.move === 'stay') return params.nextIfStay;
-  if (params.move === 'recall') return 'reserve';
+  if (params.move === 'recall') {
+    if (isLowerDivisionLoan(params.fromClub, params.toClub)) return 'reserve';
+    if (params.toClub && params.playerRatio != null) {
+      if (params.playerRatio + 1e-9 >= params.toClub.firstTeamGoalRatio) return 'starter';
+      return 'reserve';
+    }
+    return 'starter';
+  }
   if (params.move === 'loan') return 'starter';
   if (params.move === 'promotion') return 'rising-star';
+  const allowRisingStar = params.allowRisingStar !== false;
+  if (params.toClub && params.playerRatio != null) {
+    if (params.playerRatio + 1e-9 >= params.toClub.firstTeamGoalRatio) return 'starter';
+    if (allowRisingStar && params.playerRatio >= RISING_STAR_MIN_RATIO) return 'rising-star';
+    return 'reserve';
+  }
   if (!params.fromClub || !params.toClub) return 'starter';
   if (params.toClub.tier < params.fromClub.tier) return 'reserve';
   return 'starter';

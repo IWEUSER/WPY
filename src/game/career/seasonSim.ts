@@ -1536,7 +1536,12 @@ export function resolveFixture(
       outcome: 'draw',
     };
   } else if (isInternational) {
-    result = simulateClubMatch({ clubStrength: us, opponentStrength: them, isHome }, rng, playerGoals, chances);
+    result = simulateClubMatch(
+      { clubStrength: us, opponentStrength: them, isHome, knockout: isOneOffKnockout(fixture) },
+      rng,
+      playerGoals,
+      chances,
+    );
   } else {
     result = simulateClubMatch(
       {

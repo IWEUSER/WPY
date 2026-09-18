@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "simulate": "tsx scripts/simulateShots.ts",
     "simulate:career": "tsx scripts/simulateCareer.ts",
-    "simulate:season2": "tsx scripts/simulateSeason2Store.ts"
+    "simulate:season2": "tsx scripts/simulateSeason2Store.ts",
+    "test:legacy": "tsx scripts/testLegacyRecords.ts"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.0",

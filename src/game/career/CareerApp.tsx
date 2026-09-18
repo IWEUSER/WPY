@@ -5,8 +5,11 @@ import ClubChoiceScreen from './screens/ClubChoiceScreen';
 import TrialScreen from './screens/TrialScreen';
 import ClubOfferScreen from './screens/ClubOfferScreen';
 import NationalityScreen from './screens/NationalityScreen';
+import PlayerNameScreen from './screens/PlayerNameScreen';
 import CareerHub from './screens/CareerHub';
 import CareerRecordScreen from './screens/CareerRecordScreen';
+import ProfileScreen from './screens/ProfileScreen';
+import LegacyScreen from './screens/LegacyScreen';
 import CareerEndScreen from './screens/CareerEndScreen';
 import MatchScreen from './screens/MatchScreen';
 import SeasonSummaryScreen from './screens/SeasonSummaryScreen';
@@ -40,6 +43,7 @@ export default function CareerApp() {
   }, []);
   const phase = useCareerStore((s) => s.phase);
   const nationality = useCareerStore((s) => s.nationality);
+  const playerName = useCareerStore((s) => s.playerName);
   const openingCampaign = useCareerStore((s) => s.openingCampaign);
   const seasonSim = useCareerStore((s) => s.seasonSim);
   const lastMatchResult = useCareerStore((s) => s.lastMatchResult);
@@ -73,8 +77,12 @@ export default function CareerApp() {
 
   // Existing saves created before nationality-first still have a club
   // but no country - ask before they can keep playing.
-  if (!nationality && phase !== 'menu' && phase !== 'trial' && phase !== 'club-offer' && phase !== 'nationality-choice' && phase !== 'club-choice') {
+  if (!nationality && phase !== 'menu' && phase !== 'trial' && phase !== 'club-offer' && phase !== 'nationality-choice' && phase !== 'club-choice' && phase !== 'player-name') {
     return <NationalityScreen />;
+  }
+
+  if (nationality && !playerName && phase !== 'menu' && phase !== 'nationality-choice' && phase !== 'player-name' && phase !== 'club-choice') {
+    return <PlayerNameScreen />;
   }
 
   switch (phase) {
@@ -88,6 +96,8 @@ export default function CareerApp() {
       return <ClubChoiceScreen />;
     case 'nationality-choice':
       return <NationalityScreen />;
+    case 'player-name':
+      return <PlayerNameScreen />;
     case 'match':
       if (!liveMatch && !openingCampaign) {
         return <CareerHub onOpenMenu={returnToMenu} />;
@@ -116,6 +126,10 @@ export default function CareerApp() {
       );
     case 'career':
       return <CareerRecordScreen />;
+    case 'profile':
+      return <ProfileScreen />;
+    case 'legacy':
+      return <LegacyScreen />;
     case 'career-end':
       return <CareerEndScreen />;
     default:

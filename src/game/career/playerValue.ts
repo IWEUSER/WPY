@@ -1,6 +1,6 @@
 import { clampStrength, getClub, SECOND_DIVISIONS, type Club, type ClubTier } from './data/clubs';
 import { countsTowardCareerRecord, displaySeasonNumber } from './seasonDisplay';
-import type { PlayerRole, SeasonRecord } from './types';
+import type { PlayerRole, SeasonRecord, SquadStatus } from './types';
 
 /** 18 at Barcelona with a 0.9 ratio is the €200m anchor. */
 export const BARCELONA_ANCHOR_VALUE = 200_000_000;
@@ -57,7 +57,9 @@ export const FIRST_CONTRACT_YEARS = 2;
 export const RESERVE_CONTRACT_YEARS = FIRST_CONTRACT_YEARS;
 /** Academy / reserve wage — the same on every path. */
 export const RESERVE_WEEKLY_WAGE = 1000;
-/** Reserve-year and public-season-1 loans stay one year. */
+/** Rising-star deals pay a fraction of the destination's starter band. */
+export const RISING_STAR_WAGE_FACTOR = 0.45;
+/** Every loan is one season — never a multi-year loan deal. */
 export const YOUTH_LOAN_YEARS = 1;
 /** Public Season 1 stays at the youth value until week 21, on every career path. */
 export const SEASON_1_VALUE_LOCK_WEEKS = 20;
@@ -78,21 +80,6 @@ export function maxContractYearsForAge(age: number): number {
 
 export function newContractYears(age: number): number {
   return maxContractYearsForAge(age);
-}
-
-/** Early-career and free transfers mix 1–3 year deals across the offer list. */
-export function mixedPermanentContractYears(
-  age: number,
-  index: number,
-  fee = 1,
-  fallback?: number,
-): number {
-  const cap = maxContractYearsForAge(age);
-  if (fee <= 0 || age <= 21) {
-    const options = [1, 2, 3].filter((years) => years <= cap);
-    return options[index % Math.max(1, options.length)] ?? 1;
-  }
-  return Math.min(fallback ?? newContractYears(age), cap);
 }
 
 /** Full fee on a 5-year deal; expired / final year is a free transfer. */
@@ -164,14 +151,13 @@ export function nextContractYearsRemaining(yearsRemaining: number, age: number):
   return yearsRemaining <= 1 ? newContractYears(age) : yearsRemaining - 1;
 }
 
-/** Reserve year and the first public season on loan are always one-year deals. */
+/** Loans are always one season, at every age and career stage. */
 export function loanContractYearsRemaining(
-  seasonNumber: number,
-  yearsRemaining: number,
-  age: number,
+  _seasonNumber?: number,
+  _yearsRemaining?: number,
+  _age?: number,
 ): number {
-  if (seasonNumber <= 2) return YOUTH_LOAN_YEARS;
-  return nextContractYearsRemaining(yearsRemaining, age);
+  return YOUTH_LOAN_YEARS;
 }
 
 export function isSeason1ValueLocked(
@@ -447,7 +433,14 @@ function valueFromScale(
     careerGames != null && careerGames >= 50
       ? Math.min(1.2, 0.9 + (careerGames - 50) / 280)
       : 1;
-  const raw = BARCELONA_ANCHOR_VALUE * scale * ratioScale * ageValueFactor(age) * volume * proven;
+  /** Appearances-only path: the 200m Barcelona 0.9 anchor stays on playerMarketValue(). */
+  const sampleVolume = careerGames != null
+    ? Math.min(1.12, Math.max(0.12, 0.34 + volumeGoals / 100))
+    : volume;
+  const experience = careerGames != null
+    ? Math.min(1, 0.22 + careerGames / 95)
+    : 1;
+  const raw = BARCELONA_ANCHOR_VALUE * scale * ratioScale * ageValueFactor(age) * sampleVolume * proven * experience;
   return Math.max(100_000, Math.round(raw / 100_000) * 100_000);
 }
 
@@ -455,6 +448,21 @@ function valueFromScale(
  * Weekly wage. Premier League clubs pay a high English band no matter the
  * club's size. Saudi clubs pay like a top European side; MLS stays below that.
  */
+/** Starter, Rising star, and reserve wages so transfer offers are not all the same band. */
+export function weeklyWageForSquadStatus(
+  club: Club,
+  marketValue: number,
+  status: SquadStatus,
+  playingLeague?: string | null,
+): number {
+  if (status === 'reserve' || status === 'impact') return RESERVE_WEEKLY_WAGE;
+  const full = weeklyWageForClub(club, marketValue, playingLeague);
+  if (status === 'rising-star') {
+    return Math.max(RESERVE_WEEKLY_WAGE, Math.round((full * RISING_STAR_WAGE_FACTOR) / 500) * 500);
+  }
+  return full;
+}
+
 export function weeklyWageForClub(club: Club, marketValue: number, playingLeague?: string | null): number {
   const league = playingLeague ?? club.league;
   const t = (clampStrength(club.strength) - 52) / 42;

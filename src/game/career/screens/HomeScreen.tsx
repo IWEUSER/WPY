@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { GAME_LOGO_SRC, GAME_TAGLINE, GAME_TITLE } from '../../branding';
 import { getClub } from '../data/clubs';
 import { displaySeasonLabel } from '../seasonDisplay';
 import { useCareerStore } from '../store';
@@ -43,10 +44,15 @@ export default function HomeScreen({ onPractice }: { onPractice: () => void }) {
 
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-8 px-6 text-center text-white">
-      <div>
-        <h1 className="font-display text-3xl font-bold sm:text-4xl">World Player of the Year</h1>
-        <p className="mt-2 text-sm text-white/55">20 seasons. One country. Every goal counts.</p>
-        <p className="mt-2 text-[11px] uppercase tracking-wide text-emerald-300/80">Copa · Value · 15 Sep</p>
+      <div className="flex flex-col items-center">
+        <img
+          src={GAME_LOGO_SRC}
+          alt=""
+          className="h-24 w-24 rounded-[1.75rem] shadow-[0_12px_40px_rgba(0,0,0,0.45)] ring-2 ring-amber-200/35"
+        />
+        <h1 className="font-brand mt-5 text-4xl leading-none text-white sm:text-5xl">{GAME_TITLE}</h1>
+        <p className="mt-3 text-sm text-white/55">{GAME_TAGLINE}</p>
+        <p className="mt-2 text-[11px] uppercase tracking-wide text-emerald-300/80">Identity · Records · 17 Sep</p>
       </div>
 
       <div className="flex w-full max-w-xs flex-col gap-3">

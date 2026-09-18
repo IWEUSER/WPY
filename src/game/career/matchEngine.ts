@@ -20,6 +20,8 @@ export interface ClubMatchContext {
   clubStrength?: number;
   opponentStrength?: number;
   isHome: boolean;
+  /** One-off knockout (World Cup last 16, cup final). Caps blowout scorelines. */
+  knockout?: boolean;
 }
 
 export interface ClubMatchResult {
@@ -89,8 +91,11 @@ export function simulateClubMatch(
   else outcome = 'loss';
 
   const eliteClash = Math.min(us, them) >= 86 && Math.abs(us - them) <= 10;
-  const attack = (eliteClash ? 0.78 : 1.05) + 0.035 * Math.max(-12, Math.min(12, diff / 3));
-  const defence = (eliteClash ? 0.78 : 1.05) - 0.035 * Math.max(-12, Math.min(12, diff / 3));
+  const knockout = Boolean(context.knockout);
+  const gap = Math.abs(diff);
+  const knockoutScale = knockout ? (gap >= 8 ? 0.7 : 0.82) : 1;
+  const attack = ((eliteClash ? 0.78 : 1.05) + 0.035 * Math.max(-12, Math.min(12, diff / 3))) * knockoutScale;
+  const defence = ((eliteClash ? 0.78 : 1.05) - 0.035 * Math.max(-12, Math.min(12, diff / 3))) * knockoutScale;
   let scoreFor = poisson(Math.max(0.28, attack), rng);
   let scoreAgainst = poisson(Math.max(0.28, defence), rng);
   if (outcome === 'win' && scoreFor <= scoreAgainst) scoreFor = scoreAgainst + 1 + (rng() < 0.35 ? 1 : 0);
@@ -120,7 +125,28 @@ export function simulateClubMatch(
       }
     }
   }
+  if (knockout) {
+    const capped = capKnockoutScoreline(scoreFor, scoreAgainst, gap, playerGoals);
+    scoreFor = capped.scoreFor;
+    scoreAgainst = capped.scoreAgainst;
+  }
   return applyPlayerGoalsFloor({ scoreFor, scoreAgainst, outcome: outcomeOf(scoreFor, scoreAgainst) }, playerGoals);
+}
+
+/** World Cup last-16 blowouts like 5–0 vs a much weaker side are not realistic. */
+function capKnockoutScoreline(
+  scoreFor: number,
+  scoreAgainst: number,
+  gap: number,
+  playerGoals: number,
+): { scoreFor: number; scoreAgainst: number } {
+  const maxMargin = gap >= 8 ? 2 : 3;
+  let nextFor = Math.min(scoreFor, Math.max(playerGoals, 3));
+  let nextAgainst = Math.min(scoreAgainst, 3);
+  if (nextFor - nextAgainst > maxMargin) nextFor = nextAgainst + maxMargin;
+  if (nextAgainst - nextFor > maxMargin) nextAgainst = nextFor + maxMargin;
+  if (playerGoals > 0) nextFor = Math.max(nextFor, playerGoals);
+  return { scoreFor: nextFor, scoreAgainst: nextAgainst };
 }
 
 /** The printed scoreline can never be below the goals the player actually scored. */

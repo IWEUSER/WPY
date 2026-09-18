@@ -1,30 +1,33 @@
+import type { ReactNode } from 'react';
 import { formatCountedHonour, type CountedHonour } from '../honoursDisplay';
+import { DATA_CARD } from './dataUi';
 
 export function HonoursPills({
   title,
   items,
   empty,
   tone,
+  icon,
 }: {
   title: string;
   items: CountedHonour[];
   empty?: string;
-  tone: 'trophy' | 'award';
+  tone: 'trophy' | 'award' | 'record';
+  icon?: ReactNode;
 }) {
-  const box =
-    tone === 'trophy'
-      ? 'border border-emerald-300/25 bg-emerald-400/10'
-      : 'border border-sky-300/25 bg-sky-400/10';
-  const heading =
-    tone === 'trophy' ? 'text-emerald-200/70' : 'text-sky-200/70';
   const pill =
     tone === 'trophy'
       ? 'bg-emerald-400/15 text-emerald-300'
-      : 'bg-sky-400/15 text-sky-200';
+      : tone === 'award'
+        ? 'bg-sky-400/15 text-sky-200'
+        : 'bg-amber-400/15 text-amber-200';
 
   return (
-    <div className={`mt-3 rounded-2xl ${box} p-4`}>
-      <p className={`text-xs uppercase tracking-wide ${heading}`}>{title}</p>
+    <div className={`mt-3 ${DATA_CARD}`}>
+      <p className="flex items-center gap-2 text-xs uppercase tracking-wide text-white/40">
+        {icon}
+        {title}
+      </p>
       {items.length === 0 ? (
         empty ? <p className="mt-2 text-sm text-white/50">{empty}</p> : null
       ) : (

@@ -114,6 +114,8 @@ export interface SeasonRecord {
   /** Club continental Player of the Tournament (must win the cup at ≥ 0.7). */
   clubPlayerOfTheTournament?: boolean;
   clubPlayerOfTheTournamentReason?: string | null;
+  /** Continental cup won this season, when the club lifted it. */
+  continentalChampion?: ContinentalCupId | null;
   /** Weekly wage × 52 for this season. */
   earnings?: number;
   /** One-off seasonal boot / shirt deal. */
@@ -179,12 +181,15 @@ export type CareerPhase =
   | 'club-offer'
   | 'opening-brief'
   | 'nationality-choice'
+  | 'player-name'
   | 'club-choice'
   | 'hub'
   | 'match'
   | 'season-summary'
   | 'transfer-choice'
   | 'career'
+  | 'profile'
+  | 'legacy'
   | 'career-end'
   | 'match-result';
 
@@ -218,6 +223,8 @@ export interface CareerState {
   /** Chosen international nationality — picked before the U16 tournament.
    * Call-ups later use goal ratio + club level. */
   nationality: string | null;
+  /** Display name chosen after nationality. Older saves default to Player. */
+  playerName?: string | null;
   /** Caps, goals, and the same miss-streak drop rule as club football, scoped
    * to the national team. Null until a nationality is chosen. */
   nationalTeam: NationalTeamState | null;
@@ -271,6 +278,10 @@ export interface CareerState {
    * remaining fixtures without wiping career history.
    */
   rulesStamp?: string | null;
+  /** Screen to restore after closing the all-time records list. */
+  legacyReturnPhase?: CareerPhase | null;
+  /** Screen to restore after closing the career identity page. */
+  profileReturnPhase?: CareerPhase | null;
 }
 
 export interface LastMatchResult {

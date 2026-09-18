@@ -13,7 +13,6 @@ import { continentalQualificationForNextSeason } from './europeanQualification';
 import {
   DEFAULT_CONTRACT_YEARS,
   FIRST_CONTRACT_YEARS,
-  loanContractYearsRemaining,
   newContractYears,
   playerMarketValue,
   playerMarketValueFromSeasons,
@@ -496,6 +495,7 @@ function attachSeasonAwards(state: CareerState): { season: SeasonRecord; wpyResu
       playerOfTheYearReason: poty.reason,
       clubPlayerOfTheTournament: clubPot.won,
       clubPlayerOfTheTournamentReason: clubPot.reason,
+      continentalChampion: sim?.honours.continentalChampion ?? null,
       wpyReason: wpyResult?.reason ?? null,
       international: {
         ...international,
@@ -681,6 +681,7 @@ function initialState(): CareerState {
     careerGames: 0,
     pendingTransfer: null,
     nationality: null,
+    playerName: null,
     nationalTeam: null,
     seasonCalendar: null,
     seasonStandings: null,
@@ -704,6 +705,8 @@ function initialState(): CareerState {
     intlQualifying: null,
     lastSuperCupOpponentId: null,
     rulesStamp: CURRENT_RULES_STAMP,
+    legacyReturnPhase: null,
+    profileReturnPhase: null,
   };
 }
 
@@ -823,6 +826,7 @@ interface CareerActions {
   finishTrial: () => void;
   chooseClub: (clubId: string) => void;
   chooseNationality: (nationId: string) => void;
+  confirmPlayerName: (name: string) => void;
   advance: () => void;
   recordMatchChance: (result: ShotResult) => void;
   finishLiveMatch: () => void;
@@ -832,6 +836,10 @@ interface CareerActions {
   continueAfterSeason: () => void;
   resolveTransferChoice: (clubId: string | null) => void;
   openCareerRecord: () => void;
+  openProfile: () => void;
+  returnFromProfile: () => void;
+  openLegacy: () => void;
+  returnFromLegacy: () => void;
   returnToHub: () => void;
   resetCareer: () => void;
   returnToMenu: () => void;
@@ -1355,8 +1363,11 @@ export const useCareerStore = create<CareerStore>()(
 
       backFromSetup: () =>
         set((state) => {
+          if (state.phase === 'player-name') {
+            return { phase: 'nationality-choice', playerName: null };
+          }
           if (state.phase === 'nationality-choice' && isFavouriteStart(state.careerStart)) {
-            return { phase: 'club-choice', nationality: null, nationalTeam: null };
+            return { phase: 'club-choice', nationality: null, nationalTeam: null, playerName: null };
           }
           return {
             phase: 'menu',
@@ -1365,6 +1376,7 @@ export const useCareerStore = create<CareerStore>()(
             parentClubId: null,
             nationality: null,
             nationalTeam: null,
+            playerName: null,
             openingCampaign: null,
           };
         }),
@@ -1418,13 +1430,24 @@ export const useCareerStore = create<CareerStore>()(
         set((state) => beginSignedCareer(clubId, 'reserve', state.nationality, state.careerStart)),
 
       chooseNationality: (nationId) =>
+        set({
+          nationality: nationId,
+          nationalTeam: createNationalTeamState(nationId),
+          phase: 'player-name',
+        }),
+
+      confirmPlayerName: (name) =>
         set((state) => {
-          const nationalTeam = createNationalTeamState(nationId);
+          const playerName = name.replace(/\s+/g, ' ').trim();
+          const nationId = state.nationality;
+          if (!nationId) return { playerName, phase: 'nationality-choice' };
+          const nationalTeam = state.nationalTeam ?? createNationalTeamState(nationId);
           if (state.careerStart === 'favourite-trial' && state.clubId) {
             const club = getClub(state.clubId);
-            if (!club) return { nationality: nationId, nationalTeam };
+            if (!club) return { playerName, nationality: nationId, nationalTeam };
             const opening = beginFavouriteClubTrial(club);
             return {
+              playerName,
               nationality: nationId,
               nationalTeam,
               openingCampaign: opening,
@@ -1441,6 +1464,7 @@ export const useCareerStore = create<CareerStore>()(
               nationality: nationId,
               nationalTeam,
               ...beginSignedCareer(state.clubId, 'reserve', nationId, state.careerStart),
+              playerName,
             };
           }
           if (state.careerStart === 'favourite-first-team' && state.clubId) {
@@ -1448,13 +1472,15 @@ export const useCareerStore = create<CareerStore>()(
               nationality: nationId,
               nationalTeam,
               ...beginSignedCareer(state.clubId, 'first-team', nationId, state.careerStart),
+              playerName,
             };
           }
           if (state.clubId && !isFavouriteStart(state.careerStart)) {
-            return { nationality: nationId, nationalTeam, phase: 'hub' };
+            return { playerName, nationality: nationId, nationalTeam, phase: 'hub' };
           }
           const opening = createYouthCampaign(nationId);
           return {
+            playerName,
             nationality: nationId,
             nationalTeam,
             careerStart: state.careerStart ?? 'youth',
@@ -1665,12 +1691,17 @@ export const useCareerStore = create<CareerStore>()(
             homeContractYearsRemaining: state.homeContractYearsRemaining,
             careerStart: state.careerStart,
             squadStatus: state.squadStatus,
+            weeklyWage: state.weeklyWage,
           });
 
           const club = getClub(state.clubId);
           const parent = state.parentClubId ? getClub(state.parentClubId) : undefined;
           const threshold = club ? requiredGoalRatio(state.role, club, parent) : 0;
           const ratio = season.gamesPlayed > 0 ? season.goals / season.gamesPlayed : 0;
+          const publicSeason = displaySeasonNumber(state.seasonNumber, {
+            role: state.role,
+            careerStart: state.careerStart,
+          });
           const nextStatus = transition.immediate?.squadStatus
             ?? transition.pendingTransfer?.stay?.squadStatus
             ?? nextSquadStatusAfterSeason({
@@ -1680,6 +1711,7 @@ export const useCareerStore = create<CareerStore>()(
               gamesPlayed: season.gamesPlayed,
               bar: threshold,
               honoursClear: seasonOverridesRatioBar(season),
+              allowRisingStar: publicSeason === 1,
             });
           const finishedSeason: SeasonRecord = {
             ...season,
@@ -1918,6 +1950,9 @@ export const useCareerStore = create<CareerStore>()(
                   role: state.role,
                 })
               : 0;
+            const remainingPermanentOffers = (pending.offers ?? []).filter(
+              (item) => item !== offer && item.move === 'permanent' && !item.renewal,
+            ).length;
             const veto = sellingClubAcceptsOffer({
               offer,
               kind: pending.kind,
@@ -1927,6 +1962,7 @@ export const useCareerStore = create<CareerStore>()(
               squadStatus: state.squadStatus ?? defaultSquadStatus(state.role),
               contractYearsLeft: state.contractYearsRemaining,
               playerValue,
+              remainingPermanentOffers,
             });
             if (!veto.accepted) {
               const remaining = (pending.offers ?? []).filter((item) => item !== offer);
@@ -1969,9 +2005,7 @@ export const useCareerStore = create<CareerStore>()(
             role,
           );
           const dealYears = takeLoan
-            ? (offer?.contractYears && offer.contractYears > 0
-              ? offer.contractYears
-              : loanContractYearsRemaining(state.seasonNumber, state.contractYearsRemaining, state.age))
+            ? 1
             : (offer?.contractYears && offer.contractYears > 0
               ? offer.contractYears
               : newContractYears(state.age));
@@ -1983,10 +2017,9 @@ export const useCareerStore = create<CareerStore>()(
           const fromOpeningLoan = Boolean(state.openingCampaign) || !state.currentSeason;
           const nextSeasonNumber = takeLoan && fromOpeningLoan && state.seasonNumber < 2 ? 2 : state.seasonNumber;
           const nextAge = takeLoan && fromOpeningLoan && state.age <= STARTING_AGE ? STARTING_AGE + 1 : state.age;
-          const loanWage =
-            takeLoan && state.role === 'reserve'
-              ? RESERVE_WEEKLY_WAGE
-              : (offer?.weeklyWage ?? state.weeklyWage);
+          const loanWage = offer?.weeklyWage && offer.weeklyWage > 0
+            ? offer.weeklyWage
+            : state.weeklyWage;
           const homeYears = takeLoan
             ? state.role === 'loan'
               ? state.homeContractYearsRemaining
@@ -2008,17 +2041,28 @@ export const useCareerStore = create<CareerStore>()(
                 return cur ? requiredGoalRatio(state.role, cur, parent) : 0;
               })(),
               honoursClear: state.currentSeason ? seasonOverridesRatioBar(state.currentSeason) : false,
+              allowRisingStar: displaySeasonNumber(state.seasonNumber, {
+                role: state.role,
+                careerStart: state.careerStart,
+              }) === 1,
             });
           const arrivalStatus: SquadStatus = takeLoan
             ? 'starter'
             : renewing
               ? nextIfStay
-              : squadStatusOnArrival({
+              : (offer?.squadStatus ?? squadStatusOnArrival({
                   fromClub: getClub(state.clubId),
                   toClub: nextClub,
                   move: clubId === state.parentClubId && state.role === 'loan' ? 'recall' : 'permanent',
                   nextIfStay,
-                });
+                  playerRatio: state.currentSeason && state.currentSeason.gamesPlayed > 0
+                    ? state.currentSeason.goals / state.currentSeason.gamesPlayed
+                    : undefined,
+                  allowRisingStar: displaySeasonNumber(state.seasonNumber, {
+                    role: state.role,
+                    careerStart: state.careerStart,
+                  }) === 1,
+                }));
 
           return {
             pendingTransfer: null,
@@ -2069,6 +2113,44 @@ export const useCareerStore = create<CareerStore>()(
 
       openCareerRecord: () => set({ phase: 'career' }),
 
+      openProfile: () =>
+        set((state) => ({
+          phase: 'profile',
+          profileReturnPhase: state.phase === 'profile' ? state.profileReturnPhase ?? null : state.phase,
+        })),
+
+      returnFromProfile: () =>
+        set((state) => {
+          const back = state.profileReturnPhase;
+          const phase =
+            back && back !== 'profile' && back !== 'legacy'
+              ? back
+              : state.age >= RETIREMENT_AGE
+                ? 'career-end'
+                : state.clubId
+                  ? 'hub'
+                  : 'menu';
+          return { phase, profileReturnPhase: null };
+        }),
+
+      openLegacy: () =>
+        set((state) => ({
+          phase: 'legacy',
+          legacyReturnPhase: state.phase === 'legacy' ? state.legacyReturnPhase ?? null : state.phase,
+        })),
+
+      returnFromLegacy: () =>
+        set((state) => {
+          const back = state.legacyReturnPhase;
+          const phase =
+            back && back !== 'legacy'
+              ? back
+              : state.clubId
+                ? 'hub'
+                : 'menu';
+          return { phase, legacyReturnPhase: null };
+        }),
+
       returnToHub: () =>
         set((state) => ({
           phase: state.clubId ? 'hub' : 'menu',
@@ -2080,7 +2162,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 34,
+      version: 35,
       migrate: (persisted) => {
         try {
           return migrateCareerPersist(persisted);
@@ -2144,6 +2226,7 @@ function migrateCareerPersist(persisted: unknown): CareerState {
             : null,
           careerStart: state.careerStart ?? null,
           nationality: state.nationality ?? null,
+          playerName: state.playerName?.trim() ? state.playerName : 'Player',
           nationalTeam: state.nationalTeam
             ? {
                 ...state.nationalTeam,
@@ -2216,13 +2299,13 @@ function migrateCareerPersist(persisted: unknown): CareerState {
           weeklyWage: state.weeklyWage ?? 0,
           careerEarnings: state.careerEarnings ?? 0,
           contractYears:
-            (state.role === 'loan' && (state.seasonNumber ?? 1) <= 2)
+            state.role === 'loan'
               ? YOUTH_LOAN_YEARS
               : (state.seasonNumber ?? 1) === 1
                 ? FIRST_CONTRACT_YEARS
                 : (state.contractYears ?? DEFAULT_CONTRACT_YEARS),
           contractYearsRemaining:
-            (state.role === 'loan' && (state.seasonNumber ?? 1) <= 2)
+            state.role === 'loan'
               ? YOUTH_LOAN_YEARS
               : (state.seasonNumber ?? 1) === 1
                 ? FIRST_CONTRACT_YEARS
@@ -2235,6 +2318,8 @@ function migrateCareerPersist(persisted: unknown): CareerState {
           previousChampionClubId: state.previousChampionClubId ?? null,
           qualifiedContinentalCup: state.qualifiedContinentalCup ?? null,
           lastSuperCupOpponentId: state.lastSuperCupOpponentId ?? null,
+          legacyReturnPhase: state.legacyReturnPhase ?? null,
+          profileReturnPhase: state.profileReturnPhase ?? null,
           squadStatus: (() => {
             const status = normalizeSquadStatus(state.squadStatus, state.role ?? 'reserve');
             if (
