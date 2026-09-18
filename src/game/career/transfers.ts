@@ -1093,24 +1093,15 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     role,
     careerStart: params.careerStart,
   });
-  const canStayRising = honoursClear || ratio >= RISING_STAR_MIN_RATIO;
-  const firstSeasonStayStatus: SquadStatus = currentStatus === 'rising-star'
-    ? (ratioMet && ratio + 1e-9 >= threshold && season.gamesPlayed >= 12
-        ? 'starter'
-        : canStayRising
-          ? 'rising-star'
-          : 'reserve')
-    : ratioMet
-      ? nextSquadStatusAfterSeason({
-          role: 'first-team',
-          current: currentStatus,
-          ratio,
-          gamesPlayed: season.gamesPlayed,
-          bar: threshold,
-          honoursClear,
-          allowRisingStar,
-        })
-      : 'rising-star';
+  const firstSeasonStayStatus: SquadStatus = nextSquadStatusAfterSeason({
+    role: 'first-team',
+    current: currentStatus,
+    ratio,
+    gamesPlayed: season.gamesPlayed,
+    bar: threshold,
+    honoursClear,
+    allowRisingStar: true,
+  });
 
   if (promoted) {
     return parallelTransfers(
@@ -1143,22 +1134,23 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       ...offerTerms(loans, 'loan', value, 0, age, loanYears, offerExtras),
       ...offerTerms(transfers, 'permanent', value, fee, age, permYears, offerExtras),
     ]);
-    const stay = canStayRising ? stayOn({ squadStatus: firstSeasonStayStatus }) : undefined;
+    const stay = stayOn({ squadStatus: firstSeasonStayStatus });
     const honoursOnly = honoursClear && !(season.gamesPlayed > 0 && ratio + 1e-9 >= threshold);
+    const stayLabel = SQUAD_STATUS_LABEL[firstSeasonStayStatus];
     const headline = ratioMet
       ? honoursOnly
         ? 'Honours overrode the finishing ratio'
         : 'Place secured'
-      : canStayRising
-        ? 'Stay as a Rising star — or move on'
-        : `${club.name} will not keep you as a Rising star`;
+      : firstSeasonStayStatus === 'reserve'
+        ? 'Stay as a Reserve — or move on'
+        : `Stay as ${stayLabel === 'Impact' ? 'an Impact player' : `a ${stayLabel}`} — or move on`;
     const detail = ratioMet
       ? honoursOnly
         ? `Top goalscorer or player of the league/tournament this season counted as meeting ${club.name}'s ${threshold.toFixed(2)} bar.`
         : `You maintained ${threshold.toFixed(2)} goals/game at ${club.name}.`
-      : canStayRising
-        ? `${ratio.toFixed(2)} goals/game is enough to keep Rising star status (minimum ${RISING_STAR_MIN_RATIO.toFixed(2)}).`
-        : `${ratio.toFixed(2)} goals/game was below the ${RISING_STAR_MIN_RATIO.toFixed(2)} needed to stay as a Rising star.`;
+      : firstSeasonStayStatus === 'reserve'
+        ? `${ratio.toFixed(2)} goals/game was below the ${RISING_STAR_MIN_RATIO.toFixed(2)} Season 1 line — Reserve next season, every second game.`
+        : `${ratio.toFixed(2)} goals/game is enough to keep ${stayLabel} (minimum ${RISING_STAR_MIN_RATIO.toFixed(2)}).`;
     return attachCurrentClubRenewal(
       {
         headline,

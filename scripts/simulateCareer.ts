@@ -76,7 +76,7 @@ import {
   TRIALS_AT_LEVEL,
 } from '../src/game/career/trial';
 import { nextYouthKnockoutRound, pickYouthGroupOpponents, pickYouthKnockoutOpponent, youthMaxGames } from '../src/game/career/youthTournament';
-import { chancesForSquadStatus, describeSquadStatus, isLowerDivisionLoan, isSquadRotationSitOut, isToughMinutesFixture, nextSquadStatusAfterSeason, openingSquadStatus, RISING_STAR_MIN_RATIO, ROLE_REVIEW_WEEK, seasonOverridesRatioBar, shouldSitLeagueFixture, shouldSitToughFixture, squadStatusAfterFormReview, squadStatusOnArrival } from '../src/game/career/squadStatus';
+import { chancesForSquadStatus, consecutiveScoringGames, describeSquadStatus, IMPACT_CHANCES, IMPACT_STREAK, isLowerDivisionLoan, isSquadRotationSitOut, isToughMinutesFixture, nextSquadStatusAfterSeason, openingSquadStatus, promoteSquadStatusDuringSeason, RISING_STAR_MIN_RATIO, ROLE_REVIEW_WEEK, seasonOverridesRatioBar, shouldSitLeagueFixture, shouldSitToughFixture, squadStatusOnArrival, STARTER_STREAK, youthRolesAllowed } from '../src/game/career/squadStatus';
 import { consecutiveLoanSpells, LOAN_OFFER_COUNT, SAUDI_OFFER_MIN_AGE, TRANSFER_MARKET_CAP, TRANSFER_OFFER_COUNT, offerFormRatio, offerTierFromStanding, pickLoanClubsForMiss, pickLoanClubsFromOrigin, pickPermanentClubs, requiredGoalRatio, resolveSeasonTransition, sellingClubAcceptsOffer, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, trialFailTransferPending, tierForRatio } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
 import {
@@ -102,7 +102,7 @@ const N = 50000;
     console.error('live build stamp must print a UTC clock');
     process.exitCode = 1;
   }
-  if (stamped !== `${LIVE_SHIP_LABEL} · 18 Sep 18:30 UTC` || !stamped.includes('Youth')) {
+  if (stamped !== `${LIVE_SHIP_LABEL} · 18 Sep 18:30 UTC` || !stamped.includes('Rising star')) {
     console.error('the first menu stamp must name the ship and the build clock');
     process.exitCode = 1;
   }
@@ -2225,7 +2225,7 @@ if (barca && hilal && lafc) {
     gamesPlayed: 38,
     bar: 0.5,
   });
-  const starterDrop = nextSquadStatusAfterSeason({
+  const starterKeepS1 = nextSquadStatusAfterSeason({
     role: 'first-team',
     current: 'starter',
     ratio: 0.42,
@@ -2245,10 +2245,19 @@ if (barca && hilal && lafc) {
     ratio: 0.58,
     gamesPlayed: 24,
     bar: 0.5,
+    allowRisingStar: false,
   });
-  console.log('squad status after season', starterHold, starterDrop, starterCollapse, reserveUp);
-  if (starterHold !== 'starter' || starterDrop !== 'rising-star' || starterCollapse !== 'impact' || reserveUp !== 'starter') {
-    console.error('end-of-season squad status must promote or drop from the season ratio');
+  const starterDropS3 = nextSquadStatusAfterSeason({
+    role: 'first-team',
+    current: 'starter',
+    ratio: 0.42,
+    gamesPlayed: 36,
+    bar: 0.5,
+    allowRisingStar: false,
+  });
+  console.log('squad status after season', starterHold, starterKeepS1, starterCollapse, reserveUp, starterDropS3);
+  if (starterHold !== 'starter' || starterKeepS1 !== 'starter' || starterCollapse !== 'reserve' || reserveUp !== 'starter' || starterDropS3 !== 'reserve') {
+    console.error('end-of-season squad status must keep a Season 1 starter above 0.33 and only assign Reserve at season end');
     process.exitCode = 1;
   }
   const risingKeep = nextSquadStatusAfterSeason({
@@ -2265,8 +2274,15 @@ if (barca && hilal && lafc) {
     gamesPlayed: 24,
     bar: 0.5,
   });
-  if (risingKeep !== 'rising-star' || risingPromote !== 'starter') {
-    console.error('Rising star must hold with 0.33+ and become a starter when they hit the club bar');
+  const impactKeep = nextSquadStatusAfterSeason({
+    role: 'first-team',
+    current: 'impact',
+    ratio: 0.4,
+    gamesPlayed: 24,
+    bar: 0.5,
+  });
+  if (risingKeep !== 'rising-star' || risingPromote !== 'starter' || impactKeep !== 'impact') {
+    console.error('Season 1 must keep Rising star / Impact above 0.33 and promote to starter on the club bar');
     process.exitCode = 1;
   }
   const honourOverride = nextSquadStatusAfterSeason({
@@ -2305,24 +2321,24 @@ if (barca && hilal && lafc) {
   const impactSits: boolean[] = [];
   for (let i = 0; i < 8; i++) impactSits.push(shouldSitLeagueFixture('impact', i));
   console.log('reserve sit pattern', reserveSits.filter(Boolean).length, '/9', 'rising', risingSits.filter(Boolean).length, '/8', 'impact', impactSits.filter(Boolean).length, '/8');
-  if (reserveSits.filter(Boolean).length !== 6 || reserveSits[0] !== false || reserveSits[1] !== true) {
-    console.error('a reserve player must sit two of every three fixtures');
+  if (reserveSits.filter(Boolean).length !== 4 || reserveSits[0] !== false || reserveSits[1] !== true) {
+    console.error('a reserve player must sit every other fixture');
     process.exitCode = 1;
   }
   if (risingSits.filter(Boolean).length !== 2 || risingSits[3] !== true || risingSits[0] !== false) {
     console.error('a Rising star must sit every fourth fixture');
     process.exitCode = 1;
   }
-  if (impactSits.filter(Boolean).length !== 4 || impactSits[1] !== true || impactSits[0] !== false) {
-    console.error('an impact player must sit every other fixture');
+  if (impactSits.filter(Boolean).length !== 2 || impactSits[3] !== true || impactSits[0] !== false || impactSits[1] !== false) {
+    console.error('an impact player must sit the same every-fourth pattern as Rising star');
     process.exitCode = 1;
   }
   if (shouldSitLeagueFixture('starter', 2)) {
     console.error('a starter must play every fixture');
     process.exitCode = 1;
   }
-  if (chancesForSquadStatus('rising-star', 4) !== 1 || chancesForSquadStatus('starter', 3) !== 3) {
-    console.error('Rising star matches must be a single chance; starters keep the drawn looks');
+  if (chancesForSquadStatus('rising-star', 4) !== 1 || chancesForSquadStatus('impact', 4) !== IMPACT_CHANCES || chancesForSquadStatus('starter', 3) !== 3) {
+    console.error('Rising star matches must be one chance, Impact two, starters the drawn looks');
     process.exitCode = 1;
   }
   if (openingSquadStatus('first-team') !== 'rising-star') {
@@ -2333,12 +2349,12 @@ if (barca && hilal && lafc) {
     console.error('starter copy must say the XI is across all competitions, not only league games');
     process.exitCode = 1;
   }
-  if (!/Rising star/.test(describeSquadStatus('rising-star')) || !/one chance/.test(describeSquadStatus('rising-star'))) {
-    console.error('Rising star copy must mention one chance per game');
+  if (!/Rising star/.test(describeSquadStatus('rising-star')) || !/one chance/.test(describeSquadStatus('rising-star')) || !/2 consecutive/.test(describeSquadStatus('rising-star'))) {
+    console.error('Rising star copy must mention one chance and the two-game Impact promotion');
     process.exitCode = 1;
   }
-  if (!/week 20/.test(describeSquadStatus('impact')) || !/every other/.test(describeSquadStatus('impact'))) {
-    console.error('Impact copy must explain the week-20 drop and every-other minutes');
+  if (!/two chances/.test(describeSquadStatus('impact')) || !/same games as Rising star/.test(describeSquadStatus('impact'))) {
+    console.error('Impact copy must match Rising star minutes with two chances');
     process.exitCode = 1;
   }
   if (isSquadRotationSitOut('reserve', 'reserve', 'league', 0, { seasonMatchCount: 0 }) !== false
@@ -2355,8 +2371,12 @@ if (barca && hilal && lafc) {
     console.error('Rising star must sit two of three tournament or stronger-side games');
     process.exitCode = 1;
   }
-  if (shouldSitToughFixture('reserve', 0) !== false || shouldSitToughFixture('reserve', 1) !== true) {
-    console.error('first-team reserve must sit four of five tournament or stronger-side games');
+  if (shouldSitToughFixture('reserve', 0) !== false || shouldSitToughFixture('reserve', 1) !== false) {
+    console.error('first-team reserve must not add extra tough-game sits on top of every-other minutes');
+    process.exitCode = 1;
+  }
+  if (shouldSitToughFixture('impact', 0) !== false || shouldSitToughFixture('impact', 1) !== true) {
+    console.error('Impact must sit two of three tournament or stronger-side games, same as Rising star');
     process.exitCode = 1;
   }
   const foxesClub = getClub('leicester')!;
@@ -2410,50 +2430,94 @@ if (barca && hilal && lafc) {
     completed += 1;
   }
   console.log('reserve sit/play', reserveSitsAll, reservePlaysAll, 'cup sit/play', cupSits, cupPlays);
-  if (reserveSitsAll < 20 || reservePlaysAll < 10 || cupSits < 2 || cupPlays < 1) {
-    console.error('reserve must sit about two thirds of all competitions, including cups');
+  if (reserveSitsAll < 12 || reservePlaysAll < 12 || Math.abs(reserveSitsAll - reservePlaysAll) > 2 || cupPlays < 1) {
+    console.error('reserve must play every second game across all competitions, including cups');
     process.exitCode = 1;
   }
-  const week20Up = squadStatusAfterFormReview({
+  const scored = (n: number, scoredFlag: boolean) => ({ matchNumber: n, played: true, scored: scoredFlag });
+  const sat = (n: number) => ({ matchNumber: n, played: false, scored: null });
+  if (consecutiveScoringGames([scored(1, true), sat(2), scored(3, true)]) !== IMPACT_STREAK) {
+    console.error('sit-outs must not break a consecutive scoring run');
+    process.exitCode = 1;
+  }
+  const twoUp = promoteSquadStatusDuringSeason({
+    current: 'rising-star',
+    matches: [scored(1, true), scored(2, true)],
+    ratio: 0.25,
+    gamesPlayed: 8,
+    bar: 0.5,
+    allowYouthRoles: true,
+  });
+  const threeUp = promoteSquadStatusDuringSeason({
+    current: 'rising-star',
+    matches: [scored(1, true), scored(2, true), scored(3, true)],
+    ratio: 0.25,
+    gamesPlayed: 8,
+    bar: 0.5,
+    allowYouthRoles: true,
+  });
+  const impactHolds = promoteSquadStatusDuringSeason({
+    current: 'impact',
+    matches: [scored(1, true), scored(2, true), scored(3, false)],
+    ratio: 0.2,
+    gamesPlayed: 10,
+    bar: 0.5,
+    allowYouthRoles: true,
+  });
+  const risingHoldsLow = promoteSquadStatusDuringSeason({
+    current: 'rising-star',
+    matches: [scored(1, false), scored(2, false), scored(3, true)],
+    ratio: 0.25,
+    gamesPlayed: 8,
+    bar: 0.5,
+    allowYouthRoles: true,
+  });
+  const reservePromoted = promoteSquadStatusDuringSeason({
     current: 'reserve',
+    matches: [scored(1, true)],
     ratio: 0.55,
-    gamesPlayed: 18,
+    gamesPlayed: 10,
     bar: 0.5,
+    allowYouthRoles: false,
   });
-  const week20Down = squadStatusAfterFormReview({
+  const reserveKeepsStarter = promoteSquadStatusDuringSeason({
     current: 'starter',
-    ratio: 0.3,
-    gamesPlayed: 18,
+    matches: [scored(1, false), scored(2, false), scored(3, false)],
+    ratio: 0.2,
+    gamesPlayed: 12,
     bar: 0.5,
+    allowYouthRoles: false,
   });
-  const week20Rising = squadStatusAfterFormReview({
+  const noMidSeasonReserve = promoteSquadStatusDuringSeason({
     current: 'rising-star',
-    ratio: 0.4,
-    gamesPlayed: 18,
-    bar: 0.5,
-  });
-  const week20RisingHit = squadStatusAfterFormReview({
-    current: 'rising-star',
-    ratio: 0.8,
-    gamesPlayed: 18,
-    bar: 0.5,
-  });
-  const week20RisingCollapse = squadStatusAfterFormReview({
-    current: 'rising-star',
+    matches: [scored(1, false)],
     ratio: 0.1,
     gamesPlayed: 18,
     bar: 0.75,
+    allowYouthRoles: true,
   });
-  if (week20Up !== 'starter' || week20Down !== 'reserve' || week20Rising !== 'rising-star' || week20RisingHit !== 'rising-star') {
-    console.error('after week 20 a reserve can be promoted; Rising star stays Rising star');
+  const s3NoImpact = promoteSquadStatusDuringSeason({
+    current: 'rising-star',
+    matches: [scored(1, true), scored(2, true)],
+    ratio: 0.4,
+    gamesPlayed: 10,
+    bar: 0.5,
+    allowYouthRoles: false,
+  });
+  if (twoUp !== 'impact' || threeUp !== 'starter' || impactHolds !== 'impact' || risingHoldsLow !== 'rising-star') {
+    console.error('two scoring games must make Impact, three Starter; blanks must not demote a youth role');
     process.exitCode = 1;
   }
-  if (week20RisingCollapse !== 'reserve') {
-    console.error('a collapsing Rising star must drop to Reserve at week 20, not skip to Impact');
+  if (reservePromoted !== 'starter' || reserveKeepsStarter !== 'starter' || noMidSeasonReserve !== 'rising-star' || s3NoImpact !== 'rising-star') {
+    console.error('Reserve promotes to Starter on the bar and keeps it; no mid-season Reserve and no Season 3 Impact streak');
+    process.exitCode = 1;
+  }
+  if (!youthRolesAllowed(1) || !youthRolesAllowed(2) || youthRolesAllowed(3) || IMPACT_STREAK !== 2 || STARTER_STREAK !== 3) {
+    console.error('Impact and Rising star are Season 1–2 only; streaks are 2 then 3');
     process.exitCode = 1;
   }
   if (ROLE_REVIEW_WEEK !== 20 || RISING_STAR_MIN_RATIO !== 0.33) {
-    console.error('role review is week 20; Rising star stay bar is 0.33');
+    console.error('Season 1 call-ups stay week 20; Rising star stay bar is 0.33');
     process.exitCode = 1;
   }
 
@@ -2866,12 +2930,12 @@ if (barca && hilal && lafc) {
   );
   if (
     favFirstMiss.pendingTransfer?.kind !== 'loan-or-transfer'
-    || favFirstMiss.pendingTransfer.allowDecline
-    || favFirstMiss.pendingTransfer.stay
+    || !favFirstMiss.pendingTransfer.allowDecline
+    || favFirstMiss.pendingTransfer.stay?.squadStatus !== 'reserve'
     || favFirstMissLoans.length === 0
     || favFirstMissPerms.length === 0
   ) {
-    console.error('Season 1 below 0.33 must force a move with loans and transfers, not a Rising star stay');
+    console.error('Season 1 below 0.33 must offer a Reserve stay plus loans and transfers');
     process.exitCode = 1;
   }
 
@@ -3849,8 +3913,8 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
       console.error('Season 1 must offer stay, loans, and transfers rather than a forced loan');
       process.exitCode = 1;
     }
-    if (risingWindow.pendingTransfer?.stay?.squadStatus !== 'rising-star') {
-      console.error('a 0.55 Season 1 ratio must be allowed to stay as Rising star');
+    if (risingWindow.pendingTransfer?.stay?.squadStatus !== 'starter') {
+      console.error('a 0.55 Season 1 ratio at City must stay as Starter after hitting the club bar');
       process.exitCode = 1;
     }
     if (risingLoans.length !== LOAN_OFFER_COUNT || risingLoans.some((o) => SECOND_DIVISIONS.has(getClub(o.clubId)?.league ?? ''))) {

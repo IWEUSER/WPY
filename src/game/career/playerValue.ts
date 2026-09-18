@@ -461,10 +461,10 @@ export function weeklyWageForSquadStatus(
   playingLeague?: string | null,
 ): number {
   const full = weeklyWageForClub(club, marketValue, playingLeague);
-  if (status === 'reserve' || status === 'impact') {
+  if (status === 'reserve') {
     return Math.max(RESERVE_WEEKLY_WAGE, Math.round((full * RESERVE_WAGE_FACTOR) / 500) * 500);
   }
-  if (status === 'rising-star') {
+  if (status === 'rising-star' || status === 'impact') {
     return Math.max(RESERVE_WEEKLY_WAGE, Math.round((full * RISING_STAR_WAGE_FACTOR) / 500) * 500);
   }
   return full;

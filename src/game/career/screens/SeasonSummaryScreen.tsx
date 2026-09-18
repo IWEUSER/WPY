@@ -263,7 +263,7 @@ export default function SeasonSummaryScreen() {
                 <p className="mt-0.5 text-xs text-white/50">
                   {risingKept
                     ? `Retained for Season ${(publicSeason ?? 1) + 1}`
-                    : 'Below the minimum to stay as a Rising star'}
+                    : 'Below 0.33 — Reserve next season'}
                 </p>
               </div>
               <StatusMark ok={risingKept} />

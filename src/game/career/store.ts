@@ -89,11 +89,11 @@ import {
   nextSquadStatusAfterSeason,
   normalizeSquadStatus,
   openingSquadStatus,
-  ROLE_REVIEW_WEEK,
+  promoteSquadStatusDuringSeason,
   seasonOverridesRatioBar,
   seasonRatioClearsBar,
-  squadStatusAfterFormReview,
   squadStatusOnArrival,
+  youthRolesAllowed,
 } from './squadStatus';
 import { evaluateWpy } from './wpy';
 import { composeMatchSummary, nextFixtureLine, playerGoalsLine } from './matchBriefing';
@@ -192,33 +192,34 @@ function withInternationalForm(
 }
 
 function reviewedSquadFields(
-  state: Pick<CareerState, 'role' | 'squadStatus' | 'clubId'>,
+  state: Pick<CareerState, 'role' | 'squadStatus' | 'clubId' | 'seasonNumber' | 'careerStart'>,
   season: SeasonRecord | null,
-  calendar: SeasonCalendar | null,
-  sim: SeasonSimState | null,
 ): { squadStatus: CareerState['squadStatus']; currentSeason: SeasonRecord | null } {
   const current = normalizeSquadStatus(state.squadStatus, state.role);
-  if (!season || !calendar || !sim || state.role === 'reserve') {
+  if (!season || state.role === 'reserve') {
     return { squadStatus: current, currentSeason: season };
   }
-  const week = currentCalendarWeek(calendar, sim.fixtureIndex);
-  if (week <= ROLE_REVIEW_WEEK) return { squadStatus: current, currentSeason: season };
-  if (season.squadRoleReviewed) return { squadStatus: current, currentSeason: season };
   const club = state.clubId ? getClub(state.clubId) : undefined;
   if (!club) return { squadStatus: current, currentSeason: season };
+  const publicSeason = displaySeasonNumber(state.seasonNumber, {
+    role: state.role,
+    careerStart: state.careerStart,
+  });
   const ratio = season.gamesPlayed > 0 ? season.goals / season.gamesPlayed : 0;
-  const next = squadStatusAfterFormReview({
+  const next = promoteSquadStatusDuringSeason({
     current,
+    matches: season.matches,
     ratio,
     gamesPlayed: season.gamesPlayed,
     // Playing time follows the club the player is actually at. Parent first-team
     // bars are for the end-of-loan recall, not a mid-season drop on loan.
     bar: club.firstTeamGoalRatio,
     honoursClear: seasonOverridesRatioBar(season),
+    allowYouthRoles: youthRolesAllowed(publicSeason),
   });
   return {
     squadStatus: next,
-    currentSeason: { ...season, squadStatus: next, squadRoleReviewed: true },
+    currentSeason: { ...season, squadStatus: next },
   };
 }
 
@@ -967,7 +968,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
         wpyResult: awarded.wpyResult,
       };
     }
-    const reviewed = reviewedSquadFields(state, season, calendar, sim);
+    const reviewed = reviewedSquadFields(state, season);
     const hubSim = sim!;
     return {
       seasonSim: withInternationalForm(
@@ -1319,8 +1320,6 @@ function finishResolvedLiveMatch(
     : reviewedSquadFields(
         { ...state, squadStatus: state.squadStatus },
         awarded.season,
-        nextCalendar,
-        withHonours,
       );
 
   return {
