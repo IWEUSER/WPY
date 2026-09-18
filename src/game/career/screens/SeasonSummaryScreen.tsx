@@ -35,6 +35,7 @@ export default function SeasonSummaryScreen() {
   const clubLeague = useCareerStore((s) => s.clubLeague);
   const seasonSponsorship = useCareerStore((s) => s.seasonSponsorship);
   const careerStart = useCareerStore((s) => s.careerStart);
+  const weeklyWage = useCareerStore((s) => s.weeklyWage);
 
   const club = clubId ? getClub(clubId) : undefined;
   if (!club || !season || !clubId || !parentClubId) return null;
@@ -62,6 +63,7 @@ export default function SeasonSummaryScreen() {
     homeContractYearsRemaining,
     careerStart,
     squadStatus,
+    weeklyWage,
   });
 
   const honours: string[] = [];
@@ -149,7 +151,8 @@ export default function SeasonSummaryScreen() {
   });
   const risingKept = seasonOverridesRatioBar(season) || ratio >= RISING_STAR_MIN_RATIO;
   const publicSeason = displaySeasonNumber(seasonNumber, { role, careerStart });
-  const showRisingStarTrack = publicSeason === 1 || publicSeason === 2 || squadStatus === 'rising-star';
+  /** Rising star is only a role for public Seasons 1–2. After Season 1 you can still retain it for Season 2. */
+  const showRisingStarTrack = publicSeason === 1;
 
   const legacyInput = {
     seasons: [...seasonHistory, season],
