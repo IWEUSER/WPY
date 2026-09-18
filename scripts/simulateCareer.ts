@@ -3913,8 +3913,8 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
       console.error('Season 1 must offer stay, loans, and transfers rather than a forced loan');
       process.exitCode = 1;
     }
-    if (risingWindow.pendingTransfer?.stay?.squadStatus !== 'starter') {
-      console.error('a 0.55 Season 1 ratio at City must stay as Starter after hitting the club bar');
+    if (risingWindow.pendingTransfer?.stay?.squadStatus !== 'rising-star') {
+      console.error('a 0.55 Season 1 ratio at City must stay as Rising star when below the live club bar');
       process.exitCode = 1;
     }
     if (risingLoans.length !== LOAN_OFFER_COUNT || risingLoans.some((o) => SECOND_DIVISIONS.has(getClub(o.clubId)?.league ?? ''))) {
