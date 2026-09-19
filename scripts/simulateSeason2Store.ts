@@ -41,7 +41,12 @@ if (store.getState().phase !== 'nationality-choice') {
   console.error('Start Career must open nationality selection before the trial');
   process.exitCode = 1;
 }
-store.getState().chooseNationality('spain');
+function pickNation(nationId: string, name = 'Ian Test') {
+  store.getState().chooseNationality(nationId);
+  store.getState().confirmPlayerName(name);
+}
+
+pickNation('spain');
 console.log(
   'after nationality phase',
   store.getState().phase,
@@ -290,7 +295,16 @@ if (store.getState().phase === 'match-result') {
     process.exitCode = 1;
   }
   store.getState().acknowledgeMatchResult();
-  store.getState().advance();
+}
+{
+  let guard = 0;
+  while (!store.getState().liveMatch && guard++ < 12) {
+    if (store.getState().phase === 'match-result') {
+      store.getState().acknowledgeMatchResult();
+      continue;
+    }
+    store.getState().advance();
+  }
 }
 const live = store.getState().liveMatch;
 const fixture = store.getState().seasonCalendar?.fixtures[live?.fixtureIndex ?? 0];
@@ -401,18 +415,20 @@ const afterWeek =
   after.seasonCalendar && after.seasonSim
     ? currentCalendarWeek(after.seasonCalendar, after.seasonSim.fixtureIndex)
     : 1;
-const afterValue = afterClub && after.currentSeason
-  ? playerMarketValueFromSeasons({
-      age: after.age,
-      careerGoals: after.careerGoals,
-      careerGames: after.careerGames,
-      seasons: [...after.seasonHistory, after.currentSeason],
-      fallbackClub: afterClub,
-      contractYearsRemaining: after.contractYearsRemaining,
-      seasonNumber: after.seasonNumber,
-      calendarWeek: afterWeek,
-    })
-  : null;
+    const afterValue = afterClub && after.currentSeason
+      ? playerMarketValueFromSeasons({
+          age: after.age,
+          careerGoals: after.careerGoals,
+          careerGames: after.careerGames,
+          seasons: [...after.seasonHistory, after.currentSeason],
+          fallbackClub: afterClub,
+          contractYearsRemaining: after.contractYearsRemaining,
+          seasonNumber: after.seasonNumber,
+          calendarWeek: afterWeek,
+          careerStart: after.careerStart,
+          role: after.role,
+        })
+      : null;
 console.log('S1 market value after first match', afterValue, 'week', afterWeek);
 if (afterValue !== YOUTH_MARKET_VALUE) {
   console.error('Season 1 market value must stay €100k until week 20');
@@ -461,7 +477,7 @@ if (cupFinalIndex == null || cupFinalIndex < 0 || !after.seasonSim || !after.sea
 
 store.getState().resetCareer();
 store.getState().startCareer();
-store.getState().chooseNationality('spain');
+pickNation('spain');
 const loanParent = completeOpeningAndSign();
 if (!loanParent) {
   console.error('opening flow must still produce a club before a failed Season 1');
@@ -558,7 +574,7 @@ if (store.getState().phase !== 'nationality-choice' || store.getState().clubId !
   console.error('Picking a favourite club must then ask for nationality');
   process.exitCode = 1;
 }
-store.getState().chooseNationality('spain');
+pickNation('spain');
 {
   const s = store.getState();
   console.log('favourite trial start', s.phase, s.openingCampaign?.kind, s.clubId, s.seasonCalendar?.fixtures.length);
@@ -608,7 +624,7 @@ if (store.getState().phase === 'club-offer') {
 store.getState().resetCareer();
 store.getState().startFavouritePath('favourite-trial');
 store.getState().chooseFavouriteClub('real-madrid');
-store.getState().chooseNationality('spain');
+pickNation('spain');
 for (let i = 0; i < 3; i++) playOpeningMatch(0);
 if (store.getState().phase === 'opening-brief') store.getState().startOpeningTrial();
 {
@@ -636,7 +652,7 @@ if (store.getState().phase === 'opening-brief') store.getState().startOpeningTri
 store.getState().resetCareer();
 store.getState().startFavouritePath('favourite-reserve');
 store.getState().chooseFavouriteClub('barcelona');
-store.getState().chooseNationality('spain');
+pickNation('spain');
 {
   const s = store.getState();
   const kinds = new Set(s.seasonCalendar?.fixtures.map((f) => f.kind) ?? []);
@@ -656,7 +672,7 @@ store.getState().chooseNationality('spain');
 store.getState().resetCareer();
 store.getState().startFavouritePath('favourite-first-team');
 store.getState().chooseFavouriteClub('liverpool');
-store.getState().chooseNationality('england');
+pickNation('england');
 {
   const s = store.getState();
   const kinds = new Set(s.seasonCalendar?.fixtures.map((f) => f.kind) ?? []);
@@ -717,7 +733,7 @@ store.getState().chooseNationality('england');
 store.getState().resetCareer();
 store.getState().startFavouritePath('favourite-first-team');
 store.getState().chooseFavouriteClub('wolves');
-store.getState().chooseNationality('brazil');
+pickNation('brazil');
 {
   const s = store.getState();
   console.log('favourite Wolves Brazil', s.seasonSim?.europeanStanding?.cup, s.seasonSim?.internationalPhase, s.seasonSim?.internationalSelected);
@@ -731,7 +747,7 @@ console.log('\n--- Renew vs continue without renewing ---');
 store.getState().resetCareer();
 store.getState().startFavouritePath('favourite-first-team');
 store.getState().chooseFavouriteClub('liverpool');
-store.getState().chooseNationality('england');
+pickNation('england');
 {
   const s = store.getState();
   if (!s.currentSeason || !s.clubId) {
