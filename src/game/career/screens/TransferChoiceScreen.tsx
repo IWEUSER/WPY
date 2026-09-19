@@ -14,18 +14,27 @@ const KIND_LABEL: Record<string, string> = {
   'trial-offers': 'Transfer offers',
 };
 
+function wageVsHome(offerWage: number, homeWage: number): string {
+  const delta = offerWage - homeWage;
+  if (delta === 0) return 'Same weekly wage as your club';
+  if (delta > 0) return `${formatWeeklyWage(delta)} more than your club`;
+  return `${formatWeeklyWage(Math.abs(delta))} less than your club`;
+}
+
 function OfferCard({
   offer,
   clubId,
   onPick,
   compact,
   likelyStatus,
+  homeWage,
 }: {
   offer: ClubOfferTerms;
   clubId: string | null;
   onPick: (id: string) => void;
   compact?: boolean;
   likelyStatus?: SquadStatus;
+  homeWage?: number;
 }) {
   const club = getClub(offer.clubId);
   if (!club) return null;
@@ -52,7 +61,11 @@ function OfferCard({
           {likelyStatus ? ` · ${SQUAD_STATUS_LABEL[likelyStatus]}` : ''}
         </p>
         <p className={`mt-1 text-white/40 ${compact ? 'text-[10px]' : 'text-[11px]'}`}>
-          {isCurrentClubRenewal ? 'Sign the new deal' : 'Agree personal terms'}
+          {isCurrentClubRenewal
+            ? 'Your club’s salary offer'
+            : homeWage != null && homeWage > 0
+              ? wageVsHome(offer.weeklyWage, homeWage)
+              : 'Agree personal terms'}
         </p>
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1">
@@ -82,6 +95,8 @@ export default function TransferChoiceScreen() {
   );
   const renewalOffer = offers.find((o) => o.renewal && o.clubId === clubId) ?? null;
   const otherOffers = offers.filter((o) => o !== renewalOffer);
+  const homeWage = renewalOffer?.weeklyWage
+    || (pending.stay?.weeklyWage != null && pending.stay.weeklyWage > 0 ? pending.stay.weeklyWage : undefined);
   const stayYears = pending.stay?.contractYearsRemaining;
   const outOfContract = stayYears != null && stayYears <= 0;
   const showStay = Boolean(pending.allowDecline && pending.stay && stayClub && !outOfContract);
@@ -107,6 +122,14 @@ export default function TransferChoiceScreen() {
       <div>
         <h1 className="font-display text-2xl font-bold">Choose your next move</h1>
         <p className="mt-2 max-w-sm text-sm text-white/60">{KIND_LABEL[pending.kind] ?? 'Clubs'}</p>
+        <p className="mt-2 max-w-sm text-xs text-white/45">
+          Compare each weekly wage with your current club’s salary offer before you decide.
+        </p>
+        {homeWage != null && homeWage > 0 && (
+          <p className="mt-2 text-sm font-semibold text-emerald-200/90">
+            Your club’s offer · {formatWeeklyWage(homeWage)}
+          </p>
+        )}
       </div>
 
       {(lastTransferRejection || pending.rejectionDetail) && (
@@ -123,6 +146,7 @@ export default function TransferChoiceScreen() {
               clubId={clubId}
               onPick={(id) => resolveTransferChoice(id)}
               likelyStatus={likelyFor(renewalOffer)}
+              homeWage={homeWage}
             />
           )}
           {showStay && stayClub && (
@@ -168,6 +192,7 @@ export default function TransferChoiceScreen() {
               clubId={clubId}
               onPick={(id) => resolveTransferChoice(id)}
               likelyStatus={likelyFor(offer)}
+              homeWage={homeWage}
             />
           ))}
         </div>

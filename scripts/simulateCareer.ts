@@ -61,9 +61,11 @@ import {
   assignOpeningTrialClub,
   beginClubTrial,
   beginFavouriteClubTrial,
+  chooseTrialClub,
   clubTrialComplete,
   createYouthCampaign,
   failClubTrial,
+  repairOpeningCampaign,
   resolveOpeningMatch,
   youthTournamentComplete,
 } from '../src/game/career/openingFlow';
@@ -589,8 +591,8 @@ if (internationalCampaignForSeason(4, 'CAF').tournament !== 'afcon') {
   console.error('season 4 CAF must be AFCON, not the World Cup');
   process.exitCode = 1;
 }
-if (internationalCalendarSeason(2, { careerStart: 'youth' }) !== 1) {
-  console.error('youth-path internal season 2 is first-team Season 1 (World Cup qualifying)');
+if (internationalCalendarSeason(1, { careerStart: 'youth' }) !== 1) {
+  console.error('youth-path Season 1 is World Cup qualifying');
   process.exitCode = 1;
 }
 if (internationalCalendarSeason(1, { careerStart: 'favourite-first-team' }) !== 1) {
@@ -765,15 +767,15 @@ if (internationalCampaignForSeason(4, 'UEFA').qualifierGames !== 0) {
   process.exitCode = 1;
 }
 
-console.log('\n--- Display seasons skip the reserve year ---');
-console.log('internal 1', displaySeasonLabel(1), displaySeasonNumber(1));
-console.log('internal 2', displaySeasonLabel(2), displaySeasonNumber(2));
-if (displaySeasonNumber(1) !== null || displaySeasonLabel(1) !== 'Reserves') {
-  console.error('internal season 1 is the reserve year and must not show as Season 1');
+console.log('\n--- Display seasons ---');
+console.log('unspecified 1', displaySeasonLabel(1), displaySeasonNumber(1));
+console.log('first-team 1', displaySeasonLabel(1, { role: 'first-team' }), displaySeasonNumber(1, { role: 'first-team' }));
+if (displaySeasonNumber(1, { role: 'first-team', careerStart: 'youth' }) !== 1) {
+  console.error('youth-path first-team season 1 is public Season 1');
   process.exitCode = 1;
 }
-if (displaySeasonNumber(2) !== 1) {
-  console.error('internal season 2 is the first public season');
+if (displaySeasonNumber(1, { role: 'reserve' }) !== null || displaySeasonLabel(1, { role: 'reserve' }) !== 'Reserves') {
+  console.error('a leftover academy role must not show as Season 1');
   process.exitCode = 1;
 }
 if (displaySeasonNumber(1, { careerStart: 'favourite-first-team', role: 'first-team' }) !== 1) {
@@ -962,7 +964,7 @@ if (madridClub) {
   }
 
   const youthFirst = hydrateSeason({
-    seasonNumber: 2,
+    seasonNumber: 1,
     club: madridClub,
     careerGoalRatio: 0.8,
     nationId: 'spain',
@@ -1192,14 +1194,13 @@ if (germanTierOk < 80) {
 
 console.log('\n--- U16 opening: youth goals map to club tiers ---');
 if (
-  tierForYouthGoals(7) !== 1
-  || tierForYouthGoals(6) !== 2
-  || tierForYouthGoals(5) !== 3
-  || tierForYouthGoals(4) !== 4
-  || tierForYouthGoals(3) !== 5
-  || tierForYouthGoals(0) !== 5
+  tierForYouthGoals(3, 4) !== 1
+  || tierForYouthGoals(3, 3) !== 1
+  || tierForYouthGoals(2, 4) !== 3
+  || tierForYouthGoals(1, 4) !== 5
+  || tierForYouthGoals(0, 4) !== 5
 ) {
-  console.error('tierForYouthGoals must be 7 elite / 6 strong / 5 mid / 4 medium / 0-3 lower level');
+  console.error('3/4 (0.75) must be Elite; 2/4 Mid-table; 1/4 and blanks stay lower level');
   process.exitCode = 1;
 }
 const chanceSum = CLUB_TRIAL_CHANCE_SPLIT.reduce((sum, n) => sum + n, 0);
@@ -1377,9 +1378,76 @@ if (path.qualified) {
 }
 
 const assigned = assignOpeningTrialClub({ ...path, goals: 7, youthGoals: 7 }, 'germany');
-if (!assigned.trialClubId || assigned.trialTier !== 1) {
-  console.error('7 U16 goals must earn an elite trial');
+if ((assigned.trialClubIds ?? []).length !== 3 || assigned.trialTier !== 1 || assigned.trialClubId) {
+  console.error('a 1.00 U16 ratio must offer three Elite clubs to choose from');
   process.exitCode = 1;
+}
+if ((assigned.trialClubIds ?? []).some((id) => getClub(id)?.tier !== 1)) {
+  console.error('every youth trial offer at 0.75+ must be Elite');
+  process.exitCode = 1;
+}
+const threeFromFour = assignOpeningTrialClub({ ...path, goals: 3, youthGoals: 3, gamesPlayed: 4 }, 'germany');
+if (threeFromFour.trialTier !== 1 || (threeFromFour.trialClubIds ?? []).length !== 3) {
+  console.error('3 goals in 4 U16 games (0.75) must offer three Elite trials');
+  process.exitCode = 1;
+}
+const staleLower = assignOpeningTrialClub({
+  ...path,
+  goals: 3,
+  youthGoals: 3,
+  gamesPlayed: 4,
+  eliminated: true,
+  trialTier: 5,
+  trialClubId: 'luton',
+  trialClubIds: [],
+}, 'england');
+if (
+  staleLower.trialTier !== 1
+  || staleLower.trialClubId
+  || (staleLower.trialClubIds ?? []).length !== 3
+  || (staleLower.trialClubIds ?? []).some((id) => getClub(id)?.tier !== 1)
+) {
+  console.error('a stuck Lower-level 3/4 save must be repaired to three Elite trial buttons');
+  process.exitCode = 1;
+}
+const repairedEngland = repairOpeningCampaign({
+  ...path,
+  goals: 3,
+  youthGoals: 3,
+  gamesPlayed: 4,
+  eliminated: true,
+  trialTier: 5,
+  trialClubId: 'luton',
+  trialClubIds: [],
+}, 'england');
+if (repairedEngland.trialTier !== 1 || (repairedEngland.trialClubIds ?? []).length !== 3) {
+  console.error('persist repair must refill Elite clubs for a 0.75 England youth finish');
+  process.exitCode = 1;
+}
+{
+  useCareerStore.getState().resetCareer();
+  useCareerStore.setState({
+    nationality: 'england',
+    careerStart: 'youth',
+    phase: 'opening-brief',
+    openingCampaign: {
+      ...path,
+      goals: 3,
+      youthGoals: 3,
+      gamesPlayed: 4,
+      eliminated: true,
+      trialTier: 5,
+      trialClubId: 'luton',
+      trialClubIds: [],
+    },
+  });
+  useCareerStore.getState().repairOpeningTrialPicker();
+  const fixed = useCareerStore.getState().openingCampaign;
+  if (fixed?.trialTier !== 1 || (fixed.trialClubIds ?? []).length !== 3) {
+    console.error('repairOpeningTrialPicker must unstick a 3/4 England brief with no buttons');
+    process.exitCode = 1;
+  }
+  useCareerStore.getState().resetCareer();
 }
 const germanElite = pickTrialClub(1, 'germany');
 console.log('German elite trial', germanElite.id, germanElite.country, germanElite.tier);
@@ -1388,7 +1456,7 @@ if (germanElite.country !== 'Germany' || germanElite.tier !== 1) {
   process.exitCode = 1;
 }
 
-const trialStart = beginClubTrial({ ...assigned, goals: 7, youthGoals: 7 }, 'germany', 1);
+const trialStart = chooseTrialClub(assigned, assigned.trialClubIds?.[0] ?? '');
 console.log('club trial fixtures', trialStart.calendar.fixtures.map((f) => `${f.opponentLabel} ${f.isHome ? 'H' : 'A'} x${f.playerChances}`));
 if (
   trialStart.calendar.fixtures.length !== 3
@@ -1417,32 +1485,42 @@ if (!clubTrialComplete(failed) || trialContractWon(trialClub, failed.goals, fail
   process.exitCode = 1;
 }
 const firstFail = failClubTrial(failed, 'germany');
-console.log('same-level retry', failed.trialClubId, '->', firstFail.opening.trialClubId, firstFail.opening.trialTier, 'exhausted', firstFail.exhausted);
+console.log('same-level retry', failed.trialClubId, '->', firstFail.opening.trialClubIds, firstFail.opening.trialTier, 'exhausted', firstFail.exhausted);
 if (
   firstFail.exhausted
   || firstFail.opening.trialTier !== trialStart.trialTier
-  || firstFail.opening.trialClubId === trialStart.trialClubId
+  || firstFail.opening.trialClubId
+  || (firstFail.opening.trialClubIds ?? []).length !== 2
+  || (firstFail.opening.trialClubIds ?? []).includes(trialStart.trialClubId ?? '')
 ) {
-  console.error('failing a trial must stay at the same level and pick a different club');
+  console.error('failing a trial must leave the other two clubs at the same level');
   process.exitCode = 1;
 }
-let secondLook = firstFail.opening;
+let secondLook = chooseTrialClub(firstFail.opening, firstFail.opening.trialClubIds?.[0] ?? '');
 secondLook = applyTrialMatch(secondLook, 1);
 secondLook = applyTrialMatch(secondLook, 0);
 secondLook = applyTrialMatch(secondLook, 0);
 const secondFail = failClubTrial(secondLook, 'germany');
-if (secondFail.exhausted || secondFail.opening.trialTier !== trialStart.trialTier) {
-  console.error('the second miss must still be another look at the same level');
+if (
+  secondFail.exhausted
+  || secondFail.opening.trialTier !== trialStart.trialTier
+  || (secondFail.opening.trialClubIds ?? []).length !== 1
+) {
+  console.error('the second miss must still offer the last club at the same level');
   process.exitCode = 1;
 }
-let thirdLook = secondFail.opening;
+let thirdLook = chooseTrialClub(secondFail.opening, secondFail.opening.trialClubIds?.[0] ?? '');
 thirdLook = applyTrialMatch(thirdLook, 0);
 thirdLook = applyTrialMatch(thirdLook, 0);
 thirdLook = applyTrialMatch(thirdLook, 0);
 const thirdFail = failClubTrial(thirdLook, 'germany');
-console.log('three looks drop', thirdFail.exhausted, thirdFail.opening.trialClubId, thirdFail.opening.trialTier, 'best', thirdFail.opening.bestTrialRatio.toFixed(2));
-if (thirdFail.exhausted || thirdFail.opening.trialTier !== (trialStart.trialTier ?? 1) + 1) {
-  console.error('three missed looks at a level must drop one band for three more trials');
+console.log('three looks drop', thirdFail.exhausted, thirdFail.opening.trialClubIds, thirdFail.opening.trialTier, 'best', thirdFail.opening.bestTrialRatio.toFixed(2));
+if (
+  thirdFail.exhausted
+  || thirdFail.opening.trialTier !== (trialStart.trialTier ?? 1) + 1
+  || (thirdFail.opening.trialClubIds ?? []).length !== 3
+) {
+  console.error('three missed looks at a level must offer three clubs one band down');
   process.exitCode = 1;
 }
 if (Math.abs(thirdFail.opening.bestTrialRatio - 1 / 3) > 1e-9) {
@@ -1451,6 +1529,7 @@ if (Math.abs(thirdFail.opening.bestTrialRatio - 1 / 3) > 1e-9) {
 }
 let dropLook = thirdFail.opening;
 for (let i = 0; i < 3; i++) {
+  dropLook = chooseTrialClub(dropLook, dropLook.trialClubIds?.[0] ?? '');
   dropLook = applyTrialMatch(dropLook, 0);
   dropLook = applyTrialMatch(dropLook, 0);
   dropLook = applyTrialMatch(dropLook, 0);
@@ -1484,11 +1563,11 @@ if (trialOfferTiers.length === 0 || trialOfferTiers.some((tier) => tier !== tria
   console.error('trial-fail offers must all come from the best-ratio band');
   process.exitCode = 1;
 }
-if (trialOffers.offers.some((o) => {
+  if (trialOffers.offers.some((o) => {
   const dest = getClub(o.clubId);
-  return !dest || o.weeklyWage !== weeklyWageForSquadStatus(dest, 0, 'reserve') || o.contractYears !== RESERVE_CONTRACT_YEARS;
+  return !dest || o.weeklyWage !== weeklyWageForSquadStatus(dest, 0, 'rising-star') || o.contractYears !== FIRST_CONTRACT_YEARS || o.squadStatus !== 'rising-star';
 })) {
-  console.error('trial-fail offers are 2-year reserve deals at 20% of each club’s starter wage');
+  console.error('trial-fail offers are 2-year Rising star deals at 10% of each club’s top wage');
   process.exitCode = 1;
 }
 if (trialOfferHome < 4) {
@@ -1518,28 +1597,30 @@ if (favouriteClub) {
   favourite = applyTrialMatch(favourite, 0);
   favourite = applyTrialMatch(favourite, 0);
   const favRetry = failClubTrial(favourite, 'spain');
-  console.log('favourite trial retry', favourite.trialClubId, '->', favRetry.opening.trialClubId, favRetry.opening.trialTier);
+  console.log('favourite trial retry', favourite.trialClubId, '->', favRetry.opening.trialClubIds, favRetry.opening.trialTier);
   if (
     favRetry.exhausted
-    || favRetry.opening.trialClubId === 'real-madrid'
+    || (favRetry.opening.trialClubIds ?? []).includes('real-madrid')
+    || (favRetry.opening.trialClubIds ?? []).length !== 2
     || favRetry.opening.trialTier !== favouriteClub.tier
   ) {
-    console.error('missing a favourite-club trial must offer two more looks at the same level, not a forced loan');
+    console.error('missing a favourite-club trial must offer two more clubs at the same level, not a forced loan');
     process.exitCode = 1;
   }
   let favLook = favRetry.opening;
   for (let i = 0; i < 2; i++) {
+    favLook = chooseTrialClub(favLook, favLook.trialClubIds?.[0] ?? '');
     favLook = applyTrialMatch(favLook, 0);
     favLook = applyTrialMatch(favLook, 0);
     favLook = applyTrialMatch(favLook, 0);
     favLook = failClubTrial(favLook, 'spain').opening;
   }
-  console.log('favourite drop', favLook.trialClubId, favLook.trialTier, favLook.originCountry);
-  if (favLook.trialTier !== favouriteClub.tier + 1) {
-    console.error('failing three elite favourite trials must drop one level');
+  console.log('favourite drop', favLook.trialClubIds, favLook.trialTier, favLook.originCountry);
+  if (favLook.trialTier !== favouriteClub.tier + 1 || (favLook.trialClubIds ?? []).length !== 3) {
+    console.error('failing three elite favourite trials must offer three clubs one level down');
     process.exitCode = 1;
   }
-  const secondRound = [favLook.trialClubId, ...favLook.rejectedClubIds]
+  const secondRound = [...(favLook.trialClubIds ?? []), ...favLook.rejectedClubIds]
     .map((id) => (id ? getClub(id) : undefined))
     .filter((c) => c && c.tier === favLook.trialTier);
   const homeSecond = secondRound.filter((c) => c?.country === 'Spain').length;
@@ -2204,7 +2285,7 @@ if (barca && hilal && lafc) {
     process.exitCode = 1;
   }
   if (reservePromo.immediate?.contractYearsRemaining !== FIRST_CONTRACT_YEARS) {
-    console.error('the first senior contract after the reserve year must be 3 years');
+    console.error('the first senior contract after a leftover academy year must be 2 years');
     process.exitCode = 1;
   }
   const reserveBar = getClub('real-madrid')!.reserveGoalRatio.toFixed(2);
@@ -2928,6 +3009,7 @@ if (barca && hilal && lafc) {
     'transfers',
     favFirstMissPerms.length,
   );
+  const favFirstRenewal = favFirstMissOffers.find((o) => o.renewal && o.clubId === 'real-madrid');
   if (
     favFirstMiss.pendingTransfer?.kind !== 'loan-or-transfer'
     || !favFirstMiss.pendingTransfer.allowDecline
@@ -2936,6 +3018,15 @@ if (barca && hilal && lafc) {
     || favFirstMissPerms.length === 0
   ) {
     console.error('Season 1 below 0.33 must offer a Reserve stay plus loans and transfers');
+    process.exitCode = 1;
+  }
+  if (
+    !favFirstRenewal
+    || favFirstRenewal.weeklyWage <= 0
+    || favFirstMissPerms.some((o) => o.weeklyWage <= 0)
+    || favFirstMissLoans.some((o) => o.weeklyWage <= 0)
+  ) {
+    console.error('Season 1 must show the current club’s salary offer next to other clubs’ wage offers');
     process.exitCode = 1;
   }
 
@@ -3094,7 +3185,7 @@ if (barca && hilal && lafc) {
       squadStatus: 'rising-star',
     });
     const s1PermTiers = (s1Offers.pendingTransfer?.offers ?? [])
-      .filter((o) => o.move === 'permanent')
+      .filter((o) => o.move === 'permanent' && !o.renewal && o.clubId !== 'man-city')
       .map((o) => getClub(o.clubId)?.tier ?? 5);
     console.log('season 1 0.53 perm tiers', s1PermTiers);
     if (s1PermTiers.some((tier) => tier <= 2)) {
@@ -5003,8 +5094,8 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     console.error('sponsorship is only for Premier League, Ligue 1, Bundesliga, Serie A and La Liga');
     process.exitCode = 1;
   }
-  if (FIRST_CONTRACT_YEARS !== 3 || RESERVE_CONTRACT_YEARS !== 2 || loanContractYearsRemaining(2, 5, 17) !== 1) {
-    console.error('the first professional contract is 3 years; reserve deals stay 2 years; loans stay 1 year');
+  if (FIRST_CONTRACT_YEARS !== 2 || loanContractYearsRemaining(2, 5, 17) !== 1) {
+    console.error('the first Rising-star contract is 2 years; loans stay 1 year');
     process.exitCode = 1;
   }
   if (loanContractYearsRemaining(5, 5, 22) !== 1 || loanContractYearsRemaining(8, 1, 28) !== 1) {
@@ -5040,9 +5131,14 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     });
     const arsenalLoans = (arsenalS1.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan');
     const arsenalPerms = (arsenalS1.pendingTransfer?.offers ?? []).filter((o) => o.move === 'permanent' && !o.renewal);
+    const arsenalRenewal = (arsenalS1.pendingTransfer?.offers ?? []).find((o) => o.renewal && o.clubId === 'arsenal');
     const arsenalLoanWages = new Set(arsenalLoans.map((o) => o.weeklyWage));
     const arsenalTiers = arsenalPerms.map((o) => getClub(o.clubId)?.tier ?? 5);
-    console.log('Arsenal 0.48 window', arsenalS1.headline, 'loan wages', [...arsenalLoanWages], 'tiers', arsenalTiers);
+    console.log('Arsenal 0.48 window', arsenalS1.headline, 'loan wages', [...arsenalLoanWages], 'tiers', arsenalTiers, 'renewal', arsenalRenewal?.weeklyWage);
+    if (!arsenalRenewal || arsenalRenewal.weeklyWage <= 0 || arsenalPerms.some((o) => o.weeklyWage <= 0)) {
+      console.error('Season 1 must include the current club’s salary offer so it can be compared with other bids');
+      process.exitCode = 1;
+    }
     const honourAlreadyMet = resolveSeasonTransition({
       season: {
         ...dummySeason,
@@ -5292,8 +5388,8 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     console.error('favourite Season 1 week 25 must not be value-locked');
     process.exitCode = 1;
   }
-  if (!isSeason1ValueLocked(2, 15, { careerStart: 'youth', role: 'first-team' })) {
-    console.error('youth-path public Season 1 (internal 2) must stay locked until week 20');
+  if (!isSeason1ValueLocked(1, 15, { careerStart: 'youth', role: 'first-team' })) {
+    console.error('youth-path Season 1 must stay locked until week 20');
     process.exitCode = 1;
   }
   const finished = {

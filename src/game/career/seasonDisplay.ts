@@ -1,11 +1,19 @@
-/** Public-facing season numbers skip the reserve year: internal season 2 is Season 1. */
+/** Public season numbers. First-team and loan seasons count from 1.
+ * A leftover academy `reserve` role (old saves) is hidden from the label. */
 export function displaySeasonNumber(
   seasonNumber: number,
   opts?: { role?: 'reserve' | 'first-team' | 'loan'; careerStart?: string | null },
 ): number | null {
   if (opts?.role === 'reserve') return null;
-  if (opts?.careerStart === 'favourite-first-team') return Math.max(1, seasonNumber);
-  if (seasonNumber < 2) return opts?.role === 'first-team' || opts?.role === 'loan' ? 1 : null;
+  if (opts?.role === 'first-team' || opts?.role === 'loan') return Math.max(1, seasonNumber);
+  if (
+    opts?.careerStart === 'favourite-first-team'
+    || opts?.careerStart === 'youth'
+    || opts?.careerStart === 'favourite-trial'
+  ) {
+    return Math.max(1, seasonNumber);
+  }
+  if (seasonNumber < 2) return null;
   return seasonNumber - 1;
 }
 
@@ -25,7 +33,7 @@ export function displaySeasonLabel(
   return n === null ? 'Reserves' : `Season ${n}`;
 }
 
-/** The opening reserve year is hidden from the career record and overall ratio. */
+/** Academy leftover seasons stay out of the career record. First-team and loans count. */
 export function countsTowardCareerRecord(
   seasonNumber: number,
   role?: 'reserve' | 'first-team' | 'loan',

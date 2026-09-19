@@ -12,7 +12,6 @@ import {
   MIN_ACCEPTED_FEE_RATIO,
   newContractYears,
   playerMarketValueFromSeasons,
-  RESERVE_CONTRACT_YEARS,
   seasonCountsTowardForm,
   tierForMarketValue,
   TOP_LEAGUES,
@@ -1158,10 +1157,10 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
         pendingTransfer: pendingFromOffers(
           loans.length > 0 ? 'loan-or-transfer' : 'end-of-season',
           loans.length > 0
-            ? 'Loan destinations follow the club you are leaving. Loan wages follow each destination. Permanent fees follow your market value.'
+            ? 'Compare weekly wages. Renew at home, stay on the current deal, take a loan, or move.'
             : fee <= 0
-              ? 'Out of contract: more clubs can bid because there is no fee.'
-              : 'These clubs can pay the transfer fee. You can stay where you are.',
+              ? 'Compare weekly wages. Renew at home or move as a free agent.'
+              : 'Compare weekly wages. Renew at home, stay on the current deal, or move.',
           offers,
           Boolean(stay),
           stay,
@@ -1170,7 +1169,8 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       params,
       club,
       value,
-      ratioMet,
+      true,
+      firstSeasonStayStatus,
     );
   }
 
@@ -1269,13 +1269,19 @@ function attachCurrentClubRenewal(
   club: Club,
   value: number,
   ratioMet = true,
+  stayStatus?: SquadStatus,
 ): SeasonTransitionResult {
   if (params.role === 'reserve' || params.role === 'loan') return result;
   if (!ratioMet) return result;
   const yearsLeft = params.contractYearsRemaining ?? 0;
-  if (yearsLeft !== 1 && yearsLeft !== 2) return result;
+  if (yearsLeft < 1 || yearsLeft > 3) return result;
   const years = newContractYears(params.age);
-  const wage = weeklyWageForClub(club, value, params.clubLeague);
+  const wage = weeklyWageForSquadStatus(
+    club,
+    value,
+    stayStatus ?? params.squadStatus ?? 'starter',
+    params.clubLeague,
+  );
   const renewal = {
     clubId: club.id,
     move: 'permanent' as const,
@@ -1283,6 +1289,7 @@ function attachCurrentClubRenewal(
     weeklyWage: wage,
     contractYears: years,
     renewal: true,
+    squadStatus: stayStatus,
   };
   if (result.pendingTransfer) {
     const offers = result.pendingTransfer.offers ?? [];
@@ -1443,13 +1450,14 @@ export function trialFailTransferPending(params: {
   const band = TIER_LABEL[tier].toLowerCase();
   return pendingFromOffers(
     'trial-offers',
-    `Your best trial ratio was ${params.bestRatio.toFixed(2)}. ${band} clubs want to sign you on a ${RESERVE_CONTRACT_YEARS}-year reserve deal.`,
+    `Your best trial ratio was ${params.bestRatio.toFixed(2)}. ${band} clubs want to sign you as a Rising star on a ${FIRST_CONTRACT_YEARS}-year deal.`,
     clubs.map((club) => ({
       clubId: club.id,
       move: 'permanent' as const,
       fee: 0,
-      weeklyWage: weeklyWageForSquadStatus(club, 0, 'reserve'),
-      contractYears: RESERVE_CONTRACT_YEARS,
+      weeklyWage: weeklyWageForSquadStatus(club, 0, 'rising-star'),
+      contractYears: FIRST_CONTRACT_YEARS,
+      squadStatus: 'rising-star' as const,
     })),
     false,
   );

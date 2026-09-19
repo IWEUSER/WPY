@@ -63,11 +63,13 @@ import {
   applyYouthMatch,
   assignOpeningTrialClub,
   beginClubTrial,
+  chooseTrialClub,
   beginFavouriteClubTrial,
   clubTrialComplete,
   createYouthCampaign,
   failClubTrial,
   openingMatchSummary,
+  repairOpeningCampaign,
   resolveOpeningMatch,
   youthTournamentComplete,
   youthTrophyName,
@@ -823,7 +825,7 @@ function beginSignedCareer(
 }
 
 interface CareerActions {
-  /** Opens nationality selection before the Youth Championships. */
+  /** Opens nationality selection for the youth-player career path. */
   startCareer: () => void;
   startYouthChampionships: () => void;
   startFavouritePath: (kind: Exclude<CareerStart, 'youth'>) => void;
@@ -831,6 +833,8 @@ interface CareerActions {
   backFromSetup: () => void;
   startTrial: () => void;
   startOpeningTrial: () => void;
+  chooseOpeningTrialClub: (clubId: string) => void;
+  repairOpeningTrialPicker: () => void;
   recordTrialShot: (result: ShotResult) => void;
   finishTrial: () => void;
   chooseClub: (clubId: string) => void;
@@ -1404,6 +1408,9 @@ export const useCareerStore = create<CareerStore>()(
           if (opening.kind === 'youth-tournament') {
             opening = beginClubTrial(opening, state.nationality, opening.trialTier ?? undefined);
           }
+          if (!opening.trialClubId) {
+            return { openingCampaign: opening, phase: 'opening-brief' };
+          }
           const live = liveFromOpening(opening);
           if (!live) return { openingCampaign: opening, phase: 'opening-brief' };
           return {
@@ -1414,6 +1421,34 @@ export const useCareerStore = create<CareerStore>()(
             seasonCalendar: opening.calendar,
             phase: 'match',
           };
+        }),
+
+      chooseOpeningTrialClub: (clubId) =>
+        set((state) => {
+          if (!state.openingCampaign || !state.nationality) return {};
+          let opening = state.openingCampaign;
+          if (opening.kind === 'youth-tournament') {
+            opening = assignOpeningTrialClub(opening, state.nationality);
+          }
+          opening = chooseTrialClub(opening, clubId);
+          const live = liveFromOpening(opening);
+          if (!live) return { openingCampaign: opening, phase: 'opening-brief' };
+          return {
+            openingCampaign: opening,
+            clubId: opening.trialClubId,
+            trial: null,
+            liveMatch: live,
+            seasonCalendar: opening.calendar,
+            phase: 'match',
+          };
+        }),
+
+      repairOpeningTrialPicker: () =>
+        set((state) => {
+          if (!state.openingCampaign || !state.nationality) return {};
+          if (state.openingCampaign.kind !== 'youth-tournament') return {};
+          const opening = assignOpeningTrialClub(state.openingCampaign, state.nationality);
+          return { openingCampaign: opening, phase: 'opening-brief' };
         }),
 
       recordTrialShot: (result) =>
@@ -1434,7 +1469,7 @@ export const useCareerStore = create<CareerStore>()(
         }),
 
       chooseClub: (clubId) =>
-        set((state) => beginSignedCareer(clubId, 'reserve', state.nationality, state.careerStart)),
+        set((state) => beginSignedCareer(clubId, 'first-team', state.nationality, state.careerStart)),
 
       chooseNationality: (nationId) =>
         set({
@@ -1466,15 +1501,7 @@ export const useCareerStore = create<CareerStore>()(
               phase: 'match',
             };
           }
-          if (state.careerStart === 'favourite-reserve' && state.clubId) {
-            return {
-              nationality: nationId,
-              nationalTeam,
-              ...beginSignedCareer(state.clubId, 'reserve', nationId, state.careerStart),
-              playerName,
-            };
-          }
-          if (state.careerStart === 'favourite-first-team' && state.clubId) {
+          if ((state.careerStart === 'favourite-reserve' || state.careerStart === 'favourite-first-team') && state.clubId) {
             return {
               nationality: nationId,
               nationalTeam,
@@ -1509,7 +1536,10 @@ export const useCareerStore = create<CareerStore>()(
               state.openingCampaign.kind === 'youth-tournament' &&
               youthTournamentComplete(state.openingCampaign)
             ) {
-              return { phase: 'opening-brief' };
+              const opening = state.nationality
+                ? repairOpeningCampaign(state.openingCampaign, state.nationality)
+                : state.openingCampaign;
+              return { phase: 'opening-brief', openingCampaign: opening };
             }
             const live = liveFromOpening(state.openingCampaign);
             if (live) {
@@ -1619,7 +1649,11 @@ export const useCareerStore = create<CareerStore>()(
             };
           }
           if (after === 'opening-brief') {
-            return { phase: 'opening-brief', lastMatchResult: null };
+            const opening =
+              state.openingCampaign && state.nationality
+                ? repairOpeningCampaign(state.openingCampaign, state.nationality)
+                : state.openingCampaign;
+            return { phase: 'opening-brief', lastMatchResult: null, openingCampaign: opening };
           }
           if (after === 'club-offer') {
             return { phase: 'club-offer', lastMatchResult: null };
@@ -1853,7 +1887,7 @@ export const useCareerStore = create<CareerStore>()(
           if (!pending) return state;
           if (pending.kind === 'trial-offers') {
             if (!clubId) return state;
-            return beginSignedCareer(clubId, 'reserve', state.nationality, state.careerStart);
+            return beginSignedCareer(clubId, 'first-team', state.nationality, state.careerStart);
           }
           if (!state.clubId || !state.parentClubId) return state;
 
@@ -2169,7 +2203,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 35,
+      version: 36,
       migrate: (persisted) => {
         try {
           return migrateCareerPersist(persisted);
@@ -2222,14 +2256,17 @@ function migrateCareerPersist(persisted: unknown): CareerState {
         return {
           ...state,
           openingCampaign: state.openingCampaign
-            ? {
-                ...state.openingCampaign,
-                bestTrialRatio: state.openingCampaign.bestTrialRatio ?? 0,
-                rejectedClubIds: state.openingCampaign.rejectedClubIds ?? [],
-                openingTier: state.openingCampaign.openingTier ?? state.openingCampaign.trialTier ?? null,
-                originCountry: state.openingCampaign.originCountry ?? null,
-                originClubId: state.openingCampaign.originClubId ?? null,
-              }
+            ? repairOpeningCampaign(
+                {
+                  ...state.openingCampaign,
+                  bestTrialRatio: state.openingCampaign.bestTrialRatio ?? 0,
+                  rejectedClubIds: state.openingCampaign.rejectedClubIds ?? [],
+                  openingTier: state.openingCampaign.openingTier ?? state.openingCampaign.trialTier ?? null,
+                  originCountry: state.openingCampaign.originCountry ?? null,
+                  originClubId: state.openingCampaign.originClubId ?? null,
+                },
+                state.nationality ?? null,
+              )
             : null,
           careerStart: state.careerStart ?? null,
           nationality: state.nationality ?? null,

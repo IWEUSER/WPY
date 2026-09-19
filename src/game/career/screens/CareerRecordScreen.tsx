@@ -53,7 +53,7 @@ export default function CareerRecordScreen() {
       <div className="mt-5 flex flex-col gap-3">
         {seasons.length === 0 && (
           <p className="text-sm text-white/50">
-            The reserve year is not part of the career record. First-team seasons will appear here.
+            Season 1 will appear here once you play your first first-team match.
           </p>
         )}
         {seasons.map((season) => (
