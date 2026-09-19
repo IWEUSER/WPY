@@ -2,28 +2,11 @@ import { useMemo, useState } from 'react';
 import { playableClubsGroupedByLeague, TIER_LABEL } from '../data/clubs';
 import { useCareerStore } from '../store';
 
-const PATH_COPY: Record<string, { title: string; detail: string }> = {
-  'favourite-trial': {
-    title: 'Pick your club',
-    detail: 'Three academy games. Hit this club’s reserve ratio to sign. Miss three trials at this level and you trial one level down.',
-  },
-  'favourite-reserve': {
-    title: 'Pick your club',
-    detail: 'A reserve contract and the full league calendar at the academy ground. Hit the ratio to stay.',
-  },
-  'favourite-first-team': {
-    title: 'Pick your club',
-    detail: 'A two-year first-team contract. Hit the ratio to stay — miss it and a loan follows.',
-  },
-};
-
 export default function ClubChoiceScreen() {
-  const careerStart = useCareerStore((s) => s.careerStart);
   const chooseFavouriteClub = useCareerStore((s) => s.chooseFavouriteClub);
   const backFromSetup = useCareerStore((s) => s.backFromSetup);
   const [query, setQuery] = useState('');
 
-  const copy = PATH_COPY[careerStart ?? ''] ?? PATH_COPY['favourite-trial'];
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
     return playableClubsGroupedByLeague()
@@ -50,9 +33,11 @@ export default function ClubChoiceScreen() {
         >
           Back
         </button>
-        <p className="text-sm text-white/50">Play for your favourite club</p>
-        <h1 className="font-display text-2xl font-bold">{copy.title}</h1>
-        <p className="mt-2 max-w-sm text-sm text-white/60">{copy.detail}</p>
+        <p className="text-sm text-white/50">Career mode</p>
+        <h1 className="font-display text-2xl font-bold">Pick your club</h1>
+        <p className="mt-2 max-w-sm text-sm text-white/60">
+          Season 1 starts as a Rising star on a 2-year deal at 10% of that club’s top wage. You can renew or leave at the end of the season.
+        </p>
       </div>
 
       <input

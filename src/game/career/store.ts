@@ -823,7 +823,7 @@ function beginSignedCareer(
 }
 
 interface CareerActions {
-  /** Opens nationality selection before the Youth Championships. */
+  /** Opens nationality selection for the youth-player career path. */
   startCareer: () => void;
   startYouthChampionships: () => void;
   startFavouritePath: (kind: Exclude<CareerStart, 'youth'>) => void;
@@ -1434,7 +1434,7 @@ export const useCareerStore = create<CareerStore>()(
         }),
 
       chooseClub: (clubId) =>
-        set((state) => beginSignedCareer(clubId, 'reserve', state.nationality, state.careerStart)),
+        set((state) => beginSignedCareer(clubId, 'first-team', state.nationality, state.careerStart)),
 
       chooseNationality: (nationId) =>
         set({
@@ -1466,15 +1466,7 @@ export const useCareerStore = create<CareerStore>()(
               phase: 'match',
             };
           }
-          if (state.careerStart === 'favourite-reserve' && state.clubId) {
-            return {
-              nationality: nationId,
-              nationalTeam,
-              ...beginSignedCareer(state.clubId, 'reserve', nationId, state.careerStart),
-              playerName,
-            };
-          }
-          if (state.careerStart === 'favourite-first-team' && state.clubId) {
+          if ((state.careerStart === 'favourite-reserve' || state.careerStart === 'favourite-first-team') && state.clubId) {
             return {
               nationality: nationId,
               nationalTeam,
@@ -1853,7 +1845,7 @@ export const useCareerStore = create<CareerStore>()(
           if (!pending) return state;
           if (pending.kind === 'trial-offers') {
             if (!clubId) return state;
-            return beginSignedCareer(clubId, 'reserve', state.nationality, state.careerStart);
+            return beginSignedCareer(clubId, 'first-team', state.nationality, state.careerStart);
           }
           if (!state.clubId || !state.parentClubId) return state;
 

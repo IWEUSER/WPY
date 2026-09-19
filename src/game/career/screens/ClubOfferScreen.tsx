@@ -1,6 +1,7 @@
 import { getClub, TIER_LABEL } from '../data/clubs';
-import { formatWeeklyWage, playerMarketValue, weeklyWageForSquadStatus } from '../playerValue';
+import { FIRST_CONTRACT_YEARS, formatWeeklyWage, playerMarketValue, weeklyWageForSquadStatus } from '../playerValue';
 import { CLUB_TRIAL_GAMES, trialRatioRequired } from '../trial';
+import { openingSquadStatus } from '../squadStatus';
 import { useCareerStore } from '../store';
 import { STARTING_AGE } from '../constants';
 
@@ -16,11 +17,11 @@ export default function ClubOfferScreen() {
   const club = offers[0];
   const ratio = games != null && games > 0 ? goals / games : 0;
   const required = club ? trialRatioRequired(club) : 0;
-  const reserveWage = (dest: NonNullable<typeof club>) =>
+  const risingWage = (dest: NonNullable<typeof club>) =>
     weeklyWageForSquadStatus(
       dest,
-      playerMarketValue({ age: STARTING_AGE, ratio: 0.3, careerGoals: 0, club: dest }),
-      'reserve',
+      playerMarketValue({ age: STARTING_AGE + 1, ratio: 0.3, careerGoals: 0, club: dest }),
+      openingSquadStatus('first-team'),
     );
 
   return (
@@ -32,7 +33,7 @@ export default function ClubOfferScreen() {
         </h1>
         <p className="mt-2 text-sm text-white/60">
           {fromOpeningTrial && club
-            ? `Ratio ${ratio.toFixed(2)} / ${required.toFixed(2)} required. You hit it — you are now a reserve-team player on a 2-year contract at 20% of ${club.name}'s starter wage (${formatWeeklyWage(reserveWage(club))}).`
+            ? `Ratio ${ratio.toFixed(2)} / ${required.toFixed(2)} required. You hit it — Season 1 starts as a Rising star on a ${FIRST_CONTRACT_YEARS}-year deal at 10% of ${club.name}'s top wage (${formatWeeklyWage(risingWage(club))}).`
             : goals >= 9
               ? "Scouts from Europe's biggest clubs were watching. Pick your future."
               : goals >= 7
@@ -46,33 +47,32 @@ export default function ClubOfferScreen() {
       </div>
 
       <div className="flex w-full max-w-sm flex-col gap-3">
-        {offers.map((club) => (
+        {offers.map((offerClub) => (
           <button
-            key={club.id}
+            key={offerClub.id}
             type="button"
-            onClick={() => chooseClub(club.id)}
+            onClick={() => chooseClub(offerClub.id)}
             className="flex items-center gap-3 rounded-2xl bg-white/5 p-4 text-left backdrop-blur transition active:scale-[0.98]"
-            style={{ borderLeft: `4px solid ${club.color}` }}
+            style={{ borderLeft: `4px solid ${offerClub.color}` }}
           >
             <div className="flex-1">
-              <p className="font-bold">{club.name}</p>
+              <p className="font-bold">{offerClub.name}</p>
               <p className="text-xs text-white/50">
-                {club.country} · {club.league}
+                {offerClub.country} · {offerClub.league}
               </p>
               <p className="mt-1 text-xs text-white/70">
-                2-year reserve contract · {formatWeeklyWage(reserveWage(club))}
+                {FIRST_CONTRACT_YEARS}-year Rising star · {formatWeeklyWage(risingWage(offerClub))}
               </p>
             </div>
             <span className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/70">
-              {TIER_LABEL[club.tier]}
+              {TIER_LABEL[offerClub.tier]}
             </span>
           </button>
         ))}
       </div>
 
       <p className="max-w-sm text-xs text-white/40">
-        You're only 16 — you start on a 2-year reserve contract at 20% of that club's starter wage and need to hit
-        their goal ratio to earn a first-team promotion.
+        Season 1 is first-team football as a Rising star — one chance per game until you earn more.
       </p>
     </div>
   );

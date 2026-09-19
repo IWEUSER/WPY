@@ -47,10 +47,10 @@ export default function NationalityScreen() {
         <h1 className="font-display text-2xl font-bold">Who do you play for?</h1>
         <p className="mt-2 max-w-sm text-sm text-white/60">
           {favourite
-            ? 'This is independent of your club. You skip the Youth Championships and join the club you picked. You still have to hit their ratio to stay.'
+            ? 'This is independent of your club. You join the club you picked as a Rising star and play Season 1.'
             : clubId
               ? 'This is independent of your club. Selectors later look at your goal ratio and the level of club you play for.'
-              : 'Choose your nationality first. You then play that country’s Youth Championship. Clubs offer a trial from how many goals you score there.'}
+              : 'Choose your nationality first. You play that country’s youth tournament, trial for a club, then Season 1 starts as a Rising star.'}
         </p>
       </div>
 

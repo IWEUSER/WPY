@@ -589,8 +589,8 @@ if (internationalCampaignForSeason(4, 'CAF').tournament !== 'afcon') {
   console.error('season 4 CAF must be AFCON, not the World Cup');
   process.exitCode = 1;
 }
-if (internationalCalendarSeason(2, { careerStart: 'youth' }) !== 1) {
-  console.error('youth-path internal season 2 is first-team Season 1 (World Cup qualifying)');
+if (internationalCalendarSeason(1, { careerStart: 'youth' }) !== 1) {
+  console.error('youth-path Season 1 is World Cup qualifying');
   process.exitCode = 1;
 }
 if (internationalCalendarSeason(1, { careerStart: 'favourite-first-team' }) !== 1) {
@@ -765,15 +765,15 @@ if (internationalCampaignForSeason(4, 'UEFA').qualifierGames !== 0) {
   process.exitCode = 1;
 }
 
-console.log('\n--- Display seasons skip the reserve year ---');
-console.log('internal 1', displaySeasonLabel(1), displaySeasonNumber(1));
-console.log('internal 2', displaySeasonLabel(2), displaySeasonNumber(2));
-if (displaySeasonNumber(1) !== null || displaySeasonLabel(1) !== 'Reserves') {
-  console.error('internal season 1 is the reserve year and must not show as Season 1');
+console.log('\n--- Display seasons ---');
+console.log('unspecified 1', displaySeasonLabel(1), displaySeasonNumber(1));
+console.log('first-team 1', displaySeasonLabel(1, { role: 'first-team' }), displaySeasonNumber(1, { role: 'first-team' }));
+if (displaySeasonNumber(1, { role: 'first-team', careerStart: 'youth' }) !== 1) {
+  console.error('youth-path first-team season 1 is public Season 1');
   process.exitCode = 1;
 }
-if (displaySeasonNumber(2) !== 1) {
-  console.error('internal season 2 is the first public season');
+if (displaySeasonNumber(1, { role: 'reserve' }) !== null || displaySeasonLabel(1, { role: 'reserve' }) !== 'Reserves') {
+  console.error('a leftover academy role must not show as Season 1');
   process.exitCode = 1;
 }
 if (displaySeasonNumber(1, { careerStart: 'favourite-first-team', role: 'first-team' }) !== 1) {
@@ -962,7 +962,7 @@ if (madridClub) {
   }
 
   const youthFirst = hydrateSeason({
-    seasonNumber: 2,
+    seasonNumber: 1,
     club: madridClub,
     careerGoalRatio: 0.8,
     nationId: 'spain',
@@ -1484,11 +1484,11 @@ if (trialOfferTiers.length === 0 || trialOfferTiers.some((tier) => tier !== tria
   console.error('trial-fail offers must all come from the best-ratio band');
   process.exitCode = 1;
 }
-if (trialOffers.offers.some((o) => {
+  if (trialOffers.offers.some((o) => {
   const dest = getClub(o.clubId);
-  return !dest || o.weeklyWage !== weeklyWageForSquadStatus(dest, 0, 'reserve') || o.contractYears !== RESERVE_CONTRACT_YEARS;
+  return !dest || o.weeklyWage !== weeklyWageForSquadStatus(dest, 0, 'rising-star') || o.contractYears !== FIRST_CONTRACT_YEARS || o.squadStatus !== 'rising-star';
 })) {
-  console.error('trial-fail offers are 2-year reserve deals at 20% of each club’s starter wage');
+  console.error('trial-fail offers are 2-year Rising star deals at 10% of each club’s top wage');
   process.exitCode = 1;
 }
 if (trialOfferHome < 4) {
@@ -2204,7 +2204,7 @@ if (barca && hilal && lafc) {
     process.exitCode = 1;
   }
   if (reservePromo.immediate?.contractYearsRemaining !== FIRST_CONTRACT_YEARS) {
-    console.error('the first senior contract after the reserve year must be 3 years');
+    console.error('the first senior contract after a leftover academy year must be 2 years');
     process.exitCode = 1;
   }
   const reserveBar = getClub('real-madrid')!.reserveGoalRatio.toFixed(2);
@@ -2928,6 +2928,7 @@ if (barca && hilal && lafc) {
     'transfers',
     favFirstMissPerms.length,
   );
+  const favFirstRenewal = favFirstMissOffers.find((o) => o.renewal && o.clubId === 'real-madrid');
   if (
     favFirstMiss.pendingTransfer?.kind !== 'loan-or-transfer'
     || !favFirstMiss.pendingTransfer.allowDecline
@@ -2936,6 +2937,15 @@ if (barca && hilal && lafc) {
     || favFirstMissPerms.length === 0
   ) {
     console.error('Season 1 below 0.33 must offer a Reserve stay plus loans and transfers');
+    process.exitCode = 1;
+  }
+  if (
+    !favFirstRenewal
+    || favFirstRenewal.weeklyWage <= 0
+    || favFirstMissPerms.some((o) => o.weeklyWage <= 0)
+    || favFirstMissLoans.some((o) => o.weeklyWage <= 0)
+  ) {
+    console.error('Season 1 must show the current club’s salary offer next to other clubs’ wage offers');
     process.exitCode = 1;
   }
 
@@ -3094,7 +3104,7 @@ if (barca && hilal && lafc) {
       squadStatus: 'rising-star',
     });
     const s1PermTiers = (s1Offers.pendingTransfer?.offers ?? [])
-      .filter((o) => o.move === 'permanent')
+      .filter((o) => o.move === 'permanent' && !o.renewal && o.clubId !== 'man-city')
       .map((o) => getClub(o.clubId)?.tier ?? 5);
     console.log('season 1 0.53 perm tiers', s1PermTiers);
     if (s1PermTiers.some((tier) => tier <= 2)) {
@@ -5003,8 +5013,8 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     console.error('sponsorship is only for Premier League, Ligue 1, Bundesliga, Serie A and La Liga');
     process.exitCode = 1;
   }
-  if (FIRST_CONTRACT_YEARS !== 3 || RESERVE_CONTRACT_YEARS !== 2 || loanContractYearsRemaining(2, 5, 17) !== 1) {
-    console.error('the first professional contract is 3 years; reserve deals stay 2 years; loans stay 1 year');
+  if (FIRST_CONTRACT_YEARS !== 2 || loanContractYearsRemaining(2, 5, 17) !== 1) {
+    console.error('the first Rising-star contract is 2 years; loans stay 1 year');
     process.exitCode = 1;
   }
   if (loanContractYearsRemaining(5, 5, 22) !== 1 || loanContractYearsRemaining(8, 1, 28) !== 1) {
@@ -5040,9 +5050,14 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     });
     const arsenalLoans = (arsenalS1.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan');
     const arsenalPerms = (arsenalS1.pendingTransfer?.offers ?? []).filter((o) => o.move === 'permanent' && !o.renewal);
+    const arsenalRenewal = (arsenalS1.pendingTransfer?.offers ?? []).find((o) => o.renewal && o.clubId === 'arsenal');
     const arsenalLoanWages = new Set(arsenalLoans.map((o) => o.weeklyWage));
     const arsenalTiers = arsenalPerms.map((o) => getClub(o.clubId)?.tier ?? 5);
-    console.log('Arsenal 0.48 window', arsenalS1.headline, 'loan wages', [...arsenalLoanWages], 'tiers', arsenalTiers);
+    console.log('Arsenal 0.48 window', arsenalS1.headline, 'loan wages', [...arsenalLoanWages], 'tiers', arsenalTiers, 'renewal', arsenalRenewal?.weeklyWage);
+    if (!arsenalRenewal || arsenalRenewal.weeklyWage <= 0 || arsenalPerms.some((o) => o.weeklyWage <= 0)) {
+      console.error('Season 1 must include the current club’s salary offer so it can be compared with other bids');
+      process.exitCode = 1;
+    }
     const honourAlreadyMet = resolveSeasonTransition({
       season: {
         ...dummySeason,
@@ -5292,8 +5307,8 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     console.error('favourite Season 1 week 25 must not be value-locked');
     process.exitCode = 1;
   }
-  if (!isSeason1ValueLocked(2, 15, { careerStart: 'youth', role: 'first-team' })) {
-    console.error('youth-path public Season 1 (internal 2) must stay locked until week 20');
+  if (!isSeason1ValueLocked(1, 15, { careerStart: 'youth', role: 'first-team' })) {
+    console.error('youth-path Season 1 must stay locked until week 20');
     process.exitCode = 1;
   }
   const finished = {

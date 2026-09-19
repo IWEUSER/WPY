@@ -75,7 +75,7 @@ export default function OpeningBriefScreen() {
           </span>
           <p className="mt-3 text-sm text-white/70">
             Three games against {club.league} sides. Score at least {needed} goal
-            {needed === 1 ? '' : 's'} ({required.toFixed(2)} per game) to earn a reserve contract.
+            {needed === 1 ? '' : 's'} ({required.toFixed(2)} per game) to start Season 1 as a Rising star.
           </p>
         </div>
       )}
@@ -85,7 +85,7 @@ export default function OpeningBriefScreen() {
           <p className="text-xs uppercase tracking-wide text-white/40">What happens next</p>
           <p className="mt-2 text-sm text-white/70">
             Offers come from {offerBand} clubs only — the band your best ratio earned. You sign a
-            2-year reserve deal at 20% of that club’s starter wage.
+            2-year Rising star deal at 10% of that club’s top wage, then Season 1 starts.
           </p>
         </div>
       )}
