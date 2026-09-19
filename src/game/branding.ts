@@ -9,7 +9,7 @@ export const WPY_AWARD_NAME = 'World Player of the Year';
  * Human label for the current live ship. Update this whenever merging to main
  * so the first menu names what landed. The UTC clock is added at build time.
  */
-export const LIVE_SHIP_LABEL = 'Youth · Call-ups · Roles';
+export const LIVE_SHIP_LABEL = 'Rising star · Loans · Bids';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
 

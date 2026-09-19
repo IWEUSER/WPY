@@ -1,6 +1,8 @@
 import { getClub, TIER_LABEL } from '../data/clubs';
+import { formatWeeklyWage, playerMarketValue, weeklyWageForSquadStatus } from '../playerValue';
 import { CLUB_TRIAL_GAMES, trialRatioRequired } from '../trial';
 import { useCareerStore } from '../store';
+import { STARTING_AGE } from '../constants';
 
 export default function ClubOfferScreen() {
   const trial = useCareerStore((s) => s.trial);
@@ -14,6 +16,12 @@ export default function ClubOfferScreen() {
   const club = offers[0];
   const ratio = games != null && games > 0 ? goals / games : 0;
   const required = club ? trialRatioRequired(club) : 0;
+  const reserveWage = (dest: NonNullable<typeof club>) =>
+    weeklyWageForSquadStatus(
+      dest,
+      playerMarketValue({ age: STARTING_AGE, ratio: 0.3, careerGoals: 0, club: dest }),
+      'reserve',
+    );
 
   return (
     <div className="flex h-full w-full flex-col items-center gap-6 overflow-y-auto px-6 py-[max(1.5rem,env(safe-area-inset-top))] text-center text-white">
@@ -24,7 +32,7 @@ export default function ClubOfferScreen() {
         </h1>
         <p className="mt-2 text-sm text-white/60">
           {fromOpeningTrial && club
-            ? `Ratio ${ratio.toFixed(2)} / ${required.toFixed(2)} required. You hit it — you are now a reserve-team player on a 2-year contract at €1,000 a week.`
+            ? `Ratio ${ratio.toFixed(2)} / ${required.toFixed(2)} required. You hit it — you are now a reserve-team player on a 2-year contract at 20% of ${club.name}'s starter wage (${formatWeeklyWage(reserveWage(club))}).`
             : goals >= 9
               ? "Scouts from Europe's biggest clubs were watching. Pick your future."
               : goals >= 7
@@ -51,7 +59,9 @@ export default function ClubOfferScreen() {
               <p className="text-xs text-white/50">
                 {club.country} · {club.league}
               </p>
-              <p className="mt-1 text-xs text-white/70">2-year reserve contract · €1,000/week</p>
+              <p className="mt-1 text-xs text-white/70">
+                2-year reserve contract · {formatWeeklyWage(reserveWage(club))}
+              </p>
             </div>
             <span className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/70">
               {TIER_LABEL[club.tier]}
@@ -61,8 +71,8 @@ export default function ClubOfferScreen() {
       </div>
 
       <p className="max-w-sm text-xs text-white/40">
-        You're only 16 — you start on a 2-year reserve contract at €1,000 a week and need to hit their goal ratio to
-        earn a first-team promotion.
+        You're only 16 — you start on a 2-year reserve contract at 20% of that club's starter wage and need to hit
+        their goal ratio to earn a first-team promotion.
       </p>
     </div>
   );

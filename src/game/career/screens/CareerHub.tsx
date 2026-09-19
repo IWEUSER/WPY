@@ -329,11 +329,11 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
             return (
               <div className="mt-2 space-y-1 text-xs text-white/55">
                 <p>
-                  {guide.keepLabel}: {guide.keepRatio.toFixed(2)} to keep this role
+                  {guide.keepLabel}: {guide.keepHint ?? `${guide.keepRatio.toFixed(2)} to keep this role`}
                 </p>
-                {guide.nextLabel && guide.nextRatio != null && (
+                {guide.nextLabel && (
                   <p>
-                    {guide.nextLabel}: {guide.nextRatio.toFixed(2)} to move up
+                    {guide.nextLabel}: {guide.nextHint ?? (guide.nextRatio != null ? `${guide.nextRatio.toFixed(2)} to move up` : 'move up')}
                   </p>
                 )}
               </div>
@@ -644,7 +644,7 @@ function InternationalCard({
     return `${careerLine} · Last season ${lastSeasonRatio.toFixed(2)}`;
   })();
 
-  const showTable = includeTable && Boolean(group && sim?.internationalStage && sim.internationalStage !== 'not-selected');
+  const showTable = includeTable && Boolean(group);
 
   if (tableOnly) {
     if (!showTable || !group) return null;

@@ -246,24 +246,30 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
   const inNationsLeague =
     tournament !== 'nations-league' || Boolean(nationId && nationsLeagueGroupLetter(nationId));
   const publicSeason = intlSeason >= 1 ? intlSeason : null;
-  const internationalSelected = Boolean(
-    campaignActive &&
-      inEuro &&
-      inNationsLeague &&
-      isSelectedForNationalTeam({
-        clubTier: club.tier,
-        careerGoalRatio,
-        nationId,
-        publicSeason,
-        calendarWeek: 1,
-        squadStatus: params.squadStatus ?? 'starter',
-        league,
-      }),
-  );
   const startsAtTournament =
     campaign.phase === 'nations-league' || campaign.phase === 'tournament-only';
   const carryMatches = Boolean(
     qualifierCarry && tournament && qualifierCarry.tournament === tournament,
+  );
+  const continueQualifying = Boolean(
+    carryMatches &&
+      qualifierCarry &&
+      ((qualifierCarry.played ?? 0) > 0 || qualifierCarry.group),
+  );
+  const internationalSelected = Boolean(
+    continueQualifying ||
+      (campaignActive &&
+        inEuro &&
+        inNationsLeague &&
+        isSelectedForNationalTeam({
+          clubTier: club.tier,
+          careerGoalRatio,
+          nationId,
+          publicSeason,
+          calendarWeek: 1,
+          squadStatus: params.squadStatus ?? 'starter',
+          league,
+        })),
   );
 
   let calendar = buildSeasonCalendar({
@@ -311,7 +317,7 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
   const hasFriendlies = calendar.fixtures.some((f) => f.internationalRound === 'friendly');
   const titleRival = pickTitleRival(club, league);
   const carryGroup = carryMatches ? qualifierCarry?.group ?? null : null;
-  const internationalGroup = nationId && tournament && internationalSelected
+  const internationalGroup = nationId && tournament && (internationalSelected || carryGroup)
     ? (carryGroup ?? buildInternationalGroup(nationId, tournament, calendar, seasonNumber, startsAtTournament ? 'finals' : 'qualifying'))
     : null;
 
@@ -525,7 +531,12 @@ export function ensureInternationalGroup(
     : sim.internationalStage;
   const stageChanged = internationalStage !== sim.internationalStage;
   const prefer = internationalGroupPrefer(internationalStage);
-  if (!stageChanged && groupMatchesPrefer(sim.internationalGroup, prefer)) return sim;
+  const keepCarriedQualifying =
+    sim.internationalGroup?.kind === 'qualifying' &&
+    sim.internationalGroup.rows.some((row) => row.played > 0);
+  if (!stageChanged && (keepCarriedQualifying || groupMatchesPrefer(sim.internationalGroup, prefer))) {
+    return sim;
+  }
   const internationalGroup = buildInternationalGroup(
     sim.nationId,
     sim.internationalTournament,
@@ -615,7 +626,11 @@ function assignOpponentsAndChances(
   const groupCount = tournamentGroupGames(tournament);
   const groupSideIds = internationalGroupOpponentIds(nationId, tournament, seasonNumber, tournamentRivals.slice(0, groupCount).map((n) => n.id));
   const groupRivals = groupSideIds.map(nationAsOpponent).filter((n): n is NonNullable<typeof n> => Boolean(n));
-  const friendlyPool = NATIONS.filter((n) => n.id !== nationId);
+  const friendlyPool = NATIONS.filter((n) => {
+    if (n.id === nationId) return false;
+    if (tournament === 'euro') return n.confederation === 'UEFA';
+    return true;
+  });
   const friendlyRivals = nationId
     ? pickMixedRankOpponents(nationId, 2, friendlyPool, { extraExcludeIds: groupSideIds, rng })
     : [];

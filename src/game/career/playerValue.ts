@@ -52,13 +52,18 @@ export interface MarketValueParams {
 }
 
 export const DEFAULT_CONTRACT_YEARS = 5;
-/** First professional contract (trial signing and first-team promotion). */
-export const FIRST_CONTRACT_YEARS = 2;
-export const RESERVE_CONTRACT_YEARS = FIRST_CONTRACT_YEARS;
-/** Academy / reserve wage — the same on every path. */
-export const RESERVE_WEEKLY_WAGE = 1000;
+/** First-team deal: two Rising-star seasons plus a third year that can be a loan. */
+export const FIRST_CONTRACT_YEARS = 3;
+/** Academy / reserve path stays on a shorter deal than the first-team contract. */
+export const RESERVE_CONTRACT_YEARS = 2;
+/** Floor used when a club's starter band is tiny. */
+export const RESERVE_WEEKLY_WAGE = 500;
+/** Reserve / impact deals pay this fraction of the destination's starter band. */
+export const RESERVE_WAGE_FACTOR = 0.2;
 /** Rising-star deals pay a fraction of the destination's starter band. */
 export const RISING_STAR_WAGE_FACTOR = 0.45;
+/** A bid below this share of the asking fee is too cheap to accept. */
+export const MIN_ACCEPTED_FEE_RATIO = 0.8;
 /** Every loan is one season — never a multi-year loan deal. */
 export const YOUTH_LOAN_YEARS = 1;
 /** Public Season 1 stays at the youth value until week 21, on every career path. */
@@ -455,9 +460,11 @@ export function weeklyWageForSquadStatus(
   status: SquadStatus,
   playingLeague?: string | null,
 ): number {
-  if (status === 'reserve' || status === 'impact') return RESERVE_WEEKLY_WAGE;
   const full = weeklyWageForClub(club, marketValue, playingLeague);
-  if (status === 'rising-star') {
+  if (status === 'reserve') {
+    return Math.max(RESERVE_WEEKLY_WAGE, Math.round((full * RESERVE_WAGE_FACTOR) / 500) * 500);
+  }
+  if (status === 'rising-star' || status === 'impact') {
     return Math.max(RESERVE_WEEKLY_WAGE, Math.round((full * RISING_STAR_WAGE_FACTOR) / 500) * 500);
   }
   return full;

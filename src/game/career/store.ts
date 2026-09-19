@@ -17,9 +17,8 @@ import {
   playerMarketValue,
   playerMarketValueFromSeasons,
   RESERVE_CONTRACT_YEARS,
-  RESERVE_WEEKLY_WAGE,
   seasonalSponsorship,
-  weeklyWageForClub,
+  weeklyWageForSquadStatus,
   YOUTH_LOAN_YEARS,
 } from './playerValue';
 import { evaluatePlayerOfTheYear, evaluateTopGoalscorer } from './domesticAwards';
@@ -90,11 +89,11 @@ import {
   nextSquadStatusAfterSeason,
   normalizeSquadStatus,
   openingSquadStatus,
-  ROLE_REVIEW_WEEK,
+  promoteSquadStatusDuringSeason,
   seasonOverridesRatioBar,
   seasonRatioClearsBar,
-  squadStatusAfterFormReview,
   squadStatusOnArrival,
+  youthRolesAllowed,
 } from './squadStatus';
 import { evaluateWpy } from './wpy';
 import { composeMatchSummary, nextFixtureLine, playerGoalsLine } from './matchBriefing';
@@ -170,8 +169,14 @@ function withInternationalForm(
     squadStatus: ctx?.squadStatus ?? 'starter',
     league: club.league,
   });
+  const keepQualifyingCampaign =
+    sim.internationalStage === 'qualifying' &&
+    ((sim.qualifierCarryPlayed ?? 0) > 0 ||
+      (sim.internationalGroup?.kind === 'qualifying' &&
+        sim.internationalGroup.rows.some((row) => row.played > 0)));
   if (selected === sim.internationalSelected) return sim;
   if (!selected) {
+    if (keepQualifyingCampaign) return sim;
     return {
       ...sim,
       internationalSelected: false,
@@ -187,33 +192,34 @@ function withInternationalForm(
 }
 
 function reviewedSquadFields(
-  state: Pick<CareerState, 'role' | 'squadStatus' | 'clubId'>,
+  state: Pick<CareerState, 'role' | 'squadStatus' | 'clubId' | 'seasonNumber' | 'careerStart'>,
   season: SeasonRecord | null,
-  calendar: SeasonCalendar | null,
-  sim: SeasonSimState | null,
 ): { squadStatus: CareerState['squadStatus']; currentSeason: SeasonRecord | null } {
   const current = normalizeSquadStatus(state.squadStatus, state.role);
-  if (!season || !calendar || !sim || state.role === 'reserve') {
+  if (!season || state.role === 'reserve') {
     return { squadStatus: current, currentSeason: season };
   }
-  const week = currentCalendarWeek(calendar, sim.fixtureIndex);
-  if (week <= ROLE_REVIEW_WEEK) return { squadStatus: current, currentSeason: season };
-  if (season.squadRoleReviewed) return { squadStatus: current, currentSeason: season };
   const club = state.clubId ? getClub(state.clubId) : undefined;
   if (!club) return { squadStatus: current, currentSeason: season };
+  const publicSeason = displaySeasonNumber(state.seasonNumber, {
+    role: state.role,
+    careerStart: state.careerStart,
+  });
   const ratio = season.gamesPlayed > 0 ? season.goals / season.gamesPlayed : 0;
-  const next = squadStatusAfterFormReview({
+  const next = promoteSquadStatusDuringSeason({
     current,
+    matches: season.matches,
     ratio,
     gamesPlayed: season.gamesPlayed,
     // Playing time follows the club the player is actually at. Parent first-team
     // bars are for the end-of-loan recall, not a mid-season drop on loan.
     bar: club.firstTeamGoalRatio,
     honoursClear: seasonOverridesRatioBar(season),
+    allowYouthRoles: youthRolesAllowed(publicSeason),
   });
   return {
     squadStatus: next,
-    currentSeason: { ...season, squadStatus: next, squadRoleReviewed: true },
+    currentSeason: { ...season, squadStatus: next },
   };
 }
 
@@ -778,12 +784,15 @@ function beginSignedCareer(
   const seasonNumber = 1;
   const age = role === 'first-team' ? STARTING_AGE + 1 : STARTING_AGE;
   const dealYears = role === 'reserve' ? RESERVE_CONTRACT_YEARS : FIRST_CONTRACT_YEARS;
-  const weeklyWage =
-    role === 'reserve'
-      ? RESERVE_WEEKLY_WAGE
-      : club
-        ? weeklyWageForClub(club, playerMarketValue({ age, ratio: 0.3, careerGoals: 0, club }))
-        : 3000;
+  const weeklyWage = club
+    ? weeklyWageForSquadStatus(
+        club,
+        playerMarketValue({ age, ratio: 0.3, careerGoals: 0, club }),
+        role === 'reserve' ? 'reserve' : openingSquadStatus(role),
+      )
+    : role === 'reserve'
+      ? 1000
+      : 3000;
   return {
     clubId,
     parentClubId: clubId,
@@ -959,7 +968,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
         wpyResult: awarded.wpyResult,
       };
     }
-    const reviewed = reviewedSquadFields(state, season, calendar, sim);
+    const reviewed = reviewedSquadFields(state, season);
     const hubSim = sim!;
     return {
       seasonSim: withInternationalForm(
@@ -1311,8 +1320,6 @@ function finishResolvedLiveMatch(
     : reviewedSquadFields(
         { ...state, squadStatus: state.squadStatus },
         awarded.season,
-        nextCalendar,
-        withHonours,
       );
 
   return {

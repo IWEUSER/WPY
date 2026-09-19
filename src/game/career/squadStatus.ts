@@ -2,7 +2,7 @@ import type { CalendarFixture, SeasonCalendar } from './calendar';
 import { getClub, SECOND_DIVISIONS, type Club } from './data/clubs';
 import { nationStrength } from './data/fifaRankings';
 import { leagueValueWeight } from './playerValue';
-import type { PlayerRole, SeasonRecord, SquadStatus } from './types';
+import type { MatchRecord, PlayerRole, SeasonRecord, SquadStatus } from './types';
 
 export const SQUAD_STATUS_LABEL: Record<SquadStatus, string> = {
   starter: 'Starter',
@@ -11,11 +11,25 @@ export const SQUAD_STATUS_LABEL: Record<SquadStatus, string> = {
   impact: 'Impact',
 };
 
-/** Stay as Rising star into the next season with at least this goals-per-game. */
+/** End of Season 1: below this goals-per-game becomes Reserve for Season 2. */
 export const RISING_STAR_MIN_RATIO = 0.33;
 
-/** Squad role is reviewed from this calendar week onward each season. */
+/** Score in this many consecutive played games to move Rising star → Impact. */
+export const IMPACT_STREAK = 2;
+
+/** Score in this many consecutive played games to move up to Starter. */
+export const STARTER_STREAK = 3;
+
+/** Impact looks in a match they play (Rising star stays at 1). */
+export const IMPACT_CHANCES = 2;
+
+/** Season 1 call-ups and market value still open from this calendar week. */
 export const ROLE_REVIEW_WEEK = 20;
+
+/** Rising star and Impact exist only in public Seasons 1 and 2. */
+export function youthRolesAllowed(publicSeason: number | null | undefined): boolean {
+  return publicSeason === 1 || publicSeason === 2;
+}
 
 /** Older saves stored the reserve minutes role as "rotation". */
 export function normalizeSquadStatus(
@@ -44,12 +58,12 @@ export function openingSquadStatus(role: PlayerRole): SquadStatus {
 export function describeSquadStatus(status: SquadStatus): string {
   if (status === 'starter') return 'In the starting XI across league, cups and internationals';
   if (status === 'rising-star') {
-    return 'Rising star — more games than a reserve, one chance each time you play. Sits more often in tournaments and against stronger sides.';
+    return 'Rising star — temporary Season 1–2 role, one chance each time you play. Score in 2 consecutive games for Impact, or 3 for Starter.';
   }
   if (status === 'reserve') {
-    return 'Reserve role across league, cups and internationals — fewer appearances, and fewer still in tournaments or against stronger sides';
+    return 'Reserve — every second game across league, cups and internationals. Hit the starter bar at any time and you keep Starter.';
   }
-  return 'Impact — every other match. The manager moves you here after week 20 if a reserve run is well below the bar, or at season end if a starter is well short.';
+  return 'Impact — same games as Rising star, two chances each time you play. Keeps for the rest of the season; score in 3 consecutive games for Starter.';
 }
 
 export function describeRotationSitOut(status: SquadStatus): string {
@@ -60,13 +74,11 @@ export function describeRotationSitOut(status: SquadStatus): string {
 
 /**
  * Sit-out pattern among actionable fixtures already completed this season.
- * Starter: never. Rising star: every fourth. Reserve: two of every three.
- * Impact: every other.
+ * Starter: never. Rising star and Impact: every fourth. Reserve: every other.
  */
 export function shouldSitLeagueFixture(status: SquadStatus, completedFixtures: number): boolean {
   if (status === 'starter') return false;
-  if (status === 'rising-star') return completedFixtures % 4 === 3;
-  if (status === 'reserve') return completedFixtures % 3 !== 0;
+  if (status === 'rising-star' || status === 'impact') return completedFixtures % 4 === 3;
   return completedFixtures % 2 === 1;
 }
 
@@ -89,16 +101,16 @@ export function isToughMinutesFixture(
   return opp.strength > club.strength;
 }
 
-/** Rising star sits two of three tough games; reserve sits four of five. */
+/** Rising star and Impact sit two of three tough games. Reserve uses every-other only. */
 export function shouldSitToughFixture(status: SquadStatus, completedFixtures: number): boolean {
-  if (status === 'starter' || status === 'impact') return false;
-  if (status === 'rising-star') return completedFixtures % 3 !== 0;
-  return completedFixtures % 5 !== 0;
+  if (status === 'starter' || status === 'reserve') return false;
+  return completedFixtures % 3 !== 0;
 }
 
-/** Rising star always gets a single look in matches they play. */
+/** Rising star gets one look; Impact gets two; others keep the drawn chances. */
 export function chancesForSquadStatus(status: SquadStatus, drawn: number): number {
   if (status === 'rising-star') return 1;
+  if (status === 'impact') return IMPACT_CHANCES;
   return drawn;
 }
 
@@ -125,10 +137,23 @@ export function isSquadRotationSitOut(
   if (fixtureKind === 'rest') return false;
   // Rising star sits the first first-team appearance of a campaign.
   if (squadStatus === 'rising-star' && extra?.seasonMatchCount === 0) return true;
-  if (extra?.toughMinutes && (squadStatus === 'rising-star' || squadStatus === 'reserve')) {
+  if (extra?.toughMinutes && (squadStatus === 'rising-star' || squadStatus === 'impact')) {
     return shouldSitToughFixture(squadStatus, completedFixtures);
   }
   return shouldSitLeagueFixture(squadStatus, completedFixtures);
+}
+
+/** Trailing played matches that scored. Sit-outs and drops do not break the run. */
+export function consecutiveScoringGames(matches: Pick<MatchRecord, 'played' | 'scored'>[] | undefined): number {
+  if (!matches?.length) return 0;
+  let streak = 0;
+  for (let i = matches.length - 1; i >= 0; i -= 1) {
+    const match = matches[i];
+    if (!match.played) continue;
+    if (match.scored !== true) break;
+    streak += 1;
+  }
+  return streak;
 }
 
 /** League golden boot, POTY, or tournament POT counts as clearing the club bar. */
@@ -155,9 +180,51 @@ export function seasonRatioClearsBar(params: {
   return params.gamesPlayed > 0 && params.ratio >= params.bar;
 }
 
+function hitsStarterBar(params: {
+  ratio: number;
+  gamesPlayed: number;
+  bar: number;
+  honoursClear?: boolean;
+}): boolean {
+  return Boolean(params.honoursClear) || (params.gamesPlayed > 0 && params.ratio + 1e-9 >= params.bar);
+}
+
+/**
+ * In-season promotions only — never a mid-season drop to Reserve.
+ * Reserve → Starter when the club bar is hit, then it sticks.
+ * Rising star / Impact (Seasons 1–2): 2-game scoring streak → Impact, 3 → Starter.
+ */
+export function promoteSquadStatusDuringSeason(params: {
+  current: SquadStatus;
+  matches?: Pick<MatchRecord, 'played' | 'scored'>[];
+  ratio: number;
+  gamesPlayed: number;
+  bar: number;
+  honoursClear?: boolean;
+  allowYouthRoles?: boolean;
+}): SquadStatus {
+  const current = params.current;
+  if (current === 'starter') return 'starter';
+  const hitBar = hitsStarterBar(params);
+  if (current === 'reserve') return hitBar ? 'starter' : 'reserve';
+  if (params.allowYouthRoles && (current === 'rising-star' || current === 'impact')) {
+    const streak = consecutiveScoringGames(params.matches);
+    if (streak >= STARTER_STREAK) return 'starter';
+    if (streak >= IMPACT_STREAK) return 'impact';
+    return current;
+  }
+  if (hitBar) return 'starter';
+  return current;
+}
+
 /**
  * End-of-season playing-time change. The player sees this before the transfer
  * window so they know their status going into the next campaign.
+ *
+ * Season 1 (`allowRisingStar`): below 0.33 → Reserve; club bar → Starter;
+ * otherwise keep Rising star / Impact / Starter into Season 2.
+ * Season 2 onward: Starter if the club bar is met, otherwise Reserve.
+ * Impact and Rising star never continue into Season 3.
  */
 export function nextSquadStatusAfterSeason(params: {
   role: PlayerRole;
@@ -166,42 +233,30 @@ export function nextSquadStatusAfterSeason(params: {
   gamesPlayed: number;
   bar: number;
   honoursClear?: boolean;
-  /** Rising star exists only through public Season 2. After that it becomes starter or reserve. */
+  /** True while finishing public Season 1 — youth roles can continue into Season 2. */
   allowRisingStar?: boolean;
 }): SquadStatus {
   if (params.role === 'reserve') return 'rising-star';
   const { current, ratio, gamesPlayed, bar } = params;
   const honours = Boolean(params.honoursClear);
   const allowRisingStar = params.allowRisingStar !== false;
-  const badlyShort = !honours && (ratio < bar - 0.1 || gamesPlayed < 10);
-  const hit = honours || (ratio >= bar && gamesPlayed >= 12);
-  const strongHit = honours || (ratio >= bar + 0.02 && gamesPlayed >= 18);
+  const hitBar = honours || (gamesPlayed > 0 && ratio + 1e-9 >= bar);
 
-  if (current === 'starter') {
-    if (honours || (ratio >= bar && gamesPlayed >= 20)) return 'starter';
-    if (badlyShort) return 'impact';
-    return allowRisingStar ? 'rising-star' : 'reserve';
+  if (allowRisingStar) {
+    if (!honours && ratio + 1e-9 < RISING_STAR_MIN_RATIO) return 'reserve';
+    // Honours keep a youth role; only the club ratio (or a mid-season streak) makes Starter.
+    if (gamesPlayed >= 12 && ratio + 1e-9 >= bar) return 'starter';
+    return current === 'impact' || current === 'starter' || current === 'rising-star'
+      ? current
+      : 'rising-star';
   }
-  if (current === 'rising-star') {
-    if (!honours && ratio >= bar && gamesPlayed >= 18) return 'starter';
-    if (honours || (ratio >= RISING_STAR_MIN_RATIO && gamesPlayed >= 8)) {
-      if (allowRisingStar) return 'rising-star';
-      return honours || (ratio >= bar && gamesPlayed >= 12) ? 'starter' : 'reserve';
-    }
-    return 'reserve';
-  }
-  if (current === 'reserve') {
-    if (strongHit) return 'starter';
-    if (ratio >= bar - 0.1 && gamesPlayed >= 12) return 'reserve';
-    return 'impact';
-  }
-  return hit ? 'reserve' : 'impact';
+
+  return hitBar ? 'starter' : 'reserve';
 }
 
 /**
- * After week 20, this season's ratio (or a honour) promotes a reserve / rising
- * star into the XI, or drops a starter who is short of the bar.
- * Applied once — later weeks must not cascade Rising star → Reserve → Impact.
+ * @deprecated Use promoteSquadStatusDuringSeason. Kept so older call sites compile.
+ * Never demotes to Reserve mid-season.
  */
 export function squadStatusAfterFormReview(params: {
   current: SquadStatus;
@@ -209,18 +264,10 @@ export function squadStatusAfterFormReview(params: {
   gamesPlayed: number;
   bar: number;
   honoursClear?: boolean;
+  matches?: Pick<MatchRecord, 'played' | 'scored'>[];
+  allowYouthRoles?: boolean;
 }): SquadStatus {
-  const honours = Boolean(params.honoursClear);
-  const sample = params.gamesPlayed >= 6;
-  const hit = honours || (sample && params.ratio >= params.bar);
-  if (params.current === 'rising-star') {
-    if (sample && params.ratio < RISING_STAR_MIN_RATIO && !honours) return 'reserve';
-    return 'rising-star';
-  }
-  if (hit) return 'starter';
-  if (params.current === 'starter' && sample && params.ratio < params.bar) return 'reserve';
-  if (params.current === 'reserve' && sample && params.ratio < params.bar - 0.1) return 'impact';
-  return params.current;
+  return promoteSquadStatusDuringSeason(params);
 }
 
 /**
@@ -247,8 +294,10 @@ export function isLowerDivisionLoan(
 export function squadRoleRatioGuide(status: SquadStatus, clubBar: number): {
   keepLabel: string;
   keepRatio: number;
+  keepHint?: string;
   nextLabel: string | null;
   nextRatio: number | null;
+  nextHint?: string;
 } {
   if (status === 'starter') {
     return { keepLabel: 'Starter', keepRatio: clubBar, nextLabel: null, nextRatio: null };
@@ -257,23 +306,29 @@ export function squadRoleRatioGuide(status: SquadStatus, clubBar: number): {
     return {
       keepLabel: 'Rising star',
       keepRatio: RISING_STAR_MIN_RATIO,
-      nextLabel: 'Starter',
-      nextRatio: clubBar,
+      keepHint: `${RISING_STAR_MIN_RATIO.toFixed(2)} at season end or you become a Reserve`,
+      nextLabel: 'Impact',
+      nextRatio: null,
+      nextHint: 'Score in 2 consecutive games · 3 for Starter',
     };
   }
   if (status === 'reserve') {
     return {
       keepLabel: 'Reserve',
-      keepRatio: Math.max(0, clubBar - 0.1),
+      keepRatio: clubBar,
+      keepHint: 'Every second game until you hit the starter bar',
       nextLabel: 'Starter',
       nextRatio: clubBar,
+      nextHint: `${clubBar.toFixed(2)} at any time — then you keep Starter`,
     };
   }
   return {
     keepLabel: 'Impact',
-    keepRatio: 0,
-    nextLabel: 'Reserve',
-    nextRatio: Math.max(0, clubBar - 0.1),
+    keepRatio: RISING_STAR_MIN_RATIO,
+    keepHint: 'Keeps this season · two chances, same games as Rising star',
+    nextLabel: 'Starter',
+    nextRatio: clubBar,
+    nextHint: 'Score in 3 consecutive games, or hit the club bar',
   };
 }
 

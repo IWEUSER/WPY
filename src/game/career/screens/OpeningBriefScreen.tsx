@@ -85,7 +85,7 @@ export default function OpeningBriefScreen() {
           <p className="text-xs uppercase tracking-wide text-white/40">What happens next</p>
           <p className="mt-2 text-sm text-white/70">
             Offers come from {offerBand} clubs only — the band your best ratio earned. You sign a
-            2-year reserve deal at €1,000 a week.
+            2-year reserve deal at 20% of that club’s starter wage.
           </p>
         </div>
       )}

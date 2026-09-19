@@ -8,7 +8,7 @@
 import { useCareerStore } from '../src/game/career/store';
 import { getClub, leagueMatchWeeks } from '../src/game/career/data/clubs';
 import { currentCalendarWeek } from '../src/game/career/calendar';
-import { playerMarketValueFromSeasons, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
+import { FIRST_CONTRACT_YEARS, playerMarketValue, playerMarketValueFromSeasons, RESERVE_CONTRACT_YEARS, weeklyWageForSquadStatus, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import type { ShotResult } from '../src/game/shooting/types';
 
 function fakeShot(scored: boolean): ShotResult {
@@ -170,9 +170,20 @@ console.log(
   'sponsorship',
   store.getState().seasonSponsorship,
 );
-if (store.getState().contractYearsRemaining !== 2 || store.getState().weeklyWage !== 1000) {
-  console.error('The reserve contract must be 2 years at €1,000 a week');
-  process.exitCode = 1;
+{
+  const signed = store.getState();
+  const signedClub = signed.clubId ? getClub(signed.clubId) : undefined;
+  const reserveWage = signedClub
+    ? weeklyWageForSquadStatus(
+        signedClub,
+        playerMarketValue({ age: signed.age, ratio: 0.3, careerGoals: 0, club: signedClub }),
+        'reserve',
+      )
+    : 0;
+  if (signed.contractYearsRemaining !== RESERVE_CONTRACT_YEARS || signed.weeklyWage !== reserveWage) {
+    console.error('The reserve contract must be 2 years at 20% of that club’s starter wage');
+    process.exitCode = 1;
+  }
 }
 if (store.getState().seasonSponsorship !== 0) {
   console.error('Reserve team players must not receive sponsorship');
@@ -314,8 +325,8 @@ if (s2.seasonSim?.internationalSelected) {
   console.error('Call-up must wait until this season’s goal ratio meets the national bar');
   process.exitCode = 1;
 }
-if (s2.contractYearsRemaining !== 2) {
-  console.error('Promotion onto a first-team deal should start a 2-year contract');
+if (s2.contractYearsRemaining !== FIRST_CONTRACT_YEARS) {
+  console.error('Promotion onto a first-team deal should start a 3-year contract');
   process.exitCode = 1;
 }
 
@@ -554,9 +565,24 @@ if (!loanClubId) {
     console.error('The reserve miss must send the player on loan for public season 1 at age 17');
     process.exitCode = 1;
   }
-  if (loaned.weeklyWage !== 1000) {
-    console.error('The first loan must keep the €1,000 reserve wage');
-    process.exitCode = 1;
+  {
+    const dest = loaned.clubId ? getClub(loaned.clubId) : undefined;
+    const destWage = dest
+      ? weeklyWageForSquadStatus(dest, playerMarketValueFromSeasons({
+          age: loaned.age,
+          careerGoals: loaned.careerGoals,
+          careerGames: loaned.careerGames,
+          seasons: loaned.seasonHistory,
+          fallbackClub: dest,
+          seasonNumber: loaned.seasonNumber,
+          calendarWeek: 99,
+          role: 'loan',
+        }), 'starter', dest.league)
+      : 0;
+    if (loaned.weeklyWage !== destWage) {
+      console.error('The first loan must pay the destination starter wage');
+      process.exitCode = 1;
+    }
   }
   if (loaned.contractYearsRemaining !== 1) {
     console.error('A season 1 loan must remain a 1-year contract');
@@ -607,10 +633,16 @@ if (store.getState().phase === 'club-offer') {
     || s.role !== 'reserve'
     || s.seasonNumber !== 1
     || s.age !== 16
-    || s.weeklyWage !== 1000
-    || s.contractYearsRemaining !== 2
+    || s.weeklyWage !== (getClub(s.clubId ?? '')
+      ? weeklyWageForSquadStatus(
+          getClub(s.clubId!)!,
+          playerMarketValue({ age: s.age, ratio: 0.3, careerGoals: 0, club: getClub(s.clubId!)! }),
+          'reserve',
+        )
+      : -1)
+    || s.contractYearsRemaining !== RESERVE_CONTRACT_YEARS
   ) {
-    console.error('Hitting the favourite-trial reserve ratio must sign a 2-year reserve deal at €1,000 a week');
+    console.error('Hitting the favourite-trial reserve ratio must sign a 2-year reserve deal at 20% of that club’s starter wage');
     process.exitCode = 1;
   }
   const kinds = new Set(s.seasonCalendar?.fixtures.map((f) => f.kind) ?? []);
@@ -683,12 +715,12 @@ store.getState().chooseNationality('england');
     || s.role !== 'first-team'
     || s.seasonNumber !== 1
     || s.age !== 17
-    || s.contractYearsRemaining !== 2
+    || s.contractYearsRemaining !== FIRST_CONTRACT_YEARS
     || s.squadStatus !== 'rising-star'
     || !kinds.has('league')
     || !kinds.has('domestic-cup')
   ) {
-    console.error('Favourite first-team must start Season 1 at age 17 on a 2-year deal as a Rising star with the full calendar');
+    console.error('Favourite first-team must start Season 1 at age 17 on a 3-year deal as a Rising star with the full calendar');
     process.exitCode = 1;
   }
   const tournamentGames = (s.seasonCalendar?.fixtures ?? []).filter(
