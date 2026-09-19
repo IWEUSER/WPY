@@ -1,8 +1,9 @@
+import { useEffect } from 'react';
 import { getClub, TIER_LABEL } from '../data/clubs';
 import { getNation } from '../international';
 import { useCareerStore } from '../store';
-import { CLUB_TRIAL_GAMES, trialGoalsNeeded, trialRatioRequired, TRIALS_AT_LEVEL } from '../trial';
-import { rejectedIdsAtTier, remainingTrialClubIds } from '../openingFlow';
+import { CLUB_TRIAL_GAMES, trialGoalsNeeded, trialRatioRequired, TRIALS_AT_LEVEL, tierForYouthGoals } from '../trial';
+import { rejectedIdsAtTier, remainingTrialClubIds, youthTrialEarnedTier } from '../openingFlow';
 import { tierForRatio } from '../transfers';
 
 export default function OpeningBriefScreen() {
@@ -11,6 +12,7 @@ export default function OpeningBriefScreen() {
   const pendingTransfer = useCareerStore((s) => s.pendingTransfer);
   const startOpeningTrial = useCareerStore((s) => s.startOpeningTrial);
   const chooseOpeningTrialClub = useCareerStore((s) => s.chooseOpeningTrialClub);
+  const repairOpeningTrialPicker = useCareerStore((s) => s.repairOpeningTrialPicker);
 
   const nation = nationality ? getNation(nationality) : undefined;
   const rejectedId = opening?.rejectedClubIds[opening.rejectedClubIds.length - 1];
@@ -23,7 +25,17 @@ export default function OpeningBriefScreen() {
   const trialRatio = opening && opening.gamesPlayed > 0 ? opening.goals / opening.gamesPlayed : 0;
   const remainingIds = opening ? remainingTrialClubIds(opening) : [];
   const remainingClubs = remainingIds.map(getClub).filter((club): club is NonNullable<ReturnType<typeof getClub>> => club != null);
-  const levelTier = opening?.trialTier ?? remainingClubs[0]?.tier ?? null;
+  const earnedYouthTier = opening && afterYouth ? youthTrialEarnedTier(opening) : youthGames && youthGames > 0 ? tierForYouthGoals(youthGoals, youthGames) : null;
+  const levelTier = afterYouth
+    ? (earnedYouthTier ?? opening?.trialTier ?? remainingClubs[0]?.tier ?? null)
+    : (opening?.trialTier ?? remainingClubs[0]?.tier ?? null);
+
+  useEffect(() => {
+    if (!opening || offersReady) return;
+    if (afterYouth && (remainingClubs.length === 0 || (earnedYouthTier != null && opening.trialTier != null && opening.trialTier > earnedYouthTier))) {
+      repairOpeningTrialPicker();
+    }
+  }, [afterYouth, earnedYouthTier, offersReady, opening, remainingClubs.length, repairOpeningTrialPicker]);
   const looksUsedAtLevel = opening && levelTier != null ? rejectedIdsAtTier(opening, levelTier).length : 0;
   const steppedDown = Boolean(rejected && levelTier != null && rejected.tier < levelTier);
   const bestRatio = opening?.bestTrialRatio ?? trialRatio;
@@ -94,6 +106,16 @@ export default function OpeningBriefScreen() {
           </button>
         );
       })}
+
+      {!offersReady && remainingClubs.length === 0 && (
+        <button
+          type="button"
+          onClick={repairOpeningTrialPicker}
+          className="w-full max-w-sm rounded-2xl bg-emerald-500 px-6 py-4 text-lg font-bold text-black shadow-lg shadow-emerald-500/20 transition active:scale-[0.98]"
+        >
+          See trial clubs
+        </button>
+      )}
 
       {offersReady && (
         <div className="w-full max-w-sm rounded-2xl bg-white/5 p-4 text-left">

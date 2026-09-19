@@ -71,14 +71,25 @@ export function pickTrialClubs(
   count = TRIALS_AT_LEVEL,
   opts: boolean | TrialPickOptions = { sameTierOnly: true },
 ): Club[] {
+  const options = trialPickOptions(opts);
   const picks: Club[] = [];
   const exclude = [...excludeIds];
   for (let i = 0; i < count; i++) {
-    const club = pickTrialClub(tier, nationality, exclude, opts);
+    const club = pickTrialClub(tier, nationality, exclude, options);
     if (!club || exclude.includes(club.id)) break;
-    if (trialPickOptions(opts).sameTierOnly && club.tier !== tier) break;
+    if (options.sameTierOnly && club.tier !== tier) break;
     picks.push(club);
     exclude.push(club.id);
+  }
+  if (picks.length < count && options.sameTierOnly) {
+    const extra = pickTrialClubs(
+      tier,
+      nationality,
+      [...excludeIds, ...picks.map((club) => club.id)],
+      count - picks.length,
+      { ...options, sameTierOnly: false },
+    );
+    return [...picks, ...extra];
   }
   return picks;
 }

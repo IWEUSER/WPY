@@ -65,6 +65,7 @@ import {
   clubTrialComplete,
   createYouthCampaign,
   failClubTrial,
+  repairOpeningCampaign,
   resolveOpeningMatch,
   youthTournamentComplete,
 } from '../src/game/career/openingFlow';
@@ -1389,6 +1390,64 @@ const threeFromFour = assignOpeningTrialClub({ ...path, goals: 3, youthGoals: 3,
 if (threeFromFour.trialTier !== 1 || (threeFromFour.trialClubIds ?? []).length !== 3) {
   console.error('3 goals in 4 U16 games (0.75) must offer three Elite trials');
   process.exitCode = 1;
+}
+const staleLower = assignOpeningTrialClub({
+  ...path,
+  goals: 3,
+  youthGoals: 3,
+  gamesPlayed: 4,
+  eliminated: true,
+  trialTier: 5,
+  trialClubId: 'luton',
+  trialClubIds: [],
+}, 'england');
+if (
+  staleLower.trialTier !== 1
+  || staleLower.trialClubId
+  || (staleLower.trialClubIds ?? []).length !== 3
+  || (staleLower.trialClubIds ?? []).some((id) => getClub(id)?.tier !== 1)
+) {
+  console.error('a stuck Lower-level 3/4 save must be repaired to three Elite trial buttons');
+  process.exitCode = 1;
+}
+const repairedEngland = repairOpeningCampaign({
+  ...path,
+  goals: 3,
+  youthGoals: 3,
+  gamesPlayed: 4,
+  eliminated: true,
+  trialTier: 5,
+  trialClubId: 'luton',
+  trialClubIds: [],
+}, 'england');
+if (repairedEngland.trialTier !== 1 || (repairedEngland.trialClubIds ?? []).length !== 3) {
+  console.error('persist repair must refill Elite clubs for a 0.75 England youth finish');
+  process.exitCode = 1;
+}
+{
+  useCareerStore.getState().resetCareer();
+  useCareerStore.setState({
+    nationality: 'england',
+    careerStart: 'youth',
+    phase: 'opening-brief',
+    openingCampaign: {
+      ...path,
+      goals: 3,
+      youthGoals: 3,
+      gamesPlayed: 4,
+      eliminated: true,
+      trialTier: 5,
+      trialClubId: 'luton',
+      trialClubIds: [],
+    },
+  });
+  useCareerStore.getState().repairOpeningTrialPicker();
+  const fixed = useCareerStore.getState().openingCampaign;
+  if (fixed?.trialTier !== 1 || (fixed.trialClubIds ?? []).length !== 3) {
+    console.error('repairOpeningTrialPicker must unstick a 3/4 England brief with no buttons');
+    process.exitCode = 1;
+  }
+  useCareerStore.getState().resetCareer();
 }
 const germanElite = pickTrialClub(1, 'germany');
 console.log('German elite trial', germanElite.id, germanElite.country, germanElite.tier);

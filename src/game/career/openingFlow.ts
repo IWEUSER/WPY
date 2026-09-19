@@ -182,6 +182,16 @@ export function remainingTrialClubIds(campaign: OpeningCampaign): string[] {
   return (campaign.trialClubIds ?? []).filter((id) => !campaign.rejectedClubIds.includes(id));
 }
 
+export function youthTrialEarnedTier(campaign: OpeningCampaign): ClubTier {
+  const goals = campaign.youthGoals || campaign.goals;
+  const games = Math.max(campaign.kind === 'youth-tournament' ? campaign.gamesPlayed : 1, 1);
+  return tierForYouthGoals(goals, games);
+}
+
+function youthLooksNotStarted(campaign: OpeningCampaign): boolean {
+  return campaign.kind === 'youth-tournament' && (campaign.rejectedClubIds?.length ?? 0) === 0;
+}
+
 function trialPickOpts(
   campaign: OpeningCampaign,
   options?: TrialPickOptions,
@@ -209,7 +219,16 @@ function fillTrialClubIds(
     count - remaining.length,
     trialPickOpts(campaign, options),
   );
-  return [...remaining, ...extra.map((club) => club.id)];
+  const filled = [...remaining, ...extra.map((club) => club.id)];
+  if (filled.length > 0 || options?.sameTierOnly === false) return filled;
+  const fallback = pickTrialClubs(
+    tier,
+    nationality,
+    [...campaign.rejectedClubIds, ...remaining],
+    count - remaining.length,
+    { ...trialPickOpts(campaign, options), sameTierOnly: false },
+  );
+  return [...remaining, ...fallback.map((club) => club.id)];
 }
 
 /** Lock in the three trial clubs after the U16 tournament without starting the games. */
@@ -219,9 +238,16 @@ export function assignOpeningTrialClub(
   options?: TrialPickOptions,
 ): OpeningCampaign {
   const goals = campaign.youthGoals || campaign.goals;
-  const games = Math.max(campaign.gamesPlayed, 1);
-  const trialTier = campaign.trialTier ?? tierForYouthGoals(goals, games);
-  const trialClubIds = fillTrialClubIds(campaign, nationality, trialTier, TRIALS_AT_LEVEL, options);
+  const earned = youthTrialEarnedTier(campaign);
+  const looksStarted = !youthLooksNotStarted(campaign);
+  const trialTier = looksStarted ? (campaign.trialTier ?? earned) : earned;
+  const remaining = remainingTrialClubIds(campaign);
+  const remainingAtTier = remaining.filter((id) => getClub(id)?.tier === trialTier);
+  const source =
+    !looksStarted && (remaining.length !== remainingAtTier.length || remainingAtTier.length < TRIALS_AT_LEVEL)
+      ? { ...campaign, trialClubId: null, trialClubIds: remainingAtTier }
+      : campaign;
+  const trialClubIds = fillTrialClubIds(source, nationality, trialTier, TRIALS_AT_LEVEL, options);
   return {
     ...campaign,
     youthGoals: goals,
@@ -233,6 +259,16 @@ export function assignOpeningTrialClub(
     originCountry: campaign.originCountry ?? countryForNationality(nationality),
     originClubId: campaign.originClubId ?? null,
   };
+}
+
+/** Re-fill the youth picker when a save still has the old one-club / raw-goal band. */
+export function repairOpeningCampaign(
+  campaign: OpeningCampaign,
+  nationality: string | null,
+): OpeningCampaign {
+  if (campaign.kind !== 'youth-tournament') return campaign;
+  if (!youthTournamentComplete(campaign)) return campaign;
+  return assignOpeningTrialClub(campaign, nationality);
 }
 
 /** Three-game academy trial at a club the player already chose. */

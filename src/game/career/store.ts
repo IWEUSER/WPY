@@ -69,6 +69,7 @@ import {
   createYouthCampaign,
   failClubTrial,
   openingMatchSummary,
+  repairOpeningCampaign,
   resolveOpeningMatch,
   youthTournamentComplete,
   youthTrophyName,
@@ -833,6 +834,7 @@ interface CareerActions {
   startTrial: () => void;
   startOpeningTrial: () => void;
   chooseOpeningTrialClub: (clubId: string) => void;
+  repairOpeningTrialPicker: () => void;
   recordTrialShot: (result: ShotResult) => void;
   finishTrial: () => void;
   chooseClub: (clubId: string) => void;
@@ -1441,6 +1443,14 @@ export const useCareerStore = create<CareerStore>()(
           };
         }),
 
+      repairOpeningTrialPicker: () =>
+        set((state) => {
+          if (!state.openingCampaign || !state.nationality) return {};
+          if (state.openingCampaign.kind !== 'youth-tournament') return {};
+          const opening = assignOpeningTrialClub(state.openingCampaign, state.nationality);
+          return { openingCampaign: opening, phase: 'opening-brief' };
+        }),
+
       recordTrialShot: (result) =>
         set((state) => {
           if (!state.trial) return state;
@@ -1526,7 +1536,10 @@ export const useCareerStore = create<CareerStore>()(
               state.openingCampaign.kind === 'youth-tournament' &&
               youthTournamentComplete(state.openingCampaign)
             ) {
-              return { phase: 'opening-brief' };
+              const opening = state.nationality
+                ? repairOpeningCampaign(state.openingCampaign, state.nationality)
+                : state.openingCampaign;
+              return { phase: 'opening-brief', openingCampaign: opening };
             }
             const live = liveFromOpening(state.openingCampaign);
             if (live) {
@@ -1636,7 +1649,11 @@ export const useCareerStore = create<CareerStore>()(
             };
           }
           if (after === 'opening-brief') {
-            return { phase: 'opening-brief', lastMatchResult: null };
+            const opening =
+              state.openingCampaign && state.nationality
+                ? repairOpeningCampaign(state.openingCampaign, state.nationality)
+                : state.openingCampaign;
+            return { phase: 'opening-brief', lastMatchResult: null, openingCampaign: opening };
           }
           if (after === 'club-offer') {
             return { phase: 'club-offer', lastMatchResult: null };
@@ -2186,7 +2203,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 35,
+      version: 36,
       migrate: (persisted) => {
         try {
           return migrateCareerPersist(persisted);
@@ -2239,14 +2256,17 @@ function migrateCareerPersist(persisted: unknown): CareerState {
         return {
           ...state,
           openingCampaign: state.openingCampaign
-            ? {
-                ...state.openingCampaign,
-                bestTrialRatio: state.openingCampaign.bestTrialRatio ?? 0,
-                rejectedClubIds: state.openingCampaign.rejectedClubIds ?? [],
-                openingTier: state.openingCampaign.openingTier ?? state.openingCampaign.trialTier ?? null,
-                originCountry: state.openingCampaign.originCountry ?? null,
-                originClubId: state.openingCampaign.originClubId ?? null,
-              }
+            ? repairOpeningCampaign(
+                {
+                  ...state.openingCampaign,
+                  bestTrialRatio: state.openingCampaign.bestTrialRatio ?? 0,
+                  rejectedClubIds: state.openingCampaign.rejectedClubIds ?? [],
+                  openingTier: state.openingCampaign.openingTier ?? state.openingCampaign.trialTier ?? null,
+                  originCountry: state.openingCampaign.originCountry ?? null,
+                  originClubId: state.openingCampaign.originClubId ?? null,
+                },
+                state.nationality ?? null,
+              )
             : null,
           careerStart: state.careerStart ?? null,
           nationality: state.nationality ?? null,
