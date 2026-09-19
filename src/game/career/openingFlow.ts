@@ -8,7 +8,7 @@ import { describeDrawSettledOnPenalties, settleDrawOnPenalties } from './penalti
 import {
   buildClubTrialCalendar,
   nextTrialTier,
-  pickTrialClub,
+  pickTrialClubs,
   TRIALS_AT_LEVEL,
   TRIAL_HOME_LOOKS,
   type TrialPickOptions,
@@ -45,6 +45,7 @@ export function createYouthCampaign(nationId: string, rng: () => number = Math.r
     reachedSemi: false,
     usedOpponentIds: [...groupOpponents],
     trialClubId: null,
+    trialClubIds: [],
     trialTier: null,
     rejectedClubIds: [],
     bestTrialRatio: 0,
@@ -177,30 +178,58 @@ export function youthTournamentComplete(campaign: OpeningCampaign): boolean {
   return last?.internationalRound === 'final' || last?.internationalRound === 'third-place';
 }
 
-/** Lock in the trial club after the U16 tournament without starting the three games. */
+export function remainingTrialClubIds(campaign: OpeningCampaign): string[] {
+  return (campaign.trialClubIds ?? []).filter((id) => !campaign.rejectedClubIds.includes(id));
+}
+
+function trialPickOpts(
+  campaign: OpeningCampaign,
+  options?: TrialPickOptions,
+): TrialPickOptions {
+  return {
+    sameTierOnly: options?.sameTierOnly ?? true,
+    preferCountry: options?.preferCountry ?? campaign.originCountry,
+    requireHome: options?.requireHome,
+  };
+}
+
+function fillTrialClubIds(
+  campaign: OpeningCampaign,
+  nationality: string | null,
+  tier: ClubTier,
+  count: number,
+  options?: TrialPickOptions,
+): string[] {
+  const remaining = remainingTrialClubIds(campaign);
+  if (remaining.length >= count) return remaining.slice(0, count);
+  const extra = pickTrialClubs(
+    tier,
+    nationality,
+    [...campaign.rejectedClubIds, ...remaining],
+    count - remaining.length,
+    trialPickOpts(campaign, options),
+  );
+  return [...remaining, ...extra.map((club) => club.id)];
+}
+
+/** Lock in the three trial clubs after the U16 tournament without starting the games. */
 export function assignOpeningTrialClub(
   campaign: OpeningCampaign,
   nationality: string | null,
   options?: TrialPickOptions,
 ): OpeningCampaign {
-  const trialTier = campaign.trialTier ?? tierForYouthGoals(campaign.youthGoals || campaign.goals);
-  const existing = campaign.trialClubId ? getClub(campaign.trialClubId) : undefined;
-  const reuse = existing && !campaign.rejectedClubIds.includes(existing.id);
-  const pickOpts: TrialPickOptions = {
-    sameTierOnly: options?.sameTierOnly,
-    preferCountry: options?.preferCountry ?? campaign.originCountry,
-    requireHome: options?.requireHome,
-  };
-  const club = reuse
-    ? existing
-    : pickTrialClub(trialTier, nationality, campaign.rejectedClubIds, pickOpts);
+  const goals = campaign.youthGoals || campaign.goals;
+  const games = Math.max(campaign.gamesPlayed, 1);
+  const trialTier = campaign.trialTier ?? tierForYouthGoals(goals, games);
+  const trialClubIds = fillTrialClubIds(campaign, nationality, trialTier, TRIALS_AT_LEVEL, options);
   return {
     ...campaign,
-    youthGoals: campaign.youthGoals || campaign.goals,
-    trialClubId: club.id,
-    trialTier: club.tier,
+    youthGoals: goals,
+    trialClubId: null,
+    trialClubIds,
+    trialTier,
     bestTrialRatio: campaign.bestTrialRatio ?? 0,
-    openingTier: campaign.openingTier ?? club.tier,
+    openingTier: campaign.openingTier ?? trialTier,
     originCountry: campaign.originCountry ?? countryForNationality(nationality),
     originClubId: campaign.originClubId ?? null,
   };
@@ -223,6 +252,7 @@ export function beginFavouriteClubTrial(club: Club): OpeningCampaign {
     reachedSemi: false,
     usedOpponentIds: [],
     trialClubId: club.id,
+    trialClubIds: [club.id],
     trialTier: club.tier,
     rejectedClubIds: [],
     bestTrialRatio: 0,
@@ -241,16 +271,23 @@ export function beginClubTrial(
 ): OpeningCampaign {
   const assigned = assignOpeningTrialClub(
     tier != null && tier !== campaign.trialTier
-      ? { ...campaign, trialClubId: null, trialTier: tier }
+      ? { ...campaign, trialClubId: null, trialClubIds: [], trialTier: tier }
       : campaign,
     nationality,
     options,
   );
-  const club =
-    getClub(assigned.trialClubId ?? '') ??
-    pickTrialClub(assigned.trialTier ?? 5, nationality, assigned.rejectedClubIds, options);
+  if (!assigned.trialClubId) return assigned;
+  return chooseTrialClub(assigned, assigned.trialClubId);
+}
+
+/** Start the three-game look at a club the player picked from the current band. */
+export function chooseTrialClub(campaign: OpeningCampaign, clubId: string): OpeningCampaign {
+  const allowed = remainingTrialClubIds(campaign);
+  const pickedId = allowed.includes(clubId) ? clubId : allowed[0] ?? clubId;
+  const club = getClub(pickedId);
+  if (!club) return campaign;
   return {
-    ...assigned,
+    ...campaign,
     kind: 'club-trial',
     calendar: buildClubTrialCalendar(club),
     fixtureIndex: 0,
@@ -258,7 +295,8 @@ export function beginClubTrial(
     gamesPlayed: 0,
     trialClubId: club.id,
     trialTier: club.tier,
-    bestTrialRatio: assigned.bestTrialRatio ?? 0,
+    trialClubIds: campaign.trialClubIds?.length ? campaign.trialClubIds : [club.id, ...allowed.filter((id) => id !== club.id)],
+    bestTrialRatio: campaign.bestTrialRatio ?? 0,
     eliminated: false,
   };
 }
@@ -284,36 +322,42 @@ export function rejectedIdsAtTier(campaign: OpeningCampaign, tier: ClubTier): st
   return campaign.rejectedClubIds.filter((id) => getClub(id)?.tier === tier);
 }
 
-function startNextLook(
+function offerNextTrialBand(
   recorded: OpeningCampaign,
   nationality: string | null,
   tier: ClubTier,
+  count: number,
   requireHome: boolean,
 ): { opening: OpeningCampaign; exhausted: boolean } {
-  const next = beginClubTrial(
-    { ...recorded, trialClubId: null, trialTier: tier },
+  const trialClubIds = fillTrialClubIds(
+    { ...recorded, trialClubId: null, trialClubIds: remainingTrialClubIds(recorded), trialTier: tier },
     nationality,
     tier,
+    count,
     {
       sameTierOnly: true,
       preferCountry: recorded.originCountry,
       requireHome,
     },
   );
-  if (
-    !next.trialClubId
-    || recorded.rejectedClubIds.includes(next.trialClubId)
-    || next.trialTier !== tier
-  ) {
+  if (trialClubIds.length === 0) {
     return { opening: recorded, exhausted: true };
   }
-  return { opening: next, exhausted: false };
+  return {
+    opening: {
+      ...recorded,
+      trialClubId: null,
+      trialClubIds,
+      trialTier: tier,
+    },
+    exhausted: false,
+  };
 }
 
 /**
- * Record a failed 3-game look. Three misses at the opening level drop the
- * player one band for three more looks (home-country clubs first). After
- * both bands, the caller opens offers from `bestTrialRatio`.
+ * Record a failed 3-game look. Remaining clubs in the current band stay on
+ * the picker. Three misses drop the player one band for three new clubs.
+ * After both bands, the caller opens offers from `bestTrialRatio`.
  */
 export function failClubTrial(
   campaign: OpeningCampaign,
@@ -326,6 +370,7 @@ export function failClubTrial(
   const recorded: OpeningCampaign = {
     ...campaign,
     rejectedClubIds: rejected,
+    trialClubId: null,
     bestTrialRatio: Math.max(campaign.bestTrialRatio ?? 0, ratio),
     openingTier: campaign.openingTier ?? lastTier,
     originCountry: campaign.originCountry ?? countryForNationality(nationality),
@@ -334,16 +379,23 @@ export function failClubTrial(
   const homeAtTier = atThisTier.filter((id) => getClub(id)?.country === recorded.originCountry).length;
   const droppedRound = recorded.openingTier != null && lastTier > recorded.openingTier;
   if (atThisTier.length < TRIALS_AT_LEVEL) {
-    return startNextLook(
+    return offerNextTrialBand(
       recorded,
       nationality,
       lastTier,
+      TRIALS_AT_LEVEL - atThisTier.length,
       droppedRound && homeAtTier < TRIAL_HOME_LOOKS,
     );
   }
   const nextTier = nextTrialTier(lastTier);
   if (!droppedRound && nextTier !== lastTier) {
-    return startNextLook(recorded, nationality, nextTier, true);
+    return offerNextTrialBand(
+      { ...recorded, trialClubIds: [] },
+      nationality,
+      nextTier,
+      TRIALS_AT_LEVEL,
+      true,
+    );
   }
   return { opening: recorded, exhausted: true };
 }

@@ -68,7 +68,10 @@ function playOpeningMatch(goals: number) {
     store.getState().advance();
   }
   if (store.getState().phase === 'opening-brief') {
-    store.getState().startOpeningTrial();
+    const opening = store.getState().openingCampaign;
+    const nextId = (opening?.trialClubIds ?? []).find((id) => !opening?.rejectedClubIds.includes(id));
+    if (nextId) store.getState().chooseOpeningTrialClub(nextId);
+    else store.getState().startOpeningTrial();
   }
   const live = store.getState().liveMatch;
   if (!live) {
@@ -138,7 +141,11 @@ function completeOpeningAndSign(): string | undefined {
       continue;
     }
     if (phase === 'opening-brief') {
-      store.getState().startOpeningTrial();
+      const opening = store.getState().openingCampaign;
+      const nextId = (opening?.trialClubIds ?? []).find((id) => !opening?.rejectedClubIds.includes(id));
+      if (store.getState().pendingTransfer) store.getState().startOpeningTrial();
+      else if (nextId) store.getState().chooseOpeningTrialClub(nextId);
+      else store.getState().startOpeningTrial();
       continue;
     }
     if (phase === 'club-offer') {
@@ -626,7 +633,11 @@ store.getState().startFavouritePath('favourite-trial');
 store.getState().chooseFavouriteClub('real-madrid');
 pickNation('spain');
 for (let i = 0; i < 3; i++) playOpeningMatch(0);
-if (store.getState().phase === 'opening-brief') store.getState().startOpeningTrial();
+if (store.getState().phase === 'opening-brief') {
+  const opening = store.getState().openingCampaign;
+  const nextId = (opening?.trialClubIds ?? []).find((id) => !opening?.rejectedClubIds.includes(id));
+  if (nextId) store.getState().chooseOpeningTrialClub(nextId);
+}
 {
   const s = store.getState();
   console.log(
@@ -635,16 +646,18 @@ if (store.getState().phase === 'opening-brief') store.getState().startOpeningTri
     s.pendingTransfer?.kind,
     s.parentClubId,
     s.openingCampaign?.trialClubId,
+    s.openingCampaign?.trialClubIds,
     s.openingCampaign?.trialTier,
   );
   if (
     s.phase !== 'match'
     || s.parentClubId !== 'real-madrid'
     || s.openingCampaign?.trialClubId === 'real-madrid'
+    || (s.openingCampaign?.trialClubIds ?? []).length < 2
     || s.openingCampaign?.trialTier !== getClub('real-madrid')?.tier
     || s.pendingTransfer
   ) {
-    console.error('missing a favourite-club trial must offer another look at the same level, not a forced loan');
+    console.error('missing a favourite-club trial must offer the remaining clubs at the same level, not a forced loan');
     process.exitCode = 1;
   }
 }

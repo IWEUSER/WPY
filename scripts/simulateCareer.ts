@@ -61,6 +61,7 @@ import {
   assignOpeningTrialClub,
   beginClubTrial,
   beginFavouriteClubTrial,
+  chooseTrialClub,
   clubTrialComplete,
   createYouthCampaign,
   failClubTrial,
@@ -1192,14 +1193,13 @@ if (germanTierOk < 80) {
 
 console.log('\n--- U16 opening: youth goals map to club tiers ---');
 if (
-  tierForYouthGoals(7) !== 1
-  || tierForYouthGoals(6) !== 2
-  || tierForYouthGoals(5) !== 3
-  || tierForYouthGoals(4) !== 4
-  || tierForYouthGoals(3) !== 5
-  || tierForYouthGoals(0) !== 5
+  tierForYouthGoals(3, 4) !== 1
+  || tierForYouthGoals(3, 3) !== 1
+  || tierForYouthGoals(2, 4) !== 3
+  || tierForYouthGoals(1, 4) !== 5
+  || tierForYouthGoals(0, 4) !== 5
 ) {
-  console.error('tierForYouthGoals must be 7 elite / 6 strong / 5 mid / 4 medium / 0-3 lower level');
+  console.error('3/4 (0.75) must be Elite; 2/4 Mid-table; 1/4 and blanks stay lower level');
   process.exitCode = 1;
 }
 const chanceSum = CLUB_TRIAL_CHANCE_SPLIT.reduce((sum, n) => sum + n, 0);
@@ -1377,8 +1377,17 @@ if (path.qualified) {
 }
 
 const assigned = assignOpeningTrialClub({ ...path, goals: 7, youthGoals: 7 }, 'germany');
-if (!assigned.trialClubId || assigned.trialTier !== 1) {
-  console.error('7 U16 goals must earn an elite trial');
+if ((assigned.trialClubIds ?? []).length !== 3 || assigned.trialTier !== 1 || assigned.trialClubId) {
+  console.error('a 1.00 U16 ratio must offer three Elite clubs to choose from');
+  process.exitCode = 1;
+}
+if ((assigned.trialClubIds ?? []).some((id) => getClub(id)?.tier !== 1)) {
+  console.error('every youth trial offer at 0.75+ must be Elite');
+  process.exitCode = 1;
+}
+const threeFromFour = assignOpeningTrialClub({ ...path, goals: 3, youthGoals: 3, gamesPlayed: 4 }, 'germany');
+if (threeFromFour.trialTier !== 1 || (threeFromFour.trialClubIds ?? []).length !== 3) {
+  console.error('3 goals in 4 U16 games (0.75) must offer three Elite trials');
   process.exitCode = 1;
 }
 const germanElite = pickTrialClub(1, 'germany');
@@ -1388,7 +1397,7 @@ if (germanElite.country !== 'Germany' || germanElite.tier !== 1) {
   process.exitCode = 1;
 }
 
-const trialStart = beginClubTrial({ ...assigned, goals: 7, youthGoals: 7 }, 'germany', 1);
+const trialStart = chooseTrialClub(assigned, assigned.trialClubIds?.[0] ?? '');
 console.log('club trial fixtures', trialStart.calendar.fixtures.map((f) => `${f.opponentLabel} ${f.isHome ? 'H' : 'A'} x${f.playerChances}`));
 if (
   trialStart.calendar.fixtures.length !== 3
@@ -1417,32 +1426,42 @@ if (!clubTrialComplete(failed) || trialContractWon(trialClub, failed.goals, fail
   process.exitCode = 1;
 }
 const firstFail = failClubTrial(failed, 'germany');
-console.log('same-level retry', failed.trialClubId, '->', firstFail.opening.trialClubId, firstFail.opening.trialTier, 'exhausted', firstFail.exhausted);
+console.log('same-level retry', failed.trialClubId, '->', firstFail.opening.trialClubIds, firstFail.opening.trialTier, 'exhausted', firstFail.exhausted);
 if (
   firstFail.exhausted
   || firstFail.opening.trialTier !== trialStart.trialTier
-  || firstFail.opening.trialClubId === trialStart.trialClubId
+  || firstFail.opening.trialClubId
+  || (firstFail.opening.trialClubIds ?? []).length !== 2
+  || (firstFail.opening.trialClubIds ?? []).includes(trialStart.trialClubId ?? '')
 ) {
-  console.error('failing a trial must stay at the same level and pick a different club');
+  console.error('failing a trial must leave the other two clubs at the same level');
   process.exitCode = 1;
 }
-let secondLook = firstFail.opening;
+let secondLook = chooseTrialClub(firstFail.opening, firstFail.opening.trialClubIds?.[0] ?? '');
 secondLook = applyTrialMatch(secondLook, 1);
 secondLook = applyTrialMatch(secondLook, 0);
 secondLook = applyTrialMatch(secondLook, 0);
 const secondFail = failClubTrial(secondLook, 'germany');
-if (secondFail.exhausted || secondFail.opening.trialTier !== trialStart.trialTier) {
-  console.error('the second miss must still be another look at the same level');
+if (
+  secondFail.exhausted
+  || secondFail.opening.trialTier !== trialStart.trialTier
+  || (secondFail.opening.trialClubIds ?? []).length !== 1
+) {
+  console.error('the second miss must still offer the last club at the same level');
   process.exitCode = 1;
 }
-let thirdLook = secondFail.opening;
+let thirdLook = chooseTrialClub(secondFail.opening, secondFail.opening.trialClubIds?.[0] ?? '');
 thirdLook = applyTrialMatch(thirdLook, 0);
 thirdLook = applyTrialMatch(thirdLook, 0);
 thirdLook = applyTrialMatch(thirdLook, 0);
 const thirdFail = failClubTrial(thirdLook, 'germany');
-console.log('three looks drop', thirdFail.exhausted, thirdFail.opening.trialClubId, thirdFail.opening.trialTier, 'best', thirdFail.opening.bestTrialRatio.toFixed(2));
-if (thirdFail.exhausted || thirdFail.opening.trialTier !== (trialStart.trialTier ?? 1) + 1) {
-  console.error('three missed looks at a level must drop one band for three more trials');
+console.log('three looks drop', thirdFail.exhausted, thirdFail.opening.trialClubIds, thirdFail.opening.trialTier, 'best', thirdFail.opening.bestTrialRatio.toFixed(2));
+if (
+  thirdFail.exhausted
+  || thirdFail.opening.trialTier !== (trialStart.trialTier ?? 1) + 1
+  || (thirdFail.opening.trialClubIds ?? []).length !== 3
+) {
+  console.error('three missed looks at a level must offer three clubs one band down');
   process.exitCode = 1;
 }
 if (Math.abs(thirdFail.opening.bestTrialRatio - 1 / 3) > 1e-9) {
@@ -1451,6 +1470,7 @@ if (Math.abs(thirdFail.opening.bestTrialRatio - 1 / 3) > 1e-9) {
 }
 let dropLook = thirdFail.opening;
 for (let i = 0; i < 3; i++) {
+  dropLook = chooseTrialClub(dropLook, dropLook.trialClubIds?.[0] ?? '');
   dropLook = applyTrialMatch(dropLook, 0);
   dropLook = applyTrialMatch(dropLook, 0);
   dropLook = applyTrialMatch(dropLook, 0);
@@ -1518,28 +1538,30 @@ if (favouriteClub) {
   favourite = applyTrialMatch(favourite, 0);
   favourite = applyTrialMatch(favourite, 0);
   const favRetry = failClubTrial(favourite, 'spain');
-  console.log('favourite trial retry', favourite.trialClubId, '->', favRetry.opening.trialClubId, favRetry.opening.trialTier);
+  console.log('favourite trial retry', favourite.trialClubId, '->', favRetry.opening.trialClubIds, favRetry.opening.trialTier);
   if (
     favRetry.exhausted
-    || favRetry.opening.trialClubId === 'real-madrid'
+    || (favRetry.opening.trialClubIds ?? []).includes('real-madrid')
+    || (favRetry.opening.trialClubIds ?? []).length !== 2
     || favRetry.opening.trialTier !== favouriteClub.tier
   ) {
-    console.error('missing a favourite-club trial must offer two more looks at the same level, not a forced loan');
+    console.error('missing a favourite-club trial must offer two more clubs at the same level, not a forced loan');
     process.exitCode = 1;
   }
   let favLook = favRetry.opening;
   for (let i = 0; i < 2; i++) {
+    favLook = chooseTrialClub(favLook, favLook.trialClubIds?.[0] ?? '');
     favLook = applyTrialMatch(favLook, 0);
     favLook = applyTrialMatch(favLook, 0);
     favLook = applyTrialMatch(favLook, 0);
     favLook = failClubTrial(favLook, 'spain').opening;
   }
-  console.log('favourite drop', favLook.trialClubId, favLook.trialTier, favLook.originCountry);
-  if (favLook.trialTier !== favouriteClub.tier + 1) {
-    console.error('failing three elite favourite trials must drop one level');
+  console.log('favourite drop', favLook.trialClubIds, favLook.trialTier, favLook.originCountry);
+  if (favLook.trialTier !== favouriteClub.tier + 1 || (favLook.trialClubIds ?? []).length !== 3) {
+    console.error('failing three elite favourite trials must offer three clubs one level down');
     process.exitCode = 1;
   }
-  const secondRound = [favLook.trialClubId, ...favLook.rejectedClubIds]
+  const secondRound = [...(favLook.trialClubIds ?? []), ...favLook.rejectedClubIds]
     .map((id) => (id ? getClub(id) : undefined))
     .filter((c) => c && c.tier === favLook.trialTier);
   const homeSecond = secondRound.filter((c) => c?.country === 'Spain').length;

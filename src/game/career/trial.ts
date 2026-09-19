@@ -1,19 +1,16 @@
 import { CLUBS, clubsByTier, clubsForSeason, type Club, type ClubTier } from './data/clubs';
 import { countryForNationality, pickClubsBiasedToCountry } from './clubOffers';
 import type { CalendarFixture, SeasonCalendar } from './calendar';
+import { tierForRatio } from './transfers';
 
 /** Total finishing chances across the three club-trial matches. */
 export const TRIAL_SHOTS = 10;
 export const CLUB_TRIAL_GAMES = 3;
 export const CLUB_TRIAL_CHANCE_SPLIT = [4, 3, 3] as const;
 
-/** U16 tournament goals → the tier that invites the player for a club trial. */
-export function tierForYouthGoals(goals: number): ClubTier {
-  if (goals >= 7) return 1;
-  if (goals >= 6) return 2;
-  if (goals >= 5) return 3;
-  if (goals >= 4) return 4;
-  return 5;
+/** U16 goals-per-game → the tier that invites the player for a club trial. */
+export function tierForYouthGoals(goals: number, games = 1): ClubTier {
+  return tierForRatio(goals / Math.max(1, games));
 }
 
 /** @deprecated Use tierForYouthGoals. Kept so older tests still compile. */
@@ -66,21 +63,36 @@ export function pickTrialClub(
   return CLUBS.find((c) => c.playable !== false && !taken.has(c.id)) ?? CLUBS[0];
 }
 
-/**
- * Picks up to `count` clubs from the tier the U16 performance earned.
- * Used only by older tests; live careers now send the player to one club.
- */
-export function offerClubsForTrial(goals: number, count = 3, nationality?: string | null): Club[] {
-  const tier = tierForYouthGoals(goals);
+/** Three clubs at one band so the player can choose the order they trial. */
+export function pickTrialClubs(
+  tier: ClubTier,
+  nationality?: string | null,
+  excludeIds: string[] = [],
+  count = TRIALS_AT_LEVEL,
+  opts: boolean | TrialPickOptions = { sameTierOnly: true },
+): Club[] {
   const picks: Club[] = [];
-  const exclude: string[] = [];
+  const exclude = [...excludeIds];
   for (let i = 0; i < count; i++) {
-    const club = pickTrialClub(tier, nationality, exclude);
+    const club = pickTrialClub(tier, nationality, exclude, opts);
     if (!club || exclude.includes(club.id)) break;
+    if (trialPickOptions(opts).sameTierOnly && club.tier !== tier) break;
     picks.push(club);
     exclude.push(club.id);
   }
   return picks;
+}
+
+/**
+ * Picks up to `count` clubs from the tier the U16 performance earned.
+ */
+export function offerClubsForTrial(
+  goals: number,
+  count = 3,
+  nationality?: string | null,
+  games = 1,
+): Club[] {
+  return pickTrialClubs(tierForYouthGoals(goals, games), nationality, [], count, { sameTierOnly: true });
 }
 
 export type TrialRatioBar = 'reserve' | 'first-team';

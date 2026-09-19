@@ -63,6 +63,7 @@ import {
   applyYouthMatch,
   assignOpeningTrialClub,
   beginClubTrial,
+  chooseTrialClub,
   beginFavouriteClubTrial,
   clubTrialComplete,
   createYouthCampaign,
@@ -831,6 +832,7 @@ interface CareerActions {
   backFromSetup: () => void;
   startTrial: () => void;
   startOpeningTrial: () => void;
+  chooseOpeningTrialClub: (clubId: string) => void;
   recordTrialShot: (result: ShotResult) => void;
   finishTrial: () => void;
   chooseClub: (clubId: string) => void;
@@ -1404,6 +1406,29 @@ export const useCareerStore = create<CareerStore>()(
           if (opening.kind === 'youth-tournament') {
             opening = beginClubTrial(opening, state.nationality, opening.trialTier ?? undefined);
           }
+          if (!opening.trialClubId) {
+            return { openingCampaign: opening, phase: 'opening-brief' };
+          }
+          const live = liveFromOpening(opening);
+          if (!live) return { openingCampaign: opening, phase: 'opening-brief' };
+          return {
+            openingCampaign: opening,
+            clubId: opening.trialClubId,
+            trial: null,
+            liveMatch: live,
+            seasonCalendar: opening.calendar,
+            phase: 'match',
+          };
+        }),
+
+      chooseOpeningTrialClub: (clubId) =>
+        set((state) => {
+          if (!state.openingCampaign || !state.nationality) return {};
+          let opening = state.openingCampaign;
+          if (opening.kind === 'youth-tournament') {
+            opening = assignOpeningTrialClub(opening, state.nationality);
+          }
+          opening = chooseTrialClub(opening, clubId);
           const live = liveFromOpening(opening);
           if (!live) return { openingCampaign: opening, phase: 'opening-brief' };
           return {

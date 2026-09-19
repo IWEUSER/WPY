@@ -5,7 +5,7 @@ import { createNationalTeamState, recordInternationalAppearance } from './intern
 import { mlsConferenceOf } from './data/leagueFormat';
 import { buildSeasonStandings, rankLeagueTable } from './matchEngine';
 import { newContractYears, playerMarketValueFromSeasons, weeklyWageForClub } from './playerValue';
-import { applyTrialMatch, applyYouthMatch, assignOpeningTrialClub, beginClubTrial, beginFavouriteClubTrial, createYouthCampaign, failClubTrial } from './openingFlow';
+import { applyTrialMatch, applyYouthMatch, assignOpeningTrialClub, beginClubTrial, beginFavouriteClubTrial, chooseTrialClub, createYouthCampaign, failClubTrial } from './openingFlow';
 import { hydrateSeason, nextActionableFixture } from './seasonSim';
 import { CURRENT_RULES_STAMP } from './rulesStamp';
 import { formatNextLine } from './matchBriefing';
@@ -295,6 +295,10 @@ export function applyCareerLayoutPreview(): void {
     if (madrid) {
       let look = beginFavouriteClubTrial(madrid);
       const failBlank = () => {
+        if (!look.trialClubId) {
+          const nextId = (look.trialClubIds ?? []).find((id) => !look.rejectedClubIds.includes(id));
+          if (nextId) look = chooseTrialClub(look, nextId);
+        }
         look = applyTrialMatch(look, 0);
         look = applyTrialMatch(look, 0);
         look = applyTrialMatch(look, 0);
