@@ -3660,7 +3660,7 @@ if (loanMiss.immediate?.role === 'reserve' || loanOffers !== LOAN_OFFER_COUNT ||
     calendarWeek: 99,
     role: 'loan',
   });
-  if (nextLoans.length === 0 || new Set(nextLoans.map((o) => o.weeklyWage)).size < 2) {
+  if (nextLoans.length === 0 || nextLoans.every((o) => o.weeklyWage === paid)) {
     console.error('loan offers must vary by destination club instead of copying the current salary');
     process.exitCode = 1;
   }

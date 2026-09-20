@@ -414,8 +414,10 @@ export function pickLoanClubsForMiss(
         (c) => c.playable !== false && SECOND_DIVISIONS.has(c.league) && !exclude.includes(c.id),
       ));
 
-  const quality = [...sameDivision, ...otherTopFlight];
-  const extra = [...homeSecond, ...natSecond, ...worldSecond];
+  const quality = sameDivision.length > 0 ? sameDivision : otherTopFlight;
+  const extra = sameDivision.length > 0
+    ? [...otherTopFlight, ...homeSecond, ...natSecond, ...worldSecond]
+    : [...homeSecond, ...natSecond, ...worldSecond];
   return withGeographicLoanBias(quality, nationality, count, exclude, extra);
 }
 
