@@ -147,6 +147,7 @@ function withGeographicLoanBias(
   count: number,
   excludeIds: string[],
   extraFill: Club[] = [],
+  lastFill: Club[] = [],
 ): Club[] {
   const seen = new Set<string>(excludeIds.filter(Boolean));
   const picked: Club[] = [];
@@ -155,8 +156,12 @@ function withGeographicLoanBias(
   if (picked.length < destWanted) {
     picked.push(...takeGeographicLoans(extraFill, nationality, destWanted - picked.length, seen));
   }
+  if (picked.length < destWanted) {
+    picked.push(...takeGeographicLoans(lastFill, nationality, destWanted - picked.length, seen));
+  }
   picked.push(...takeShuffled(qualityPool, count - picked.length, seen));
   picked.push(...takeShuffled(extraFill, count - picked.length, seen));
+  picked.push(...takeShuffled(lastFill, count - picked.length, seen));
   return picked.slice(0, count);
 }
 
@@ -415,10 +420,9 @@ export function pickLoanClubsForMiss(
       ));
 
   const quality = sameDivision.length > 0 ? sameDivision : otherTopFlight;
-  const extra = sameDivision.length > 0
-    ? [...otherTopFlight, ...homeSecond, ...natSecond, ...worldSecond]
-    : [...homeSecond, ...natSecond, ...worldSecond];
-  return withGeographicLoanBias(quality, nationality, count, exclude, extra);
+  const extra = sameDivision.length > 0 ? otherTopFlight : [];
+  const last = [...homeSecond, ...natSecond, ...worldSecond];
+  return withGeographicLoanBias(quality, nationality, count, exclude, extra, last);
 }
 
 function canPayFee(club: Club, fee: number): boolean {

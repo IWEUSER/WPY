@@ -5381,7 +5381,6 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     });
     const arsenalBlankRenewal = (arsenalBlank.pendingTransfer?.offers ?? []).find((o) => o.renewal && o.clubId === 'arsenal');
     const arsenalBlankLoans = (arsenalBlank.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan');
-    const arsenalBlankWages = new Set(arsenalBlankLoans.map((o) => o.weeklyWage));
     console.log('Arsenal 0.0 window', arsenalBlank.headline, 'renewal', Boolean(arsenalBlankRenewal), 'loans', arsenalBlankLoans.length);
     if (arsenalBlankRenewal) {
       console.error('0.0 at an elite club must not table a current-club renewal');
