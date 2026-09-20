@@ -1766,8 +1766,11 @@ if (saleLoans !== LOAN_OFFER_COUNT || salePerms.length !== TRANSFER_OFFER_COUNT)
   console.error('a failed first-team season must offer 3 loans and 6 transfers');
   process.exitCode = 1;
 }
-if (salePerms.some((o) => o.contractYears !== newContractYears(20))) {
-  console.error('permanent sale offers for a 20-year-old must be 5-year contracts, not 1-year frees');
+if (salePerms.some((o) => {
+  const expected = o.squadStatus === 'reserve' ? RESERVE_CONTRACT_YEARS : newContractYears(20);
+  return o.contractYears !== expected;
+})) {
+  console.error('permanent sale offers for a 20-year-old must be 5-year starter deals or 3-year reserve deals');
   process.exitCode = 1;
 }
 {
@@ -5292,12 +5295,16 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     const arsenalLoanWages = new Set(arsenalLoans.map((o) => o.weeklyWage));
     const arsenalTiers = arsenalPerms.map((o) => getClub(o.clubId)?.tier ?? 5);
     console.log('Arsenal 0.48 window', arsenalS1.headline, 'loan wages', [...arsenalLoanWages], 'tiers', arsenalTiers, 'renewal', arsenalRenewal?.weeklyWage);
-    if (!arsenalRenewal || arsenalRenewal.weeklyWage <= 0 || arsenalPerms.some((o) => o.weeklyWage <= 0)) {
-      console.error('Season 1 that meets the club ratio must include the current club’s salary offer so it can be compared with other bids');
+    if (arsenalRenewal) {
+      console.error('Season 1 that misses the club ratio must not table a current-club renewal');
       process.exitCode = 1;
     }
-    if (arsenalLoans.length !== 0) {
-      console.error('meeting the club ratio must not table loan offers');
+    if (arsenalPerms.some((o) => o.weeklyWage <= 0)) {
+      console.error('Season 1 must still table other clubs’ salary offers after a missed ratio');
+      process.exitCode = 1;
+    }
+    if (arsenalLoans.length !== LOAN_OFFER_COUNT || arsenalLoanWages.size < 2 || arsenalLoans.some((o) => o.weeklyWage === 154_000)) {
+      console.error('Arsenal 0.48 loan wages must vary by destination instead of copying the current 154k salary');
       process.exitCode = 1;
     }
     const honourAlreadyMet = resolveSeasonTransition({
@@ -5326,9 +5333,19 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
       careerStart: 'favourite-first-team',
       squadStatus: 'rising-star',
     });
-    console.log('S2 honour with ratio met', honourAlreadyMet.headline, honourAlreadyMet.detail);
+    const honourRenewal = (honourAlreadyMet.pendingTransfer?.offers ?? []).find((o) => o.renewal && o.clubId === 'arsenal');
+    const honourLoans = (honourAlreadyMet.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan');
+    console.log('S2 honour with ratio met', honourAlreadyMet.headline, honourAlreadyMet.detail, 'renewal', Boolean(honourRenewal), 'loans', honourLoans.length);
     if (/honour/i.test(`${honourAlreadyMet.headline} ${honourAlreadyMet.detail}`)) {
       console.error('honour-override copy must not show when the finishing ratio already cleared the bar');
+      process.exitCode = 1;
+    }
+    if (!honourRenewal || honourRenewal.weeklyWage <= 0) {
+      console.error('Season 1 that meets the club ratio must include the current club’s salary offer');
+      process.exitCode = 1;
+    }
+    if (honourLoans.length !== 0) {
+      console.error('meeting the club ratio must not table loan offers');
       process.exitCode = 1;
     }
     const arsenalBlank = resolveSeasonTransition({
