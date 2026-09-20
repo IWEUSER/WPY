@@ -43,6 +43,13 @@ import {
 } from './chanceSetup';
 import type { ShotOutcomeKind, ShotResult, SwipeGesture } from './types';
 import StatsBar, { type ShotStats } from './StatsBar';
+import {
+  advanceBallTravel,
+  chanceBallTravels,
+  pickBallTravelDir,
+  takeQualityFromXRatio,
+  type BallTravelDir,
+} from './ballTravel';
 
 type Phase = 'idle' | 'dragging' | 'shooting' | 'result';
 
@@ -68,6 +75,10 @@ interface AnimState {
   shakeUntilMs: number;
   /** Horizontal spawn of the idle ball, as a fraction of canvas width. */
   ballStartXRatio: number;
+  /** +1 rolls right, −1 rolls left. Frozen once the swipe starts. */
+  ballTravelDir: BallTravelDir;
+  /** Open-play chances roll; penalties stay planted. */
+  ballTravelActive: boolean;
   /** Metres from the ball to the goal line. */
   shotDistanceM: number;
   chanceKind: ChanceKind;
@@ -217,6 +228,12 @@ function readDevStadium(): StadiumAppearance | null {
   };
 }
 
+function readDevTravelOff(): boolean {
+  if (!import.meta.env.DEV) return false;
+  const raw = new URLSearchParams(window.location.search).get('travel');
+  return raw === 'off' || raw === '0';
+}
+
 function readDevDualDefenders(): boolean {
   if (!import.meta.env.DEV) return false;
   const raw = new URLSearchParams(window.location.search).get('defenders');
@@ -357,6 +374,7 @@ export default function ShootingGame({
 }: ShootingGameProps = {}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const hintRef = useRef<HTMLDivElement | null>(null);
   const sizeRef = useRef({ w: 0, h: 0, dpr: 1 });
 
   const [uiPhase, setUiPhase] = useState<Phase>('idle');
@@ -406,6 +424,8 @@ export default function ShootingGame({
     shakeMagnitude: 0,
     shakeUntilMs: 0,
     ballStartXRatio: initialChance.ballStartXRatio,
+    ballTravelDir: pickBallTravelDir(initialChance.ballStartXRatio),
+    ballTravelActive: chanceBallTravels(initialChance.kind) && !readDevTravelOff(),
     shotDistanceM: initialChance.distanceM,
     chanceKind: initialChance.kind,
     defender: initialChance.defender,
@@ -466,6 +486,8 @@ export default function ShootingGame({
     anim.dragPoints = [];
     anim.result = null;
     anim.ballStartXRatio = chance.ballStartXRatio;
+    anim.ballTravelDir = pickBallTravelDir(chance.ballStartXRatio);
+    anim.ballTravelActive = chanceBallTravels(chance.kind) && !readDevTravelOff();
     anim.shotDistanceM = chance.distanceM;
     anim.chanceKind = chance.kind;
     anim.defender = chance.defender;
@@ -522,6 +544,7 @@ export default function ShootingGame({
         canvasW: w,
         canvasH: h,
         distanceM: anim.shotDistanceM,
+        takeQuality: 1,
       });
       return true;
     };
@@ -606,6 +629,16 @@ export default function ShootingGame({
         if (anim.phase === 'idle' || anim.phase === 'dragging') {
           const dt = anim.lastTickMs > 0 ? Math.min(0.05, (now - anim.lastTickMs) / 1000) : 0;
           anim.lastTickMs = now;
+          if (anim.phase === 'idle' && anim.ballTravelActive && dt > 0) {
+            const rolled = advanceBallTravel(anim.ballStartXRatio, anim.ballTravelDir, dt);
+            anim.ballStartXRatio = rolled.xRatio;
+            anim.ballTravelDir = rolled.direction;
+            anim.ballRotation += rolled.direction * dt * 9;
+          }
+          if (hintRef.current) {
+            const x = Math.min(0.82, Math.max(0.18, anim.ballStartXRatio));
+            hintRef.current.style.left = `${x * 100}%`;
+          }
           if (anim.defenders.length > 0 && dt > 0) {
             const paired = anim.defenders.length > 1;
             anim.defenders = anim.defenders.map((defender) =>
@@ -825,6 +858,7 @@ export default function ShootingGame({
         canvasW: w,
         canvasH: h,
         distanceM: anim.shotDistanceM,
+        takeQuality: anim.ballTravelActive ? takeQualityFromXRatio(anim.ballStartXRatio) : 1,
       };
 
       anim.dragStart = null;
@@ -856,7 +890,7 @@ export default function ShootingGame({
       <header className="z-10 flex items-center justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 text-white">
         <div>
           <h1 className="font-display text-lg font-bold sm:text-xl">{title ?? 'Football Legacy'}</h1>
-          <p className="text-xs text-white/50">{subtitle ?? 'Swipe the ball to shoot'}</p>
+          <p className="text-xs text-white/50">{subtitle ?? 'Time your swipe as the ball rolls'}</p>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {progressLabel && (
               <p className="inline-block rounded-full bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-white/80">
@@ -894,6 +928,7 @@ export default function ShootingGame({
 
         {uiPhase === 'idle' && (
           <div
+            ref={hintRef}
             className="pointer-events-none absolute whitespace-nowrap"
             style={{
               left: `${Math.min(0.82, Math.max(0.18, ballHintX)) * 100}%`,
@@ -902,7 +937,7 @@ export default function ShootingGame({
             }}
           >
             <div className="animate-pulse rounded-full bg-black/40 px-4 py-1.5 text-sm text-white/80 backdrop-blur">
-              Swipe up on the ball to shoot ⬆
+              {chanceKind === 'penalty' ? 'Swipe up on the ball to shoot ⬆' : 'Time your swipe ⬆'}
             </div>
           </div>
         )}

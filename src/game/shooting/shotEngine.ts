@@ -422,7 +422,8 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
   const rng = options.rng ?? defaultRandom;
 
   const { aim: intendedAim, power, curl } = computeIntendedShot(gesture);
-  const noise = computeNoise(power, curl, difficulty);
+  const takeQuality = gesture.takeQuality ?? 1;
+  const noise = computeNoise(power, curl, difficulty) + (1 - takeQuality) * difficulty.baseNoise * 1.6;
 
   const actualAim: AimPoint = {
     x: intendedAim.x + gaussianRandom(0, noise, rng),
