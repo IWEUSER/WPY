@@ -66,10 +66,13 @@ import {
 import type { SwipeGesture } from '../src/game/shooting/types';
 import {
   advanceBallTravel,
+  applyHorizontalKnock,
   BALL_TRAVEL_MAX_X,
   BALL_TRAVEL_MIN_X,
   chanceBallTravels,
+  knockForceFromSwipe,
   pickBallTravelDir,
+  swipeIsHorizontalKnock,
   takeQualityFromXRatio,
 } from '../src/game/shooting/ballTravel';
 import { nationStrength } from '../src/game/career/data/fifaRankings';
@@ -970,5 +973,32 @@ const edgeSpread = aimSpread(0);
 console.log(`take spread centre=${centreSpread.toFixed(4)} edge=${edgeSpread.toFixed(4)}`);
 if (!(edgeSpread > centreSpread * 1.15)) {
   console.error('FAIL: an awkward edge take must be less accurate than a central take');
+  process.exitCode = 1;
+}
+
+console.log('\n--- Horizontal knock moves the ball by swipe force ---');
+if (!swipeIsHorizontalKnock(80, 10) || swipeIsHorizontalKnock(40, 120) || swipeIsHorizontalKnock(10, 4)) {
+  console.error('FAIL: only a clearly sideways swipe should knock the ball');
+  process.exitCode = 1;
+}
+const soft = applyHorizontalKnock(0.5, 40, 280);
+const hard = applyHorizontalKnock(0.5, 240, 140);
+const against = applyHorizontalKnock(0.45, 180, 160);
+console.log(`knock soft=${soft.delta.toFixed(3)} hard=${hard.delta.toFixed(3)} against=${against.direction} force=${against.force.toFixed(2)}`);
+if (!(Math.abs(hard.delta) > Math.abs(soft.delta) * 1.6) || soft.delta <= 0 || hard.delta <= 0) {
+  console.error('FAIL: a stronger sideways swipe must shove the ball further');
+  process.exitCode = 1;
+}
+if (against.direction !== 1 || against.xRatio <= 0.45) {
+  console.error('FAIL: knocking right against a left-rolling ball must open space to the right');
+  process.exitCode = 1;
+}
+if (knockForceFromSwipe(40, 280) >= knockForceFromSwipe(240, 140)) {
+  console.error('FAIL: a long fast knock must out-force a soft tap');
+  process.exitCode = 1;
+}
+const pinched = applyHorizontalKnock(BALL_TRAVEL_MAX_X, 200, 120);
+if (pinched.xRatio > BALL_TRAVEL_MAX_X) {
+  console.error('FAIL: a knock must stay on the shooting line');
   process.exitCode = 1;
 }

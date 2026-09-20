@@ -45,8 +45,11 @@ import type { ShotOutcomeKind, ShotResult, SwipeGesture } from './types';
 import StatsBar, { type ShotStats } from './StatsBar';
 import {
   advanceBallTravel,
+  applyHorizontalKnock,
   chanceBallTravels,
+  KNOCK_SLIDE_MS,
   pickBallTravelDir,
+  swipeIsHorizontalKnock,
   takeQualityFromXRatio,
   type BallTravelDir,
 } from './ballTravel';
@@ -79,6 +82,9 @@ interface AnimState {
   ballTravelDir: BallTravelDir;
   /** Open-play chances roll; penalties stay planted. */
   ballTravelActive: boolean;
+  knockFromX: number;
+  knockToX: number;
+  knockUntilMs: number;
   /** Metres from the ball to the goal line. */
   shotDistanceM: number;
   chanceKind: ChanceKind;
@@ -433,6 +439,9 @@ export default function ShootingGame({
     ballStartXRatio: initialChance.ballStartXRatio,
     ballTravelDir: pickBallTravelDir(initialChance.ballStartXRatio),
     ballTravelActive: chanceBallTravels(initialChance.kind) && !readDevTravelOff(),
+    knockFromX: initialChance.ballStartXRatio,
+    knockToX: initialChance.ballStartXRatio,
+    knockUntilMs: 0,
     shotDistanceM: initialChance.distanceM,
     chanceKind: initialChance.kind,
     defender: initialChance.defender,
@@ -495,6 +504,9 @@ export default function ShootingGame({
     anim.ballStartXRatio = chance.ballStartXRatio;
     anim.ballTravelDir = pickBallTravelDir(chance.ballStartXRatio);
     anim.ballTravelActive = chanceBallTravels(chance.kind) && !readDevTravelOff();
+    anim.knockFromX = chance.ballStartXRatio;
+    anim.knockToX = chance.ballStartXRatio;
+    anim.knockUntilMs = 0;
     anim.shotDistanceM = chance.distanceM;
     anim.chanceKind = chance.kind;
     anim.defender = chance.defender;
@@ -637,10 +649,17 @@ export default function ShootingGame({
           const dt = anim.lastTickMs > 0 ? Math.min(0.05, (now - anim.lastTickMs) / 1000) : 0;
           anim.lastTickMs = now;
           if (anim.phase === 'idle' && anim.ballTravelActive && dt > 0) {
-            const rolled = advanceBallTravel(anim.ballStartXRatio, anim.ballTravelDir, dt);
-            anim.ballStartXRatio = rolled.xRatio;
-            anim.ballTravelDir = rolled.direction;
-            anim.ballRotation += rolled.direction * dt * 9;
+            if (anim.knockUntilMs > now) {
+              const t = 1 - (anim.knockUntilMs - now) / KNOCK_SLIDE_MS;
+              const eased = t * t * (3 - 2 * t);
+              anim.ballStartXRatio = anim.knockFromX + (anim.knockToX - anim.knockFromX) * eased;
+              anim.ballRotation += anim.ballTravelDir * dt * 16;
+            } else {
+              const rolled = advanceBallTravel(anim.ballStartXRatio, anim.ballTravelDir, dt);
+              anim.ballStartXRatio = rolled.xRatio;
+              anim.ballTravelDir = rolled.direction;
+              anim.ballRotation += rolled.direction * dt * 9;
+            }
           }
           if (hintRef.current) {
             const x = Math.min(0.82, Math.max(0.18, anim.ballStartXRatio));
@@ -871,6 +890,17 @@ export default function ShootingGame({
       anim.dragStart = null;
       anim.dragPoints = [];
 
+      if (anim.ballTravelActive && swipeIsHorizontalKnock(dx, dy)) {
+        const knock = applyHorizontalKnock(anim.ballStartXRatio, dx, durationMs);
+        anim.knockFromX = anim.ballStartXRatio;
+        anim.knockToX = knock.xRatio;
+        anim.ballTravelDir = knock.direction;
+        anim.knockUntilMs = performance.now() + KNOCK_SLIDE_MS;
+        anim.phase = 'idle';
+        setUiPhase('idle');
+        return;
+      }
+
       if (isValidSwipe(gesture)) {
         launchShot(gesture);
       } else {
@@ -897,7 +927,7 @@ export default function ShootingGame({
       <header className="z-10 flex items-center justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 text-white">
         <div>
           <h1 className="font-display text-lg font-bold sm:text-xl">{title ?? 'Football Legacy'}</h1>
-          <p className="text-xs text-white/50">{subtitle ?? 'Time your swipe as the ball rolls'}</p>
+          <p className="text-xs text-white/50">{subtitle ?? 'Knock the ball sideways, then swipe up to shoot'}</p>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {progressLabel && (
               <p className="inline-block rounded-full bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-white/80">
@@ -944,7 +974,7 @@ export default function ShootingGame({
             }}
           >
             <div className="animate-pulse rounded-full bg-black/40 px-4 py-1.5 text-sm text-white/80 backdrop-blur">
-              {chanceKind === 'penalty' ? 'Swipe up on the ball to shoot ⬆' : 'Time your swipe ⬆'}
+              {chanceKind === 'penalty' ? 'Swipe up on the ball to shoot ⬆' : 'Swipe sideways to move · up to shoot'}
             </div>
           </div>
         )}
