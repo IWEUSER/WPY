@@ -155,8 +155,8 @@ function withGeographicLoanBias(
   if (picked.length < destWanted) {
     picked.push(...takeGeographicLoans(extraFill, nationality, destWanted - picked.length, seen));
   }
-  const fill = [...qualityPool, ...extraFill];
-  picked.push(...takeShuffled(fill, count - picked.length, seen));
+  picked.push(...takeShuffled(qualityPool, count - picked.length, seen));
+  picked.push(...takeShuffled(extraFill, count - picked.length, seen));
   return picked.slice(0, count);
 }
 
