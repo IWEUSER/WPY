@@ -25,7 +25,11 @@ export default function OpeningBriefScreen() {
   const trialRatio = opening && opening.gamesPlayed > 0 ? opening.goals / opening.gamesPlayed : 0;
   const remainingIds = opening ? remainingTrialClubIds(opening) : [];
   const remainingClubs = remainingIds.map(getClub).filter((club): club is NonNullable<ReturnType<typeof getClub>> => club != null);
-  const earnedYouthTier = opening && afterYouth ? youthTrialEarnedTier(opening) : youthGames && youthGames > 0 ? tierForYouthGoals(youthGoals, youthGames) : null;
+  const earnedYouthTier = opening && afterYouth
+    ? youthTrialEarnedTier(opening, nationality)
+    : youthGames && youthGames > 0
+      ? tierForYouthGoals(youthGoals, youthGames, nationality)
+      : null;
   const levelTier = afterYouth
     ? (earnedYouthTier ?? opening?.trialTier ?? remainingClubs[0]?.tier ?? null)
     : (opening?.trialTier ?? remainingClubs[0]?.tier ?? null);
@@ -122,7 +126,7 @@ export default function OpeningBriefScreen() {
           <p className="text-xs uppercase tracking-wide text-white/40">What happens next</p>
           <p className="mt-2 text-sm text-white/70">
             Offers come from {offerBand} clubs only — the band your best ratio earned. You sign a
-            2-year Rising star deal at 10% of that club’s top wage, then Season 1 starts.
+            2-year Rising star deal at 10% of that club’s average wage, then Season 1 starts.
           </p>
         </div>
       )}

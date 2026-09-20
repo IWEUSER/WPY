@@ -19,7 +19,7 @@ import { nationKit } from '../src/game/career/data/nationColours';
 import { reserveStadium, resolveCareerStadium, resolveMatchStadium, trialStadium } from '../src/game/career/matchVenue';
 import { crowdSwatch, kitFromColor, kitFromScheme, luminance } from '../src/game/shooting/kitPalette';
 import { AFRICA_SKIN_TONES, createPitchView, idleKeeperPose, MAX_SHOT_DISTANCE_M, MIN_SHOT_DISTANCE_M, PLAYER_SKIN_TONES, pickPlayerLook, pickPlayerSkin, SHORTS_HALF_H, THIGH_SHARE } from '../src/game/shooting/render';
-import { appearanceRegionForNation, isBlackHair, isBlondeHair, isFairSkin } from '../src/game/shooting/appearance';
+import { appearanceRegionForNation, HAIR_SWATCHES, isBlackHair, isBlondeHair, isFairSkin, SKIN_SWATCHES } from '../src/game/shooting/appearance';
 import { rollChanceSetup } from '../src/game/shooting/chanceSetup';
 import { applyMatchResult, createAvailability } from '../src/game/career/availabilityEngine';
 import { useCareerStore } from '../src/game/career/store';
@@ -53,7 +53,7 @@ import { leaguePhaseOpponents, pickSuperCupOpponent } from '../src/game/career/c
 import { settleDrawOnPenalties } from '../src/game/career/penalties';
 import { planDomesticSuperCup } from '../src/game/career/domesticSuperCup';
 import { firstLegStakeLine, formatNextLine, nextMatchBriefing } from '../src/game/career/matchBriefing';
-import { canWinLeague, continentalAggregateLine, ensureInternationalGroup, fixtureTitle, hydrateSeason, internationalStageWhenSelected, leagueFixtureIsHome, nextActionableFixture, nextPlayableFixture, pickDomesticCupOpponent, pickTitleRival, remainingPlayableCount, resolveFixture, shouldSkipFixture } from '../src/game/career/seasonSim';
+import { canWinLeague, continentalAggregateLine, ensureInternationalGroup, fixtureTitle, hydrateSeason, internationalStageWhenSelected, leagueFixtureIsHome, nextActionableFixture, nextPlayableFixture, pickDomesticCupOpponent, pickTitleRival, remainingPlayableCount, resolveFixture, shouldSimulateNationQualifier, shouldSkipFixture } from '../src/game/career/seasonSim';
 import { applyPlayerGroupResult, createGroupState, nationCanProgressKnockout, nationCanWinMajor, simulateNpcRoundAfterPlayerMatch } from '../src/game/career/internationalTable';
 import {
   applyTrialMatch,
@@ -72,11 +72,8 @@ import {
 import {
   CLUB_TRIAL_CHANCE_SPLIT,
   CLUB_TRIAL_GAMES,
-  pickTrialClub,
-  tierForYouthGoals,
-  trialContractWon,
-  TRIALS_AT_LEVEL,
-} from '../src/game/career/trial';
+import { pickTrialClub, pickTrialClubs, tierForYouthGoals, trialContractWon, TRIALS_AT_LEVEL } from '../src/game/career/trial';
+import { trialDestinationCountries, youthTierForNation, youthTrialsAreMlsOnly } from '../src/game/career/trialGeography';
 import { nextYouthKnockoutRound, pickYouthGroupOpponents, pickYouthKnockoutOpponent, youthMaxGames } from '../src/game/career/youthTournament';
 import { chancesForSquadStatus, consecutiveScoringGames, describeSquadStatus, IMPACT_CHANCES, IMPACT_STREAK, isLowerDivisionLoan, isSquadRotationSitOut, isToughMinutesFixture, nextSquadStatusAfterSeason, openingSquadStatus, promoteSquadStatusDuringSeason, RISING_STAR_MIN_RATIO, ROLE_REVIEW_WEEK, seasonOverridesRatioBar, shouldSitLeagueFixture, shouldSitToughFixture, squadStatusOnArrival, STARTER_STREAK, youthRolesAllowed } from '../src/game/career/squadStatus';
 import { consecutiveLoanSpells, LOAN_OFFER_COUNT, SAUDI_OFFER_MIN_AGE, TRANSFER_MARKET_CAP, TRANSFER_OFFER_COUNT, offerFormRatio, offerTierFromStanding, pickLoanClubsForMiss, pickLoanClubsFromOrigin, pickPermanentClubs, requiredGoalRatio, resolveSeasonTransition, sellingClubAcceptsOffer, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, trialFailTransferPending, tierForRatio } from '../src/game/career/transfers';
@@ -692,7 +689,10 @@ if (euroFinalsRounds.includes('round-of-32')) {
   const wcFinals = wcTournament.filter((f) => f.internationalRound !== 'friendly');
   const nationsFinals = nationsTournament.filter((f) => f.internationalRound !== 'friendly');
   const euroFinals = euroTournament.filter((f) => f.internationalRound !== 'friendly');
-  const friendlies = [...wcTournament, ...nationsTournament, ...euroTournament].filter((f) => f.internationalRound === 'friendly');
+  const wcFriendlies = wcTournament.filter((f) => f.internationalRound === 'friendly');
+  const nationsGroups = nationsFinals.filter((f) => f.internationalRound === 'group');
+  const nationsKnockouts = nationsFinals.filter((f) => f.internationalRound !== 'group');
+  const continentalFriendlies = [...nationsTournament, ...euroTournament].filter((f) => f.internationalRound === 'friendly');
   console.log(
     'venues WC quals',
     wcQuals.map((f) => fixtureVenueLabel(f)),
@@ -707,16 +707,21 @@ if (euroFinalsRounds.includes('round-of-32')) {
     console.error('World Cup qualifiers must stay home/away with a home crowd');
     process.exitCode = 1;
   }
-  if (friendlies.some((f) => fixtureIsNeutral(f))) {
-    console.error('pre-tournament friendlies must stay home or away');
+  if (wcFriendlies.length !== 2 || fixtureVenueLabel(wcFriendlies[0]!) !== 'Home' || !fixtureIsNeutral(wcFriendlies[1]!)) {
+    console.error('World Cup friendlies must be one home game then a neutral');
+    process.exitCode = 1;
+  }
+  if (continentalFriendlies.some((f) => fixtureIsNeutral(f))) {
+    console.error('continental pre-tournament friendlies must stay home or away');
     process.exitCode = 1;
   }
   if (
     wcFinals.some((f) => fixtureVenueLabel(f) !== 'Neutral' || fixtureCrowdAwayShare(f) !== 0.5)
-    || nationsFinals.some((f) => fixtureVenueLabel(f) !== 'Neutral' || fixtureCrowdAwayShare(f) !== 0.5)
+    || nationsKnockouts.some((f) => fixtureVenueLabel(f) !== 'Neutral' || fixtureCrowdAwayShare(f) !== 0.5)
     || euroFinals.some((f) => fixtureVenueLabel(f) !== 'Neutral' || fixtureCrowdAwayShare(f) !== 0.5)
+    || nationsGroups.some((f) => fixtureIsNeutral(f))
   ) {
-    console.error('World Cup, Nations League and Euro matches must be Neutral with a 50/50 country crowd');
+    console.error('World Cup and Euro tournament games stay Neutral; Nations League groups are home and away');
     process.exitCode = 1;
   }
 }
@@ -1189,6 +1194,62 @@ if (germanTrials < 80) {
 }
 if (germanTierOk < 80) {
   console.error('Home trial club must stay near the tier the U16 tournament earned');
+  process.exitCode = 1;
+}
+
+console.log('\n--- Youth trials: geography and non-top-20 bands ---');
+if (trialDestinationCountries('republic-of-ireland').join() !== 'England' || trialDestinationCountries('northern-ireland').join() !== 'England') {
+  console.error('Ireland and Northern Ireland must trial in England');
+  process.exitCode = 1;
+}
+if (trialDestinationCountries('nigeria').join() !== 'France') {
+  console.error('African players must see French trial clubs');
+  process.exitCode = 1;
+}
+if (trialDestinationCountries('norway').join() !== 'Germany,Netherlands') {
+  console.error('Nordic players must see German or Dutch trial clubs');
+  process.exitCode = 1;
+}
+if (trialDestinationCountries('poland').join() !== 'Germany,Netherlands,Italy') {
+  console.error('Eastern Europe must see German, Dutch or Italian trial clubs');
+  process.exitCode = 1;
+}
+if (trialDestinationCountries('brazil').join() !== 'Spain,Portugal') {
+  console.error('South American players must see Spain or Portugal');
+  process.exitCode = 1;
+}
+if (trialDestinationCountries('united-states').join() !== 'United States' || trialDestinationCountries('mexico').join() !== 'United States') {
+  console.error('CONCACAF players must see MLS');
+  process.exitCode = 1;
+}
+if (trialDestinationCountries('qatar').join() !== 'Saudi Arabia') {
+  console.error('Middle East players must see Saudi clubs');
+  process.exitCode = 1;
+}
+let irelandEngland = 0;
+for (let i = 0; i < 40; i++) {
+  const clubs = pickTrialClubs(3, 'republic-of-ireland', [], 3, { geographyNationId: 'republic-of-ireland' });
+  irelandEngland += clubs.filter((club) => club.country === 'England').length >= 2 ? 1 : 0;
+}
+console.log('Ireland England looks', irelandEngland, '/40');
+if (irelandEngland < 32) {
+  console.error('Ireland players should usually see two England trial options');
+  process.exitCode = 1;
+}
+if (youthTierForNation(1, 'ghana') !== 3 || youthTierForNation(0.66, 'ghana') !== 4 || youthTierForNation(0.33, 'ghana') !== 5 || youthTierForNation(0, 'ghana') !== 5) {
+  console.error('nations outside the FIFA top 20 cannot earn Elite/Strong youth trials');
+  process.exitCode = 1;
+}
+if (tierForYouthGoals(7, 7, 'ghana') !== 3 || tierForYouthGoals(0, 7, 'ghana') !== 5 || !youthTrialsAreMlsOnly(0, 'ghana')) {
+  console.error('a blank youth campaign from outside the top 20 must stay lower-level and MLS-only');
+  process.exitCode = 1;
+}
+if (tierForYouthGoals(3, 4, 'spain') !== 1) {
+  console.error('top-20 nations keep the existing elite youth band');
+  process.exitCode = 1;
+}
+if (SKIN_SWATCHES.length < 6 || HAIR_SWATCHES.length < 5) {
+  console.error('players must be able to pick several skin and hair colours');
   process.exitCode = 1;
 }
 
@@ -2036,8 +2097,20 @@ if (barca && hilal && lafc) {
     console.error('Premier League wages must sit far above Championship money, even at smaller clubs');
     process.exitCode = 1;
   }
-  if (highWage <= 0 || euroWage < highWage * 2.5) {
-    console.error('elite weekly wages must sit well above a high-tier club');
+  if (highWage <= 0 || euroWage <= highWage) {
+    console.error('elite weekly wages must sit above a high-tier club');
+    process.exitCode = 1;
+  }
+  const madridWage = weeklyWageForClub(getClub('real-madrid')!, 0);
+  const risingMadrid = weeklyWageForSquadStatus(getClub('real-madrid')!, 0, 'rising-star');
+  console.log('listed RM starter/rising', madridWage, risingMadrid);
+  if (madridWage < 600_000 || risingMadrid < 20_000 || risingMadrid > 22_000) {
+    console.error('Real Madrid starter must use the listed top wage and Rising star 10% of the squad average');
+    process.exitCode = 1;
+  }
+  const getafeWage = getClub('getafe') ? weeklyWageForClub(getClub('getafe')!, 0) : 0;
+  if (getafeWage <= 0 || getafeWage >= 60_192) {
+    console.error('unlisted La Liga clubs must sit well below the cheapest listed side');
     process.exitCode = 1;
   }
 
@@ -7131,7 +7204,7 @@ console.log('\n--- Club cups, paced tables, transfers, injuries, and elite score
   });
   const risingPlayed = s2Rising.sim.internationalGroup?.rows.reduce((sum, row) => sum + row.played, 0) ?? 0;
   console.log('S2 rising carry', s2Rising.sim.internationalSelected, risingPlayed, s2Rising.sim.qualifierCarryPlayed);
-  if (!s2Rising.sim.internationalSelected || risingPlayed < 2 || s2Rising.sim.qualifierCarryPlayed !== 5) {
+  if (risingPlayed < 2 || s2Rising.sim.qualifierCarryPlayed !== 5 || !s2Rising.sim.internationalGroup) {
     console.error('Season 2 must keep the previous qualifying table even as a Rising star');
     process.exitCode = 1;
   }
@@ -7151,6 +7224,44 @@ console.log('\n--- Club cups, paced tables, transfers, injuries, and elite score
   console.log('Euro friendlies', euroFriendlies.map((f) => f.opponentLabel), euroFriendlyConfeds);
   if (euroFriendlies.length < 2 || euroFriendlyConfeds.some((confed) => confed !== 'UEFA')) {
     console.error('European Championship friendlies must only be against UEFA nations');
+    process.exitCode = 1;
+  }
+
+  const africaSeason = hydrateSeason({
+    seasonNumber: 4,
+    club: madrid,
+    careerGoalRatio: 0.8,
+    nationId: 'nigeria',
+    careerStart: 'favourite-first-team',
+    rng: () => 0.22,
+  });
+  const africaFriendlies = africaSeason.calendar.fixtures.filter(
+    (f) => f.kind === 'international' && f.internationalRound === 'friendly' && f.opponentId,
+  );
+  if (africaFriendlies.length < 2 || africaFriendlies.some((f) => getNation(f.opponentId!)?.confederation !== 'CAF')) {
+    console.error('AFCON friendlies must only be against African nations');
+    process.exitCode = 1;
+  }
+
+  const s1Npc = hydrateSeason({
+    seasonNumber: 1,
+    club: madrid,
+    careerGoalRatio: 0.8,
+    nationId: 'spain',
+    careerStart: 'favourite-first-team',
+    rng: () => 0.18,
+  });
+  let npcSim = s1Npc.sim;
+  let npcPlayed = 0;
+  for (const fixture of s1Npc.calendar.fixtures) {
+    if (!shouldSimulateNationQualifier(fixture, npcSim)) continue;
+    npcSim = resolveFixture(npcSim, fixture, madrid, 0, () => 0.3, { playerParticipated: false }).sim;
+    npcPlayed += 1;
+  }
+  const spainRow = npcSim.internationalGroup?.rows.find((row) => row.nationId === 'spain');
+  console.log('S1 NPC quals', npcPlayed, 'spain played', spainRow?.played, 'selected', s1Npc.sim.internationalSelected);
+  if (s1Npc.sim.internationalSelected || npcPlayed !== 5 || (spainRow?.played ?? 0) < 5) {
+    console.error('World Cup qualifying must run from Season 1 even when the player is not called up');
     process.exitCode = 1;
   }
 

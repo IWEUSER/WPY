@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { appearanceRegionForNation, pickPlayerLook } from '../../shooting/appearance';
 import { getClub } from '../data/clubs';
 import { currentCalendarWeek } from '../calendar';
 import { careerAwardCounts, careerTrophyCounts } from '../honoursDisplay';
@@ -9,6 +10,7 @@ import { getNation } from '../international';
 import { useCareerStore } from '../store';
 import { DATA_CARD } from './dataUi';
 import { AwardIcon, EarningsIcon, RecordsIcon, TrophyIcon, WageIcon } from './careerIcons';
+import { AppearancePicker } from './AppearancePicker';
 import { HonoursPills } from './HonoursPills';
 import { PlayerKitPortrait } from './PlayerKitPortrait';
 
@@ -53,6 +55,9 @@ export default function ProfileScreen() {
   const openLegacy = useCareerStore((s) => s.openLegacy);
   const careerStart = useCareerStore((s) => s.careerStart);
   const playerName = useCareerStore((s) => s.playerName);
+  const playerSkin = useCareerStore((s) => s.playerSkin);
+  const playerHair = useCareerStore((s) => s.playerHair);
+  const setPlayerLook = useCareerStore((s) => s.setPlayerLook);
   const role = useCareerStore((s) => s.role);
 
   const recordSeasons = [...history, ...(current && countsTowardCareerRecord(current.seasonNumber, current.role) ? [current] : [])];
@@ -81,6 +86,14 @@ export default function ProfileScreen() {
       : null;
   const fee = value != null ? transferFeeFromValue(value, contractYearsRemaining) : null;
   const name = playerName?.trim() || 'Player';
+  const seededLook = pickPlayerLook(
+    name.split('').reduce((hash, ch) => (hash * 33 + ch.charCodeAt(0)) >>> 0, 0) || 1,
+    appearanceRegionForNation(nation ?? null),
+  );
+  const look = {
+    skin: playerSkin || seededLook.skin,
+    hair: playerHair || seededLook.hair,
+  };
   const legacy = identityLegacyBoards({
     seasons: scoredSeasons,
     nationalTeam,
@@ -105,7 +118,10 @@ export default function ProfileScreen() {
         {` · Age ${age}`}
       </p>
 
-      <PlayerKitPortrait name={name} club={club} nation={nation} />
+      <PlayerKitPortrait name={name} club={club} nation={nation} look={look} />
+      <div className="mt-4 w-full">
+        <AppearancePicker skin={look.skin} hair={look.hair} onChange={setPlayerLook} />
+      </div>
 
       <div className="mt-4 grid grid-cols-2 gap-2">
         <IdentityBox title="Earnings" icon={<EarningsIcon className="h-3.5 w-3.5" />} className="mt-0">

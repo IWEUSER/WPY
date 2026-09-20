@@ -88,15 +88,13 @@ export interface SeasonCalendar {
   domesticCup?: DomesticCupId | null;
 }
 
-/** World Cup, continental championship, and Nations League ties — not qualifiers. */
+/** World Cup, continental championship, and Nations League knockouts — not qualifiers or NL groups. */
 export function isInternationalTournamentFixture(fixture: CalendarFixture): boolean {
   const round = fixture.internationalRound;
-  return (
-    fixture.kind === 'international'
-    && round != null
-    && round !== 'qualifier'
-    && round !== 'friendly'
-  );
+  if (fixture.kind !== 'international' || round == null) return false;
+  if (round === 'qualifier' || round === 'friendly') return false;
+  if (round === 'group' && fixture.neutral === false) return false;
+  return true;
 }
 
 /** Domestic and European one-off finals at the large club-final stadium. */
@@ -115,6 +113,8 @@ export function isClubFinalNeutral(fixture: CalendarFixture): boolean {
 
 /** Club finals and international tournament games are not home or away. */
 export function fixtureIsNeutral(fixture: CalendarFixture): boolean {
+  if (fixture.kind === 'international' && fixture.neutral === true) return true;
+  if (fixture.kind === 'international' && fixture.neutral === false) return false;
   return isClubFinalNeutral(fixture) || isInternationalTournamentFixture(fixture);
 }
 

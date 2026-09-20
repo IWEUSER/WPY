@@ -1050,6 +1050,8 @@ export function applyCareerLayoutPreview(): void {
     seasonsAtCurrentClub: preview === 'end' ? 10 : preview === 's1-summary' ? 0 : promoteSummary ? 1 : 3,
     nationality: preview === 'trial-england' || preview === 'mls' ? (preview === 'trial-england' ? 'england' : 'united-states') : preview === 'saudi' ? 'saudi-arabia' : preview === 'championship-transfer' || preview === 's1-summary' || preview === 'rising-loans' || preview === 'rising-loans-s2' ? 'england' : preview === 'benfica' || preview === 'rebuild' || preview === 'match-benfica' ? 'portugal' : preview === 'ajax' || preview === 'match-ajax' ? 'netherlands' : preview === 'galatasaray' || preview === 'match-galatasaray' ? 'turkey' : 'spain',
     playerName: preview === 'player-name' ? null : 'Alex Rivera',
+    playerSkin: '#e8b88a',
+    playerHair: '#2c1810',
     nationalTeam,
     availability: preview === 'hub-ucl-leg2'
       ? { phase: 0, windowFails: 2, bannedGamesRemaining: 0 }

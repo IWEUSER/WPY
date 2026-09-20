@@ -227,6 +227,10 @@ export interface CareerState {
   nationality: string | null;
   /** Display name chosen after nationality. Older saves default to Player. */
   playerName?: string | null;
+  /** Portrait skin hex. Null on older saves uses a seeded look. */
+  playerSkin?: string | null;
+  /** Portrait hair hex. Null on older saves uses a seeded look. */
+  playerHair?: string | null;
   /** Caps, goals, and the same miss-streak drop rule as club football, scoped
    * to the national team. Null until a nationality is chosen. */
   nationalTeam: NationalTeamState | null;

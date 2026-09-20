@@ -95,12 +95,14 @@ const plCareer = {
   title: 'Premier League',
   subtitle: 'All-time league goals',
   group: 'league' as const,
+  tone: 'all-time' as const,
 };
 const plSeason = {
   ...plCareer,
   id: 'league:season:premier-league',
   span: 'season' as const,
   subtitle: 'Single-season league goals',
+  tone: 'season-overall' as const,
 };
 
 const outside = viewForBoard(plCareer, { seasons: [], nationalTeam: null });
@@ -155,6 +157,7 @@ const cl = {
   title: 'Champions League',
   subtitle: 'All-time tournament goals',
   group: 'continental' as const,
+  tone: 'all-time' as const,
 };
 const clGoals = playerGoalsForBoard(cl, {
   seasons: [
@@ -190,6 +193,7 @@ const wc = {
   title: 'England · World Cup',
   subtitle: 'All-time tournament goals',
   group: 'nation' as const,
+  tone: 'all-time' as const,
 };
 const wcView = viewForBoard(wc, { seasons: [], nationalTeam: team, nationality: 'england' });
 assert(wcView.playerGoals === 8, `World Cup board should use finals only, got ${wcView.playerGoals}`);
@@ -202,6 +206,7 @@ const intl = {
   title: 'England',
   subtitle: 'All-time international goals',
   group: 'nation' as const,
+  tone: 'all-time' as const,
 };
 const intlView = viewForBoard(intl, { seasons: [], nationalTeam: team, nationality: 'england' });
 assert(intlView.playerGoals === 40, `all-time international should use cap goals, got ${intlView.playerGoals}`);
@@ -214,6 +219,7 @@ const cup = {
   title: 'FA Cup',
   subtitle: 'All-time cup goals',
   group: 'cup' as const,
+  tone: 'all-time' as const,
 };
 const cupGoals = playerGoalsForBoard(cup, {
   seasons: [

@@ -1,4 +1,9 @@
 import { clampStrength, getClub, SECOND_DIVISIONS, type Club, type ClubTier } from './data/clubs';
+import {
+  averageWageForClubId,
+  starterWageForClubId,
+  usesPublishedWages,
+} from './data/clubWages';
 import { countsTowardCareerRecord, displaySeasonNumber } from './seasonDisplay';
 import type { PlayerRole, SeasonRecord, SquadStatus } from './types';
 
@@ -60,7 +65,7 @@ export const RESERVE_CONTRACT_YEARS = 2;
 export const RESERVE_WEEKLY_WAGE = 500;
 /** Reserve / impact deals pay this fraction of the destination's starter band. */
 export const RESERVE_WAGE_FACTOR = 0.2;
-/** Rising-star deals pay this fraction of the club's starter (maximum) wage. */
+/** Rising-star first contracts pay this fraction of the club's squad-average wage. */
 export const RISING_STAR_WAGE_FACTOR = 0.1;
 /** A bid below this share of the asking fee is too cheap to accept. */
 export const MIN_ACCEPTED_FEE_RATIO = 0.8;
@@ -453,6 +458,14 @@ function valueFromScale(
  * Weekly wage. Premier League clubs pay a high English band no matter the
  * club's size. Saudi clubs pay like a top European side; MLS stays below that.
  */
+function roundWeeklyWage(amount: number, floor = RESERVE_WEEKLY_WAGE): number {
+  return Math.max(floor, Math.round(amount / 500) * 500);
+}
+
+function clubLeagueOf(clubId: string): string | undefined {
+  return getClub(clubId)?.league;
+}
+
 /** Starter, Rising star, and reserve wages so transfer offers are not all the same band. */
 export function weeklyWageForSquadStatus(
   club: Club,
@@ -460,18 +473,29 @@ export function weeklyWageForSquadStatus(
   status: SquadStatus,
   playingLeague?: string | null,
 ): number {
+  const league = playingLeague ?? club.league;
+  if (status === 'rising-star' && usesPublishedWages(league)) {
+    const average = averageWageForClubId(club.id, league, clubLeagueOf);
+    if (average != null) {
+      return roundWeeklyWage(average * RISING_STAR_WAGE_FACTOR);
+    }
+  }
   const full = weeklyWageForClub(club, marketValue, playingLeague);
   if (status === 'reserve') {
-    return Math.max(RESERVE_WEEKLY_WAGE, Math.round((full * RESERVE_WAGE_FACTOR) / 500) * 500);
+    return roundWeeklyWage(full * RESERVE_WAGE_FACTOR);
   }
   if (status === 'rising-star' || status === 'impact') {
-    return Math.max(RESERVE_WEEKLY_WAGE, Math.round((full * RISING_STAR_WAGE_FACTOR) / 500) * 500);
+    return roundWeeklyWage(full * RISING_STAR_WAGE_FACTOR);
   }
   return full;
 }
 
 export function weeklyWageForClub(club: Club, marketValue: number, playingLeague?: string | null): number {
   const league = playingLeague ?? club.league;
+  if (usesPublishedWages(league)) {
+    const listed = starterWageForClubId(club.id, league, clubLeagueOf);
+    if (listed != null) return roundWeeklyWage(listed, club.tier >= 5 ? 500 : club.tier >= 4 ? 800 : 1_200);
+  }
   const t = (clampStrength(club.strength) - 52) / 42;
   if (league === 'Premier League') {
     const plBase: Record<ClubTier, number> = {
