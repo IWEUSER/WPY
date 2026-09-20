@@ -72,7 +72,12 @@ import {
 import {
   CLUB_TRIAL_CHANCE_SPLIT,
   CLUB_TRIAL_GAMES,
-import { pickTrialClub, pickTrialClubs, tierForYouthGoals, trialContractWon, TRIALS_AT_LEVEL } from '../src/game/career/trial';
+  pickTrialClub,
+  pickTrialClubs,
+  tierForYouthGoals,
+  trialContractWon,
+  TRIALS_AT_LEVEL,
+} from '../src/game/career/trial';
 import { trialDestinationCountries, youthTierForNation, youthTrialsAreMlsOnly } from '../src/game/career/trialGeography';
 import { nextYouthKnockoutRound, pickYouthGroupOpponents, pickYouthKnockoutOpponent, youthMaxGames } from '../src/game/career/youthTournament';
 import { chancesForSquadStatus, consecutiveScoringGames, describeSquadStatus, IMPACT_CHANCES, IMPACT_STREAK, isLowerDivisionLoan, isSquadRotationSitOut, isToughMinutesFixture, nextSquadStatusAfterSeason, openingSquadStatus, promoteSquadStatusDuringSeason, RISING_STAR_MIN_RATIO, ROLE_REVIEW_WEEK, seasonOverridesRatioBar, shouldSitLeagueFixture, shouldSitToughFixture, squadStatusOnArrival, STARTER_STREAK, youthRolesAllowed } from '../src/game/career/squadStatus';
@@ -738,7 +743,12 @@ if (madridClub) {
     });
     let state = sim;
     for (const fixture of calendar.fixtures) {
-      if (fixture.kind !== 'international' || shouldSkipFixture(fixture, state)) continue;
+      if (fixture.kind !== 'international') continue;
+      if (shouldSimulateNationQualifier(fixture, state)) {
+        state = resolveFixture(state, fixture, madridClub!, 0, () => 0.3, { playerParticipated: false }).sim;
+        continue;
+      }
+      if (shouldSkipFixture(fixture, state)) continue;
       state = resolveFixture(state, fixture, madridClub!, 0).sim;
     }
     return state.internationalStage;

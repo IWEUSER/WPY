@@ -1,6 +1,6 @@
 import type { CalendarFixture, DomesticCupStage, LeaguesCupStage, PlayoffRound, SeasonCalendar, SuperCupStage } from './calendar';
 import type { SquadStatus } from './types';
-import { buildSeasonCalendar, fixtureIsHome } from './calendar';
+import { buildSeasonCalendar, fixtureIsHome, internationalVenueFlags } from './calendar';
 import { leaguePhaseOpponents } from './continentalDraw';
 import {
   chancesForKnockoutTie,
@@ -814,16 +814,21 @@ function assignOpponentsAndChances(
       f.playerChances = chancesForLeagueMatch({ strength: club.strength }).count;
     } else if (f.kind === 'international') {
       let opp: { id: string; name: string } | undefined;
+      let venueIndex = 0;
       if (f.internationalRound === 'qualifier') {
+        venueIndex = qualifierI;
         opp = qualifierRivals[qualifierI];
         qualifierI += 1;
       } else if (f.internationalRound === 'friendly') {
+        venueIndex = friendlyI;
         opp = friendlyRivals[friendlyI % Math.max(1, friendlyRivals.length)];
         friendlyI += 1;
       } else if (f.internationalRound === 'group') {
+        venueIndex = groupOppI;
         opp = groupRivals[groupOppI];
         groupOppI += 1;
       } else {
+        venueIndex = knockoutI;
         opp = knockoutRivals[knockoutI];
         knockoutI += 1;
       }
@@ -833,30 +838,10 @@ function assignOpponentsAndChances(
       }
       const nationStr = nationId ? nationStrength(nationId) : club.strength;
       f.playerChances = chancesForLeagueMatch({ strength: nationStr }).count;
-      if (f.internationalRound === 'qualifier') {
-        f.neutral = false;
-        f.isHome = qualifierI % 2 === 1;
-        if (flipQualifierVenues) f.isHome = !f.isHome;
-      } else if (f.internationalRound === 'friendly') {
-        if (tournament === 'world-cup') {
-          if (friendlyI === 1) {
-            f.isHome = true;
-            f.neutral = false;
-          } else {
-            f.isHome = false;
-            f.neutral = true;
-          }
-        } else {
-          f.isHome = friendlyI % 2 === 1;
-          f.neutral = false;
-        }
-      } else if (f.internationalRound === 'group' && tournament === 'nations-league') {
-        f.isHome = groupOppI % 2 === 1;
-        f.neutral = false;
-      } else {
-        f.isHome = false;
-        f.neutral = true;
-      }
+      const venue = internationalVenueFlags(f.internationalRound, tournament, venueIndex);
+      f.isHome = venue.isHome;
+      f.neutral = venue.neutral;
+      if (f.internationalRound === 'qualifier' && flipQualifierVenues) f.isHome = !f.isHome;
     }
   }
 
@@ -1313,7 +1298,12 @@ export function applyInternationalResult(
     }
     if (totalPlayed >= 10 && next.nationId && next.internationalTournament) {
       const qualified = next.internationalGroup?.kind === 'qualifying'
-        ? doesNationQualifyFromTable(next.internationalGroup, next.nationId, 10)
+        ? doesNationQualifyFromTable(
+            next.internationalGroup,
+            next.nationId,
+            10,
+            next.internationalTournament,
+          )
         : doesNationQualify(
             next.nationId,
             next.internationalTournament,
