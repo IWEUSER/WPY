@@ -1,14 +1,13 @@
 /**
- * Exercises the season 1 → season 2 store transition: a full reserve season
- * that earns promotion, then the first simulated matchday of season 2
- * (calendar, standings, multi-chance live match).
+ * Exercises the youth-path store: tournament + trial, then Season 1 as a
+ * Rising star, then the first matchday checks (calendar, standings, chances).
  *
  * Run with: npx tsx scripts/simulateSeason2Store.ts
  */
 import { useCareerStore } from '../src/game/career/store';
 import { getClub, leagueMatchWeeks } from '../src/game/career/data/clubs';
 import { currentCalendarWeek } from '../src/game/career/calendar';
-import { FIRST_CONTRACT_YEARS, playerMarketValue, playerMarketValueFromSeasons, RESERVE_CONTRACT_YEARS, weeklyWageForSquadStatus, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
+import { FIRST_CONTRACT_YEARS, playerMarketValue, playerMarketValueFromSeasons, weeklyWageForSquadStatus, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import type { ShotResult } from '../src/game/shooting/types';
 
 function fakeShot(scored: boolean): ShotResult {
@@ -42,7 +41,12 @@ if (store.getState().phase !== 'nationality-choice') {
   console.error('Start Career must open nationality selection before the trial');
   process.exitCode = 1;
 }
-store.getState().chooseNationality('spain');
+function pickNation(nationId: string, name = 'Ian Test') {
+  store.getState().chooseNationality(nationId);
+  store.getState().confirmPlayerName(name);
+}
+
+pickNation('spain');
 console.log(
   'after nationality phase',
   store.getState().phase,
@@ -64,7 +68,10 @@ function playOpeningMatch(goals: number) {
     store.getState().advance();
   }
   if (store.getState().phase === 'opening-brief') {
-    store.getState().startOpeningTrial();
+    const opening = store.getState().openingCampaign;
+    const nextId = (opening?.trialClubIds ?? []).find((id) => !opening?.rejectedClubIds.includes(id));
+    if (nextId) store.getState().chooseOpeningTrialClub(nextId);
+    else store.getState().startOpeningTrial();
   }
   const live = store.getState().liveMatch;
   if (!live) {
@@ -134,7 +141,11 @@ function completeOpeningAndSign(): string | undefined {
       continue;
     }
     if (phase === 'opening-brief') {
-      store.getState().startOpeningTrial();
+      const opening = store.getState().openingCampaign;
+      const nextId = (opening?.trialClubIds ?? []).find((id) => !opening?.rejectedClubIds.includes(id));
+      if (store.getState().pendingTransfer) store.getState().startOpeningTrial();
+      else if (nextId) store.getState().chooseOpeningTrialClub(nextId);
+      else store.getState().startOpeningTrial();
       continue;
     }
     if (phase === 'club-offer') {
@@ -173,20 +184,26 @@ console.log(
 {
   const signed = store.getState();
   const signedClub = signed.clubId ? getClub(signed.clubId) : undefined;
-  const reserveWage = signedClub
+  const risingWage = signedClub
     ? weeklyWageForSquadStatus(
         signedClub,
         playerMarketValue({ age: signed.age, ratio: 0.3, careerGoals: 0, club: signedClub }),
-        'reserve',
+        'rising-star',
       )
     : 0;
-  if (signed.contractYearsRemaining !== RESERVE_CONTRACT_YEARS || signed.weeklyWage !== reserveWage) {
-    console.error('The reserve contract must be 2 years at 20% of that club’s starter wage');
+  if (
+    signed.role !== 'first-team'
+    || signed.squadStatus !== 'rising-star'
+    || signed.age !== 17
+    || signed.contractYearsRemaining !== FIRST_CONTRACT_YEARS
+    || signed.weeklyWage !== risingWage
+  ) {
+    console.error('A passed trial must start Season 1 as a Rising star on a 2-year deal at 10% of that club’s top wage');
     process.exitCode = 1;
   }
 }
 if (store.getState().seasonSponsorship !== 0) {
-  console.error('Reserve team players must not receive sponsorship');
+  console.error('Season 1 sponsorship must stay at zero until market value reaches €10m');
   process.exitCode = 1;
 }
 if (store.getState().phase !== 'hub') {
@@ -194,65 +211,12 @@ if (store.getState().phase !== 'hub') {
   process.exitCode = 1;
 }
 
-const reserveCal = store.getState().seasonCalendar;
-const reserveKinds = [...new Set(reserveCal?.fixtures.map((f) => f.kind) ?? [])];
-const reserveGames = leagueMatchWeeks(getClub(clubId)?.league ?? 'La Liga');
-console.log('S1 reserve calendar', reserveCal?.fixtures.length, reserveKinds, 'league weeks', reserveGames);
-if (!reserveCal || reserveKinds.join() !== 'league' || reserveCal.fixtures.length !== reserveGames) {
-  console.error('the reserve year must be a league-only first-team calendar');
-  process.exitCode = 1;
-}
-if (reserveCal.fixtures.some((f) => f.playerChances == null)) {
-  console.error('reserve league games must use the first-team chance roll');
-  process.exitCode = 1;
-}
-playSimSeason(true);
-console.log('S1 done phase', store.getState().phase, 'goals', store.getState().currentSeason?.goals);
-store.getState().continueAfterSeason();
-const afterReserveHit = store.getState();
-const reserveHitLoans = (afterReserveHit.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan');
-console.log(
-  'S1 ratio met phase',
-  afterReserveHit.phase,
-  'kind',
-  afterReserveHit.pendingTransfer?.kind,
-  'loans',
-  reserveHitLoans.length,
-);
-if (reserveHitLoans.length !== 0 || afterReserveHit.pendingTransfer) {
-  console.error('hitting the reserve ratio must promote immediately with no transfer offers');
-  process.exitCode = 1;
-}
-if (store.getState().phase === 'transfer-choice') {
-  store.getState().resolveTransferChoice(null);
-}
-
-const s1record = store.getState().seasonHistory[0];
-console.log(
-  'S1 record',
-  s1record && {
-    age: s1record.age,
-    clubId: s1record.clubId,
-    games: s1record.gamesPlayed,
-    goals: s1record.goals,
-    leagueGoals: s1record.leagueGoals,
-    ratio: s1record.gamesPlayed ? (s1record.goals / s1record.gamesPlayed).toFixed(2) : '0',
-    trophies: s1record.trophies,
-    topGoalscorer: s1record.topGoalscorer,
-    playerOfTheYear: s1record.playerOfTheYear,
-    wonWpy: s1record.wonWpy,
-  },
-);
-if (!s1record || s1record.age !== 16 || s1record.matches.length !== reserveGames) {
-  console.error('Season 1 career record must store age and a full league of reserve games');
-  process.exitCode = 1;
-}
-if (store.getState().careerGoals !== 0 || store.getState().careerGames !== 0) {
-  console.error('Trial and the reserve year must not count toward the overall career ratio');
-  process.exitCode = 1;
-}
-if (s1record.playerOfTheYear) {
-  console.error('Season 1 has no league title, so it cannot award Player of the Year');
+const firstCal = store.getState().seasonCalendar;
+const firstKinds = [...new Set(firstCal?.fixtures.map((f) => f.kind) ?? [])];
+const leagueGames = leagueMatchWeeks(getClub(clubId)?.league ?? 'La Liga');
+console.log('S1 calendar', firstCal?.fixtures.length, firstKinds, 'league weeks', leagueGames);
+if (!firstCal || !firstKinds.includes('league') || !firstKinds.includes('domestic-cup')) {
+  console.error('Season 1 after a trial must be the full first-team calendar');
   process.exitCode = 1;
 }
 
@@ -326,7 +290,7 @@ if (s2.seasonSim?.internationalSelected) {
   process.exitCode = 1;
 }
 if (s2.contractYearsRemaining !== FIRST_CONTRACT_YEARS) {
-  console.error('Promotion onto a first-team deal should start a 3-year contract');
+  console.error('Season 1 as a Rising star must start a 2-year contract');
   process.exitCode = 1;
 }
 
@@ -338,7 +302,16 @@ if (store.getState().phase === 'match-result') {
     process.exitCode = 1;
   }
   store.getState().acknowledgeMatchResult();
-  store.getState().advance();
+}
+{
+  let guard = 0;
+  while (!store.getState().liveMatch && guard++ < 12) {
+    if (store.getState().phase === 'match-result') {
+      store.getState().acknowledgeMatchResult();
+      continue;
+    }
+    store.getState().advance();
+  }
 }
 const live = store.getState().liveMatch;
 const fixture = store.getState().seasonCalendar?.fixtures[live?.fixtureIndex ?? 0];
@@ -353,31 +326,18 @@ const after = store.getState();
 console.log('after first S2 match:', after.lastMatchSummary);
 console.log('league pos', after.seasonStandings?.league.find((r) => r.clubId === after.clubId)?.position, 'pts', after.seasonStandings?.league.find((r) => r.clubId === after.clubId)?.points);
 console.log('phase', after.phase, 'career games', after.careerGames, '(expect 1 after first first-team match)');
-const reserveEarnings = store.getState().seasonHistory[0]?.earnings ?? 0;
-const reserveSponsorship = store.getState().seasonHistory[0]?.sponsorship ?? 0;
-const s1Wages = 1000 * reserveGames;
+const expectedCareer = after.weeklyWage * 2 + after.seasonSponsorship;
 console.log(
-  'earnings after S1',
-  reserveEarnings,
-  'sponsorship',
-  reserveSponsorship,
-  'after first S2 match',
+  'after first S1 match',
   after.careerEarnings,
   'wage',
   after.weeklyWage,
-  'S2 sponsorship',
+  'S1 sponsorship',
   after.seasonSponsorship,
 );
-if (reserveEarnings <= 0 || reserveEarnings !== s1Wages + reserveSponsorship) {
-  console.error(
-    `reserve-year earnings ${reserveEarnings} should be wages ${s1Wages} + sponsorship ${reserveSponsorship}`,
-  );
-  process.exitCode = 1;
-}
-const expectedCareer = reserveEarnings + after.weeklyWage * 2 + after.seasonSponsorship;
 if (after.careerEarnings !== expectedCareer) {
   console.error(
-    `career earnings ${after.careerEarnings} should be reserve ${reserveEarnings} + sit-out week + played week ${after.weeklyWage} + S2 sponsorship ${after.seasonSponsorship}`,
+    `career earnings ${after.careerEarnings} should be sit-out week + played week ${after.weeklyWage} + S1 sponsorship ${after.seasonSponsorship}`,
   );
   process.exitCode = 1;
 }
@@ -391,7 +351,7 @@ if (after.seasonSim?.internationalSelected) {
   process.exitCode = 1;
 }
 if (after.careerGames !== 1) {
-  console.error('Career games must start counting in season 2');
+  console.error('Career games must start counting in Season 1');
   process.exitCode = 1;
 }
 
@@ -462,18 +422,20 @@ const afterWeek =
   after.seasonCalendar && after.seasonSim
     ? currentCalendarWeek(after.seasonCalendar, after.seasonSim.fixtureIndex)
     : 1;
-const afterValue = afterClub && after.currentSeason
-  ? playerMarketValueFromSeasons({
-      age: after.age,
-      careerGoals: after.careerGoals,
-      careerGames: after.careerGames,
-      seasons: [...after.seasonHistory, after.currentSeason],
-      fallbackClub: afterClub,
-      contractYearsRemaining: after.contractYearsRemaining,
-      seasonNumber: after.seasonNumber,
-      calendarWeek: afterWeek,
-    })
-  : null;
+    const afterValue = afterClub && after.currentSeason
+      ? playerMarketValueFromSeasons({
+          age: after.age,
+          careerGoals: after.careerGoals,
+          careerGames: after.careerGames,
+          seasons: [...after.seasonHistory, after.currentSeason],
+          fallbackClub: afterClub,
+          contractYearsRemaining: after.contractYearsRemaining,
+          seasonNumber: after.seasonNumber,
+          calendarWeek: afterWeek,
+          careerStart: after.careerStart,
+          role: after.role,
+        })
+      : null;
 console.log('S1 market value after first match', afterValue, 'week', afterWeek);
 if (afterValue !== YOUTH_MARKET_VALUE) {
   console.error('Season 1 market value must stay €100k until week 20');
@@ -522,27 +484,40 @@ if (cupFinalIndex == null || cupFinalIndex < 0 || !after.seasonSim || !after.sea
 
 store.getState().resetCareer();
 store.getState().startCareer();
-store.getState().chooseNationality('spain');
+pickNation('spain');
 const loanParent = completeOpeningAndSign();
 if (!loanParent) {
-  console.error('opening flow must still produce a club before a failed reserve season');
+  console.error('opening flow must still produce a club before a failed Season 1');
   process.exit(1);
 }
 playSimSeason(false);
-store.getState().continueAfterSeason();
+if (store.getState().phase === 'season-summary') store.getState().continueAfterSeason();
 console.log(
-  'failed reserve phase',
+  'failed S1 phase',
   store.getState().phase,
   'season',
   store.getState().seasonNumber,
   'offers',
   store.getState().pendingTransfer?.kind,
 );
-if (store.getState().phase !== 'transfer-choice' || store.getState().pendingTransfer?.kind !== 'loan') {
-  console.error('Missing the reserve ratio must force a season-1 loan');
-  process.exitCode = 1;
+{
+  const pending = store.getState().pendingTransfer;
+  const renewal = pending?.offers?.find((o) => o.renewal && o.clubId === loanParent);
+  const otherWages = (pending?.offers ?? []).filter((o) => !o.renewal).map((o) => o.weeklyWage);
+  if (
+    store.getState().phase !== 'transfer-choice'
+    || !pending?.allowDecline
+    || !renewal
+    || renewal.weeklyWage <= 0
+    || otherWages.length === 0
+    || otherWages.some((wage) => wage <= 0)
+  ) {
+    console.error('Missing Season 1 must still offer a current-club renewal wage plus other clubs’ salary offers');
+    process.exitCode = 1;
+  }
 }
-const loanClubId = store.getState().pendingTransfer?.clubIds[0];
+const loanClubId = store.getState().pendingTransfer?.offers?.find((o) => o.move === 'loan' && !o.renewal)?.clubId
+  ?? store.getState().pendingTransfer?.clubIds.find((id) => id !== loanParent);
 if (!loanClubId) {
   console.error('Season 1 loan offers must include a club');
   process.exitCode = 1;
@@ -550,7 +525,7 @@ if (!loanClubId) {
   store.getState().resolveTransferChoice(loanClubId);
   const loaned = store.getState();
   console.log(
-    'S1 loan',
+    'S2 loan',
     loaned.clubId,
     'role',
     loaned.role,
@@ -561,8 +536,8 @@ if (!loanClubId) {
     'sponsorship',
     loaned.seasonSponsorship,
   );
-  if (loaned.role !== 'loan' || loaned.seasonNumber !== 2 || loaned.age !== 17) {
-    console.error('The reserve miss must send the player on loan for public season 1 at age 17');
+  if (loaned.role !== 'loan' || loaned.seasonNumber !== 2 || loaned.age !== 18) {
+    console.error('A Season 1 loan move must start Season 2 on loan at age 18');
     process.exitCode = 1;
   }
   {
@@ -585,11 +560,11 @@ if (!loanClubId) {
     }
   }
   if (loaned.contractYearsRemaining !== 1) {
-    console.error('A season 1 loan must remain a 1-year contract');
+    console.error('A season 2 loan must remain a 1-year contract');
     process.exitCode = 1;
   }
   if (loaned.seasonSponsorship !== 0) {
-    console.error('A season 1 loan below €10m must not receive sponsorship');
+    console.error('A season 2 loan below €10m must not receive sponsorship');
     process.exitCode = 1;
   }
 }
@@ -606,7 +581,7 @@ if (store.getState().phase !== 'nationality-choice' || store.getState().clubId !
   console.error('Picking a favourite club must then ask for nationality');
   process.exitCode = 1;
 }
-store.getState().chooseNationality('spain');
+pickNation('spain');
 {
   const s = store.getState();
   console.log('favourite trial start', s.phase, s.openingCampaign?.kind, s.clubId, s.seasonCalendar?.fixtures.length);
@@ -630,24 +605,25 @@ if (store.getState().phase === 'club-offer') {
   console.log('favourite trial pass', s.phase, s.role, s.seasonNumber, s.age, s.weeklyWage, s.contractYearsRemaining);
   if (
     s.phase !== 'hub'
-    || s.role !== 'reserve'
+    || s.role !== 'first-team'
+    || s.squadStatus !== 'rising-star'
     || s.seasonNumber !== 1
-    || s.age !== 16
+    || s.age !== 17
     || s.weeklyWage !== (getClub(s.clubId ?? '')
       ? weeklyWageForSquadStatus(
           getClub(s.clubId!)!,
           playerMarketValue({ age: s.age, ratio: 0.3, careerGoals: 0, club: getClub(s.clubId!)! }),
-          'reserve',
+          'rising-star',
         )
       : -1)
-    || s.contractYearsRemaining !== RESERVE_CONTRACT_YEARS
+    || s.contractYearsRemaining !== FIRST_CONTRACT_YEARS
   ) {
-    console.error('Hitting the favourite-trial reserve ratio must sign a 2-year reserve deal at 20% of that club’s starter wage');
+    console.error('Hitting a favourite-club trial must sign a 2-year Rising star deal at 10% of that club’s top wage');
     process.exitCode = 1;
   }
   const kinds = new Set(s.seasonCalendar?.fixtures.map((f) => f.kind) ?? []);
-  if (!kinds.has('league') || kinds.has('domestic-cup')) {
-    console.error('Favourite trial success must start the reserve season, not the first team');
+  if (!kinds.has('league') || !kinds.has('domestic-cup')) {
+    console.error('Favourite trial success must start Season 1 first-team football');
     process.exitCode = 1;
   }
 }
@@ -655,9 +631,13 @@ if (store.getState().phase === 'club-offer') {
 store.getState().resetCareer();
 store.getState().startFavouritePath('favourite-trial');
 store.getState().chooseFavouriteClub('real-madrid');
-store.getState().chooseNationality('spain');
+pickNation('spain');
 for (let i = 0; i < 3; i++) playOpeningMatch(0);
-if (store.getState().phase === 'opening-brief') store.getState().startOpeningTrial();
+if (store.getState().phase === 'opening-brief') {
+  const opening = store.getState().openingCampaign;
+  const nextId = (opening?.trialClubIds ?? []).find((id) => !opening?.rejectedClubIds.includes(id));
+  if (nextId) store.getState().chooseOpeningTrialClub(nextId);
+}
 {
   const s = store.getState();
   console.log(
@@ -666,16 +646,18 @@ if (store.getState().phase === 'opening-brief') store.getState().startOpeningTri
     s.pendingTransfer?.kind,
     s.parentClubId,
     s.openingCampaign?.trialClubId,
+    s.openingCampaign?.trialClubIds,
     s.openingCampaign?.trialTier,
   );
   if (
     s.phase !== 'match'
     || s.parentClubId !== 'real-madrid'
     || s.openingCampaign?.trialClubId === 'real-madrid'
+    || (s.openingCampaign?.trialClubIds ?? []).length < 2
     || s.openingCampaign?.trialTier !== getClub('real-madrid')?.tier
     || s.pendingTransfer
   ) {
-    console.error('missing a favourite-club trial must offer another look at the same level, not a forced loan');
+    console.error('missing a favourite-club trial must offer the remaining clubs at the same level, not a forced loan');
     process.exitCode = 1;
   }
 }
@@ -683,13 +665,19 @@ if (store.getState().phase === 'opening-brief') store.getState().startOpeningTri
 store.getState().resetCareer();
 store.getState().startFavouritePath('favourite-reserve');
 store.getState().chooseFavouriteClub('barcelona');
-store.getState().chooseNationality('spain');
+pickNation('spain');
 {
   const s = store.getState();
   const kinds = new Set(s.seasonCalendar?.fixtures.map((f) => f.kind) ?? []);
   console.log('favourite reserve', s.phase, s.role, s.seasonNumber, [...kinds].join('/'), s.seasonCalendar?.fixtures.length);
-  if (s.phase !== 'hub' || s.role !== 'reserve' || s.seasonNumber !== 1 || kinds.has('domestic-cup') || kinds.has('international')) {
-    console.error('Favourite reserve must start a league-only season 1 at the chosen club');
+  if (
+    s.phase !== 'hub'
+    || s.role !== 'first-team'
+    || s.squadStatus !== 'rising-star'
+    || s.seasonNumber !== 1
+    || !kinds.has('domestic-cup')
+  ) {
+    console.error('The leftover favourite-reserve start now joins Season 1 as a Rising star');
     process.exitCode = 1;
   }
 }
@@ -697,7 +685,7 @@ store.getState().chooseNationality('spain');
 store.getState().resetCareer();
 store.getState().startFavouritePath('favourite-first-team');
 store.getState().chooseFavouriteClub('liverpool');
-store.getState().chooseNationality('england');
+pickNation('england');
 {
   const s = store.getState();
   const kinds = new Set(s.seasonCalendar?.fixtures.map((f) => f.kind) ?? []);
@@ -720,7 +708,7 @@ store.getState().chooseNationality('england');
     || !kinds.has('league')
     || !kinds.has('domestic-cup')
   ) {
-    console.error('Favourite first-team must start Season 1 at age 17 on a 3-year deal as a Rising star with the full calendar');
+    console.error('Favourite first-team must start Season 1 at age 17 on a 2-year deal as a Rising star with the full calendar');
     process.exitCode = 1;
   }
   const tournamentGames = (s.seasonCalendar?.fixtures ?? []).filter(
@@ -758,7 +746,7 @@ store.getState().chooseNationality('england');
 store.getState().resetCareer();
 store.getState().startFavouritePath('favourite-first-team');
 store.getState().chooseFavouriteClub('wolves');
-store.getState().chooseNationality('brazil');
+pickNation('brazil');
 {
   const s = store.getState();
   console.log('favourite Wolves Brazil', s.seasonSim?.europeanStanding?.cup, s.seasonSim?.internationalPhase, s.seasonSim?.internationalSelected);
@@ -772,7 +760,7 @@ console.log('\n--- Renew vs continue without renewing ---');
 store.getState().resetCareer();
 store.getState().startFavouritePath('favourite-first-team');
 store.getState().chooseFavouriteClub('liverpool');
-store.getState().chooseNationality('england');
+pickNation('england');
 {
   const s = store.getState();
   if (!s.currentSeason || !s.clubId) {
@@ -800,8 +788,16 @@ store.getState().chooseNationality('england');
       'stay',
       pending?.stay?.contractYearsRemaining,
     );
-    if (!renewal || !pending?.allowDecline || pending.stay?.contractYearsRemaining !== 1) {
-      console.error('after Season 1 there must be a new contract and a stay-without-renewing option');
+    const otherWages = (pending?.offers ?? []).filter((o) => !o.renewal).map((o) => o.weeklyWage);
+    if (
+      !renewal
+      || renewal.weeklyWage <= 0
+      || !pending?.allowDecline
+      || pending.stay?.contractYearsRemaining !== 1
+      || otherWages.length === 0
+      || otherWages.some((wage) => wage <= 0)
+    ) {
+      console.error('after Season 1 there must be a current-club salary offer plus other clubs’ wage offers');
       process.exitCode = 1;
     }
     store.getState().resolveTransferChoice(null);

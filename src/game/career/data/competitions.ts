@@ -184,29 +184,28 @@ export const CONTINENTAL_TOURNAMENT_FOR_CONFEDERATION: Record<Confederation, Int
 /**
  * Maps an internal season onto the international campaign year.
  *
- * Favourite first-team starts at internal 1 = campaign year 1.
- * Youth / trial / reserve paths spend internal 1 in the reserves, so
- * first-team season 2 is campaign year 1. Tests that omit careerStart treat
- * `seasonNumber` as the campaign year itself.
+ * Every first-team start is campaign year = season number.
+ * A leftover academy `reserve` role (or leagueOnly) has no internationals.
+ * Tests that omit careerStart treat `seasonNumber` as the campaign year itself.
  */
 export function internationalCalendarSeason(
   seasonNumber: number,
   opts?: { leagueOnly?: boolean; careerStart?: string | null; role?: string | null },
 ): number {
   if (opts?.leagueOnly || opts?.role === 'reserve') return 0;
-  if (opts?.careerStart === 'favourite-first-team') return Math.max(1, seasonNumber);
   if (
-    opts?.careerStart === 'youth'
+    opts?.careerStart === 'favourite-first-team'
+    || opts?.careerStart === 'youth'
     || opts?.careerStart === 'favourite-trial'
     || opts?.careerStart === 'favourite-reserve'
   ) {
-    return Math.max(0, seasonNumber - 1);
+    return Math.max(1, seasonNumber);
   }
   return Math.max(0, seasonNumber);
 }
 
 /**
- * International campaign years (first-team Season 1, not the reserve year):
+ * International campaign years (Season 1 is the first first-team year):
  *  - Season 1, 5, 9…: World Cup qualifying — the player can be selected.
  *  - Season 2, 6, 10…: five more World Cup qualifiers, then the World Cup.
  *  - Season 3, 7, 11…: Nations League (three in-season group games, no

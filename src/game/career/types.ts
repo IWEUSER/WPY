@@ -155,6 +155,8 @@ export interface OpeningCampaign {
   reachedSemi: boolean;
   usedOpponentIds: string[];
   trialClubId: string | null;
+  /** Clubs still available to trial at this band. The player picks one. */
+  trialClubIds?: string[];
   trialTier: ClubTier | null;
   rejectedClubIds: string[];
   /** Best goals/games across completed 3-game trials. */

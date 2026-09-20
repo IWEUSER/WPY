@@ -3,29 +3,6 @@ import { GAME_LOGO_SRC, GAME_TAGLINE, GAME_TITLE, liveMenuStamp } from '../../br
 import { getClub } from '../data/clubs';
 import { displaySeasonLabel } from '../seasonDisplay';
 import { useCareerStore } from '../store';
-import type { CareerStart } from '../types';
-
-const FAVOURITE_OPTIONS: {
-  kind: Exclude<CareerStart, 'youth'>;
-  title: string;
-  detail: string;
-}[] = [
-  {
-    kind: 'favourite-trial',
-    title: 'Trial',
-    detail: 'Three academy games. Miss all three at this level and you get three more one level down. Fail those and clubs bid from your best ratio.',
-  },
-  {
-    kind: 'favourite-reserve',
-    title: 'Reserve team contract',
-    detail: 'Full league season at the academy ground. Hit the club ratio to stay.',
-  },
-  {
-    kind: 'favourite-first-team',
-    title: 'First team contract',
-    detail: 'Two-year deal and the full first-team calendar. Hit the ratio to stay.',
-  },
-];
 
 export default function HomeScreen({ onPractice }: { onPractice: () => void }) {
   const clubId = useCareerStore((s) => s.clubId);
@@ -37,7 +14,7 @@ export default function HomeScreen({ onPractice }: { onPractice: () => void }) {
   const startFavouritePath = useCareerStore((s) => s.startFavouritePath);
   const resetCareer = useCareerStore((s) => s.resetCareer);
   const advance = useCareerStore((s) => s.advance);
-  const [favouriteOpen, setFavouriteOpen] = useState(false);
+  const [careerOpen, setCareerOpen] = useState(false);
 
   const club = clubId ? getClub(clubId) : undefined;
   const inProgress = Boolean(clubId || opening);
@@ -77,38 +54,39 @@ export default function HomeScreen({ onPractice }: { onPractice: () => void }) {
           <>
             <button
               type="button"
-              onClick={startYouthChampionships}
+              onClick={() => setCareerOpen((open) => !open)}
               className="rounded-2xl bg-emerald-500 px-6 py-4 text-lg font-bold text-black shadow-lg shadow-emerald-500/20 transition active:scale-[0.98]"
             >
-              Youth Championships
+              Career mode
               <span className="mt-1 block text-xs font-medium text-black/70">
-                Pick your country, then play the continental youth tournament
+                20 seasons. Start without a club, or pick one now.
               </span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => setFavouriteOpen((open) => !open)}
-              className="rounded-2xl bg-sky-500/25 px-6 py-4 text-lg font-bold text-white ring-1 ring-sky-300/30 backdrop-blur transition active:scale-[0.98]"
-            >
-              Play for your favourite club
-              <span className="mt-1 block text-xs font-medium text-white/70">
-                Skip the youth tournament and join any club
-              </span>
-            </button>
-
-            {favouriteOpen &&
-              FAVOURITE_OPTIONS.map((option) => (
+            {careerOpen && (
+              <>
                 <button
-                  key={option.kind}
                   type="button"
-                  onClick={() => startFavouritePath(option.kind)}
+                  onClick={startYouthChampionships}
                   className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3.5 text-left transition active:scale-[0.98]"
                 >
-                  <span className="block text-base font-bold text-white">{option.title}</span>
-                  <span className="mt-1 block text-xs font-medium text-white/60">{option.detail}</span>
+                  <span className="block text-base font-bold text-white">Start as a youth player</span>
+                  <span className="mt-1 block text-xs font-medium text-white/60">
+                    No club yet. Play your country’s youth tournament, trial, then Season 1 as a Rising star.
+                  </span>
                 </button>
-              ))}
+                <button
+                  type="button"
+                  onClick={() => startFavouritePath('favourite-first-team')}
+                  className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3.5 text-left transition active:scale-[0.98]"
+                >
+                  <span className="block text-base font-bold text-white">Pick a club</span>
+                  <span className="mt-1 block text-xs font-medium text-white/60">
+                    Join any club now as a Rising star on a 2-year deal at 10% of that club’s top wage.
+                  </span>
+                </button>
+              </>
+            )}
           </>
         )}
 
@@ -117,7 +95,7 @@ export default function HomeScreen({ onPractice }: { onPractice: () => void }) {
           onClick={onPractice}
           className="rounded-2xl bg-white/8 px-6 py-3 text-sm font-semibold text-white/75 backdrop-blur transition active:scale-[0.98]"
         >
-          Free Practice
+          Free practice mode
         </button>
 
         {inProgress && (
