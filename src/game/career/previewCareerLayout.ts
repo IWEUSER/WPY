@@ -269,14 +269,22 @@ export function applyCareerLayoutPreview(): void {
       })
     : null;
 
-  const isTrialPreview = preview === 'trial' || preview === 'trial-england';
+  const isTrialPreview = preview === 'trial' || preview === 'trial-england' || preview === 'trial-ireland';
   const isYouthPreview = preview === 'youth';
   const isYouthNextPreview = preview === 'youth-next';
   const isClubTrialPreview = preview === 'club-trial';
   const isTrialRetryPreview = preview === 'trial-retry';
   const isTrialOffersPreview = preview === 'trial-offers';
   const isReserveLoansPreview = preview === 'reserve-loans';
-  const openingNationId = preview === 'trial-england' ? 'england' : preview === 'mls' ? 'united-states' : preview === 'saudi' ? 'saudi-arabia' : 'spain';
+  const openingNationId = preview === 'trial-england'
+    ? 'england'
+    : preview === 'trial-ireland'
+      ? 'republic-of-ireland'
+      : preview === 'mls'
+        ? 'united-states'
+        : preview === 'saudi'
+          ? 'saudi-arabia'
+          : 'spain';
   let openingCampaign: OpeningCampaign | null = null;
   if (isYouthPreview || isYouthNextPreview || isTrialPreview || isClubTrialPreview || preview === 'club-offer') {
     const youth = createYouthCampaign(openingNationId, () => 0.31);
@@ -292,7 +300,9 @@ export function applyCareerLayoutPreview(): void {
           trialClubId: 'luton',
           trialClubIds: [] as string[],
         }
-      : { ...youth, goals: 6, youthGoals: 6, gamesPlayed: 7, qualified: true };
+      : preview === 'trial-ireland'
+        ? { ...youth, goals: 7, youthGoals: 7, gamesPlayed: 7, qualified: true, eliminated: true }
+        : { ...youth, goals: 6, youthGoals: 6, gamesPlayed: 7, qualified: true };
     if (isYouthPreview) openingCampaign = youth;
     else if (isYouthNextPreview) {
       const first = youth.calendar.fixtures[0];
@@ -1048,7 +1058,21 @@ export function applyCareerLayoutPreview(): void {
     openingCampaign,
     careerStart: isTrialRetryPreview || isTrialOffersPreview || preview === 'trial-drop' || preview === 'club-choice' ? 'favourite-trial' : isYouthPreview || isYouthNextPreview || isTrialPreview || isClubTrialPreview ? 'youth' : preview === 'hub-rising-star' || preview === 'hub-qualifying' || preview === 's1-summary' ? 'favourite-first-team' : 'favourite-first-team',
     seasonsAtCurrentClub: preview === 'end' ? 10 : preview === 's1-summary' ? 0 : promoteSummary ? 1 : 3,
-    nationality: preview === 'trial-england' || preview === 'mls' ? (preview === 'trial-england' ? 'england' : 'united-states') : preview === 'saudi' ? 'saudi-arabia' : preview === 'championship-transfer' || preview === 's1-summary' || preview === 'rising-loans' || preview === 'rising-loans-s2' ? 'england' : preview === 'benfica' || preview === 'rebuild' || preview === 'match-benfica' ? 'portugal' : preview === 'ajax' || preview === 'match-ajax' ? 'netherlands' : preview === 'galatasaray' || preview === 'match-galatasaray' ? 'turkey' : 'spain',
+    nationality: preview === 'trial-ireland'
+      ? 'republic-of-ireland'
+      : preview === 'trial-england' || preview === 'mls'
+        ? (preview === 'trial-england' ? 'england' : 'united-states')
+        : preview === 'saudi'
+          ? 'saudi-arabia'
+          : preview === 'championship-transfer' || preview === 's1-summary' || preview === 'rising-loans' || preview === 'rising-loans-s2'
+            ? 'england'
+            : preview === 'benfica' || preview === 'rebuild' || preview === 'match-benfica'
+              ? 'portugal'
+              : preview === 'ajax' || preview === 'match-ajax'
+                ? 'netherlands'
+                : preview === 'galatasaray' || preview === 'match-galatasaray'
+                  ? 'turkey'
+                  : 'spain',
     playerName: preview === 'player-name' ? null : 'Alex Rivera',
     playerSkin: '#e8b88a',
     playerHair: '#2c1810',
