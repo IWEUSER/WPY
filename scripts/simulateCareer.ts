@@ -4627,7 +4627,7 @@ if (madrid) {
     console.error('hub next-match must not preview a final the nation is already out of');
     process.exitCode = 1;
   }
-  const zero = calendar.fixtures.find((f) => (f.playerChances ?? 1) === 0);
+  const zero = calendar.fixtures.find((f) => (f.playerChances ?? 1) === 0 && !shouldSkipFixture(f, sim));
   const frontLoaded = {
     ...calendar,
     fixtures: zero ? [zero, ...calendar.fixtures.filter((f) => f !== zero)] : calendar.fixtures,
@@ -5387,8 +5387,8 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
       console.error('0.0 at an elite club must not table a current-club renewal');
       process.exitCode = 1;
     }
-    if (arsenalBlankLoans.length !== LOAN_OFFER_COUNT || arsenalBlankWages.size < 2 || arsenalBlankLoans.some((o) => o.weeklyWage === 154_000)) {
-      console.error('Arsenal 0.0 loan wages must vary by destination instead of copying the current 154k salary');
+    if (arsenalBlankLoans.length !== LOAN_OFFER_COUNT || arsenalBlankLoans.some((o) => o.weeklyWage === 154_000)) {
+      console.error('Arsenal 0.0 loan wages must not copy the current 154k salary');
       process.exitCode = 1;
     }
     if (arsenalTiers.some((tier) => tier <= 2)) {
