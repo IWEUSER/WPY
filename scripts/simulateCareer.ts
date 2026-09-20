@@ -2081,8 +2081,10 @@ if (barca && hilal && lafc) {
   const lowWage = luton ? weeklyWageForClub(luton, young) : 0;
   const highWage = villa ? weeklyWageForClub(villa, young) : 0;
   console.log('wages Barca', euroWage, 'Hilal', saudiWage, 'LAFC', mlsWage, 'low', lowWage, 'high-tier', highWage);
-  if (saudiWage < highWage * 0.8) {
-    console.error('Saudi wages should sit with high-tier Europe, not the elite band');
+  // Listed European tops (Atlético €400k) now sit in the elite band. Saudi stays
+  // on the previous formula: above MLS, well below published European salaries.
+  if (saudiWage <= mlsWage * 3 || saudiWage < 20_000) {
+    console.error('Saudi formula wages must stay well above MLS');
     process.exitCode = 1;
   }
   if (saudiWage >= euroWage * 0.6) {
