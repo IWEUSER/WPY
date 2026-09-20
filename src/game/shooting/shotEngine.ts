@@ -447,6 +447,7 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
       saveMargin: 0,
       penaltyCommit,
       penalty: Boolean(options.penalty),
+      takeQuality,
     };
   }
 
@@ -462,6 +463,7 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
       saveMargin: 0,
       penaltyCommit,
       penalty: Boolean(options.penalty),
+      takeQuality,
     };
   }
 
@@ -485,5 +487,6 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
     saveCell,
     penaltyCommit,
     penalty: Boolean(options.penalty),
+    takeQuality,
   };
 }

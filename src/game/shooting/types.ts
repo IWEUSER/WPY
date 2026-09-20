@@ -90,6 +90,8 @@ export interface ShotResult {
   penalty?: boolean;
   /** The 16×5 goalmouth cell the shot arrived in, when the shot was on target. */
   saveCell?: SaveCell;
+  /** How well-timed the take was on a rolling ball, in [0, 1]. */
+  takeQuality?: number;
 }
 
 export interface ShotDifficulty {

@@ -110,6 +110,13 @@ const OUTCOME_COLOR: Record<ShotOutcomeKind, string> = {
 };
 
 /** Describes how hard the shot was struck, for on-screen feedback. */
+function takeTimingLabel(takeQuality?: number): string | null {
+  if (takeQuality == null) return null;
+  if (takeQuality >= 0.8) return 'Clean take';
+  if (takeQuality <= 0.4) return 'Awkward take';
+  return null;
+}
+
 function powerTierLabel(power: number): string {
   if (power >= 1.55) return 'Thunderbolt';
   if (power >= 1.15) return 'Firm strike';
@@ -571,7 +578,7 @@ export default function ShootingGame({
         bestStreak: Math.max(prev.bestStreak, streak),
       };
     });
-    const detailParts = [powerTierLabel(result.power), curlStyleLabel(result)].filter(Boolean) as string[];
+    const detailParts = [powerTierLabel(result.power), curlStyleLabel(result), takeTimingLabel(result.takeQuality)].filter(Boolean) as string[];
     setResultLabel({
       text: OUTCOME_LABEL[result.outcome],
       color: OUTCOME_COLOR[result.outcome],
