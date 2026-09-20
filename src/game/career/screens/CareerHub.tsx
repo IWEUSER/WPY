@@ -19,7 +19,7 @@ import { clubEligibleForNationalTeam, callUpLeagueRequirement, callUpRatio, getN
 import { formatEuros, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
 import type { SeasonStandings } from '../matchEngine';
 import { conferenceTable, ensureInternationalGroup, fixtureTitle, internationalRoundLabel, nextActionableFixture, type SeasonSimState } from '../seasonSim';
-import { nextMatchBriefing, playerGoalsLine } from '../matchBriefing';
+import { nextMatchBriefing, playerGoalsLine, sitOutRecapLine } from '../matchBriefing';
 import { groupPosition, sortGroupTable } from '../internationalTable';
 import { requiredGoalRatio } from '../transfers';
 import { competitionStageLabel } from '../honoursDisplay';
@@ -432,15 +432,16 @@ function LastMatchRecap({
       ? playerGoalsLine(result.playerGoals, result.chances)
       : null;
   const structured = Boolean(result?.headline || result?.aggregateLine || result?.nextLine || playerLine);
+  const sitOutLine = sitOutRecapLine(result?.sitOutReason);
 
   return (
     <div className={`mt-3 ${DATA_INSET}`}>
       <p className="text-xs uppercase tracking-wide text-white/40">Last match</p>
       <p className="mt-1 text-sm font-semibold text-white/90">{headline}</p>
       {structured && playerLine && <p className="mt-1 text-sm text-white/70">{playerLine}</p>}
-      {result?.sitOutReason && (
+      {sitOutLine && (
         <p className="mt-1 text-sm font-semibold text-amber-200">
-          You did not play — {result.sitOutReason}
+          {sitOutLine}
         </p>
       )}
       {result?.aggregateLine && <p className="mt-1 text-sm font-semibold text-emerald-200">{result.aggregateLine}</p>}

@@ -1,11 +1,13 @@
 import { CLUBS, clubsInCountry, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, promotionTarget, SECOND_DIVISIONS, secondDivisionOf, TIER_LABEL, type Club, type ClubTier } from './data/clubs';
 import { countryForNationality, pickClubsBiasedToCountry, nearbyTierClubs, tierPool } from './clubOffers';
+import { trialDestinationCountries } from './trialGeography';
 import { shuffle } from './util';
 import {
   clubTransferBudget,
   consecutiveSeasonsBelow,
   DEFAULT_CONTRACT_YEARS,
   FIRST_CONTRACT_YEARS,
+  RESERVE_CONTRACT_YEARS,
   ELITE_TRANSFER_VALUE_FLOOR,
   formAdjustedRatio,
   leagueValueWeight,
@@ -118,8 +120,50 @@ function pickClubsFromTier(
   return withoutSaudi(pickClubsBiasedToCountry(preferred, count, country, minHome, extraHome));
 }
 
-export const LOAN_OFFER_COUNT = 6;
+export const LOAN_OFFER_COUNT = 3;
 export const TRANSFER_OFFER_COUNT = 6;
+/** Two of the three loans prefer the player's nation, or trial geography when that nation has no league. */
+const GEO_LOAN_COUNT = 2;
+
+function geographicLoanCountries(nationality: string | null | undefined): string[] {
+  return trialDestinationCountries(nationality);
+}
+
+function takeGeographicLoans(
+  pool: Club[],
+  nationality: string | null | undefined,
+  count: number,
+  seen: Set<string>,
+): Club[] {
+  const countries = new Set(geographicLoanCountries(nationality));
+  if (countries.size === 0 || count <= 0) return [];
+  return takeShuffled(pool.filter((club) => countries.has(club.country)), count, seen);
+}
+
+/** Fill two geographic/home loans first, then the remaining slots from the rest of the pool. */
+function withGeographicLoanBias(
+  qualityPool: Club[],
+  nationality: string | null | undefined,
+  count: number,
+  excludeIds: string[],
+  extraFill: Club[] = [],
+): Club[] {
+  const seen = new Set<string>(excludeIds.filter(Boolean));
+  const picked: Club[] = [];
+  picked.push(...takeGeographicLoans(qualityPool, nationality, Math.min(GEO_LOAN_COUNT, count), seen));
+  if (picked.length < GEO_LOAN_COUNT && picked.length < count) {
+    const destCountries = geographicLoanCountries(nationality);
+    const destClubs = withoutSaudi(CLUBS.filter(
+      (c) =>
+        isPlayableLoanClub(c, excludeIds) &&
+        destCountries.includes(c.country),
+    ));
+    picked.push(...takeGeographicLoans(destClubs, nationality, Math.min(GEO_LOAN_COUNT, count) - picked.length, seen));
+  }
+  const fill = [...qualityPool, ...extraFill];
+  picked.push(...takeShuffled(fill, count - picked.length, seen));
+  return picked.slice(0, count);
+}
 
 export function isSaudiClub(club: Club | undefined | null): boolean {
   return Boolean(club && (club.league === 'Saudi Pro League' || club.country === 'Saudi Arabia'));
@@ -222,16 +266,9 @@ export function pickLoanClubsFromOrigin(
   fromClub: Club,
   count: number = LOAN_OFFER_COUNT,
   excludeIds: string[] = [],
-  _nationality?: string | null,
+  nationality?: string | null,
 ): Club[] {
   const exclude = [...excludeIds.filter(Boolean), fromClub.id];
-  const seen = new Set<string>(exclude);
-  const picked: Club[] = [];
-  const add = (pool: Club[], n: number) => {
-    if (n <= 0) return;
-    picked.push(...takeShuffled(withoutSaudi(pool.filter((c) => isPlayableLoanClub(c, exclude))), n, seen));
-  };
-
   const fromLeague = fromClub.league;
   const eliteOrStrong = fromClub.tier <= 2;
   const sameLeagueLower = (minTier: ClubTier) =>
@@ -245,45 +282,30 @@ export function pickLoanClubsFromOrigin(
         c.tier >= 3,
     );
   const floorAway = () => lowerLeagueCountryPool(fromClub.country, exclude);
+  const mls = clubsInLeague('MLS').filter((c) => isPlayableLoanClub(c, exclude));
 
+  let quality: Club[] = [];
+  let extra: Club[] = [];
   if (SECOND_DIVISIONS.has(fromLeague)) {
-    add(floorAway(), count);
-    add(clubsInLeague('MLS').filter((c) => isPlayableLoanClub(c, exclude)), count - picked.length);
-    add(floorAway(), count - picked.length);
-    return picked.slice(0, count);
-  }
-
-  if (TOP_LEAGUES.has(fromLeague) && eliteOrStrong) {
-    add(sameLeagueLower(3), count);
-    add(otherTopFlightLower(), count - picked.length);
-    return picked.slice(0, count);
-  }
-
-  if (TOP_LEAGUES.has(fromLeague)) {
+    quality = floorAway();
+    extra = mls;
+  } else if (TOP_LEAGUES.has(fromLeague) && eliteOrStrong) {
+    quality = sameLeagueLower(3);
+    extra = otherTopFlightLower();
+  } else if (TOP_LEAGUES.has(fromLeague)) {
     const second = secondDivisionOf(fromLeague);
-    if (second) {
-      add(
-        clubsInLeague(second).filter((c) => c.country === fromClub.country && isPlayableLoanClub(c, exclude)),
-        count,
-      );
-    }
-    add(
-      CLUBS.filter((c) => SECOND_DIVISIONS.has(c.league) && isPlayableLoanClub(c, exclude)),
-      count - picked.length,
-    );
-    return picked.slice(0, count);
+    quality = second
+      ? clubsInLeague(second).filter((c) => c.country === fromClub.country && isPlayableLoanClub(c, exclude))
+      : [];
+    extra = CLUBS.filter((c) => SECOND_DIVISIONS.has(c.league) && isPlayableLoanClub(c, exclude));
+  } else if (eliteOrStrong) {
+    quality = sameLeagueLower(3);
+    extra = [...floorAway().filter((c) => c.tier >= 3), ...mls];
+  } else {
+    quality = floorAway();
+    extra = mls;
   }
-
-  if (eliteOrStrong) {
-    add(sameLeagueLower(3), count);
-    add(floorAway().filter((c) => c.tier >= 3), count - picked.length);
-    add(clubsInLeague('MLS').filter((c) => isPlayableLoanClub(c, exclude)), count - picked.length);
-    return picked.slice(0, count);
-  }
-
-  add(floorAway(), count);
-  add(clubsInLeague('MLS').filter((c) => isPlayableLoanClub(c, exclude)), count - picked.length);
-  return picked.slice(0, count);
+  return withGeographicLoanBias(withoutSaudi(quality), nationality, count, exclude, withoutSaudi(extra));
 }
 
 function pickSeasonLoanClubs(
@@ -350,8 +372,6 @@ export function pickLoanClubsForMiss(
   const parentAlreadySecond = Boolean(parentLeague && SECOND_DIVISIONS.has(parentLeague));
   const natCountry = countryForNationality(nationality);
   const exclude = excludeIds.filter(Boolean);
-  const seen = new Set<string>(exclude);
-  const picked: Club[] = [];
   const leagueBars = parentLeague
     ? clubsInLeague(parentLeague).map((c) => c.firstTeamGoalRatio)
     : [];
@@ -399,23 +419,9 @@ export function pickLoanClubsForMiss(
         (c) => c.playable !== false && SECOND_DIVISIONS.has(c.league) && !exclude.includes(c.id),
       ));
 
-  picked.push(...takeShuffled(sameDivision, count, seen));
-  if (picked.length < count) {
-    picked.push(...takeShuffled(otherTopFlight, count - picked.length, seen));
-  }
-  if (picked.length >= count) return picked.slice(0, count);
-
-  if (homeSecond.length > 0 && natSecond.length >= 2) {
-    picked.push(...takeShuffled(homeSecond, Math.min(3, count - picked.length), seen));
-    picked.push(...takeShuffled(natSecond, Math.min(2, count - picked.length), seen));
-  } else if (homeSecond.length > 0) {
-    picked.push(...takeShuffled(homeSecond, Math.min(5, count - picked.length), seen));
-  } else if (natSecond.length > 0) {
-    picked.push(...takeShuffled(natSecond, Math.min(3, count - picked.length), seen));
-  }
-  picked.push(...takeShuffled(worldSecond, count - picked.length, seen));
-  picked.push(...takeShuffled(otherTopFlight, count - picked.length, seen));
-  return picked.slice(0, count);
+  const quality = [...sameDivision, ...otherTopFlight];
+  const extra = [...homeSecond, ...natSecond, ...worldSecond];
+  return withGeographicLoanBias(quality, nationality, count, exclude, extra);
 }
 
 function canPayFee(club: Club, fee: number): boolean {
@@ -742,7 +748,6 @@ function offerTerms(
   _contractYears?: number,
   extras?: OfferTermExtras,
 ): ClubOfferTerms[] {
-  const years = move === 'loan' ? 1 : newContractYears(age);
   const allowRisingStar = extras?.allowRisingStar !== false;
   return clubs.map((club) => {
     if (move === 'loan') {
@@ -756,6 +761,7 @@ function offerTerms(
       };
     }
     const status = destinationSquadStatus(club, extras?.playerRatio, allowRisingStar);
+    const years = status === 'reserve' ? RESERVE_CONTRACT_YEARS : newContractYears(age);
     return {
       clubId: club.id,
       move,
@@ -949,7 +955,12 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     blockElite,
     fee,
   });
-  const canOfferLoans = fee > 0;
+  const parentYears = params.homeContractYearsRemaining;
+  const canOfferLoans = (
+    role === 'loan' && parentYears != null
+      ? transferFeeFromValue(value, parentYears)
+      : fee
+  ) > 0;
   const offerExtras: OfferTermExtras = {
     currentWeeklyWage: params.weeklyWage,
     originClub: club,
@@ -1059,15 +1070,21 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
         detail: `${ratio.toFixed(2)} goals/game was below their ${returnBar.toFixed(2)} first-team bar. Choose another loan or a permanent move.`,
         pendingTransfer: pendingFromOffers(
           'loan-or-transfer',
-          'A second consecutive loan is the last one at this club. After that you must move permanently.',
+          loansUsed < 1
+            ? 'A first loan can be followed by one more. After two consecutive loans you must move permanently.'
+            : 'A second consecutive loan is the last one at this club. After that you must move permanently.',
           offers,
           false,
         ),
       };
     }
     return {
-      headline: 'Two consecutive loans - you are being sold',
-      detail: `${parentClub?.name ?? 'Your parent club'} will not send you on a third consecutive loan. They are selling you.`,
+      headline: loansUsed >= MAX_CONSECUTIVE_LOANS
+        ? 'Two consecutive loans - you are being sold'
+        : `${parentClub?.name ?? 'Your parent club'} are selling you`,
+      detail: loansUsed >= MAX_CONSECUTIVE_LOANS
+        ? `${parentClub?.name ?? 'Your parent club'} will not send you on a third consecutive loan. They are selling you.`
+        : `${parentClub?.name ?? 'Your parent club'} will not bring you back into the first team.`,
       pendingTransfer: pendingFromOffers(
         'sold',
         fee <= 0
@@ -1128,7 +1145,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
 
   if (firstPublic) {
     const transfers = pickPermanentClubs(transferTier, fee, [club.id], nationality, blockElite, currentLeague, value, age);
-    const loans = canOfferLoans ? loanPick([club.id], club) : [];
+    const loans = canOfferLoans && !ratioMet ? loanPick([club.id], club) : [];
     const offers = withTwilight([
       ...offerTerms(loans, 'loan', value, 0, age, loanYears, offerExtras),
       ...offerTerms(transfers, 'permanent', value, fee, age, permYears, offerExtras),
@@ -1157,10 +1174,10 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
         pendingTransfer: pendingFromOffers(
           loans.length > 0 ? 'loan-or-transfer' : 'end-of-season',
           loans.length > 0
-            ? 'Compare weekly wages. Renew at home, stay on the current deal, take a loan, or move.'
+            ? 'Compare weekly wages. Stay on the current deal, take a loan, or move.'
             : fee <= 0
-              ? 'Compare weekly wages. Renew at home or move as a free agent.'
-              : 'Compare weekly wages. Renew at home, stay on the current deal, or move.',
+              ? 'Compare weekly wages. Stay or move as a free agent.'
+              : 'Compare weekly wages. Stay on the current deal, or move.',
           offers,
           Boolean(stay),
           stay,
@@ -1169,7 +1186,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       params,
       club,
       value,
-      true,
+      ratioMet,
       firstSeasonStayStatus,
     );
   }

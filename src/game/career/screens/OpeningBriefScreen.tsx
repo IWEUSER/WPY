@@ -126,7 +126,7 @@ export default function OpeningBriefScreen() {
           <p className="text-xs uppercase tracking-wide text-white/40">What happens next</p>
           <p className="mt-2 text-sm text-white/70">
             Offers come from {offerBand} clubs only — the band your best ratio earned. You sign a
-            2-year Rising star deal at 10% of that club’s average wage, then Season 1 starts.
+            3-year Rising star deal at 10% of that club’s average wage, then Season 1 starts.
           </p>
         </div>
       )}

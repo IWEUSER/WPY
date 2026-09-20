@@ -58,12 +58,12 @@ export interface MarketValueParams {
 
 export const DEFAULT_CONTRACT_YEARS = 5;
 /** Opening Rising-star deal. European under-18s cannot sign longer than this. */
-export const FIRST_CONTRACT_YEARS = 2;
-/** Academy / reserve path stays on a shorter deal than the first-team contract. */
-export const RESERVE_CONTRACT_YEARS = 2;
+export const FIRST_CONTRACT_YEARS = 3;
+/** Reserve-role offers are shorter than a full first-team deal. */
+export const RESERVE_CONTRACT_YEARS = 3;
 /** Floor used when a club's starter band is tiny. */
 export const RESERVE_WEEKLY_WAGE = 500;
-/** Reserve / impact deals pay this fraction of the destination's starter band. */
+/** Reserve deals pay this fraction of the destination's listed average wage. */
 export const RESERVE_WAGE_FACTOR = 0.2;
 /** Rising-star first contracts pay this fraction of the club's squad-average wage. */
 export const RISING_STAR_WAGE_FACTOR = 0.1;
@@ -478,6 +478,12 @@ export function weeklyWageForSquadStatus(
     const average = averageWageForClubId(club.id, league, clubLeagueOf);
     if (average != null) {
       return roundWeeklyWage(average * RISING_STAR_WAGE_FACTOR);
+    }
+  }
+  if (status === 'reserve' && usesPublishedWages(league)) {
+    const average = averageWageForClubId(club.id, league, clubLeagueOf);
+    if (average != null) {
+      return roundWeeklyWage(average * RESERVE_WAGE_FACTOR);
     }
   }
   const full = weeklyWageForClub(club, marketValue, playingLeague);

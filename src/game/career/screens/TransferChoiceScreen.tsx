@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { getClub, TIER_LABEL } from '../data/clubs';
 import { formatEuros, formatWeeklyWage } from '../playerValue';
 import { defaultSquadStatus, squadStatusOnArrival, SQUAD_STATUS_LABEL } from '../squadStatus';
@@ -84,6 +85,18 @@ export default function TransferChoiceScreen() {
   const lastTransferRejection = useCareerStore((s) => s.lastTransferRejection);
   const resolveTransferChoice = useCareerStore((s) => s.resolveTransferChoice);
   const currentSeason = useCareerStore((s) => s.currentSeason);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const rejectionRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!lastTransferRejection && !pending?.rejectionDetail) return;
+    const scroller = scrollerRef.current;
+    if (scroller) {
+      scroller.scrollTop = 0;
+      scroller.scrollTo({ top: 0, behavior: 'auto' });
+    }
+    rejectionRef.current?.scrollIntoView({ block: 'start', behavior: 'auto' });
+  }, [lastTransferRejection, pending?.rejectionDetail]);
 
   const currentClub = clubId ? getClub(clubId) : undefined;
   if (!pending) return null;
@@ -118,7 +131,7 @@ export default function TransferChoiceScreen() {
   };
 
   return (
-    <div className="flex h-full w-full flex-col items-center gap-6 overflow-y-auto px-6 py-[max(1.5rem,env(safe-area-inset-top))] text-center text-white">
+    <div ref={scrollerRef} className="flex h-full w-full flex-col items-center gap-6 overflow-y-auto px-6 py-[max(1.5rem,env(safe-area-inset-top))] text-center text-white">
       <div>
         <h1 className="font-display text-2xl font-bold">Choose your next move</h1>
         <p className="mt-2 max-w-sm text-sm text-white/60">{KIND_LABEL[pending.kind] ?? 'Clubs'}</p>
@@ -133,7 +146,10 @@ export default function TransferChoiceScreen() {
       </div>
 
       {(lastTransferRejection || pending.rejectionDetail) && (
-        <div className="w-full max-w-md rounded-2xl border border-amber-300/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+        <div
+          ref={rejectionRef}
+          className="w-full max-w-md rounded-2xl border border-amber-300/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100"
+        >
           {lastTransferRejection ?? pending.rejectionDetail}
         </div>
       )}

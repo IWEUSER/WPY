@@ -36,7 +36,7 @@ export default function ClubChoiceScreen() {
         <p className="text-sm text-white/50">Career mode</p>
         <h1 className="font-display text-2xl font-bold">Pick your club</h1>
         <p className="mt-2 max-w-sm text-sm text-white/60">
-          Season 1 starts as a Rising star on a 2-year deal at 10% of that club’s average wage. You can renew or leave at the end of the season.
+          Season 1 starts as a Rising star on a 3-year deal at 10% of that club’s average wage. You can renew or leave at the end of the season.
         </p>
       </div>
 

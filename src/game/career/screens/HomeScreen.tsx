@@ -82,7 +82,7 @@ export default function HomeScreen({ onPractice }: { onPractice: () => void }) {
                 >
                   <span className="block text-base font-bold text-white">Pick a club</span>
                   <span className="mt-1 block text-xs font-medium text-white/60">
-                    Join any club now as a Rising star on a 2-year deal at 10% of that club’s average wage.
+                    Join any club now as a Rising star on a 3-year deal at 10% of that club’s average wage.
                   </span>
                 </button>
               </>

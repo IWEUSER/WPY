@@ -10,7 +10,6 @@ import { getNation } from '../international';
 import { useCareerStore } from '../store';
 import { DATA_CARD } from './dataUi';
 import { AwardIcon, EarningsIcon, RecordsIcon, TrophyIcon, WageIcon } from './careerIcons';
-import { AppearancePicker } from './AppearancePicker';
 import { HonoursPills } from './HonoursPills';
 import { PlayerKitPortrait } from './PlayerKitPortrait';
 
@@ -57,7 +56,6 @@ export default function ProfileScreen() {
   const playerName = useCareerStore((s) => s.playerName);
   const playerSkin = useCareerStore((s) => s.playerSkin);
   const playerHair = useCareerStore((s) => s.playerHair);
-  const setPlayerLook = useCareerStore((s) => s.setPlayerLook);
   const role = useCareerStore((s) => s.role);
 
   const recordSeasons = [...history, ...(current && countsTowardCareerRecord(current.seasonNumber, current.role) ? [current] : [])];
@@ -119,9 +117,6 @@ export default function ProfileScreen() {
       </p>
 
       <PlayerKitPortrait name={name} club={club} nation={nation} look={look} />
-      <div className="mt-4 w-full">
-        <AppearancePicker skin={look.skin} hair={look.hair} onChange={setPlayerLook} />
-      </div>
 
       <div className="mt-4 grid grid-cols-2 gap-2">
         <IdentityBox title="Earnings" icon={<EarningsIcon className="h-3.5 w-3.5" />} className="mt-0">

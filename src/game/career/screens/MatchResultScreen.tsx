@@ -1,4 +1,4 @@
-import { playerGoalsLine } from '../matchBriefing';
+import { playerGoalsLine, sitOutRecapLine } from '../matchBriefing';
 import { useCareerStore } from '../store';
 
 export default function MatchResultScreen() {
@@ -13,6 +13,7 @@ export default function MatchResultScreen() {
     result.playerGoals != null && result.chances != null
       ? playerGoalsLine(result.playerGoals, result.chances)
       : null;
+  const sitOutLine = sitOutRecapLine(result.sitOutReason);
 
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-6 overflow-y-auto px-6 py-[max(1.5rem,env(safe-area-inset-top))] text-center text-white">
@@ -22,9 +23,9 @@ export default function MatchResultScreen() {
           <h1 className="mt-2 text-3xl font-black tracking-tight text-amber-100">You won the {result.trophyName}</h1>
           <p className="mt-4 text-lg font-semibold text-white/90">{headline}</p>
           {playerLine && <p className="mt-2 text-sm text-white/70">{playerLine}</p>}
-          {result.sitOutReason && (
+          {sitOutLine && (
             <p className="mt-2 text-sm font-semibold text-amber-200">
-              You did not play — {result.sitOutReason}
+              {sitOutLine}
             </p>
           )}
           {result.aggregateLine && <p className="mt-2 text-sm font-semibold text-emerald-200">{result.aggregateLine}</p>}
@@ -38,9 +39,9 @@ export default function MatchResultScreen() {
           </p>
           <h1 className="mt-2 text-2xl font-extrabold">{headline}</h1>
           {playerLine && <p className="mt-3 text-sm text-white/70">{playerLine}</p>}
-          {result.sitOutReason && (
+          {sitOutLine && (
             <p className="mt-2 text-sm font-semibold text-amber-200">
-              You did not play — {result.sitOutReason}
+              {sitOutLine}
             </p>
           )}
           {result.aggregateLine && <p className="mt-2 text-sm font-semibold text-emerald-200">{result.aggregateLine}</p>}

@@ -117,6 +117,7 @@ function freshSeason(
     clubId,
     role,
     squadStatus: squadStatus ?? defaultSquadStatus(role),
+    openedSquadStatus: squadStatus ?? defaultSquadStatus(role),
     matches: [],
     goals: 0,
     gamesPlayed: 0,
@@ -232,6 +233,7 @@ function reviewedSquadFields(
     bar: club.firstTeamGoalRatio,
     honoursClear: seasonOverridesRatioBar(season),
     allowYouthRoles: youthRolesAllowed(publicSeason),
+    openedAs: season.openedSquadStatus ?? current,
   });
   return {
     squadStatus: next,
