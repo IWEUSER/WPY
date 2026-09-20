@@ -1,4 +1,5 @@
-import { fifaRank, nationStrength } from './data/fifaRankings';
+import type { InternationalTournamentId } from './data/competitions';
+import { doesNationQualify, fifaRank, nationStrength } from './data/fifaRankings';
 import { NATIONS_LEAGUE_GROUPS, NATIONS_LEAGUE_QF_GROUPS, nationLabel } from './data/nationsLeague';
 import { mulberry32 } from './util';
 
@@ -161,10 +162,55 @@ function hashSeed(seed: string): number {
   return h >>> 0;
 }
 
+export function simulateNationScore(homeId: string, awayId: string, seed: string): [number, number] {
+  return simulateScore(homeId, awayId, mulberry32(hashSeed(seed)));
+}
+
+/** Simulate one nation match into a qualifying/group table. */
+export function applyNpcNationMatch(
+  state: IntlGroupState,
+  nationId: string,
+  opponentId: string,
+  isHome: boolean,
+  seed: string,
+): IntlGroupState {
+  const home = isHome ? nationId : opponentId;
+  const away = isHome ? opponentId : nationId;
+  const [hg, ag] = simulateNationScore(home, away, seed);
+  return simulateNpcRoundAfterPlayerMatch(
+    { ...state, rows: sortGroupTable(applyResult(state.rows, home, away, hg, ag)) },
+    nationId,
+    opponentId,
+    `${seed}-npc-round`,
+  );
+}
+
 export function groupPosition(state: IntlGroupState | null | undefined, nationId: string): number {
   if (!state) return 0;
   const sorted = sortGroupTable(state.rows);
   return sorted.findIndex((r) => r.nationId === nationId) + 1;
+}
+
+/** World Cup qualifying groups send the top two after the full home-and-away slate. */
+export function qualifyingPlacesFromGroup(state: IntlGroupState | null | undefined): number {
+  if (!state || state.teamIds.length < 2) return 1;
+  return 2;
+}
+
+export function doesNationQualifyFromTable(
+  state: IntlGroupState | null | undefined,
+  nationId: string,
+  minPlayed = 10,
+  tournament: InternationalTournamentId = 'world-cup',
+): boolean {
+  if (!state) return false;
+  const row = state.rows.find((item) => item.nationId === nationId);
+  if (!row || row.played < minPlayed) return false;
+  const pos = groupPosition(state, nationId);
+  if (pos > 0 && pos <= qualifyingPlacesFromGroup(state)) return true;
+  // 3rd (or lower) can still go through on FIFA ranking + form so Spain do
+  // not miss a World Cup from a group of death after a full 10-game slate.
+  return doesNationQualify(nationId, tournament, row.points, row.played);
 }
 
 /**

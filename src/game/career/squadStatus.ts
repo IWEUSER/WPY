@@ -15,9 +15,9 @@ export const SQUAD_STATUS_LABEL: Record<SquadStatus, string> = {
 export const RISING_STAR_MIN_RATIO = 0.33;
 
 /** Score in this many consecutive played games to move Rising star → Impact. */
-export const IMPACT_STREAK = 2;
+export const IMPACT_STREAK = 3;
 
-/** Score in this many consecutive played games to move up to Starter. */
+/** After Impact, score in this many more consecutive games to become Starter. */
 export const STARTER_STREAK = 3;
 
 /** Impact looks in a match they play (Rising star stays at 1). */
@@ -58,7 +58,7 @@ export function openingSquadStatus(role: PlayerRole): SquadStatus {
 export function describeSquadStatus(status: SquadStatus): string {
   if (status === 'starter') return 'In the starting XI across league, cups and internationals';
   if (status === 'rising-star') {
-    return 'Rising star — temporary Season 1–2 role, one chance each time you play. Score in 2 consecutive games for Impact, or 3 for Starter.';
+    return 'Rising star — temporary Season 1–2 role, one chance each time you play. Score in 3 consecutive games for Impact, then another 3 for Starter. Extra goals in one game still count as one.';
   }
   if (status === 'reserve') {
     return 'Reserve — every second game across league, cups and internationals. Hit the starter bar at any time and you keep Starter.';
@@ -192,7 +192,8 @@ function hitsStarterBar(params: {
 /**
  * In-season promotions only — never a mid-season drop to Reserve.
  * Reserve → Starter when the club bar is hit, then it sticks.
- * Rising star / Impact (Seasons 1–2): 2-game scoring streak → Impact, 3 → Starter.
+ * Rising star / Impact (Seasons 1–2): score in 3 games → Impact, reset,
+ * then score in 3 more games → Starter. Multiple goals in one game count as one.
  */
 export function promoteSquadStatusDuringSeason(params: {
   current: SquadStatus;
@@ -202,19 +203,65 @@ export function promoteSquadStatusDuringSeason(params: {
   bar: number;
   honoursClear?: boolean;
   allowYouthRoles?: boolean;
+  /** Status at the start of this season — needed so an Impact carry-in can still use a fresh 3-game run. */
+  openedAs?: SquadStatus;
 }): SquadStatus {
   const current = params.current;
   if (current === 'starter') return 'starter';
   const hitBar = hitsStarterBar(params);
   if (current === 'reserve') return hitBar ? 'starter' : 'reserve';
   if (params.allowYouthRoles && (current === 'rising-star' || current === 'impact')) {
-    const streak = consecutiveScoringGames(params.matches);
-    if (streak >= STARTER_STREAK) return 'starter';
-    if (streak >= IMPACT_STREAK) return 'impact';
-    return current;
+    if (current === 'rising-star') {
+      return consecutiveScoringGames(params.matches) >= IMPACT_STREAK ? 'impact' : 'rising-star';
+    }
+    const openedAs = params.openedAs ?? 'impact';
+    if (consecutiveScoringAsImpact(params.matches, openedAs) >= STARTER_STREAK) return 'starter';
+    return 'impact';
   }
   if (hitBar) return 'starter';
   return current;
+}
+
+/** First played match that completed a Rising-star → Impact 3-game scoring run. */
+export function impactPromotionMatchIndex(
+  matches: Pick<MatchRecord, 'played' | 'scored'>[] | undefined,
+): number | null {
+  if (!matches?.length) return null;
+  let streak = 0;
+  for (let i = 0; i < matches.length; i += 1) {
+    const match = matches[i];
+    if (!match.played) continue;
+    if (match.scored === true) {
+      streak += 1;
+      if (streak >= IMPACT_STREAK) return i;
+    } else {
+      streak = 0;
+    }
+  }
+  return null;
+}
+
+/**
+ * Trailing scoring games that count toward Starter. If the player opened the
+ * season as Rising star, the Impact run is discarded and a new 3-game run starts.
+ */
+export function consecutiveScoringAsImpact(
+  matches: Pick<MatchRecord, 'played' | 'scored'>[] | undefined,
+  openedAs: SquadStatus,
+): number {
+  if (!matches?.length) return 0;
+  const after = openedAs === 'rising-star' || openedAs === 'reserve'
+    ? impactPromotionMatchIndex(matches)
+    : null;
+  const start = after == null ? -1 : after;
+  let streak = 0;
+  for (let i = matches.length - 1; i > start; i -= 1) {
+    const match = matches[i];
+    if (!match.played) continue;
+    if (match.scored !== true) break;
+    streak += 1;
+  }
+  return streak;
 }
 
 /**
@@ -309,7 +356,7 @@ export function squadRoleRatioGuide(status: SquadStatus, clubBar: number): {
       keepHint: `${RISING_STAR_MIN_RATIO.toFixed(2)} at season end or you become a Reserve`,
       nextLabel: 'Impact',
       nextRatio: null,
-      nextHint: 'Score in 2 consecutive games · 3 for Starter',
+      nextHint: 'Score in 3 consecutive games for Impact, then 3 more for Starter',
     };
   }
   if (status === 'reserve') {
@@ -328,7 +375,7 @@ export function squadRoleRatioGuide(status: SquadStatus, clubBar: number): {
     keepHint: 'Keeps this season · two chances, same games as Rising star',
     nextLabel: 'Starter',
     nextRatio: clubBar,
-    nextHint: 'Score in 3 consecutive games, or hit the club bar',
+    nextHint: 'Score in 3 consecutive games after becoming Impact, or hit the club bar',
   };
 }
 

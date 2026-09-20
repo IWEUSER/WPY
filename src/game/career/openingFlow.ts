@@ -14,6 +14,7 @@ import {
   type TrialPickOptions,
   tierForYouthGoals,
 } from './trial';
+import { youthTrialsAreMlsOnly } from './trialGeography';
 import {
   buildYouthGroupCalendar,
   nextYouthKnockoutRound,
@@ -182,10 +183,10 @@ export function remainingTrialClubIds(campaign: OpeningCampaign): string[] {
   return (campaign.trialClubIds ?? []).filter((id) => !campaign.rejectedClubIds.includes(id));
 }
 
-export function youthTrialEarnedTier(campaign: OpeningCampaign): ClubTier {
+export function youthTrialEarnedTier(campaign: OpeningCampaign, nationality?: string | null): ClubTier {
   const goals = campaign.youthGoals || campaign.goals;
   const games = Math.max(campaign.kind === 'youth-tournament' ? campaign.gamesPlayed : 1, 1);
-  return tierForYouthGoals(goals, games);
+  return tierForYouthGoals(goals, games, nationality);
 }
 
 function youthLooksNotStarted(campaign: OpeningCampaign): boolean {
@@ -200,6 +201,23 @@ function trialPickOpts(
     sameTierOnly: options?.sameTierOnly ?? true,
     preferCountry: options?.preferCountry ?? campaign.originCountry,
     requireHome: options?.requireHome,
+    geographyNationId: options?.geographyNationId ?? null,
+    mlsOnly: options?.mlsOnly,
+  };
+}
+
+function trialPickOptsForNation(
+  campaign: OpeningCampaign,
+  nationality: string | null,
+  options?: TrialPickOptions,
+): TrialPickOptions {
+  const youthGoals = campaign.youthGoals || campaign.goals;
+  const youthGames = Math.max(campaign.kind === 'youth-tournament' ? campaign.gamesPlayed : 1, 1);
+  const ratio = youthGoals / youthGames;
+  return {
+    ...trialPickOpts(campaign, options),
+    geographyNationId: options?.geographyNationId ?? nationality,
+    mlsOnly: options?.mlsOnly ?? youthTrialsAreMlsOnly(ratio, nationality),
   };
 }
 
@@ -217,7 +235,7 @@ function fillTrialClubIds(
     nationality,
     [...campaign.rejectedClubIds, ...remaining],
     count - remaining.length,
-    trialPickOpts(campaign, options),
+    trialPickOptsForNation(campaign, nationality, options),
   );
   const filled = [...remaining, ...extra.map((club) => club.id)];
   if (filled.length > 0 || options?.sameTierOnly === false) return filled;
@@ -226,7 +244,7 @@ function fillTrialClubIds(
     nationality,
     [...campaign.rejectedClubIds, ...remaining],
     count - remaining.length,
-    { ...trialPickOpts(campaign, options), sameTierOnly: false },
+    { ...trialPickOptsForNation(campaign, nationality, options), sameTierOnly: false },
   );
   return [...remaining, ...fallback.map((club) => club.id)];
 }
@@ -238,7 +256,7 @@ export function assignOpeningTrialClub(
   options?: TrialPickOptions,
 ): OpeningCampaign {
   const goals = campaign.youthGoals || campaign.goals;
-  const earned = youthTrialEarnedTier(campaign);
+  const earned = youthTrialEarnedTier(campaign, nationality);
   const looksStarted = !youthLooksNotStarted(campaign);
   const trialTier = looksStarted ? (campaign.trialTier ?? earned) : earned;
   const remaining = remainingTrialClubIds(campaign);
@@ -374,6 +392,7 @@ function offerNextTrialBand(
       sameTierOnly: true,
       preferCountry: recorded.originCountry,
       requireHome,
+      geographyNationId: nationality,
     },
   );
   if (trialClubIds.length === 0) {

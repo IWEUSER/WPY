@@ -50,6 +50,7 @@ import {
   reassignLeagueHomeAway,
   resolveFixture,
   shouldSkipFixture,
+  shouldSimulateNationQualifier,
   syncInternationalCalendar,
   trophyNameForFixture,
   internationalRoundLabel,
@@ -116,6 +117,7 @@ function freshSeason(
     clubId,
     role,
     squadStatus: squadStatus ?? defaultSquadStatus(role),
+    openedSquadStatus: squadStatus ?? defaultSquadStatus(role),
     matches: [],
     goals: 0,
     gamesPlayed: 0,
@@ -172,17 +174,30 @@ function withInternationalForm(
     league: club.league,
   });
   const keepQualifyingCampaign =
-    sim.internationalStage === 'qualifying' &&
+    sim.internationalStage === 'qualifying' ||
+    sim.internationalPhase === 'qualifiers' ||
+    sim.internationalPhase === 'qualifiers-and-tournament' ||
     ((sim.qualifierCarryPlayed ?? 0) > 0 ||
       (sim.internationalGroup?.kind === 'qualifying' &&
         sim.internationalGroup.rows.some((row) => row.played > 0)));
-  if (selected === sim.internationalSelected) return sim;
+  if (selected === sim.internationalSelected) {
+    if (!selected && keepQualifyingCampaign && sim.internationalStage === 'not-selected') {
+      return { ...sim, internationalStage: 'qualifying' };
+    }
+    return sim;
+  }
   if (!selected) {
-    if (keepQualifyingCampaign) return sim;
     return {
       ...sim,
       internationalSelected: false,
-      internationalStage: sim.internationalStage === 'qualifying' ? 'not-selected' : sim.internationalStage,
+      internationalStage:
+        sim.internationalStage === 'friendly' || sim.internationalStage === 'group'
+          ? sim.internationalStage
+          : keepQualifyingCampaign && (sim.internationalStage === 'qualifying' || sim.internationalStage === 'not-selected' || !sim.internationalStage)
+            ? 'qualifying'
+            : sim.internationalStage === 'qualifying'
+              ? 'qualifying'
+              : sim.internationalStage,
     };
   }
   const next: SeasonSimState = {
@@ -218,6 +233,7 @@ function reviewedSquadFields(
     bar: club.firstTeamGoalRatio,
     honoursClear: seasonOverridesRatioBar(season),
     allowYouthRoles: youthRolesAllowed(publicSeason),
+    openedAs: season.openedSquadStatus ?? current,
   });
   return {
     squadStatus: next,
@@ -690,6 +706,8 @@ function initialState(): CareerState {
     pendingTransfer: null,
     nationality: null,
     playerName: null,
+    playerSkin: null,
+    playerHair: null,
     nationalTeam: null,
     seasonCalendar: null,
     seasonStandings: null,
@@ -729,7 +747,7 @@ function nextQualifyingCarry(
   sim: CareerState['seasonSim'],
   opponentIds: string[] = [],
 ): CareerState['intlQualifying'] {
-  if (!sim?.internationalSelected || !sim.internationalTournament) return null;
+  if (!sim?.internationalTournament) return null;
   if (sim.internationalPhase !== 'qualifiers') return null;
   return {
     tournament: sim.internationalTournament,
@@ -839,7 +857,8 @@ interface CareerActions {
   finishTrial: () => void;
   chooseClub: (clubId: string) => void;
   chooseNationality: (nationId: string) => void;
-  confirmPlayerName: (name: string) => void;
+  confirmPlayerName: (name: string, look?: { skin: string; hair: string }) => void;
+  setPlayerLook: (look: { skin: string; hair: string }) => void;
   advance: () => void;
   recordMatchChance: (result: ShotResult) => void;
   finishLiveMatch: () => void;
@@ -1009,9 +1028,30 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
   };
 
   while (sim.fixtureIndex < calendar.fixtures.length) {
+    sim = withInternationalForm(
+      sim,
+      season,
+      state.clubId,
+      state.nationality,
+      state.careerGoals,
+      careerGames,
+      {
+        week: currentCalendarWeek(calendar, sim.fixtureIndex),
+        seasonNumber: state.seasonNumber,
+        role: state.role,
+        careerStart: state.careerStart,
+        calendar,
+        squadStatus: reviewedSquadFields(state, season).squadStatus,
+      },
+    );
     const fixture = calendar.fixtures[sim.fixtureIndex];
     if (shouldSkipFixture(fixture, sim)) {
-      sim = { ...sim, fixtureIndex: sim.fixtureIndex + 1 };
+      if (shouldSimulateNationQualifier(fixture, sim)) {
+        const resolution = resolveFixture(sim, fixture, club, 0, Math.random, { playerParticipated: false });
+        sim = { ...resolution.sim, fixtureIndex: sim.fixtureIndex + 1 };
+      } else {
+        sim = { ...sim, fixtureIndex: sim.fixtureIndex + 1 };
+      }
       continue;
     }
 
@@ -1375,10 +1415,10 @@ export const useCareerStore = create<CareerStore>()(
       backFromSetup: () =>
         set((state) => {
           if (state.phase === 'player-name') {
-            return { phase: 'nationality-choice', playerName: null };
+            return { phase: 'nationality-choice', playerName: null, playerSkin: null, playerHair: null };
           }
           if (state.phase === 'nationality-choice' && isFavouriteStart(state.careerStart)) {
-            return { phase: 'club-choice', nationality: null, nationalTeam: null, playerName: null };
+            return { phase: 'club-choice', nationality: null, nationalTeam: null, playerName: null, playerSkin: null, playerHair: null };
           }
           return {
             phase: 'menu',
@@ -1388,6 +1428,8 @@ export const useCareerStore = create<CareerStore>()(
             nationality: null,
             nationalTeam: null,
             playerName: null,
+            playerSkin: null,
+            playerHair: null,
             openingCampaign: null,
           };
         }),
@@ -1478,18 +1520,23 @@ export const useCareerStore = create<CareerStore>()(
           phase: 'player-name',
         }),
 
-      confirmPlayerName: (name) =>
+      confirmPlayerName: (name, look) =>
         set((state) => {
           const playerName = name.replace(/\s+/g, ' ').trim();
+          const appearance = {
+            playerSkin: look?.skin ?? state.playerSkin ?? null,
+            playerHair: look?.hair ?? state.playerHair ?? null,
+          };
           const nationId = state.nationality;
-          if (!nationId) return { playerName, phase: 'nationality-choice' };
+          if (!nationId) return { playerName, ...appearance, phase: 'nationality-choice' };
           const nationalTeam = state.nationalTeam ?? createNationalTeamState(nationId);
           if (state.careerStart === 'favourite-trial' && state.clubId) {
             const club = getClub(state.clubId);
-            if (!club) return { playerName, nationality: nationId, nationalTeam };
+            if (!club) return { playerName, ...appearance, nationality: nationId, nationalTeam };
             const opening = beginFavouriteClubTrial(club);
             return {
               playerName,
+              ...appearance,
               nationality: nationId,
               nationalTeam,
               openingCampaign: opening,
@@ -1507,14 +1554,16 @@ export const useCareerStore = create<CareerStore>()(
               nationalTeam,
               ...beginSignedCareer(state.clubId, 'first-team', nationId, state.careerStart),
               playerName,
+              ...appearance,
             };
           }
           if (state.clubId && !isFavouriteStart(state.careerStart)) {
-            return { playerName, nationality: nationId, nationalTeam, phase: 'hub' };
+            return { playerName, ...appearance, nationality: nationId, nationalTeam, phase: 'hub' };
           }
           const opening = createYouthCampaign(nationId);
           return {
             playerName,
+            ...appearance,
             nationality: nationId,
             nationalTeam,
             careerStart: state.careerStart ?? 'youth',
@@ -1525,6 +1574,8 @@ export const useCareerStore = create<CareerStore>()(
             phase: 'match',
           };
         }),
+
+      setPlayerLook: (look) => set({ playerSkin: look.skin, playerHair: look.hair }),
 
       advance: () =>
         set((state) => {
@@ -2271,6 +2322,8 @@ function migrateCareerPersist(persisted: unknown): CareerState {
           careerStart: state.careerStart ?? null,
           nationality: state.nationality ?? null,
           playerName: state.playerName?.trim() ? state.playerName : 'Player',
+          playerSkin: state.playerSkin ?? null,
+          playerHair: state.playerHair ?? null,
           nationalTeam: state.nationalTeam
             ? {
                 ...state.nationalTeam,

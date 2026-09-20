@@ -5,6 +5,27 @@ import { countsTowardCareerRecord } from '../seasonDisplay';
 import { useCareerStore } from '../store';
 import { DATA_CARD, DATA_TILE } from './dataUi';
 
+const TONE_CLASS: Record<LegacyBoardView['def']['tone'], string> = {
+  'all-time': 'border-amber-400/40 bg-amber-950/30',
+  'season-overall': 'border-sky-400/40 bg-sky-950/30',
+  'season-club': 'border-violet-400/40 bg-violet-950/30',
+  'season-intl': 'border-emerald-400/40 bg-emerald-950/30',
+};
+
+const TONE_LABEL: Record<LegacyBoardView['def']['tone'], string> = {
+  'all-time': 'All-time',
+  'season-overall': 'Single season',
+  'season-club': 'Club season',
+  'season-intl': 'International tournament',
+};
+
+const TONE_BADGE: Record<LegacyBoardView['def']['tone'], string> = {
+  'all-time': 'bg-amber-400/20 text-amber-200',
+  'season-overall': 'bg-sky-400/20 text-sky-200',
+  'season-club': 'bg-violet-400/20 text-violet-200',
+  'season-intl': 'bg-emerald-400/20 text-emerald-200',
+};
+
 const GROUPS: Array<{ id: LegacyBoardView['def']['group'] | 'all'; label: string }> = [
   { id: 'all', label: 'All' },
   { id: 'club-overall', label: 'Club' },
@@ -53,8 +74,15 @@ export default function LegacyScreen() {
         <img src="/logo.png" alt="" className="h-12 w-12 rounded-xl ring-1 ring-amber-200/30" />
         <div>
           <h1 className="font-brand text-2xl leading-none text-white">{GAME_TITLE}</h1>
-          <p className="mt-1 text-xs text-white/50">Sourced all-time totals. Rank and the number to chase.</p>
+          <p className="mt-1 text-xs text-white/50">Sourced all-time and single-season totals. Rank and the number to chase.</p>
         </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-1.5 text-[10px] font-semibold uppercase tracking-wide">
+        <span className={`rounded-full px-2 py-1 ${TONE_BADGE['season-overall']}`}>Single season</span>
+        <span className={`rounded-full px-2 py-1 ${TONE_BADGE['season-club']}`}>Club season</span>
+        <span className={`rounded-full px-2 py-1 ${TONE_BADGE['season-intl']}`}>Intl tournament</span>
+        <span className={`rounded-full px-2 py-1 ${TONE_BADGE['all-time']}`}>All-time</span>
       </div>
 
       <div className="mt-4 grid grid-cols-3 gap-2">
@@ -123,10 +151,13 @@ function BoardCard({
   playerName: string;
 }) {
   return (
-    <article className={DATA_CARD}>
+    <article className={`${DATA_CARD} ${TONE_CLASS[board.def.tone]}`}>
       <button type="button" onClick={onToggle} className="flex w-full items-start justify-between gap-3 text-left">
         <div>
-          <p className="text-[10px] uppercase tracking-wide text-white/40">{board.def.subtitle}</p>
+          <p className={`text-[10px] uppercase tracking-wide ${TONE_BADGE[board.def.tone]} inline-block rounded-full px-2 py-0.5`}>
+            {TONE_LABEL[board.def.tone]}
+          </p>
+          <p className="mt-1 text-[10px] uppercase tracking-wide text-white/40">{board.def.subtitle}</p>
           <h2 className="mt-0.5 text-lg font-extrabold">{board.def.title}</h2>
           <p className="mt-1 text-sm text-white/60">{statusLine(board, playerName)}</p>
         </div>
