@@ -25,14 +25,24 @@ export function advanceBallTravel(
   xRatio: number,
   direction: BallTravelDir,
   dtSeconds: number,
-  speed = BALL_TRAVEL_SPEED,
-  minX = BALL_TRAVEL_MIN_X,
-  maxX = BALL_TRAVEL_MAX_X,
+  opts?: {
+    speed?: number;
+    minX?: number;
+    maxX?: number;
+    bounce?: boolean;
+  },
 ): { xRatio: number; direction: BallTravelDir } {
+  const speed = opts?.speed ?? BALL_TRAVEL_SPEED;
+  const minX = opts?.minX ?? BALL_TRAVEL_MIN_X;
+  const maxX = opts?.maxX ?? BALL_TRAVEL_MAX_X;
+  const bounce = opts?.bounce !== false;
   const span = Math.max(1e-4, maxX - minX);
   const step = speed * Math.min(0.05, Math.max(0, dtSeconds));
   let next = xRatio + direction * step;
   let dir = direction;
+  if (!bounce) {
+    return { xRatio: clamp(next, minX, maxX), direction: dir };
+  }
   if (next > maxX) {
     const over = next - maxX;
     next = maxX - (over % span);
@@ -70,6 +80,8 @@ export const KNOCK_SOFT_RATIO = 0.055;
 /** Full-blooded horizontal knock. */
 export const KNOCK_HARD_RATIO = 0.34;
 export const KNOCK_SLIDE_MS = 180;
+/** After a knock, keep that direction and sit at the edge instead of bouncing back. */
+export const KNOCK_HOLD_MS = 420;
 
 /** True when the gesture is a sideways knock rather than a shot. */
 export function swipeIsHorizontalKnock(dx: number, dy: number): boolean {

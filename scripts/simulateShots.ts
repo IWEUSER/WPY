@@ -1002,3 +1002,8 @@ if (pinched.xRatio > BALL_TRAVEL_MAX_X) {
   console.error('FAIL: a knock must stay on the shooting line');
   process.exitCode = 1;
 }
+const held = advanceBallTravel(BALL_TRAVEL_MAX_X, 1, 0.05, { bounce: false });
+if (held.direction !== 1 || held.xRatio !== BALL_TRAVEL_MAX_X) {
+  console.error('FAIL: a knock hold must keep the shove direction at the edge instead of bouncing back');
+  process.exitCode = 1;
+}

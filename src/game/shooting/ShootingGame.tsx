@@ -46,6 +46,7 @@ import StatsBar, { type ShotStats } from './StatsBar';
 import {
   advanceBallTravel,
   applyHorizontalKnock,
+  KNOCK_HOLD_MS,
   chanceBallTravels,
   KNOCK_SLIDE_MS,
   pickBallTravelDir,
@@ -85,6 +86,8 @@ interface AnimState {
   knockFromX: number;
   knockToX: number;
   knockUntilMs: number;
+  /** After a knock, keep that direction and clamp at the edge instead of bouncing. */
+  knockHoldUntilMs: number;
   /** Metres from the ball to the goal line. */
   shotDistanceM: number;
   chanceKind: ChanceKind;
@@ -442,6 +445,7 @@ export default function ShootingGame({
     knockFromX: initialChance.ballStartXRatio,
     knockToX: initialChance.ballStartXRatio,
     knockUntilMs: 0,
+    knockHoldUntilMs: 0,
     shotDistanceM: initialChance.distanceM,
     chanceKind: initialChance.kind,
     defender: initialChance.defender,
@@ -507,6 +511,7 @@ export default function ShootingGame({
     anim.knockFromX = chance.ballStartXRatio;
     anim.knockToX = chance.ballStartXRatio;
     anim.knockUntilMs = 0;
+    anim.knockHoldUntilMs = 0;
     anim.shotDistanceM = chance.distanceM;
     anim.chanceKind = chance.kind;
     anim.defender = chance.defender;
@@ -655,7 +660,10 @@ export default function ShootingGame({
               anim.ballStartXRatio = anim.knockFromX + (anim.knockToX - anim.knockFromX) * eased;
               anim.ballRotation += anim.ballTravelDir * dt * 16;
             } else {
-              const rolled = advanceBallTravel(anim.ballStartXRatio, anim.ballTravelDir, dt);
+              const holdKnock = anim.knockHoldUntilMs > now;
+              const rolled = advanceBallTravel(anim.ballStartXRatio, anim.ballTravelDir, dt, {
+                bounce: !holdKnock,
+              });
               anim.ballStartXRatio = rolled.xRatio;
               anim.ballTravelDir = rolled.direction;
               anim.ballRotation += rolled.direction * dt * 9;
@@ -895,7 +903,9 @@ export default function ShootingGame({
         anim.knockFromX = anim.ballStartXRatio;
         anim.knockToX = knock.xRatio;
         anim.ballTravelDir = knock.direction;
-        anim.knockUntilMs = performance.now() + KNOCK_SLIDE_MS;
+        const now = performance.now();
+        anim.knockUntilMs = now + KNOCK_SLIDE_MS;
+        anim.knockHoldUntilMs = now + KNOCK_SLIDE_MS + KNOCK_HOLD_MS;
         anim.phase = 'idle';
         setUiPhase('idle');
         return;
