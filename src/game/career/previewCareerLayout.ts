@@ -1253,6 +1253,8 @@ export function applyCareerLayoutPreview(): void {
           }),
     lastMatchSummary: preview === 'hub-rotation' || preview === 's1-summary'
       ? null
+      : preview === 'hub-sitout'
+      ? 'Andorra lost 0–2 vs Denmark · out of the tournament'
       : isYouthNextPreview
       ? 'Spain won 2–0 · 1 goal from 1 chance'
       : preview === 'hub-ucl-leg2'
@@ -1262,6 +1264,20 @@ export function applyCareerLayoutPreview(): void {
       : 'Spain won 2–0 vs Italy · 2 goals from 2 chances',
     lastMatchResult: isYouthNextPreview || preview === 'hub-rotation' || preview === 's1-summary'
       ? null
+      : preview === 'hub-sitout'
+      ? {
+          summary: 'Andorra lost 0–2 vs Denmark · out of the tournament',
+          headline: 'Andorra lost 0–2 vs Denmark · out of the tournament',
+          isFinal: false,
+          won: false,
+          trophyName: null,
+          afterPhase: 'hub',
+          playerGoals: 0,
+          chances: 0,
+          sitOutReason: 'no chance this match',
+          aggregateLine: null,
+          nextLine: null,
+        }
       : preview === 'hub-ucl-leg2'
       ? {
           summary: 'Won 1–0 vs Bayern Munich · 1 goal from 2 chances · Aggregate 1–0 · second leg to come · Next: Bayern Munich · Away · Champions League quarter-final 2nd leg · 1–0 up from the first leg',
