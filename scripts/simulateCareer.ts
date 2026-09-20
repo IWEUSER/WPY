@@ -2518,8 +2518,8 @@ if (barca && hilal && lafc) {
     console.error('starter copy must say the XI is across all competitions, not only league games');
     process.exitCode = 1;
   }
-  if (!/Rising star/.test(describeSquadStatus('rising-star')) || !/one chance/.test(describeSquadStatus('rising-star')) || !/2 consecutive/.test(describeSquadStatus('rising-star'))) {
-    console.error('Rising star copy must mention one chance and the two-game Impact promotion');
+  if (!/Rising star/.test(describeSquadStatus('rising-star')) || !/one chance/.test(describeSquadStatus('rising-star')) || !/3 consecutive/.test(describeSquadStatus('rising-star'))) {
+    console.error('Rising star copy must mention one chance and the 3-game Impact promotion');
     process.exitCode = 1;
   }
   if (!/two chances/.test(describeSquadStatus('impact')) || !/same games as Rising star/.test(describeSquadStatus('impact'))) {
@@ -3150,12 +3150,11 @@ if (barca && hilal && lafc) {
     process.exitCode = 1;
   }
   if (
-    !favFirstRenewal
-    || favFirstRenewal.weeklyWage <= 0
+    favFirstRenewal
     || favFirstMissPerms.some((o) => o.weeklyWage <= 0)
     || favFirstMissLoans.some((o) => o.weeklyWage <= 0)
   ) {
-    console.error('Season 1 must show the current club’s salary offer next to other clubs’ wage offers');
+    console.error('Season 1 that misses the club ratio must not table a current-club renewal; other salary offers stay');
     process.exitCode = 1;
   }
 
@@ -3571,8 +3570,12 @@ if ((citySameDivision.pendingTransfer?.stay?.squadStatus ?? citySameDivision.imm
   console.error('a Premier League loan at 1.02 must return to City as a starter, not a reserve');
   process.exitCode = 1;
 }
-if (citySameDivision.pendingTransfer?.offers?.some((o) => o.move === 'permanent' && o.contractYears !== newContractYears(18))) {
-  console.error('free or parallel transfer offers after a loan must be 5-year contracts for an 18-year-old');
+if (citySameDivision.pendingTransfer?.offers?.some((o) => {
+  if (o.move !== 'permanent') return false;
+  const expected = o.squadStatus === 'reserve' ? RESERVE_CONTRACT_YEARS : newContractYears(18);
+  return o.contractYears !== expected;
+})) {
+  console.error('free or parallel transfer offers after a loan must be 5-year starter deals or 3-year reserve deals');
   process.exitCode = 1;
 }
 const lowerLoanBack = resolveSeasonTransition({
@@ -3675,8 +3678,11 @@ if (loanMiss.immediate?.role === 'reserve' || loanOffers !== LOAN_OFFER_COUNT ||
     console.error('permanent offers must include a reserve role at 20% of that club’s starter wage');
     process.exitCode = 1;
   }
-  if (perms.some((o) => o.contractYears !== newContractYears(18))) {
-    console.error('permanent offers at 18 must be 5-year contracts');
+  if (perms.some((o) => {
+    const expected = o.squadStatus === 'reserve' ? RESERVE_CONTRACT_YEARS : newContractYears(18);
+    return o.contractYears !== expected;
+  })) {
+    console.error('permanent offers at 18 must be 5-year starter deals or 3-year reserve deals');
     process.exitCode = 1;
   }
   const s2RisingEnd = nextSquadStatusAfterSeason({

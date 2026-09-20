@@ -150,15 +150,10 @@ function withGeographicLoanBias(
 ): Club[] {
   const seen = new Set<string>(excludeIds.filter(Boolean));
   const picked: Club[] = [];
-  picked.push(...takeGeographicLoans(qualityPool, nationality, Math.min(GEO_LOAN_COUNT, count), seen));
-  if (picked.length < GEO_LOAN_COUNT && picked.length < count) {
-    const destCountries = geographicLoanCountries(nationality);
-    const destClubs = withoutSaudi(CLUBS.filter(
-      (c) =>
-        isPlayableLoanClub(c, excludeIds) &&
-        destCountries.includes(c.country),
-    ));
-    picked.push(...takeGeographicLoans(destClubs, nationality, Math.min(GEO_LOAN_COUNT, count) - picked.length, seen));
+  const destWanted = Math.min(GEO_LOAN_COUNT, count);
+  picked.push(...takeGeographicLoans(qualityPool, nationality, destWanted, seen));
+  if (picked.length < destWanted) {
+    picked.push(...takeGeographicLoans(extraFill, nationality, destWanted - picked.length, seen));
   }
   const fill = [...qualityPool, ...extraFill];
   picked.push(...takeShuffled(fill, count - picked.length, seen));
