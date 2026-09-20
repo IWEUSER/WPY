@@ -64,6 +64,17 @@ import {
   shotSideForAim,
 } from '../src/game/shooting/shotEngine';
 import type { SwipeGesture } from '../src/game/shooting/types';
+import {
+  advanceBallTravel,
+  applyHorizontalKnock,
+  BALL_TRAVEL_MAX_X,
+  BALL_TRAVEL_MIN_X,
+  chanceBallTravels,
+  knockForceFromSwipe,
+  pickBallTravelDir,
+  swipeIsHorizontalKnock,
+  takeQualityFromXRatio,
+} from '../src/game/shooting/ballTravel';
 import { nationStrength } from '../src/game/career/data/fifaRankings';
 
 const SIM_W = 390;
@@ -919,5 +930,80 @@ const rolledRate = rolledPens / ROLL_N;
 console.log(`rolled penalty rate at strength 70: ${(rolledRate * 100).toFixed(2)}% (expect ~${(p70 * 100).toFixed(2)}%)`);
 if (Math.abs(rolledRate - p70) > 0.012) {
   console.error('FAIL: rolled penalty frequency drifted from the season-rate probability');
+  process.exitCode = 1;
+}
+
+console.log('\n--- Open-play ball rolls across; penalties stay planted ---');
+if (chanceBallTravels('penalty') || !chanceBallTravels('open')) {
+  console.error('FAIL: only open-play chances should roll the ball');
+  process.exitCode = 1;
+}
+
+let travel = { xRatio: BALL_TRAVEL_MIN_X, direction: 1 as const };
+for (let i = 0; i < 40; i++) travel = advanceBallTravel(travel.xRatio, travel.direction, 0.04);
+if (travel.xRatio <= BALL_TRAVEL_MIN_X + 0.02) {
+  console.error('FAIL: the ball must roll across the shooting line');
+  process.exitCode = 1;
+}
+let bounced = { xRatio: BALL_TRAVEL_MAX_X - 0.01, direction: 1 as const };
+bounced = advanceBallTravel(bounced.xRatio, bounced.direction, 0.2);
+if (bounced.direction !== -1 || bounced.xRatio > BALL_TRAVEL_MAX_X + 1e-6) {
+  console.error('FAIL: the rolling ball must bounce at the edge and come back');
+  process.exitCode = 1;
+}
+if (pickBallTravelDir(BALL_TRAVEL_MIN_X) !== 1 || pickBallTravelDir(BALL_TRAVEL_MAX_X) !== -1) {
+  console.error('FAIL: a ball on the edge must start toward the open side');
+  process.exitCode = 1;
+}
+if (takeQualityFromXRatio(0.5) < 0.99 || takeQualityFromXRatio(BALL_TRAVEL_MIN_X) > 0.08) {
+  console.error('FAIL: a central take must be cleaner than an edge take');
+  process.exitCode = 1;
+}
+
+function aimSpread(takeQuality: number): number {
+  const aimed: number[] = [];
+  for (let i = 0; i < 500; i++) {
+    aimed.push(resolveShot({ ...gestureFor(0, 0.45, 1), takeQuality }, { rng: Math.random }).aim.x);
+  }
+  const mean = aimed.reduce((a, b) => a + b, 0) / aimed.length;
+  return aimed.reduce((sum, x) => sum + (x - mean) ** 2, 0) / aimed.length;
+}
+const centreSpread = aimSpread(1);
+const edgeSpread = aimSpread(0);
+console.log(`take spread centre=${centreSpread.toFixed(4)} edge=${edgeSpread.toFixed(4)}`);
+if (!(edgeSpread > centreSpread * 1.15)) {
+  console.error('FAIL: an awkward edge take must be less accurate than a central take');
+  process.exitCode = 1;
+}
+
+console.log('\n--- Horizontal knock moves the ball by swipe force ---');
+if (!swipeIsHorizontalKnock(80, 10) || swipeIsHorizontalKnock(40, 120) || swipeIsHorizontalKnock(10, 4)) {
+  console.error('FAIL: only a clearly sideways swipe should knock the ball');
+  process.exitCode = 1;
+}
+const soft = applyHorizontalKnock(0.5, 40, 280);
+const hard = applyHorizontalKnock(0.5, 240, 140);
+const against = applyHorizontalKnock(0.45, 180, 160);
+console.log(`knock soft=${soft.delta.toFixed(3)} hard=${hard.delta.toFixed(3)} against=${against.direction} force=${against.force.toFixed(2)}`);
+if (!(Math.abs(hard.delta) > Math.abs(soft.delta) * 1.6) || soft.delta <= 0 || hard.delta <= 0) {
+  console.error('FAIL: a stronger sideways swipe must shove the ball further');
+  process.exitCode = 1;
+}
+if (against.direction !== 1 || against.xRatio <= 0.45) {
+  console.error('FAIL: knocking right against a left-rolling ball must open space to the right');
+  process.exitCode = 1;
+}
+if (knockForceFromSwipe(40, 280) >= knockForceFromSwipe(240, 140)) {
+  console.error('FAIL: a long fast knock must out-force a soft tap');
+  process.exitCode = 1;
+}
+const pinched = applyHorizontalKnock(BALL_TRAVEL_MAX_X, 200, 120);
+if (pinched.xRatio > BALL_TRAVEL_MAX_X) {
+  console.error('FAIL: a knock must stay on the shooting line');
+  process.exitCode = 1;
+}
+const held = advanceBallTravel(BALL_TRAVEL_MAX_X, 1, 0.05, { bounce: false });
+if (held.direction !== 1 || held.xRatio !== BALL_TRAVEL_MAX_X) {
+  console.error('FAIL: a knock hold must keep the shove direction at the edge instead of bouncing back');
   process.exitCode = 1;
 }

@@ -31,6 +31,12 @@ export interface SwipeGesture {
   canvasH?: number;
   /** World distance from the ball to the goal line, in metres. */
   distanceM?: number;
+  /**
+   * How well-timed the take was on a rolling ball, in [0, 1].
+   * 1 is a central, balanced strike; 0 is an awkward take at the edge.
+   * Omitted (or 1) on a planted penalty.
+   */
+  takeQuality?: number;
 }
 
 export type ShotZoneX = 'far-left' | 'left' | 'center' | 'right' | 'far-right';
@@ -84,6 +90,8 @@ export interface ShotResult {
   penalty?: boolean;
   /** The 16×5 goalmouth cell the shot arrived in, when the shot was on target. */
   saveCell?: SaveCell;
+  /** How well-timed the take was on a rolling ball, in [0, 1]. */
+  takeQuality?: number;
 }
 
 export interface ShotDifficulty {
