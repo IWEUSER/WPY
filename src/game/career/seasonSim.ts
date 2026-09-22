@@ -72,6 +72,7 @@ import {
   applyMatchToTable,
   clubsForContinentalCup,
   emptyStanding,
+  formatHomeAwayScore,
   simulateClubMatch,
   simulateRestOfLeagueRound,
   applyPlayerGoalsFloor,
@@ -195,7 +196,7 @@ export function liveMatchBoardLine(args: {
 }): string {
   const { sim, fixture, club, live, seasonNumber } = args;
   if (live.penaltyKick && live.ninetyScoreFor != null && live.ninetyScoreAgainst != null) {
-    return `${live.ninetyScoreFor}\u2013${live.ninetyScoreAgainst}`;
+    return formatHomeAwayScore(live.ninetyScoreFor, live.ninetyScoreAgainst, fixtureIsHome(fixture));
   }
   const rng = mulberry32(liveMatchScoreSeed(seasonNumber, live.fixtureIndex, club.id));
   const isHome = fixtureIsHome(fixture);
@@ -231,7 +232,7 @@ export function liveMatchBoardLine(args: {
     result = { scoreFor: result.scoreAgainst, scoreAgainst: result.scoreAgainst, outcome: 'draw' };
   }
   result = applyPlayerGoalsFloor(result, live.goals);
-  return `${result.scoreFor}\u2013${result.scoreAgainst}`;
+  return formatHomeAwayScore(result.scoreFor, result.scoreAgainst, isHome);
 }
 
 export interface HydrateSeasonParams {

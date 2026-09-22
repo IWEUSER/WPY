@@ -1,7 +1,8 @@
 import { useRef } from 'react';
 import ShootingGame from '../../shooting/ShootingGame';
 import type { ShotResult } from '../../shooting/types';
-import { currentCalendarWeek, fixtureVenueLabel, isFinalFixture } from '../calendar';
+import { currentCalendarWeek, fixtureIsHome, fixtureVenueLabel, isFinalFixture } from '../calendar';
+import { formatHomeAwayScore } from '../matchEngine';
 import { getClub, leagueMatchWeeks } from '../data/clubs';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { nationStrength } from '../data/fifaRankings';
@@ -58,9 +59,11 @@ export default function MatchScreen() {
 
   const penaltyKick = Boolean(liveMatch?.penaltyKick);
   const ninetyLine =
-    liveMatch?.ninetyScoreFor != null && liveMatch?.ninetyScoreAgainst != null
-      ? `${liveMatch.ninetyScoreFor}\u2013${liveMatch.ninetyScoreAgainst}`
-      : null;
+    liveMatch?.ninetyScoreFor != null && liveMatch?.ninetyScoreAgainst != null && fixture
+      ? formatHomeAwayScore(liveMatch.ninetyScoreFor, liveMatch.ninetyScoreAgainst, fixtureIsHome(fixture))
+      : liveMatch?.ninetyScoreFor != null && liveMatch?.ninetyScoreAgainst != null
+        ? `${liveMatch.ninetyScoreFor}\u2013${liveMatch.ninetyScoreAgainst}`
+        : null;
   const chances = penaltyKick ? 1 : (liveMatch?.chancesTotal ?? 1);
   const subtitle = penaltyKick
     ? ninetyLine

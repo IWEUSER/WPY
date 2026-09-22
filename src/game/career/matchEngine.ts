@@ -8,10 +8,10 @@ import {
 /**
  * Probabilistic club-vs-club engine for seasons 2-20. Stronger squads
  * (`Club.strength`) win more often, never deterministically. Tier is only a
- * fallback when a test passes no explicit strength. Regular league and group
- * fixtures use this independently of the player's chances; the player's
- * goals are then added as one extra input. Missed chances scale P(win)
- * down so finishing is linked to the result without a 1-chance lock.
+ * fallback when a test passes no explicit strength. Teammate and opponent
+ * goals are rolled first and capped so remaining player chances still fit a
+ * realistic score; the player's goals are then added on top. The board does
+ * not re-roll when those goals change, so the overlay matches full time.
  */
 
 export interface ClubMatchContext {
@@ -58,7 +58,8 @@ export function expectedScore(us: number, them: number): number {
 
 /**
  * Multiplier on P(win) from missed finishing chances. Four blanks hurt a
- * lot; a single miss is a nudge. Scoring still adds to the scoreline.
+ * lot; a single miss is a nudge. Kept for sit-out / briefing copy; live
+ * boards no longer re-roll the match from this factor.
  */
 export function missedChanceWinFactor(misses: number): number {
   if (misses <= 0) return 1;
@@ -66,6 +67,30 @@ export function missedChanceWinFactor(misses: number): number {
   if (misses === 2) return 0.72;
   if (misses === 3) return 0.55;
   return 0.35;
+}
+
+/** Traditional scoreboard: home on the left, away on the right. */
+export function formatHomeAwayScore(scoreFor: number, scoreAgainst: number, isHome: boolean): string {
+  return isHome
+    ? `${scoreFor}\u2013${scoreAgainst}`
+    : `${scoreAgainst}\u2013${scoreFor}`;
+}
+
+/** A 6–0 is only on the table when the sides are a class apart. */
+export function blowoutScorePossible(us: number, them: number): boolean {
+  return us - them >= 18;
+}
+
+export function plausibleGoalCaps(
+  us: number,
+  them: number,
+  knockout = false,
+): { maxFor: number; maxAgainst: number } {
+  if (knockout) return { maxFor: 3, maxAgainst: 3 };
+  const gap = us - them;
+  const maxFor = gap >= 18 ? 6 : gap >= 10 ? 5 : gap >= -4 ? 4 : 3;
+  const maxAgainst = -gap >= 18 ? 6 : -gap >= 10 ? 5 : -gap >= -4 ? 4 : 3;
+  return { maxFor, maxAgainst };
 }
 
 export function simulateClubMatch(
@@ -78,11 +103,7 @@ export function simulateClubMatch(
   const them = resolveStrength(context.opponentStrength, context.opponentTier);
   const diff = us - them;
   const expected = expectedScore(us, them);
-  const misses =
-    playerChances != null && playerChances > 0
-      ? Math.max(0, playerChances - Math.max(0, playerGoals))
-      : 0;
-  const pWin = expected * 0.92 * missedChanceWinFactor(misses);
+  const pWin = expected * 0.92;
   const pDraw = 0.16 * Math.exp(-((diff / 16) ** 2));
   const roll = rng();
   let outcome: ClubMatchResult['outcome'];
@@ -105,24 +126,33 @@ export function simulateClubMatch(
     scoreFor = tied;
     scoreAgainst = tied;
   }
-  scoreFor = scoreFor + Math.max(0, playerGoals);
+
+  const reserved = Math.max(0, playerChances ?? 0);
+  const caps = plausibleGoalCaps(us, them, knockout);
+  const maxTeammate = Math.max(0, caps.maxFor - reserved);
+  scoreFor = Math.min(scoreFor, maxTeammate);
+  scoreAgainst = Math.min(6, scoreAgainst, caps.maxAgainst);
+
+  const projected = scoreFor + reserved + scoreAgainst;
+  if (projected >= 9 && rng() >= 0.012) {
+    scoreAgainst = Math.min(scoreAgainst, Math.max(0, 7 - scoreFor - Math.min(reserved, 2)));
+  }
+
+  if (eliteClash) {
+    scoreFor = Math.min(scoreFor, 4);
+    scoreAgainst = Math.min(scoreAgainst, 3);
+    if (scoreFor + reserved + scoreAgainst > 6) {
+      scoreAgainst = Math.max(0, 6 - scoreFor - reserved);
+    }
+  }
+
+  scoreFor += Math.max(0, playerGoals);
   scoreAgainst = Math.min(6, scoreAgainst);
   if (eliteClash) {
     scoreFor = Math.min(scoreFor, Math.max(playerGoals, 4));
     scoreAgainst = Math.min(scoreAgainst, 3);
     if (scoreFor + scoreAgainst > 6) {
       scoreAgainst = Math.max(0, 6 - scoreFor);
-    }
-  }
-  if (playerGoals > 0 && scoreFor <= scoreAgainst && outcome !== 'draw') {
-    // A player goal can still turn a simulated loss into a draw/win - teammates aren't the whole story.
-    const attempt = scoreAgainst + (rng() < 0.55 ? 1 : 0);
-    scoreFor = Math.max(scoreFor, attempt);
-    if (eliteClash) {
-      scoreFor = Math.min(scoreFor, Math.max(playerGoals, 4));
-      if (scoreFor + scoreAgainst > 6) {
-        scoreAgainst = Math.max(0, 6 - scoreFor);
-      }
     }
   }
   if (knockout) {
