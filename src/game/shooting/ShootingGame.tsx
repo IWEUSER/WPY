@@ -4,6 +4,7 @@ import * as haptics from './haptics';
 import {
   chanceBeatLine,
   crowdLevelForChance,
+  crowdReactsToOutcome,
   defaultVenueLine,
   introHoldMs,
   resultHoldMs,
@@ -742,7 +743,9 @@ export default function ShootingGame({
     animRef.current.resultHoldMs = resultHoldMs(result.outcome, effectiveStake(kind), last, result.power);
     const homeCrowd = stadiumRef.current.isHome !== false;
     const scored = result.outcome === 'goal';
-    audio.reactCrowd(scored === homeCrowd ? 'cheer' : 'groan');
+    if (crowdReactsToOutcome(result.outcome)) {
+      audio.reactCrowd(scored === homeCrowd ? 'cheer' : 'groan');
+    }
     if (result.outcome === 'goal') {
       haptics.hapticGoal();
       if (result.power > 1.15) {

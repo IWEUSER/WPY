@@ -35,6 +35,11 @@ export function resultHoldMs(
   return hold;
 }
 
+/** Crowds stay quiet for a block — only the impact SFX should play. */
+export function crowdReactsToOutcome(outcome: ShotOutcomeKind): boolean {
+  return outcome !== 'blocked';
+}
+
 export function chanceBeatLine(
   stake: ChanceStake,
   night: boolean,

@@ -76,7 +76,7 @@ import {
   swipeIsHorizontalKnock,
   takeQualityFromXRatio,
 } from '../src/game/shooting/ballTravel';
-import { chanceBeatLine, introHoldMs, resultHoldMs } from '../src/game/shooting/chanceAtmosphere';
+import { chanceBeatLine, crowdReactsToOutcome, introHoldMs, resultHoldMs } from '../src/game/shooting/chanceAtmosphere';
 import { nationStrength } from '../src/game/career/data/fifaRankings';
 
 const SIM_W = 390;
@@ -379,6 +379,10 @@ if (chanceBeatLine('league', false, '1\u20130') !== '1\u20130') {
 }
 if (chanceBeatLine('cup', true).includes('Last')) {
   console.error('FAIL: last-chance copy should stay off the run-up');
+  process.exitCode = 1;
+}
+if (crowdReactsToOutcome('blocked') || !crowdReactsToOutcome('goal') || !crowdReactsToOutcome('saved')) {
+  console.error('FAIL: a block should keep the crowd quiet and leave the impact sound');
   process.exitCode = 1;
 }
 
