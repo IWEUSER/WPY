@@ -198,8 +198,40 @@ export function liveMatchBoardLine(args: {
     return `${live.ninetyScoreFor}\u2013${live.ninetyScoreAgainst}`;
   }
   const rng = mulberry32(liveMatchScoreSeed(seasonNumber, live.fixtureIndex, club.id));
-  const peek = resolveFixture(sim, fixture, club, live.goals, rng, { settlePenalties: false });
-  return `${peek.result.scoreFor}\u2013${peek.result.scoreAgainst}`;
+  const isHome = fixtureIsHome(fixture);
+  const isInternational = fixture.kind === 'international';
+  const clubOpp = !isInternational && fixture.opponentId ? getClub(fixture.opponentId) : undefined;
+  const us = isInternational
+    ? (sim.nationId ? nationStrength(sim.nationId) : 70)
+    : club.strength;
+  const them = isInternational
+    ? (fixture.opponentId ? nationStrength(fixture.opponentId) : 70)
+    : (clubOpp?.strength ?? 70);
+  let result = isInternational
+    ? simulateClubMatch(
+      { clubStrength: us, opponentStrength: them, isHome, knockout: isOneOffKnockout(fixture) },
+      rng,
+      live.goals,
+      fixture.playerChances,
+    )
+    : simulateClubMatch(
+      {
+        clubTier: club.tier,
+        opponentTier: clubOpp?.tier ?? 3,
+        clubStrength: club.strength,
+        opponentStrength: clubOpp?.strength,
+        isHome,
+      },
+      rng,
+      live.goals,
+      fixture.playerChances,
+    );
+  const isTitleRival = fixture.kind === 'league' && fixture.opponentId === sim.titleRivalId;
+  if (isTitleRival && live.goals > 0 && result.outcome === 'loss') {
+    result = { scoreFor: result.scoreAgainst, scoreAgainst: result.scoreAgainst, outcome: 'draw' };
+  }
+  result = applyPlayerGoalsFloor(result, live.goals);
+  return `${result.scoreFor}\u2013${result.scoreAgainst}`;
 }
 
 export interface HydrateSeasonParams {
