@@ -1,5 +1,6 @@
 import type { CalendarFixture, SeasonCalendar } from './calendar';
 import { getClub, SECOND_DIVISIONS, type Club } from './data/clubs';
+import type { ContinentalCupId } from './data/competitions';
 import { nationStrength } from './data/fifaRankings';
 import { leagueValueWeight } from './playerValue';
 import type { MatchRecord, PlayerRole, SeasonRecord, SquadStatus } from './types';
@@ -61,7 +62,7 @@ export function describeSquadStatus(status: SquadStatus): string {
     return 'Rising star — temporary Season 1–2 role, one chance each time you play. Score in 3 consecutive games for Impact, then another 3 for Starter. Extra goals in one game still count as one.';
   }
   if (status === 'reserve') {
-    return 'Reserve — every second game across league, cups and internationals. Hit the starter bar at any time and you keep Starter.';
+    return 'Reserve — sits Champions League nights. In Europa League or lower, European ties come first and league games are the ones rotated. Every second other game. Hit the starter bar at any time and you keep Starter.';
   }
   return 'Impact — same games as Rising star, two chances each time you play. Keeps for the rest of the season; score in 3 consecutive games for Starter.';
 }
@@ -122,6 +123,22 @@ export function completedLeagueFixtureCount(
   return calendar.fixtures.slice(0, fixtureIndex).filter((fixture) => fixture.kind !== 'rest').length;
 }
 
+export function reserveSitsChampionsLeague(
+  fixtureKind: CalendarFixture['kind'],
+  continentalCup?: ContinentalCupId | null,
+): boolean {
+  return continentalCup === 'ucl' && fixtureKind.startsWith('continental');
+}
+
+/** Europa League, Conference, ACLE, Leagues Cup — play these ahead of the league. */
+export function reservePrioritisesContinental(
+  fixtureKind: CalendarFixture['kind'],
+  continentalCup?: ContinentalCupId | null,
+): boolean {
+  if (!continentalCup || continentalCup === 'ucl') return false;
+  return fixtureKind.startsWith('continental') || fixtureKind === 'leagues-cup';
+}
+
 export function isSquadRotationSitOut(
   role: PlayerRole,
   squadStatus: SquadStatus,
@@ -130,6 +147,7 @@ export function isSquadRotationSitOut(
   extra?: {
     toughMinutes?: boolean;
     seasonMatchCount?: number;
+    continentalCup?: ContinentalCupId | null;
   },
 ): boolean {
   // Academy / reserve-year football is every game except injury.
@@ -137,6 +155,10 @@ export function isSquadRotationSitOut(
   if (fixtureKind === 'rest') return false;
   // Rising star sits the first first-team appearance of a campaign.
   if (squadStatus === 'rising-star' && extra?.seasonMatchCount === 0) return true;
+  if (squadStatus === 'reserve') {
+    if (reserveSitsChampionsLeague(fixtureKind, extra?.continentalCup)) return true;
+    if (reservePrioritisesContinental(fixtureKind, extra?.continentalCup)) return false;
+  }
   if (extra?.toughMinutes && (squadStatus === 'rising-star' || squadStatus === 'impact')) {
     return shouldSitToughFixture(squadStatus, completedFixtures);
   }

@@ -46,14 +46,14 @@ import { cupFromLeaguePosition, continentalQualificationForNextSeason } from '..
 import { fifaRank, knockoutRankCap, nationStrength, nationsInConfederation, tournamentOpponents, worldCupKnockoutRankCap } from '../src/game/career/data/fifaRankings';
 import { countsTowardCareerRecord, displaySeasonLabel, displaySeasonNumber, isFirstPublicSeason } from '../src/game/career/seasonDisplay';
 import { bumpInternationalSeason, callUpRatio, isInternationalFinalsRound, isSelectedForNationalTeam, leagueEligibleForNationalTeam, markInjuryMissedFinals, SEASON_1_CALL_UP_MIN_WEEK, selectionRatioForNation } from '../src/game/career/international';
-import { missedChanceWinFactor, simulateClubMatch, simulateLeagueSeason } from '../src/game/career/matchEngine';
+import { blowoutScorePossible, formatHomeAwayScore, missedChanceWinFactor, plausibleGoalCaps, simulateClubMatch, simulateLeagueSeason } from '../src/game/career/matchEngine';
 import { aggregateContinental, aggregateDomesticSplit, recordClubAppearanceStats, seasonDomesticSplit } from '../src/game/career/seasonStats';
 import { evaluateClubPlayerOfTheTournament } from '../src/game/career/clubInternationalAwards';
 import { leaguePhaseOpponents, pickSuperCupOpponent } from '../src/game/career/continentalDraw';
 import { settleDrawOnPenalties } from '../src/game/career/penalties';
 import { planDomesticSuperCup } from '../src/game/career/domesticSuperCup';
 import { firstLegStakeLine, formatNextLine, nextMatchBriefing, sitOutRecapLine } from '../src/game/career/matchBriefing';
-import { canWinLeague, continentalAggregateLine, ensureInternationalGroup, fixtureTitle, hydrateSeason, internationalStageWhenSelected, leagueFixtureIsHome, nextActionableFixture, nextPlayableFixture, pickDomesticCupOpponent, pickTitleRival, remainingPlayableCount, resolveFixture, shouldSimulateNationQualifier, shouldSkipFixture } from '../src/game/career/seasonSim';
+import { canWinLeague, continentalAggregateLine, ensureInternationalGroup, fixtureTitle, hydrateSeason, internationalStageWhenSelected, leagueFixtureIsHome, liveMatchBoardLine, liveMatchScoreSeed, mulberry32, nextActionableFixture, nextPlayableFixture, pickDomesticCupOpponent, pickTitleRival, remainingPlayableCount, resolveFixture, shouldSimulateNationQualifier, shouldSkipFixture } from '../src/game/career/seasonSim';
 import { applyPlayerGroupResult, createGroupState, nationCanProgressKnockout, nationCanWinMajor, simulateNpcRoundAfterPlayerMatch } from '../src/game/career/internationalTable';
 import {
   applyTrialMatch,
@@ -80,7 +80,7 @@ import {
 } from '../src/game/career/trial';
 import { trialDestinationCountries, youthTierForNation, youthTrialsAreMlsOnly } from '../src/game/career/trialGeography';
 import { nextYouthKnockoutRound, pickYouthGroupOpponents, pickYouthKnockoutOpponent, youthMaxGames } from '../src/game/career/youthTournament';
-import { chancesForSquadStatus, consecutiveScoringAsImpact, consecutiveScoringGames, describeSquadStatus, IMPACT_CHANCES, IMPACT_STREAK, isLowerDivisionLoan, isSquadRotationSitOut, isToughMinutesFixture, nextSquadStatusAfterSeason, openingSquadStatus, promoteSquadStatusDuringSeason, RISING_STAR_MIN_RATIO, ROLE_REVIEW_WEEK, seasonOverridesRatioBar, shouldSitLeagueFixture, shouldSitToughFixture, squadStatusOnArrival, STARTER_STREAK, youthRolesAllowed } from '../src/game/career/squadStatus';
+import { chancesForSquadStatus, consecutiveScoringAsImpact, consecutiveScoringGames, describeSquadStatus, IMPACT_CHANCES, IMPACT_STREAK, isLowerDivisionLoan, isSquadRotationSitOut, isToughMinutesFixture, nextSquadStatusAfterSeason, openingSquadStatus, promoteSquadStatusDuringSeason, reservePrioritisesContinental, reserveSitsChampionsLeague, RISING_STAR_MIN_RATIO, ROLE_REVIEW_WEEK, seasonOverridesRatioBar, shouldSitLeagueFixture, shouldSitToughFixture, squadStatusOnArrival, STARTER_STREAK, youthRolesAllowed } from '../src/game/career/squadStatus';
 import { consecutiveLoanSpells, LOAN_OFFER_COUNT, SAUDI_OFFER_MIN_AGE, TRANSFER_MARKET_CAP, TRANSFER_OFFER_COUNT, offerFormRatio, offerTierFromStanding, pickLoanClubsForMiss, pickLoanClubsFromOrigin, pickPermanentClubs, requiredGoalRatio, resolveSeasonTransition, sellingClubAcceptsOffer, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, trialFailTransferPending, tierForRatio } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
 import {
@@ -2585,22 +2585,88 @@ if (barca && hilal && lafc) {
   let completed = 0;
   let reserveSitsAll = 0;
   let reservePlaysAll = 0;
-  let cupSits = 0;
-  let cupPlays = 0;
+  let uclSits = 0;
+  let uclPlays = 0;
+  let leagueSits = 0;
+  let leaguePlays = 0;
   for (const fixture of madridCal.calendar.fixtures) {
     if (shouldSkipFixture(fixture, madridCal.sim)) continue;
-    const sits = isSquadRotationSitOut('first-team', 'reserve', fixture.kind, completed);
+    const sits = isSquadRotationSitOut('first-team', 'reserve', fixture.kind, completed, {
+      continentalCup: fixture.continentalCup,
+    });
     if (sits) reserveSitsAll += 1;
     else reservePlaysAll += 1;
-    if (fixture.kind !== 'league' && fixture.kind !== 'rest') {
-      if (sits) cupSits += 1;
-      else cupPlays += 1;
+    if (reserveSitsChampionsLeague(fixture.kind, fixture.continentalCup)) {
+      if (sits) uclSits += 1;
+      else uclPlays += 1;
+    }
+    if (fixture.kind === 'league') {
+      if (sits) leagueSits += 1;
+      else leaguePlays += 1;
     }
     completed += 1;
   }
-  console.log('reserve sit/play', reserveSitsAll, reservePlaysAll, 'cup sit/play', cupSits, cupPlays);
-  if (reserveSitsAll < 12 || reservePlaysAll < 12 || Math.abs(reserveSitsAll - reservePlaysAll) > 2 || cupPlays < 1) {
-    console.error('reserve must play every second game across all competitions, including cups');
+  console.log('reserve sit/play', reserveSitsAll, reservePlaysAll, 'ucl sit/play', uclSits, uclPlays, 'league sit/play', leagueSits, leaguePlays);
+  if (uclPlays !== 0 || uclSits < 4) {
+    console.error('a reserve must sit every Champions League fixture');
+    process.exitCode = 1;
+  }
+  if (leaguePlays < 6 || leagueSits < 6) {
+    console.error('a Champions League reserve still rotates league games');
+    process.exitCode = 1;
+  }
+  if (
+    isSquadRotationSitOut('first-team', 'reserve', 'continental-group', 0, { continentalCup: 'ucl' }) !== true
+    || isSquadRotationSitOut('first-team', 'reserve', 'continental-knockout', 4, { continentalCup: 'ucl' }) !== true
+  ) {
+    console.error('Champions League nights are always a reserve sit');
+    process.exitCode = 1;
+  }
+  if (
+    isSquadRotationSitOut('first-team', 'reserve', 'continental-group', 1, { continentalCup: 'uel' }) !== false
+    || isSquadRotationSitOut('first-team', 'reserve', 'continental-knockout', 3, { continentalCup: 'uecl' }) !== false
+    || isSquadRotationSitOut('first-team', 'reserve', 'league', 1, { continentalCup: undefined }) !== true
+  ) {
+    console.error('Europa League or lower must be played; the league is the one that sits');
+    process.exitCode = 1;
+  }
+  if (!reserveSitsChampionsLeague('continental-group', 'ucl') || reservePrioritisesContinental('continental-group', 'ucl')) {
+    console.error('UCL helpers must sit Champions League and not treat it as a lower cup');
+    process.exitCode = 1;
+  }
+  if (!reservePrioritisesContinental('continental-group', 'uel') || !reservePrioritisesContinental('leagues-cup', 'leagues-cup')) {
+    console.error('Europa League and lower continental cups must be prioritised for a reserve');
+    process.exitCode = 1;
+  }
+  const arsenalCal = hydrateSeason({
+    seasonNumber: 2,
+    club: getClub('arsenal')!,
+    careerGoalRatio: 0.6,
+    nationId: 'england',
+  });
+  let europaSits = 0;
+  let europaPlays = 0;
+  let arsenalLeagueSits = 0;
+  let arsenalCompleted = 0;
+  for (const fixture of arsenalCal.calendar.fixtures) {
+    if (shouldSkipFixture(fixture, arsenalCal.sim)) continue;
+    const sits = isSquadRotationSitOut('first-team', 'reserve', fixture.kind, arsenalCompleted, {
+      continentalCup: fixture.continentalCup,
+    });
+    if (reservePrioritisesContinental(fixture.kind, fixture.continentalCup)) {
+      if (sits) europaSits += 1;
+      else europaPlays += 1;
+    }
+    if (fixture.kind === 'league' && sits) arsenalLeagueSits += 1;
+    arsenalCompleted += 1;
+  }
+  console.log('arsenal reserve europa sit/play', europaSits, europaPlays, 'league sits', arsenalLeagueSits);
+  if (europaSits !== 0 || europaPlays < 4 || arsenalLeagueSits < 4) {
+    console.error('a Europa League reserve must play every European night and sit league games instead');
+    process.exitCode = 1;
+  }
+  if (!/Champions League/.test(describeSquadStatus('reserve')) || !/Europa/.test(describeSquadStatus('reserve'))) {
+    console.error('reserve copy must mention sitting Champions League and prioritising Europa');
     process.exitCode = 1;
   }
   const scored = (n: number, scoredFlag: boolean) => ({ matchNumber: n, played: true, scored: scoredFlag });
@@ -6086,6 +6152,112 @@ console.log('\n--- Player goals cannot produce a 1–0 when the player scored tw
     console.log('finals with 2 player goals undercounted', badFinal);
     if (badFinal > 0) {
       console.error('a final win screen must not show 1–0 when the player scored two');
+      process.exitCode = 1;
+    }
+  }
+}
+
+console.log('\n--- Live board is home–away and stays frozen through the player\'s chances ---');
+{
+  if (formatHomeAwayScore(4, 1, true) !== '4\u20131' || formatHomeAwayScore(4, 1, false) !== '1\u20134') {
+    console.error('the score line must put the home team on the left');
+    process.exitCode = 1;
+  }
+  const madridClub = getClub('real-madrid')!;
+  const burnley = getClub('burnley') ?? getClub('leicester')!;
+  const city = getClub('man-city')!;
+  if (!blowoutScorePossible(madridClub.strength + 3.5, burnley.strength)) {
+    console.error('Madrid at home vs a much weaker side must be able to reach 6–0');
+    process.exitCode = 1;
+  }
+  if (blowoutScorePossible(madridClub.strength + 3.5, city.strength)) {
+    console.error('an elite home clash must not treat 6–0 as a live score');
+    process.exitCode = 1;
+  }
+  const evenCaps = plausibleGoalCaps(madridClub.strength + 3.5, city.strength);
+  if (evenCaps.maxFor - 4 >= 2) {
+    console.error('four player chances in an even game must leave no room for a 2–0 teammate lead');
+    process.exitCode = 1;
+  }
+  let evenLead = 0;
+  let blowoutLead = 0;
+  let highScore = 0;
+  for (let i = 0; i < 400; i++) {
+    const even = simulateClubMatch(
+      { clubStrength: madridClub.strength, opponentStrength: city.strength, isHome: true },
+      Math.random,
+      0,
+      4,
+    );
+    if (even.scoreFor >= 2 && even.scoreAgainst === 0) evenLead += 1;
+    const blow = simulateClubMatch(
+      { clubStrength: madridClub.strength, opponentStrength: burnley.strength, isHome: true },
+      Math.random,
+      0,
+      4,
+    );
+    if (blow.scoreFor === 2 && blow.scoreAgainst === 0) blowoutLead += 1;
+    const basketball = simulateClubMatch(
+      { clubStrength: 78, opponentStrength: 76, isHome: true },
+      Math.random,
+      4,
+      4,
+    );
+    if (basketball.scoreFor >= 5 && basketball.scoreAgainst >= 5) highScore += 1;
+  }
+  console.log('2-0 before 4 chances even/blowout', evenLead, blowoutLead, '6-5 class', highScore);
+  if (evenLead > 0) {
+    console.error('the team must not be 2–0 up before the first of four chances unless a 6–0 is possible');
+    process.exitCode = 1;
+  }
+  if (highScore > 8) {
+    console.error('6–5 scorelines must stay extremely rare');
+    process.exitCode = 1;
+  }
+
+  const { calendar, sim } = hydrateSeason({
+    seasonNumber: 2,
+    club: madridClub,
+    careerGoalRatio: 0.8,
+    nationId: 'spain',
+  });
+  const awayFx = calendar.fixtures.find((f) => f.kind === 'league' && f.isHome === false && f.opponentId)
+    ?? calendar.fixtures.find((f) => f.kind === 'league' && f.opponentId);
+  if (!awayFx) {
+    console.error('season 2 must have a league fixture to check the live board');
+    process.exitCode = 1;
+  } else {
+    const fixture = { ...awayFx, isHome: false, playerChances: 4 };
+    const live0 = { fixtureIndex: calendar.fixtures.indexOf(awayFx), chancesTotal: 4, chancesTaken: 0, goals: 0 };
+    const live3 = { ...live0, chancesTaken: 3, goals: 3 };
+    const line0 = liveMatchBoardLine({ sim, fixture, club: madridClub, live: live0, seasonNumber: 2 });
+    const line3 = liveMatchBoardLine({ sim, fixture, club: madridClub, live: live3, seasonNumber: 2 });
+    const rng = mulberry32(liveMatchScoreSeed(2, live0.fixtureIndex, madridClub.id));
+    const finished = resolveFixture(sim, fixture, madridClub, 3, rng, { settlePenalties: false });
+    const finishedLine = formatHomeAwayScore(finished.result.scoreFor, finished.result.scoreAgainst, false);
+    const peek0 = simulateClubMatch(
+      { clubStrength: madridClub.strength, opponentStrength: getClub(fixture.opponentId!)?.strength, isHome: false },
+      mulberry32(liveMatchScoreSeed(2, live0.fixtureIndex, madridClub.id)),
+      0,
+      4,
+    );
+    const peek3 = simulateClubMatch(
+      { clubStrength: madridClub.strength, opponentStrength: getClub(fixture.opponentId!)?.strength, isHome: false },
+      mulberry32(liveMatchScoreSeed(2, live0.fixtureIndex, madridClub.id)),
+      3,
+      4,
+    );
+    console.log('live board away 0 then 3 then full time', line0, line3, finishedLine, peek0, peek3);
+    if (peek3.scoreFor !== peek0.scoreFor + 3 || peek3.scoreAgainst !== peek0.scoreAgainst) {
+      console.error('adding player goals must not re-roll teammate or opponent scores');
+      process.exitCode = 1;
+    }
+    if (line3 !== finishedLine) {
+      console.error('the match-screen board must match the last-match score');
+      process.exitCode = 1;
+    }
+    if (line0.split('\u2013')[0] === String(peek0.scoreFor) && peek0.scoreFor !== peek0.scoreAgainst) {
+      console.error('an away board must not put the player\'s team on the left');
       process.exitCode = 1;
     }
   }

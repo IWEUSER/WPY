@@ -1094,6 +1094,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
       {
         toughMinutes: isToughMinutesFixture(fixture, club, state.nationality),
         seasonMatchCount: season.matches.length,
+        continentalCup: fixture.continentalCup,
       },
     );
     if (rotatedOut) {

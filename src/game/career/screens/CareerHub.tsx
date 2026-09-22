@@ -111,6 +111,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
       {
         toughMinutes: isToughMinutesFixture(nextFixture, club, nationality),
         seasonMatchCount: season.matches.length,
+        continentalCup: nextFixture.continentalCup,
       },
     ),
   );
