@@ -39,6 +39,9 @@ export interface SwipeGesture {
   takeQuality?: number;
 }
 
+/** How the same upward swipe was struck — poke, chip, drive, or lofted floater. */
+export type ShotStyle = 'poke' | 'chip' | 'drive' | 'floater';
+
 export type ShotZoneX = 'far-left' | 'left' | 'center' | 'right' | 'far-right';
 export type ShotZoneY = 'low' | 'mid' | 'high';
 
@@ -92,6 +95,8 @@ export interface ShotResult {
   saveCell?: SaveCell;
   /** How well-timed the take was on a rolling ball, in [0, 1]. */
   takeQuality?: number;
+  /** Which strike the swipe produced. */
+  shotStyle?: ShotStyle;
 }
 
 export interface ShotDifficulty {

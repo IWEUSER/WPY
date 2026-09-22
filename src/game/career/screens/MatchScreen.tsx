@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import ShootingGame from '../../shooting/ShootingGame';
 import type { ShotResult } from '../../shooting/types';
-import { currentCalendarWeek, fixtureVenueLabel } from '../calendar';
+import { currentCalendarWeek, fixtureVenueLabel, isFinalFixture } from '../calendar';
 import { getClub, leagueMatchWeeks } from '../data/clubs';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { nationStrength } from '../data/fifaRankings';
@@ -118,6 +118,21 @@ export default function MatchScreen() {
       allowPenalties={opening?.kind !== 'club-trial' && (penaltyKick || squadStatus === 'starter')}
       forcePenalty={penaltyKick}
       stadium={stadium}
+      venueLine={[
+        stadium.groundName,
+        venueLabel,
+        stadium.night ? 'Night' : null,
+      ].filter(Boolean).join(' · ') || undefined}
+      chanceStake={
+        penaltyKick
+          ? 'penalty'
+          : fixture && isFinalFixture(fixture)
+            ? 'final'
+            : fixture && fixture.kind !== 'league' && fixture.kind !== 'rest'
+              ? 'cup'
+              : 'league'
+      }
+      lastChance={!penaltyKick && chances === 1}
       opponentSkinPalette={appearanceRegionForNation(opponentNation)}
       onShotResolved={(result) => {
         lastResultRef.current = result;

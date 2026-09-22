@@ -49,6 +49,7 @@ import {
 import {
   aimToSaveCell,
   cellCenter,
+  classifyShotStyle,
   computeIntendedShot,
   computeKeeperDive,
   computeSwipeCurl,
@@ -75,6 +76,7 @@ import {
   swipeIsHorizontalKnock,
   takeQualityFromXRatio,
 } from '../src/game/shooting/ballTravel';
+import { introHoldMs, resultHoldMs } from '../src/game/shooting/chanceAtmosphere';
 import { nationStrength } from '../src/game/career/data/fifaRankings';
 
 const SIM_W = 390;
@@ -322,6 +324,53 @@ const softLow = computeIntendedShot(gestureFor(0.2, 0.12, 0.35));
 console.log(`soft low placement: y=${softLow.aim.y.toFixed(3)} (must stay under the bar)`);
 if (softLow.aim.y > 0.45) {
   console.error('FAIL: a soft touch aimed low is still going high/over');
+  process.exitCode = 1;
+}
+
+console.log('\n--- Swipe styles from one upward gesture ---');
+const pokeStyle = classifyShotStyle({ dx: 8, dy: 40, durationMs: 90, distanceM: 11 });
+const chipStyle = classifyShotStyle({ dx: 6, dy: 70, durationMs: 110, distanceM: 10 });
+const driveStyle = classifyShotStyle(gestureFor(-0.4, 0.35, 1.2));
+const floaterStyle = classifyShotStyle(gestureFor(-0.3, 0.9, 0.45));
+const cornerDrive = classifyShotStyle(gestureFor(-0.82, 0.85, 1.0));
+console.log(`jab poke=${pokeStyle} chip=${chipStyle} drive=${driveStyle} floater=${floaterStyle} corner@1.0=${cornerDrive}`);
+if (pokeStyle !== 'poke' || chipStyle !== 'chip' || driveStyle !== 'drive' || floaterStyle !== 'floater') {
+  console.error('FAIL: swipe styles did not classify poke/chip/drive/floater from the same gesture family');
+  process.exitCode = 1;
+}
+if (cornerDrive !== 'drive') {
+  console.error('FAIL: a well-struck corner swipe should stay a drive');
+  process.exitCode = 1;
+}
+if (aimed.style !== 'drive') {
+  console.error('FAIL: aim-recovery corner swipe lost its drive style');
+  process.exitCode = 1;
+}
+const pokeShot = computeIntendedShot({ dx: 10, dy: 36, durationMs: 80, distanceM: 11 });
+console.log(`poke power=${pokeShot.power.toFixed(3)} y=${pokeShot.aim.y.toFixed(3)}`);
+if (pokeShot.style !== 'poke' || pokeShot.power > 0.72) {
+  console.error('FAIL: a short jab should be a poke under the drive power cap');
+  process.exitCode = 1;
+}
+const floaterShot = computeIntendedShot(gestureFor(-0.3, 0.9, 0.45));
+console.log(`floater travel=${computeTravelTimeMs(floaterShot.power, 16.5, floaterShot.style).toFixed(0)}ms vs drive=${computeTravelTimeMs(1, 16.5, 'drive').toFixed(0)}ms`);
+if (floaterShot.style !== 'floater' || computeTravelTimeMs(floaterShot.power, 16.5, 'floater') <= computeTravelTimeMs(floaterShot.power, 16.5, 'drive')) {
+  console.error('FAIL: a lofted swipe should hang longer than a drive');
+  process.exitCode = 1;
+}
+
+console.log('\n--- Chance atmosphere timings ---');
+console.log(`intro league=${introHoldMs('league', false, true)} final=${introHoldMs('final', false, true)} last-cup=${introHoldMs('cup', true, true)}`);
+if (introHoldMs('league', false, true) >= introHoldMs('final', false, true)) {
+  console.error('FAIL: finals should hold the run-up longer than a league chance');
+  process.exitCode = 1;
+}
+if (resultHoldMs('goal', 'league', false, 1) <= 1600) {
+  console.error('FAIL: a goal should hold long enough for the swell and haptic to land');
+  process.exitCode = 1;
+}
+if (resultHoldMs('saved', 'final', true, 1) <= resultHoldMs('saved', 'league', false, 1)) {
+  console.error('FAIL: a final last-chance should hold the result longer');
   process.exitCode = 1;
 }
 

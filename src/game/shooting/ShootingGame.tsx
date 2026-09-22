@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as audio from './audio';
+import * as haptics from './haptics';
+import {
+  chanceBeatLine,
+  crowdLevelForChance,
+  defaultVenueLine,
+  introHoldMs,
+  resultHoldMs,
+  type ChanceStake,
+} from './chanceAtmosphere';
 import { MAX_ARC_ALONG_PATH, MAX_BEND_RATIO, MIN_ARC_ALONG_PATH, DEFAULT_DIFFICULTY } from './constants';
 import { cellCenter, computeKeeperDive, computeSwipeCurl, isValidSwipe, resolveShot } from './shotEngine';
 import {
@@ -41,7 +50,7 @@ import {
   type ChanceSetup,
   type DefenderPose,
 } from './chanceSetup';
-import type { ShotOutcomeKind, ShotResult, SwipeGesture } from './types';
+import type { ShotOutcomeKind, ShotResult, ShotStyle, SwipeGesture } from './types';
 import StatsBar, { type ShotStats } from './StatsBar';
 import {
   advanceBallTravel,
@@ -55,7 +64,7 @@ import {
   type BallTravelDir,
 } from './ballTravel';
 
-type Phase = 'idle' | 'dragging' | 'shooting' | 'result';
+type Phase = 'intro' | 'idle' | 'dragging' | 'shooting' | 'result';
 
 interface Point {
   x: number;
@@ -94,11 +103,19 @@ interface AnimState {
   defender: DefenderPose | null;
   defenders: DefenderPose[];
   lastTickMs: number;
+  introUntilMs: number;
+  resultHoldMs: number;
 }
 
-const RESULT_HOLD_MS = 1500;
 const SHAKE_DURATION_MS = 280;
 const MAX_DRAG_POINTS = 400;
+
+const SHOT_STYLE_LABEL: Record<ShotStyle, string> = {
+  poke: 'Poke',
+  chip: 'Chip',
+  drive: 'Drive',
+  floater: 'Floater',
+};
 
 const OUTCOME_LABEL: Record<ShotOutcomeKind, string> = {
   goal: 'GOAL!',
@@ -256,6 +273,30 @@ function readDevDualDefenders(): boolean {
   return raw === '2' || raw === 'dual';
 }
 
+function readDevIntroOff(): boolean {
+  if (!import.meta.env.DEV) return false;
+  const raw = new URLSearchParams(window.location.search).get('intro');
+  return raw === 'off' || raw === '0';
+}
+
+function readDevStake(): ChanceStake | null {
+  if (!import.meta.env.DEV) return null;
+  const raw = new URLSearchParams(window.location.search).get('stake');
+  if (raw === 'league' || raw === 'cup' || raw === 'final' || raw === 'penalty') return raw;
+  return null;
+}
+
+function readDevVenueLine(): string | null {
+  if (!import.meta.env.DEV) return null;
+  return new URLSearchParams(window.location.search).get('venue');
+}
+
+function readDevLastChance(): boolean {
+  if (!import.meta.env.DEV) return false;
+  const raw = new URLSearchParams(window.location.search).get('last');
+  return raw === '1' || raw === 'true';
+}
+
 /** DEV: ?strength=94, ?opponent=man-city, or ?nation=france. */
 function readDevOpponentStrength(): number | undefined {
   if (!import.meta.env.DEV) return undefined;
@@ -370,6 +411,12 @@ export interface ShootingGameProps {
   allowPenalties?: boolean;
   /** Force this session to a penalty kick (cup shootouts). */
   forcePenalty?: boolean;
+  /** Ground / home-away / night line shown in the chance run-up. */
+  venueLine?: string;
+  /** How much atmosphere this fixture carries. */
+  chanceStake?: ChanceStake;
+  /** When true, this match is already a last-chance beat. */
+  lastChance?: boolean;
 }
 
 export default function ShootingGame({
@@ -387,16 +434,20 @@ export default function ShootingGame({
   opponentSkinPalette = 'any',
   allowPenalties = true,
   forcePenalty = false,
+  venueLine,
+  chanceStake,
+  lastChance = false,
 }: ShootingGameProps = {}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const hintRef = useRef<HTMLDivElement | null>(null);
   const sizeRef = useRef({ w: 0, h: 0, dpr: 1 });
 
-  const [uiPhase, setUiPhase] = useState<Phase>('idle');
+  const [uiPhase, setUiPhase] = useState<Phase>(readDevIntroOff() ? 'idle' : 'intro');
   const [resultLabel, setResultLabel] = useState<{ text: string; color: string; detail: string | null } | null>(null);
   const [stats, setStats] = useState<ShotStats>({ shots: 0, goals: 0, streak: 0, bestStreak: 0 });
   const [muted, setMuted] = useState(false);
+  const [introLine, setIntroLine] = useState<{ venue: string; beat: string } | null>(null);
 
   const [initialChance] = useState(() =>
     nextChance(clubStrength, opponentSkinPalette, allowPenalties, opponentStrength, forcePenalty),
@@ -424,6 +475,13 @@ export default function ShootingGame({
   forcePenaltyRef.current = forcePenalty;
   const stadiumRef = useRef<StadiumAppearance>(stadium ?? readDevStadium() ?? DEFAULT_STADIUM);
   stadiumRef.current = stadium ?? readDevStadium() ?? DEFAULT_STADIUM;
+  const venueLineRef = useRef(venueLine);
+  venueLineRef.current = venueLine;
+  const chanceStakeRef = useRef(chanceStake);
+  chanceStakeRef.current = chanceStake;
+  const lastChancePropRef = useRef(lastChance);
+  lastChancePropRef.current = lastChance;
+  const introStartedRef = useRef(false);
 
   const animRef = useRef<AnimState>({
     phase: 'idle',
@@ -451,11 +509,70 @@ export default function ShootingGame({
     defender: initialChance.defender,
     defenders: chanceDefenders(initialChance),
     lastTickMs: 0,
+    introUntilMs: 0,
+    resultHoldMs: 1600,
   });
+
+  const effectiveStake = useCallback((kind: ChanceKind): ChanceStake => {
+    if (forcePenaltyRef.current || kind === 'penalty') return 'penalty';
+    return readDevStake() ?? chanceStakeRef.current ?? 'league';
+  }, []);
+
+  const isLastChanceNow = useCallback((_kind: ChanceKind): boolean => {
+    if (readDevLastChance() || lastChancePropRef.current) return true;
+    const limit = maxShotsRef.current;
+    return limit !== undefined && shotsTakenRef.current + 1 >= limit;
+  }, []);
+
+  const beginChanceIntro = useCallback((first: boolean, kind: ChanceKind) => {
+    const look = stadiumRef.current;
+    const stake = effectiveStake(kind);
+    const last = isLastChanceNow(kind);
+    const venue = readDevVenueLine()
+      ?? venueLineRef.current
+      ?? defaultVenueLine({ groundName: look.groundName, isHome: look.isHome, night: look.night });
+    const beat = chanceBeatLine(stake, last, Boolean(look.night));
+    const skip = readDevIntroOff();
+    const hold = skip ? 0 : introHoldMs(stake, last, first);
+    const anim = animRef.current;
+    anim.phase = skip ? 'idle' : 'intro';
+    anim.introUntilMs = performance.now() + hold;
+    anim.lastTickMs = 0;
+    setIntroLine(skip ? null : { venue, beat });
+    setUiPhase(skip ? 'idle' : 'intro');
+    audio.startCrowdBed(crowdLevelForChance({
+      home: look.isHome,
+      night: look.night,
+      stake,
+      lastChance: last,
+      crowdFill: look.crowdFill,
+    }));
+    if (!skip) {
+      audio.playWhistle();
+      haptics.hapticWhistle();
+    }
+  }, [effectiveStake, isLastChanceNow]);
 
   useEffect(() => {
     audio.setMuted(muted);
-  }, [muted]);
+    if (muted) return;
+    const look = stadiumRef.current;
+    const kind = animRef.current.chanceKind;
+    audio.startCrowdBed(crowdLevelForChance({
+      home: look.isHome,
+      night: look.night,
+      stake: effectiveStake(kind),
+      lastChance: isLastChanceNow(kind),
+      crowdFill: look.crowdFill,
+    }));
+  }, [muted, effectiveStake, isLastChanceNow]);
+
+  useEffect(() => {
+    if (introStartedRef.current) return;
+    introStartedRef.current = true;
+    beginChanceIntro(true, animRef.current.chanceKind);
+    return () => audio.stopCrowdBed();
+  }, [beginChanceIntro]);
 
   useEffect(() => {
     setBallHintX(animRef.current.ballStartXRatio);
@@ -527,9 +644,9 @@ export default function ShootingGame({
     setBallHintX(chance.ballStartXRatio);
     setChanceKind(chance.kind);
     setDefenderCount(chanceDefenders(chance).length);
-    setUiPhase('idle');
     setResultLabel(null);
-  }, []);
+    beginChanceIntro(false, chance.kind);
+  }, [beginChanceIntro]);
 
   const launchShot = useCallback((gesture: SwipeGesture) => {
     const anim = animRef.current;
@@ -542,6 +659,7 @@ export default function ShootingGame({
     setUiPhase('shooting');
     setResultLabel(null);
     audio.playKick(result.power);
+    haptics.hapticKick(result.power);
   }, []);
 
   useEffect(() => {
@@ -595,25 +713,47 @@ export default function ShootingGame({
         bestStreak: Math.max(prev.bestStreak, streak),
       };
     });
-    const detailParts = [powerTierLabel(result.power), curlStyleLabel(result), takeTimingLabel(result.takeQuality)].filter(Boolean) as string[];
+    const detailParts = [
+      result.shotStyle ? SHOT_STYLE_LABEL[result.shotStyle] : null,
+      powerTierLabel(result.power),
+      curlStyleLabel(result),
+      takeTimingLabel(result.takeQuality),
+    ].filter(Boolean) as string[];
     setResultLabel({
       text: OUTCOME_LABEL[result.outcome],
       color: OUTCOME_COLOR[result.outcome],
       detail: detailParts.length > 0 ? detailParts.join(' \u00b7 ') : null,
     });
     setUiPhase('result');
+    const kind = animRef.current.chanceKind;
+    const limit = maxShotsRef.current;
+    const last = readDevLastChance() || lastChancePropRef.current || (limit !== undefined && shotsTakenRef.current >= limit);
+    animRef.current.resultHoldMs = resultHoldMs(result.outcome, effectiveStake(kind), last, result.power);
     if (result.outcome === 'goal') {
       audio.playGoal();
+      haptics.hapticGoal();
+      audio.swellCrowd('goal');
       if (result.power > 1.15) {
         const anim = animRef.current;
         anim.shakeMagnitude = Math.min(14, (result.power - 1) * 14);
         anim.shakeUntilMs = performance.now() + SHAKE_DURATION_MS;
       }
-    } else if (result.outcome === 'saved') audio.playSave();
-    else if (result.outcome === 'post') audio.playPost();
-    else if (result.outcome === 'blocked') audio.playBlock();
-    else audio.playMiss();
-  }, []);
+    } else if (result.outcome === 'saved') {
+      audio.playSave();
+      audio.swellCrowd('save');
+    } else if (result.outcome === 'post') {
+      audio.playPost();
+      haptics.hapticPost();
+      audio.swellCrowd('post');
+    } else if (result.outcome === 'blocked') {
+      audio.playBlock();
+      haptics.hapticBlock();
+      audio.swellCrowd('block');
+    } else {
+      audio.playMiss();
+      audio.swellCrowd(result.outcome === 'over' || result.power > 1.2 ? 'miss' : 'save');
+    }
+  }, [effectiveStake]);
 
   // Main animation loop.
   useEffect(() => {
@@ -650,7 +790,13 @@ export default function ShootingGame({
         });
         drawGoal(ctx, view);
 
-        if (anim.phase === 'idle' || anim.phase === 'dragging') {
+        if (anim.phase === 'intro' || anim.phase === 'idle' || anim.phase === 'dragging') {
+          if (anim.phase === 'intro' && now >= anim.introUntilMs) {
+            anim.phase = 'idle';
+            anim.lastTickMs = now;
+            setUiPhase('idle');
+            setIntroLine(null);
+          }
           const dt = anim.lastTickMs > 0 ? Math.min(0.05, (now - anim.lastTickMs) / 1000) : 0;
           anim.lastTickMs = now;
           if (anim.phase === 'idle' && anim.ballTravelActive && dt > 0) {
@@ -722,7 +868,9 @@ export default function ShootingGame({
 
           const powerT = clamp((result.power - 0.25) / (1.8 - 0.25), 0, 1);
           const pathLen = Math.hypot(end.x - start.x, end.y - start.y);
-          const arcHeight = lerpNum(MAX_ARC_ALONG_PATH, MIN_ARC_ALONG_PATH, powerT) * pathLen;
+          const style = result.shotStyle;
+          const arcMul = style === 'floater' ? 1.55 : style === 'chip' ? 1.35 : style === 'poke' ? 0.45 : 1;
+          const arcHeight = lerpNum(MAX_ARC_ALONG_PATH, MIN_ARC_ALONG_PATH, powerT) * pathLen * arcMul;
           const bend = result.curl * w * MAX_BEND_RATIO;
 
           // Gentle banana: a little early bow, then settle into the aimed
@@ -815,7 +963,7 @@ export default function ShootingGame({
             drawDefender(ctx, view, defender.worldX, defender.z, defenderKit, defender.stride, defender.skinTone, defender.hairColor, look.showSun === false);
           }
           drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
-          if (now - anim.resultAtMs > RESULT_HOLD_MS) {
+          if (now - anim.resultAtMs > anim.resultHoldMs) {
             const limit = maxShotsRef.current;
             if (limit !== undefined && shotsTakenRef.current >= limit) {
               onCompleteRef.current?.();
@@ -844,7 +992,7 @@ export default function ShootingGame({
 
     const onPointerDown = (e: PointerEvent) => {
       const anim = animRef.current;
-      if (anim.phase !== 'idle') return;
+      if (anim.phase !== 'idle') return; // intro, flight, and result ignore swipes
       e.preventDefault();
       canvas.setPointerCapture(e.pointerId);
       const p = getPoint(e);
@@ -908,6 +1056,8 @@ export default function ShootingGame({
         anim.knockHoldUntilMs = now + KNOCK_SLIDE_MS + KNOCK_HOLD_MS;
         anim.phase = 'idle';
         setUiPhase('idle');
+        audio.playKnock();
+        haptics.hapticKnock();
         return;
       }
 
@@ -937,7 +1087,7 @@ export default function ShootingGame({
       <header className="z-10 flex items-center justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 text-white">
         <div>
           <h1 className="font-display text-lg font-bold sm:text-xl">{title ?? 'Football Legacy'}</h1>
-          <p className="text-xs text-white/50">{subtitle ?? 'Knock the ball sideways, then swipe up to shoot'}</p>
+          <p className="text-xs text-white/50">{subtitle ?? 'Knock sideways, then jab, drive, or loft'}</p>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {progressLabel && (
               <p className="inline-block rounded-full bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-white/80">
@@ -973,6 +1123,15 @@ export default function ShootingGame({
       <div ref={containerRef} className="relative min-h-0 flex-1 select-none touch-none">
         <canvas ref={canvasRef} className="absolute inset-0 h-full w-full touch-none" />
 
+        {uiPhase === 'intro' && introLine && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div className="flex flex-col items-center gap-2 rounded-2xl border border-white/15 bg-black/45 px-7 py-5 text-center backdrop-blur-sm">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">{introLine.venue}</p>
+              <p className="font-display text-2xl font-bold text-white sm:text-3xl">{introLine.beat}</p>
+            </div>
+          </div>
+        )}
+
         {uiPhase === 'idle' && (
           <div
             ref={hintRef}
@@ -984,7 +1143,7 @@ export default function ShootingGame({
             }}
           >
             <div className="animate-pulse rounded-full bg-black/40 px-4 py-1.5 text-sm text-white/80 backdrop-blur">
-              {chanceKind === 'penalty' ? 'Swipe up on the ball to shoot ⬆' : 'Swipe sideways to move · up to shoot'}
+              {chanceKind === 'penalty' ? 'Swipe up on the ball to shoot ⬆' : 'Swipe sideways to move · jab, drive, or loft'}
             </div>
           </div>
         )}
