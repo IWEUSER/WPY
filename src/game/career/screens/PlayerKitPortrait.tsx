@@ -55,12 +55,14 @@ export function PlayerKitPortrait({
   name,
   club,
   nation,
+  look: lookOverride,
 }: {
   name: string;
   club?: Club;
   nation?: Nation;
+  look?: { skin: string; hair: string } | null;
 }) {
-  const look = pickPlayerLook(seedFrom(name, nation?.id), appearanceRegionForNation(nation ?? null));
+  const look = lookOverride ?? pickPlayerLook(seedFrom(name, nation?.id), appearanceRegionForNation(nation ?? null));
   if (!club && !nation) return null;
   return (
     <div className="mt-4 flex items-end justify-center gap-2">

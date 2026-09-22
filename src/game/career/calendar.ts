@@ -88,15 +88,13 @@ export interface SeasonCalendar {
   domesticCup?: DomesticCupId | null;
 }
 
-/** World Cup, continental championship, and Nations League ties — not qualifiers. */
+/** World Cup, continental championship, and Nations League knockouts — not qualifiers or NL groups. */
 export function isInternationalTournamentFixture(fixture: CalendarFixture): boolean {
   const round = fixture.internationalRound;
-  return (
-    fixture.kind === 'international'
-    && round != null
-    && round !== 'qualifier'
-    && round !== 'friendly'
-  );
+  if (fixture.kind !== 'international' || round == null) return false;
+  if (round === 'qualifier' || round === 'friendly') return false;
+  if (round === 'group' && fixture.neutral === false) return false;
+  return true;
 }
 
 /** Domestic and European one-off finals at the large club-final stadium. */
@@ -115,6 +113,8 @@ export function isClubFinalNeutral(fixture: CalendarFixture): boolean {
 
 /** Club finals and international tournament games are not home or away. */
 export function fixtureIsNeutral(fixture: CalendarFixture): boolean {
+  if (fixture.kind === 'international' && fixture.neutral === true) return true;
+  if (fixture.kind === 'international' && fixture.neutral === false) return false;
   return isClubFinalNeutral(fixture) || isInternationalTournamentFixture(fixture);
 }
 
@@ -130,6 +130,31 @@ export function fixtureIsHome(fixture: CalendarFixture): boolean {
   if (fixture.leg === 2) return false;
   if (fixture.leg === 1) return true;
   return fixture.week % 2 === 1;
+}
+
+/**
+ * Home / away / neutral for an international fixture. `indexInRound` is 0-based
+ * within that round (first qualifier home, first World Cup friendly home).
+ */
+export function internationalVenueFlags(
+  round: CalendarFixture['internationalRound'] | undefined,
+  tournament: InternationalTournamentId | null | undefined,
+  indexInRound: number,
+): { isHome: boolean; neutral: boolean } {
+  if (round === 'qualifier') {
+    return { isHome: indexInRound % 2 === 0, neutral: false };
+  }
+  if (round === 'friendly') {
+    if (tournament === 'world-cup') {
+      if (indexInRound === 0) return { isHome: true, neutral: false };
+      return { isHome: false, neutral: true };
+    }
+    return { isHome: indexInRound % 2 === 0, neutral: false };
+  }
+  if (round === 'group' && tournament === 'nations-league') {
+    return { isHome: indexInRound % 2 === 0, neutral: false };
+  }
+  return { isHome: false, neutral: true };
 }
 
 /**
@@ -416,11 +441,14 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
     const interval = leagueMatchWeeks / Math.max(1, qualifierCount);
     for (let i = 0; i < qualifierCount; i++) {
       const qualifierWeek = Math.max(1, Math.min(leagueMatchWeeks, Math.round((i + 0.5) * interval)));
+      const venue = internationalVenueFlags('qualifier', campaign.tournament, i);
       fixtures.push({
         week: qualifierWeek,
         kind: 'international',
         isDecisive: false,
         internationalRound: 'qualifier',
+        isHome: venue.isHome,
+        neutral: venue.neutral,
       });
     }
   }
@@ -430,11 +458,14 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
     for (let i = 0; i < groupCount; i++) {
       const fraction = 0.12 + (i / Math.max(1, groupCount - 1)) * 0.5;
       const week = Math.max(1, Math.min(leagueMatchWeeks, Math.round(fraction * leagueMatchWeeks)));
+      const venue = internationalVenueFlags('group', campaign.tournament, i);
       fixtures.push({
         week,
         kind: 'international',
         isDecisive: false,
         internationalRound: 'group',
+        isHome: venue.isHome,
+        neutral: venue.neutral,
       });
     }
     const [qfWeek, sfWeek, finalWeek] = nationsLeagueKnockoutWeeks(leagueMatchWeeks);
@@ -444,11 +475,14 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
       { week: finalWeek, round: 'final' },
     ];
     for (const packed of ko) {
+      const venue = internationalVenueFlags(packed.round, campaign.tournament, 0);
       fixtures.push({
         week: packed.week,
         kind: 'international',
         isDecisive: false,
         internationalRound: packed.round,
+        isHome: venue.isHome,
+        neutral: venue.neutral,
       });
     }
   }
@@ -518,12 +552,19 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
       ...groupRounds,
       ...tournamentKnockoutRounds(campaign.tournament),
     ];
+    let friendlyIndex = 0;
+    let groupIndex = 0;
     for (const packed of packIntoWeeks(rounds, finalsWeeks, week + 1)) {
+      const indexInRound =
+        packed.round === 'friendly' ? friendlyIndex++ : packed.round === 'group' ? groupIndex++ : 0;
+      const venue = internationalVenueFlags(packed.round, campaign.tournament, indexInRound);
       fixtures.push({
         week: packed.week,
         kind: 'international',
         isDecisive: false,
         internationalRound: packed.round,
+        isHome: venue.isHome,
+        neutral: venue.neutral,
       });
       week = Math.max(week, packed.week);
     }

@@ -7,7 +7,7 @@ import { ensureInternationalGroup, hydrateSeason, internationalStageWhenSelected
 import type { CareerState } from './types';
 
 /** Bump when calendar generation, playable leagues, or cup rules change. */
-export const CURRENT_RULES_STAMP = 'career-no-reserve-v1';
+export const CURRENT_RULES_STAMP = 'career-trials-intl-v1';
 
 const SETUP_PHASES = new Set<string>(['menu', 'club-choice', 'nationality-choice']);
 
@@ -159,7 +159,7 @@ export function rebuildCurrentSeason(state: CareerState): Partial<CareerState> {
     calendar.fixtures.map((f) => f.week),
   );
 
-  const rebuilt = selected ? ensureInternationalGroup(merged, calendar, state.seasonNumber) : merged;
+  const rebuilt = ensureInternationalGroup(merged, calendar, state.seasonNumber);
 
   return {
     seasonCalendar: calendar,

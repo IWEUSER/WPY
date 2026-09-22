@@ -198,7 +198,7 @@ console.log(
     || signed.contractYearsRemaining !== FIRST_CONTRACT_YEARS
     || signed.weeklyWage !== risingWage
   ) {
-    console.error('A passed trial must start Season 1 as a Rising star on a 2-year deal at 10% of that club’s top wage');
+    console.error('A passed trial must start Season 1 as a Rising star on a 3-year deal at 10% of that club’s average wage');
     process.exitCode = 1;
   }
 }
@@ -290,7 +290,7 @@ if (s2.seasonSim?.internationalSelected) {
   process.exitCode = 1;
 }
 if (s2.contractYearsRemaining !== FIRST_CONTRACT_YEARS) {
-  console.error('Season 1 as a Rising star must start a 2-year contract');
+  console.error('Season 1 as a Rising star must start a 3-year contract');
   process.exitCode = 1;
 }
 
@@ -504,15 +504,16 @@ console.log(
   const pending = store.getState().pendingTransfer;
   const renewal = pending?.offers?.find((o) => o.renewal && o.clubId === loanParent);
   const otherWages = (pending?.offers ?? []).filter((o) => !o.renewal).map((o) => o.weeklyWage);
+  const loans = (pending?.offers ?? []).filter((o) => o.move === 'loan');
   if (
     store.getState().phase !== 'transfer-choice'
     || !pending?.allowDecline
-    || !renewal
-    || renewal.weeklyWage <= 0
+    || renewal
+    || loans.length === 0
     || otherWages.length === 0
     || otherWages.some((wage) => wage <= 0)
   ) {
-    console.error('Missing Season 1 must still offer a current-club renewal wage plus other clubs’ salary offers');
+    console.error('Missing Season 1 must not table a current-club renewal; loans and other salary offers stay');
     process.exitCode = 1;
   }
 }
@@ -618,7 +619,7 @@ if (store.getState().phase === 'club-offer') {
       : -1)
     || s.contractYearsRemaining !== FIRST_CONTRACT_YEARS
   ) {
-    console.error('Hitting a favourite-club trial must sign a 2-year Rising star deal at 10% of that club’s top wage');
+    console.error('Hitting a favourite-club trial must sign a 3-year Rising star deal at 10% of that club’s average wage');
     process.exitCode = 1;
   }
   const kinds = new Set(s.seasonCalendar?.fixtures.map((f) => f.kind) ?? []);
@@ -708,7 +709,7 @@ pickNation('england');
     || !kinds.has('league')
     || !kinds.has('domestic-cup')
   ) {
-    console.error('Favourite first-team must start Season 1 at age 17 on a 2-year deal as a Rising star with the full calendar');
+    console.error('Favourite first-team must start Season 1 at age 17 on a 3-year deal as a Rising star with the full calendar');
     process.exitCode = 1;
   }
   const tournamentGames = (s.seasonCalendar?.fixtures ?? []).filter(
