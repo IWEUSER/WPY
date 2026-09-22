@@ -297,6 +297,12 @@ function readDevLastChance(): boolean {
   return raw === '1' || raw === 'true';
 }
 
+function readDevScoreLine(): string | null {
+  if (!import.meta.env.DEV) return null;
+  const raw = new URLSearchParams(window.location.search).get('score');
+  return raw && raw.includes('-') ? raw.replace('-', '\u2013') : raw;
+}
+
 /** DEV: ?strength=94, ?opponent=man-city, or ?nation=france. */
 function readDevOpponentStrength(): number | undefined {
   if (!import.meta.env.DEV) return undefined;
@@ -417,6 +423,8 @@ export interface ShootingGameProps {
   chanceStake?: ChanceStake;
   /** When true, this match is already a last-chance beat. */
   lastChance?: boolean;
+  /** Live board shown between chances, e.g. "1–0". */
+  matchScoreLine?: string;
 }
 
 export default function ShootingGame({
@@ -437,6 +445,7 @@ export default function ShootingGame({
   venueLine,
   chanceStake,
   lastChance = false,
+  matchScoreLine,
 }: ShootingGameProps = {}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -481,6 +490,8 @@ export default function ShootingGame({
   chanceStakeRef.current = chanceStake;
   const lastChancePropRef = useRef(lastChance);
   lastChancePropRef.current = lastChance;
+  const matchScoreRef = useRef(matchScoreLine);
+  matchScoreRef.current = matchScoreLine;
   const introStartedRef = useRef(false);
 
   const animRef = useRef<AnimState>({
@@ -531,7 +542,11 @@ export default function ShootingGame({
     const venue = readDevVenueLine()
       ?? venueLineRef.current
       ?? defaultVenueLine({ groundName: look.groundName, isHome: look.isHome, night: look.night });
-    const beat = chanceBeatLine(stake, last, Boolean(look.night));
+    const beat = chanceBeatLine(
+      stake,
+      Boolean(look.night),
+      readDevScoreLine() ?? matchScoreRef.current,
+    );
     const skip = readDevIntroOff();
     const hold = skip ? 0 : introHoldMs(stake, last, first);
     const anim = animRef.current;
@@ -547,10 +562,6 @@ export default function ShootingGame({
       lastChance: last,
       crowdFill: look.crowdFill,
     }));
-    if (!skip) {
-      audio.playWhistle();
-      haptics.hapticWhistle();
-    }
   }, [effectiveStake, isLastChanceNow]);
 
   useEffect(() => {
@@ -729,29 +740,22 @@ export default function ShootingGame({
     const limit = maxShotsRef.current;
     const last = readDevLastChance() || lastChancePropRef.current || (limit !== undefined && shotsTakenRef.current >= limit);
     animRef.current.resultHoldMs = resultHoldMs(result.outcome, effectiveStake(kind), last, result.power);
+    const homeCrowd = stadiumRef.current.isHome !== false;
+    const scored = result.outcome === 'goal';
+    audio.reactCrowd(scored === homeCrowd ? 'cheer' : 'groan');
     if (result.outcome === 'goal') {
-      audio.playGoal();
       haptics.hapticGoal();
-      audio.swellCrowd('goal');
       if (result.power > 1.15) {
         const anim = animRef.current;
         anim.shakeMagnitude = Math.min(14, (result.power - 1) * 14);
         anim.shakeUntilMs = performance.now() + SHAKE_DURATION_MS;
       }
-    } else if (result.outcome === 'saved') {
-      audio.playSave();
-      audio.swellCrowd('save');
     } else if (result.outcome === 'post') {
       audio.playPost();
       haptics.hapticPost();
-      audio.swellCrowd('post');
     } else if (result.outcome === 'blocked') {
       audio.playBlock();
       haptics.hapticBlock();
-      audio.swellCrowd('block');
-    } else {
-      audio.playMiss();
-      audio.swellCrowd(result.outcome === 'over' || result.power > 1.2 ? 'miss' : 'save');
     }
   }, [effectiveStake]);
 

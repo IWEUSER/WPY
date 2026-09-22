@@ -166,6 +166,42 @@ export interface LiveMatch {
   ninetyScoreAgainst?: number;
 }
 
+/** Stable per-match seed so the board shown between chances matches full time. */
+export function liveMatchScoreSeed(seasonNumber: number, fixtureIndex: number, clubId: string): number {
+  let h = 2166136261 ^ (seasonNumber >>> 0) ^ Math.imul(fixtureIndex + 1, 2654435761);
+  for (let i = 0; i < clubId.length; i++) {
+    h ^= clubId.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+export function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export function liveMatchBoardLine(args: {
+  sim: SeasonSimState;
+  fixture: CalendarFixture;
+  club: Club;
+  live: LiveMatch;
+  seasonNumber: number;
+}): string {
+  const { sim, fixture, club, live, seasonNumber } = args;
+  if (live.penaltyKick && live.ninetyScoreFor != null && live.ninetyScoreAgainst != null) {
+    return `${live.ninetyScoreFor}\u2013${live.ninetyScoreAgainst}`;
+  }
+  const rng = mulberry32(liveMatchScoreSeed(seasonNumber, live.fixtureIndex, club.id));
+  const peek = resolveFixture(sim, fixture, club, live.goals, rng, { settlePenalties: false });
+  return `${peek.result.scoreFor}\u2013${peek.result.scoreAgainst}`;
+}
+
 export interface HydrateSeasonParams {
   seasonNumber: number;
   club: Club;

@@ -76,7 +76,7 @@ import {
   swipeIsHorizontalKnock,
   takeQualityFromXRatio,
 } from '../src/game/shooting/ballTravel';
-import { introHoldMs, resultHoldMs } from '../src/game/shooting/chanceAtmosphere';
+import { chanceBeatLine, introHoldMs, resultHoldMs } from '../src/game/shooting/chanceAtmosphere';
 import { nationStrength } from '../src/game/career/data/fifaRankings';
 
 const SIM_W = 390;
@@ -371,6 +371,14 @@ if (resultHoldMs('goal', 'league', false, 1) <= 1600) {
 }
 if (resultHoldMs('saved', 'final', true, 1) <= resultHoldMs('saved', 'league', false, 1)) {
   console.error('FAIL: a final last-chance should hold the result longer');
+  process.exitCode = 1;
+}
+if (chanceBeatLine('league', false, '1\u20130') !== '1\u20130') {
+  console.error('FAIL: the run-up should show the live score when it is known');
+  process.exitCode = 1;
+}
+if (chanceBeatLine('cup', true).includes('Last')) {
+  console.error('FAIL: last-chance copy should stay off the run-up');
   process.exitCode = 1;
 }
 

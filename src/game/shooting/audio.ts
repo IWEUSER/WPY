@@ -6,7 +6,10 @@ export type { CrowdBedLevel };
 
 let ctx: AudioContext | null = null;
 let muted = false;
-let crowdGain: GainNode | null = null;
+let crowdMaster: GainNode | null = null;
+let crowdBed: GainNode | null = null;
+let crowdCheer: GainNode | null = null;
+let crowdGroan: GainNode | null = null;
 let crowdStarted = false;
 let crowdTargetGain = 0;
 
@@ -82,119 +85,163 @@ function noiseBurst(durationSec: number, { startGain = 0.25, delaySec = 0, filte
 }
 
 function crowdBaseGain(level: CrowdBedLevel): number {
-  let gain = 0.042;
-  if (level.home) gain += 0.016;
-  if (level.night) gain += 0.012;
-  if (level.cup) gain += 0.014;
-  if (level.final) gain += 0.02;
-  if (level.lastChance) gain += 0.01;
-  if (level.penalty) gain += 0.012;
-  if (level.crowdFill === 'sparse') gain *= 0.42;
-  if (level.crowdFill === 'empty') gain *= 0.1;
+  let gain = 0.016;
+  if (level.home) gain += 0.004;
+  if (level.night) gain += 0.003;
+  if (level.cup) gain += 0.003;
+  if (level.final) gain += 0.005;
+  if (level.penalty) gain += 0.003;
+  if (level.crowdFill === 'sparse') gain *= 0.4;
+  if (level.crowdFill === 'empty') gain *= 0.08;
   return gain;
 }
 
-function brownNoiseBuffer(audio: AudioContext, seconds = 3.2): AudioBuffer {
+function voiceBuffer(audio: AudioContext, seconds: number, colour: 'bed' | 'cheer' | 'groan'): AudioBuffer {
   const frames = Math.floor(audio.sampleRate * seconds);
   const buffer = audio.createBuffer(1, frames, audio.sampleRate);
   const data = buffer.getChannelData(0);
   let brown = 0;
+  let pink = 0;
   for (let i = 0; i < frames; i++) {
     const white = Math.random() * 2 - 1;
-    brown = (brown + 0.02 * white) / 1.02;
-    data[i] = brown * 3.2 + white * 0.06;
+    brown = (brown + 0.018 * white) / 1.018;
+    pink = 0.97 * pink + 0.03 * white;
+    const breath = 0.72 + 0.28 * Math.sin((i / audio.sampleRate) * (colour === 'cheer' ? 9.2 : colour === 'groan' ? 3.4 : 5.1));
+    const chatter = Math.sin((i / audio.sampleRate) * (colour === 'cheer' ? 340 : colour === 'groan' ? 160 : 220) + brown * 8);
+    if (colour === 'cheer') data[i] = (pink * 0.7 + white * 0.18 + chatter * 0.22) * breath;
+    else if (colour === 'groan') data[i] = (brown * 2.4 + pink * 0.35 + chatter * 0.12) * breath;
+    else data[i] = (brown * 1.8 + pink * 0.45) * breath;
   }
   return buffer;
 }
 
-function ensureCrowd(audio: AudioContext): GainNode {
-  if (crowdGain && crowdStarted) return crowdGain;
-  const output = crowdGain ?? audio.createGain();
-  output.gain.value = 0.0001;
-  if (!crowdGain) output.connect(audio.destination);
-  crowdGain = output;
-  if (crowdStarted) return output;
+function connectLoop(
+  audio: AudioContext,
+  buffer: AudioBuffer,
+  dest: AudioNode,
+  filter: { type: BiquadFilterType; freq: number; q?: number; gain?: number },
+  extra?: { type: BiquadFilterType; freq: number; q?: number; gain?: number },
+): void {
+  const src = audio.createBufferSource();
+  src.buffer = buffer;
+  src.loop = true;
+  const a = audio.createBiquadFilter();
+  a.type = filter.type;
+  a.frequency.value = filter.freq;
+  if (filter.q != null) a.Q.value = filter.q;
+  if (filter.gain != null && 'gain' in a) a.gain.value = filter.gain;
+  src.connect(a);
+  if (extra) {
+    const b = audio.createBiquadFilter();
+    b.type = extra.type;
+    b.frequency.value = extra.freq;
+    if (extra.q != null) b.Q.value = extra.q;
+    if (extra.gain != null) b.gain.value = extra.gain;
+    a.connect(b);
+    b.connect(dest);
+  } else {
+    a.connect(dest);
+  }
+  src.start();
+}
 
-  const noise = audio.createBufferSource();
-  noise.buffer = brownNoiseBuffer(audio);
-  noise.loop = true;
-  const wash = audio.createBiquadFilter();
-  wash.type = 'lowpass';
-  wash.frequency.value = 720;
-  wash.Q.value = 0.7;
-  const presence = audio.createBiquadFilter();
-  presence.type = 'peaking';
-  presence.frequency.value = 980;
-  presence.gain.value = 4.5;
-  presence.Q.value = 0.8;
-  const noiseGain = audio.createGain();
-  noiseGain.gain.value = 0.9;
-  noise.connect(wash);
-  wash.connect(presence);
-  presence.connect(noiseGain);
-  noiseGain.connect(output);
-  noise.start();
+function ensureCrowd(audio: AudioContext): GainNode {
+  if (crowdMaster && crowdStarted) return crowdMaster;
+  const master = crowdMaster ?? audio.createGain();
+  master.gain.value = 1;
+  if (!crowdMaster) master.connect(audio.destination);
+  crowdMaster = master;
+
+  const bed = crowdBed ?? audio.createGain();
+  bed.gain.value = 0.0001;
+  if (!crowdBed) bed.connect(master);
+  crowdBed = bed;
+
+  const cheer = crowdCheer ?? audio.createGain();
+  cheer.gain.value = 0.0001;
+  if (!crowdCheer) cheer.connect(master);
+  crowdCheer = cheer;
+
+  const groan = crowdGroan ?? audio.createGain();
+  groan.gain.value = 0.0001;
+  if (!crowdGroan) groan.connect(master);
+  crowdGroan = groan;
+
+  if (crowdStarted) return master;
+
+  connectLoop(audio, voiceBuffer(audio, 3.4, 'bed'), bed, { type: 'lowpass', freq: 420, q: 0.6 }, { type: 'highpass', freq: 80, q: 0.5 });
+  connectLoop(audio, voiceBuffer(audio, 2.6, 'cheer'), cheer, { type: 'bandpass', freq: 980, q: 0.7 }, { type: 'highpass', freq: 420, q: 0.4 });
+  connectLoop(audio, voiceBuffer(audio, 3.1, 'groan'), groan, { type: 'lowpass', freq: 280, q: 0.8 }, { type: 'peaking', freq: 180, q: 0.9, gain: 5 });
 
   const rumble = audio.createOscillator();
   rumble.type = 'sine';
-  rumble.frequency.value = 58;
-  const rumble2 = audio.createOscillator();
-  rumble2.type = 'triangle';
-  rumble2.frequency.value = 73;
+  rumble.frequency.value = 52;
   const rumbleGain = audio.createGain();
-  rumbleGain.gain.value = 0.045;
+  rumbleGain.gain.value = 0.018;
   rumble.connect(rumbleGain);
-  rumble2.connect(rumbleGain);
-  rumbleGain.connect(output);
+  rumbleGain.connect(bed);
   rumble.start();
-  rumble2.start();
 
   crowdStarted = true;
-  return output;
+  return master;
 }
 
-function rampCrowdTo(value: number, seconds: number): void {
+function hushBus(node: GainNode | null, seconds: number): void {
   const audio = getCtx();
-  if (!audio || !crowdGain) return;
+  if (!audio || !node) return;
   const now = audio.currentTime;
-  crowdGain.gain.cancelScheduledValues(now);
-  crowdGain.gain.setValueAtTime(Math.max(0.0001, crowdGain.gain.value), now);
-  crowdGain.gain.linearRampToValueAtTime(Math.max(0.0001, value), now + seconds);
+  node.gain.cancelScheduledValues(now);
+  node.gain.setValueAtTime(Math.max(0.0001, node.gain.value), now);
+  node.gain.linearRampToValueAtTime(0.0001, now + seconds);
 }
 
 function hushCrowd(seconds: number): void {
-  if (!crowdGain) return;
-  rampCrowdTo(0.0001, seconds);
+  hushBus(crowdBed, seconds);
+  hushBus(crowdCheer, seconds);
+  hushBus(crowdGroan, seconds);
 }
 
-/** Continuous stadium wash under a chance. Louder at home, at night, and in cups. */
+/** Quiet living wash under a chance — kept low so the outcome reaction reads. */
 export function startCrowdBed(level: CrowdBedLevel = {}): void {
   if (muted) return;
   const audio = getCtx();
   if (!audio) return;
-  const output = ensureCrowd(audio);
+  ensureCrowd(audio);
+  if (!crowdBed) return;
   crowdTargetGain = crowdBaseGain(level);
   const now = audio.currentTime;
-  output.gain.cancelScheduledValues(now);
-  output.gain.setValueAtTime(Math.max(0.0001, output.gain.value), now);
-  output.gain.linearRampToValueAtTime(crowdTargetGain, now + 0.55);
+  crowdBed.gain.cancelScheduledValues(now);
+  crowdBed.gain.setValueAtTime(Math.max(0.0001, crowdBed.gain.value), now);
+  crowdBed.gain.linearRampToValueAtTime(crowdTargetGain, now + 0.7);
+  hushBus(crowdCheer, 0.2);
+  hushBus(crowdGroan, 0.2);
 }
 
-export function swellCrowd(kind: 'goal' | 'miss' | 'save' | 'post' | 'block'): void {
-  if (muted || !crowdGain) return;
+export type CrowdReaction = 'cheer' | 'groan';
+
+/** Home goal / away miss = cheer. Away goal / home miss = groan. */
+export function reactCrowd(reaction: CrowdReaction): void {
+  if (muted) return;
   const audio = getCtx();
   if (!audio) return;
-  const peak =
-    kind === 'goal' ? crowdTargetGain * 2.4
-    : kind === 'miss' ? crowdTargetGain * 1.85
-    : kind === 'post' ? crowdTargetGain * 1.7
-    : kind === 'block' ? crowdTargetGain * 1.35
-    : crowdTargetGain * 1.2;
+  ensureCrowd(audio);
+  const bus = reaction === 'cheer' ? crowdCheer : crowdGroan;
+  if (!bus) return;
   const now = audio.currentTime;
-  crowdGain.gain.cancelScheduledValues(now);
-  crowdGain.gain.setValueAtTime(Math.max(0.0001, crowdGain.gain.value), now);
-  crowdGain.gain.linearRampToValueAtTime(Math.max(crowdTargetGain, peak), now + 0.12);
-  crowdGain.gain.linearRampToValueAtTime(crowdTargetGain, now + (kind === 'goal' ? 1.6 : 0.9));
+  const peak = reaction === 'cheer' ? 0.28 : 0.24;
+  const hold = reaction === 'cheer' ? 0.55 : 0.7;
+  const tail = reaction === 'cheer' ? 1.7 : 1.9;
+  bus.gain.cancelScheduledValues(now);
+  bus.gain.setValueAtTime(Math.max(0.0001, bus.gain.value), now);
+  bus.gain.linearRampToValueAtTime(peak, now + (reaction === 'cheer' ? 0.07 : 0.14));
+  bus.gain.linearRampToValueAtTime(peak * 0.72, now + hold);
+  bus.gain.exponentialRampToValueAtTime(0.0001, now + tail);
+}
+
+/** @deprecated Outcome reactions now go through reactCrowd. */
+export function swellCrowd(kind: 'goal' | 'miss' | 'save' | 'post' | 'block', home = true): void {
+  const scored = kind === 'goal';
+  reactCrowd(scored === home ? 'cheer' : 'groan');
 }
 
 export function stopCrowdBed(): void {
@@ -212,8 +259,10 @@ export function playKnock(): void {
 }
 
 export function playPost(): void {
-  tone(1400, 0.35, { type: 'square', startGain: 0.22, freqEnd: 900 });
-  tone(2100, 0.25, { type: 'sine', startGain: 0.15, delaySec: 0.02 });
+  noiseBurst(0.04, { startGain: 0.3, filterFreq: 1500 });
+  tone(155, 0.08, { type: 'triangle', startGain: 0.2, freqEnd: 68 });
+  tone(620, 0.24, { type: 'sine', startGain: 0.15, freqEnd: 410 });
+  tone(880, 0.14, { type: 'sine', startGain: 0.06, delaySec: 0.018, freqEnd: 640 });
 }
 
 export function playGoal(): void {

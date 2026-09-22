@@ -35,10 +35,14 @@ export function resultHoldMs(
   return hold;
 }
 
-export function chanceBeatLine(stake: ChanceStake, lastChance: boolean, night: boolean): string {
-  if (stake === 'penalty') return 'The whistle';
-  if (stake === 'final') return lastChance ? 'The final · last chance' : 'The final';
-  if (lastChance) return 'Last chance';
+export function chanceBeatLine(
+  stake: ChanceStake,
+  night: boolean,
+  matchScoreLine?: string | null,
+): string {
+  if (matchScoreLine) return matchScoreLine;
+  if (stake === 'penalty') return 'Penalty';
+  if (stake === 'final') return 'The final';
   if (stake === 'cup') return night ? 'Cup night' : 'Cup tie';
   return 'Here we go';
 }

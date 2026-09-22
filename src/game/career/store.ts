@@ -46,6 +46,8 @@ import {
   canWinLeague,
   ensureInternationalGroup,
   hydrateSeason,
+  liveMatchScoreSeed,
+  mulberry32,
   remainingPlayableCount,
   reassignLeagueHomeAway,
   resolveFixture,
@@ -1658,8 +1660,9 @@ export const useCareerStore = create<CareerStore>()(
           const fixture = calendar.fixtures[live.fixtureIndex];
           if (!club || !fixture) return state;
 
+          const matchRng = mulberry32(liveMatchScoreSeed(state.seasonNumber, live.fixtureIndex, club.id));
           if (!live.penaltyKick) {
-            const peek = resolveFixture(sim, fixture, club, live.goals, Math.random, {
+            const peek = resolveFixture(sim, fixture, club, live.goals, matchRng, {
               settlePenalties: false,
             });
             if (peek.needsPenalty) {
@@ -1677,7 +1680,7 @@ export const useCareerStore = create<CareerStore>()(
             return finishResolvedLiveMatch(state, peek, live);
           }
 
-          const resolution = resolveFixture(sim, fixture, club, live.goals, Math.random, {
+          const resolution = resolveFixture(sim, fixture, club, live.goals, matchRng, {
             ninetyScore: {
               for: live.ninetyScoreFor ?? live.goals,
               against: live.ninetyScoreAgainst ?? live.goals,

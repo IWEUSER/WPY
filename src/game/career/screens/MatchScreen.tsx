@@ -8,7 +8,7 @@ import { nationStrength } from '../data/fifaRankings';
 import { getNation } from '../international';
 import { appearanceRegionForNation } from '../../shooting/appearance';
 import { resolveCareerStadium } from '../matchVenue';
-import { fixtureTitle } from '../seasonSim';
+import { fixtureTitle, liveMatchBoardLine } from '../seasonSim';
 import { firstLegStakeLine, isTwoLeggedClubKnockout } from '../matchBriefing';
 import { useCareerStore } from '../store';
 
@@ -133,6 +133,19 @@ export default function MatchScreen() {
               : 'league'
       }
       lastChance={!penaltyKick && chances === 1}
+      matchScoreLine={
+        penaltyKick && ninetyLine
+          ? ninetyLine
+          : simulated && seasonSim && fixture && club && liveMatch
+            ? liveMatchBoardLine({
+              sim: seasonSim,
+              fixture,
+              club,
+              live: liveMatch,
+              seasonNumber,
+            })
+            : undefined
+      }
       opponentSkinPalette={appearanceRegionForNation(opponentNation)}
       onShotResolved={(result) => {
         lastResultRef.current = result;
