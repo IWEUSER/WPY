@@ -192,6 +192,13 @@ function readDevPenalty(): boolean {
   return raw === '1' || raw === 'true';
 }
 
+function readDevChanceKind(): ChanceKind | null {
+  if (!import.meta.env.DEV) return null;
+  const raw = new URLSearchParams(window.location.search).get('kind');
+  if (raw === 'open' || raw === 'penalty' || raw === 'cross') return raw;
+  return null;
+}
+
 function readDevDefenderOff(): boolean {
   if (!import.meta.env.DEV) return false;
   const raw = new URLSearchParams(window.location.search).get('defender');
@@ -349,6 +356,7 @@ function nextChance(
     skinPalette,
     allowPenalties,
     forceDualDefenders: readDevDualDefenders(),
+    forceKind: forcePenalty ? 'penalty' : readDevChanceKind() ?? undefined,
   });
 }
 

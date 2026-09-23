@@ -569,6 +569,20 @@ export function applyCareerLayoutPreview(): void {
     sim.internationalTournament = 'euro';
     sim.internationalSelected = true;
     sim.internationalStage = 'group';
+    sim.leagueTable = rankLeagueTable(
+      sim.leagueTable.map((row, i) => {
+        if (row.clubId === 'real-madrid') {
+          return { ...row, played: 16, won: 12, drawn: 3, lost: 1, goalsFor: 38, goalsAgainst: 12, points: 39 };
+        }
+        if (row.clubId === 'barcelona') {
+          return { ...row, played: 16, won: 11, drawn: 3, lost: 2, goalsFor: 34, goalsAgainst: 14, points: 36 };
+        }
+        if (row.clubId === 'atletico-madrid') {
+          return { ...row, played: 16, won: 10, drawn: 4, lost: 2, goalsFor: 28, goalsAgainst: 13, points: 34 };
+        }
+        return { ...row, played: 16, won: 7, drawn: 4, lost: 5, goalsFor: 22, goalsAgainst: 18, points: Math.max(8, 32 - i) };
+      }),
+    );
   } else if (preview === 's1-summary') {
     sim.leagueTable = rankLeagueTable(
       sim.leagueTable.map((row, i) => {

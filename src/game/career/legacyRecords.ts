@@ -32,7 +32,7 @@ import {
 import { leagueDisplayName } from './data/leagueFormat';
 import { getNation } from './international';
 import { countsTowardCareerRecord } from './seasonDisplay';
-import { aggregateContinental } from './seasonStats';
+import { aggregateContinental, clubSeasonTotals } from './seasonStats';
 import type { NationalTeamState } from './international';
 import type { SeasonRecord } from './types';
 
@@ -181,15 +181,15 @@ function playedNationTournament(team: NationalTeamState | null, tournament: Inte
 export function playerGoalsForBoard(def: LegacyBoardDef, input: LegacyCareerInput): number {
   const seasons = countedSeasons(input.seasons);
   if (def.id === 'club:overall') {
-    return seasons.reduce((sum, season) => sum + season.goals, 0);
+    return seasons.reduce((sum, season) => sum + clubSeasonTotals(season).goals, 0);
   }
   if (def.id.startsWith('club-overall:')) {
     const clubId = def.id.slice('club-overall:'.length);
     const clubSeasons = seasons.filter((season) => season.clubId === clubId);
     if (def.span === 'season') {
-      return clubSeasons.reduce((best, season) => Math.max(best, season.goals), 0);
+      return clubSeasons.reduce((best, season) => Math.max(best, clubSeasonTotals(season).goals), 0);
     }
-    return clubSeasons.reduce((sum, season) => sum + season.goals, 0);
+    return clubSeasons.reduce((sum, season) => sum + clubSeasonTotals(season).goals, 0);
   }
   if (def.id.startsWith('club-league:')) {
     const [, span, clubId] = def.id.split(':') as [string, LegacySpan, string];
@@ -252,10 +252,10 @@ export function playerGoalsForBoard(def: LegacyBoardDef, input: LegacyCareerInpu
 
 function thisSeasonGoalsForBoard(def: LegacyBoardDef, season: SeasonRecord): number {
   if (!countsTowardCareerRecord(season.seasonNumber, season.role)) return 0;
-  if (def.id === 'club:overall') return season.goals;
+  if (def.id === 'club:overall') return clubSeasonTotals(season).goals;
   if (def.id.startsWith('club-overall:')) {
     const clubId = def.id.slice('club-overall:'.length);
-    return season.clubId === clubId ? season.goals : 0;
+    return season.clubId === clubId ? clubSeasonTotals(season).goals : 0;
   }
   if (def.id.startsWith('club-league:')) {
     const clubId = def.id.split(':')[2];
