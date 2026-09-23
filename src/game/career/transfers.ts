@@ -978,6 +978,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
           role: 'first-team',
           contractYearsRemaining: FIRST_CONTRACT_YEARS,
           squadStatus: openingSquadStatus('first-team'),
+          weeklyWage: weeklyWageForSquadStatus(club, value, openingSquadStatus('first-team')),
         }),
       };
     }
@@ -1031,6 +1032,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
           contractYearsRemaining: recalledYears,
           clubLeague: parentClub.league,
           squadStatus: recallStatus,
+          weeklyWage: weeklyWageForSquadStatus(parentClub, value, recallStatus, parentClub.league),
         }),
         value,
         fee,
@@ -1120,7 +1122,9 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     return parallelTransfers(
       `${club.name} have been promoted to the ${nextLeague}!`,
       `Finished ${params.leaguePosition}${params.leaguePosition === 1 ? 'st' : 'nd'} in ${currentLeague}. Stay and play in the ${nextLeague} next season.`,
-      stayOn(),
+      stayOn({
+        weeklyWage: weeklyWageForSquadStatus(club, value, nextIfStay, nextLeague),
+      }),
       value,
       fee,
       nationality,
