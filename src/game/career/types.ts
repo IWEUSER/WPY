@@ -1,5 +1,6 @@
 import type { ShotResult } from '../shooting/types';
 import type { SeasonCalendar } from './calendar';
+import type { CareerBeat, CareerBeatKind } from './careerBeat';
 import type { ClubTier } from './data/clubs';
 import type { ContinentalCupId, InternationalTournamentId } from './data/competitions';
 import type { NationalTeamState } from './international';
@@ -290,6 +291,12 @@ export interface CareerState {
   legacyReturnPhase?: CareerPhase | null;
   /** Screen to restore after closing the career identity page. */
   profileReturnPhase?: CareerPhase | null;
+  /** Headline beats waiting to be shown (first cap, first title, sold, record, retirement). */
+  pendingBeats?: CareerBeat[];
+  /** Beat kinds already shown so first-cap / first-title / retirement fire once. */
+  seenBeatKinds?: CareerBeatKind[];
+  /** One guided first chance, then leave the player alone. */
+  guidedChanceSeen?: boolean;
 }
 
 export interface LastMatchResult {

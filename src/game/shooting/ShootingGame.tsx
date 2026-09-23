@@ -3,10 +3,13 @@ import * as audio from './audio';
 import * as haptics from './haptics';
 import {
   chanceBeatLine,
+  chanceImportanceLine,
+  chanceMinute,
+  chancesLeftLine,
   crowdLevelForChance,
   crowdReactsToOutcome,
   defaultVenueLine,
-  introHoldMs,
+  formatChanceMinute,
   resultHoldMs,
   type ChanceStake,
 } from './chanceAtmosphere';
@@ -426,6 +429,16 @@ export interface ShootingGameProps {
   lastChance?: boolean;
   /** Live board shown between chances, e.g. "1–0". */
   matchScoreLine?: string;
+  /** Player goals on the live board (for stake copy). */
+  chanceScoreFor?: number;
+  /** Opponent goals on the live board. */
+  chanceScoreAgainst?: number;
+  /** 0-based chances already taken this match. */
+  chanceTaken?: number;
+  /** Total chances in this match. */
+  chanceTotal?: number;
+  /** Knockout / must-score nights get extra stake copy. */
+  knockoutChance?: boolean;
 }
 
 export default function ShootingGame({
@@ -447,6 +460,11 @@ export default function ShootingGame({
   chanceStake,
   lastChance = false,
   matchScoreLine,
+  chanceScoreFor,
+  chanceScoreAgainst,
+  chanceTaken,
+  chanceTotal,
+  knockoutChance = false,
 }: ShootingGameProps = {}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -457,7 +475,13 @@ export default function ShootingGame({
   const [resultLabel, setResultLabel] = useState<{ text: string; color: string; detail: string | null } | null>(null);
   const [stats, setStats] = useState<ShotStats>({ shots: 0, goals: 0, streak: 0, bestStreak: 0 });
   const [muted, setMuted] = useState(false);
-  const [introLine, setIntroLine] = useState<{ venue: string; beat: string } | null>(null);
+  const [introLine, setIntroLine] = useState<{
+    venue: string;
+    beat: string;
+    minute?: string;
+    left?: string;
+    importance?: string | null;
+  } | null>(null);
 
   const [initialChance] = useState(() =>
     nextChance(clubStrength, opponentSkinPalette, allowPenalties, opponentStrength, forcePenalty),
@@ -493,6 +517,16 @@ export default function ShootingGame({
   lastChancePropRef.current = lastChance;
   const matchScoreRef = useRef(matchScoreLine);
   matchScoreRef.current = matchScoreLine;
+  const chanceScoreForRef = useRef(chanceScoreFor);
+  chanceScoreForRef.current = chanceScoreFor;
+  const chanceScoreAgainstRef = useRef(chanceScoreAgainst);
+  chanceScoreAgainstRef.current = chanceScoreAgainst;
+  const chanceTakenRef = useRef(chanceTaken);
+  chanceTakenRef.current = chanceTaken;
+  const chanceTotalRef = useRef(chanceTotal);
+  chanceTotalRef.current = chanceTotal;
+  const knockoutChanceRef = useRef(knockoutChance);
+  knockoutChanceRef.current = knockoutChance;
   const introStartedRef = useRef(false);
 
   const animRef = useRef<AnimState>({
@@ -536,7 +570,7 @@ export default function ShootingGame({
     return limit !== undefined && shotsTakenRef.current + 1 >= limit;
   }, []);
 
-  const beginChanceIntro = useCallback((first: boolean, kind: ChanceKind) => {
+  const beginChanceIntro = useCallback((_first: boolean, kind: ChanceKind) => {
     const look = stadiumRef.current;
     const stake = effectiveStake(kind);
     const last = isLastChanceNow(kind);
@@ -549,12 +583,21 @@ export default function ShootingGame({
       readDevScoreLine() ?? matchScoreRef.current,
     );
     const skip = readDevIntroOff();
-    const hold = skip ? 0 : introHoldMs(stake, last, first);
+    const taken = chanceTakenRef.current ?? shotsTakenRef.current;
+    const total = chanceTotalRef.current ?? maxShotsRef.current ?? 1;
+    const remaining = Math.max(1, total - taken);
+    const minute = formatChanceMinute(chanceMinute(taken, total, stake));
+    const left = chancesLeftLine(remaining);
+    const scoreFor = chanceScoreForRef.current;
+    const scoreAgainst = chanceScoreAgainstRef.current;
+    const importance = scoreFor != null && scoreAgainst != null
+      ? chanceImportanceLine(scoreFor, scoreAgainst, remaining, knockoutChanceRef.current)
+      : null;
     const anim = animRef.current;
     anim.phase = skip ? 'idle' : 'intro';
-    anim.introUntilMs = performance.now() + hold;
+    anim.introUntilMs = 0;
     anim.lastTickMs = 0;
-    setIntroLine(skip ? null : { venue, beat });
+    setIntroLine(skip ? null : { venue, beat, minute, left, importance });
     setUiPhase(skip ? 'idle' : 'intro');
     audio.startCrowdBed(crowdLevelForChance({
       home: look.isHome,
@@ -564,6 +607,15 @@ export default function ShootingGame({
       crowdFill: look.crowdFill,
     }));
   }, [effectiveStake, isLastChanceNow]);
+
+  const beginFromIntro = useCallback(() => {
+    const anim = animRef.current;
+    if (anim.phase !== 'intro') return;
+    anim.phase = 'idle';
+    anim.lastTickMs = performance.now();
+    setUiPhase('idle');
+    setIntroLine(null);
+  }, []);
 
   useEffect(() => {
     audio.setMuted(muted);
@@ -798,13 +850,9 @@ export default function ShootingGame({
         drawGoal(ctx, view);
 
         if (anim.phase === 'intro' || anim.phase === 'idle' || anim.phase === 'dragging') {
-          if (anim.phase === 'intro' && now >= anim.introUntilMs) {
-            anim.phase = 'idle';
-            anim.lastTickMs = now;
-            setUiPhase('idle');
-            setIntroLine(null);
-          }
-          const dt = anim.lastTickMs > 0 ? Math.min(0.05, (now - anim.lastTickMs) / 1000) : 0;
+          const dt = anim.phase === 'intro'
+            ? 0
+            : (anim.lastTickMs > 0 ? Math.min(0.05, (now - anim.lastTickMs) / 1000) : 0);
           anim.lastTickMs = now;
           if (anim.phase === 'idle' && anim.ballTravelActive && dt > 0) {
             if (anim.knockUntilMs > now) {
@@ -826,7 +874,7 @@ export default function ShootingGame({
             const x = Math.min(0.82, Math.max(0.18, anim.ballStartXRatio));
             hintRef.current.style.left = `${x * 100}%`;
           }
-          if (anim.defenders.length > 0 && dt > 0) {
+          if (anim.defenders.length > 0 && dt > 0 && anim.phase !== 'intro') {
             const paired = anim.defenders.length > 1;
             anim.defenders = anim.defenders.map((defender) =>
               advanceDefender(
@@ -1131,12 +1179,25 @@ export default function ShootingGame({
         <canvas ref={canvasRef} className="absolute inset-0 h-full w-full touch-none" />
 
         {uiPhase === 'intro' && introLine && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <div className="flex flex-col items-center gap-2 rounded-2xl border border-white/15 bg-black/45 px-7 py-5 text-center backdrop-blur-sm">
+          <button
+            type="button"
+            onClick={beginFromIntro}
+            className="absolute inset-0 z-10 flex items-center justify-center bg-black/20 px-4"
+          >
+            <div className="flex w-full max-w-sm flex-col items-center gap-2 rounded-2xl border border-white/15 bg-black/70 px-7 py-6 text-center backdrop-blur-sm">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">{introLine.venue}</p>
-              <p className="font-display text-2xl font-bold text-white sm:text-3xl">{introLine.beat}</p>
+              <p className="font-display text-3xl font-bold text-white sm:text-4xl">{introLine.beat}</p>
+              {(introLine.minute || introLine.left) && (
+                <p className="text-sm font-semibold text-white/80">
+                  {[introLine.minute, introLine.left].filter(Boolean).join(' · ')}
+                </p>
+              )}
+              {introLine.importance && (
+                <p className="text-sm font-semibold text-amber-200">{introLine.importance}</p>
+              )}
+              <p className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-200/90">Tap to begin</p>
             </div>
-          </div>
+          </button>
         )}
 
         {uiPhase === 'idle' && (

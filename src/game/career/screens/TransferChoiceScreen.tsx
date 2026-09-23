@@ -85,6 +85,7 @@ export default function TransferChoiceScreen() {
   const lastTransferRejection = useCareerStore((s) => s.lastTransferRejection);
   const resolveTransferChoice = useCareerStore((s) => s.resolveTransferChoice);
   const currentSeason = useCareerStore((s) => s.currentSeason);
+  const currentWeeklyWage = useCareerStore((s) => s.weeklyWage);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const rejectionRef = useRef<HTMLDivElement>(null);
 
@@ -108,8 +109,11 @@ export default function TransferChoiceScreen() {
   );
   const renewalOffer = offers.find((o) => o.renewal && o.clubId === clubId) ?? null;
   const otherOffers = offers.filter((o) => o !== renewalOffer);
+  const keepDealWage = currentWeeklyWage > 0
+    ? currentWeeklyWage
+    : (pending.stay?.weeklyWage != null && pending.stay.weeklyWage > 0 ? pending.stay.weeklyWage : 0);
   const homeWage = renewalOffer?.weeklyWage
-    || (pending.stay?.weeklyWage != null && pending.stay.weeklyWage > 0 ? pending.stay.weeklyWage : undefined);
+    || (keepDealWage > 0 ? keepDealWage : undefined);
   const stayYears = pending.stay?.contractYearsRemaining;
   const outOfContract = stayYears != null && stayYears <= 0;
   const showStay = Boolean(pending.allowDecline && pending.stay && stayClub && !outOfContract);
@@ -183,9 +187,11 @@ export default function TransferChoiceScreen() {
                     : pending.stay?.clubId && pending.stay.clubId !== clubId
                       ? 'Return to parent club'
                       : 'Stay at this club'}
-                  {pending.stay?.weeklyWage != null && pending.stay.weeklyWage > 0
-                    ? ` · ${formatWeeklyWage(pending.stay.weeklyWage)}`
-                    : ''}
+                  {renewalOffer
+                    ? (keepDealWage > 0 ? ` · ${formatWeeklyWage(keepDealWage)}` : '')
+                    : pending.stay?.weeklyWage != null && pending.stay.weeklyWage > 0
+                      ? ` · ${formatWeeklyWage(pending.stay.weeklyWage)}`
+                      : ''}
                   {` · ${SQUAD_STATUS_LABEL[nextIfStay]}`}
                 </p>
               </div>

@@ -929,13 +929,9 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       squadStatus: role === 'reserve' ? 'rising-star' : nextIfStay,
       ...extra,
     };
-    const stayClub = getClub(stay.clubId) ?? club;
-    stay.weeklyWage = weeklyWageForSquadStatus(
-      stayClub,
-      value,
-      stay.squadStatus ?? 'starter',
-      stay.clubLeague,
-    );
+    if (stay.weeklyWage == null) {
+      stay.weeklyWage = params.weeklyWage;
+    }
     return stay;
   };
   const loanPick = (exclude: string[], origin: Club) =>

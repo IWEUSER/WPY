@@ -3,7 +3,8 @@ import { fixtureIsNight } from './calendar';
 import { getClub } from './data/clubs';
 import { createNationalTeamState, recordInternationalAppearance } from './international';
 import { mlsConferenceOf } from './data/leagueFormat';
-import { buildSeasonStandings, rankLeagueTable } from './matchEngine';
+import { applyMatchToTable, buildSeasonStandings, rankLeagueTable } from './matchEngine';
+import { firstCapBeat, firstTitleBeat, recordBeat, retirementBeat, soldBeat } from './careerBeat';
 import { newContractYears, playerMarketValueFromSeasons, weeklyWageForClub } from './playerValue';
 import { applyTrialMatch, applyYouthMatch, assignOpeningTrialClub, beginClubTrial, beginFavouriteClubTrial, chooseTrialClub, createYouthCampaign, failClubTrial } from './openingFlow';
 import { hydrateSeason, nextActionableFixture } from './seasonSim';
@@ -244,6 +245,22 @@ export function applyCareerLayoutPreview(): void {
     nationId: previewNationId,
     careerStart: preview === 'hub-qualifying' || preview === 'hub-rising-star' || preview === 'hub-rotation' || preview === 's1-summary' ? 'favourite-first-team' : undefined,
   });
+  if (sim.europeanStanding && sim.europeanTable.length > 1) {
+    const playerId = club.id;
+    const oppId = sim.europeanTable.find((row) => row.clubId !== playerId)?.clubId;
+    if (oppId) {
+      let table = applyMatchToTable(sim.europeanTable, playerId, oppId, { scoreFor: 2, scoreAgainst: 1, outcome: 'win' });
+      for (let i = 2; i + 1 < Math.min(10, table.length); i += 2) {
+        const a = table[i]?.clubId;
+        const b = table[i + 1]?.clubId;
+        if (!a || !b || a === playerId || b === playerId) continue;
+        table = applyMatchToTable(table, a, b, { scoreFor: 1, scoreAgainst: 1, outcome: 'draw' });
+      }
+      sim.europeanTable = rankLeagueTable(table);
+      sim.europeanGroupPlayed = 1;
+      sim.europeanGroupPoints = 3;
+    }
+  }
   if (preview === 'mls') {
     sim.leagueTable = rankLeagueTable(
       sim.leagueTable.map((row, i) => {
@@ -477,6 +494,7 @@ export function applyCareerLayoutPreview(): void {
       fx.opponentLabel = 'France';
       fx.isHome = true;
       fx.playerChances = 2;
+      fx.neutral = true;
     }
   } else if (preview === 'match-africa') {
     const idx = calendar.fixtures.findIndex((f) => f.kind === 'international');
@@ -1044,6 +1062,8 @@ export function applyCareerLayoutPreview(): void {
               ? 'career-end'
               : preview === 'summary'
                 ? 'season-summary'
+                : preview === 'guide'
+                  ? 'match'
                 : isMatchPreview || isReservePreview
                   ? 'match'
                   : 'hub',
@@ -1102,7 +1122,7 @@ export function applyCareerLayoutPreview(): void {
           chancesTaken: 0,
           goals: 0,
         }
-      : isMatchPreview
+      : isMatchPreview || preview === 'guide'
       ? preview === 'cup-pens'
         ? {
             fixtureIndex: matchFixtureIndex,
@@ -1114,7 +1134,12 @@ export function applyCareerLayoutPreview(): void {
             ninetyScoreFor: 1,
             ninetyScoreAgainst: 1,
           }
-        : { fixtureIndex: matchFixtureIndex, chancesTotal: 2, chancesTaken: 0, goals: 0 }
+        : {
+            fixtureIndex: matchFixtureIndex,
+            chancesTotal: 2,
+            chancesTaken: preview === 'match-intl-ko' ? 1 : 0,
+            goals: preview === 'match-intl-ko' ? 1 : 0,
+          }
       : null,
     seasonSim: isYouthPreview || isYouthNextPreview || isClubTrialPreview || isTrialPreview
       ? null
@@ -1338,6 +1363,26 @@ export function applyCareerLayoutPreview(): void {
     wpyResult: preview === 's1-summary' || preview === 'loan-summary'
       ? { won: false, reason: '' }
       : undefined,
+    guidedChanceSeen: preview !== 'guide',
+    seenBeatKinds: [],
+    pendingBeats:
+      preview === 'beat-cap'
+        ? [firstCapBeat('Spain')]
+        : preview === 'beat-title'
+          ? [firstTitleBeat('La Liga')]
+          : preview === 'beat-sold'
+            ? [soldBeat('Real Madrid')]
+            : preview === 'beat-record'
+              ? [recordBeat({
+                title: 'La Liga season',
+                subtitle: 'Goals in a single league season',
+                rankLabel: '3rd',
+                playerGoals: 38,
+                kind: 'season',
+              }, 'Alex Rivera')]
+              : preview === 'beat-retire'
+                ? [retirementBeat('Alex Rivera', 'Inter Miami')]
+                : [],
   });
 
   if (preview === 'legacy' || preview === 'profile') applyLegacyRecordsOverlay(preview);

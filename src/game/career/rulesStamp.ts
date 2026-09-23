@@ -122,6 +122,7 @@ export function rebuildCurrentSeason(state: CareerState): Partial<CareerState> {
       ...sim,
       leagueTable: sameTable ? old.leagueTable : sim.leagueTable,
       europeanStanding: old.europeanStanding ?? sim.europeanStanding,
+      europeanTable: old.europeanTable ?? sim.europeanTable,
       europeanGroupPoints: old.europeanGroupPoints,
       europeanGroupPlayed: old.europeanGroupPlayed,
       knockoutAggFor: old.knockoutAggFor,

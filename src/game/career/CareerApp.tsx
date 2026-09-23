@@ -17,6 +17,8 @@ import TransferChoiceScreen from './screens/TransferChoiceScreen';
 import MatchResultScreen from './screens/MatchResultScreen';
 import OpeningBriefScreen from './screens/OpeningBriefScreen';
 import OpeningStatusScreen from './screens/OpeningStatusScreen';
+import CareerBeatScreen from './screens/CareerBeatScreen';
+import GuidedFirstChanceScreen from './screens/GuidedFirstChanceScreen';
 import { useCareerStore } from './store';
 import { applyCareerLayoutPreview } from './previewCareerLayout';
 
@@ -51,6 +53,8 @@ export default function CareerApp() {
   const pendingTransfer = useCareerStore((s) => s.pendingTransfer);
   const clubId = useCareerStore((s) => s.clubId);
   const returnToMenu = useCareerStore((s) => s.returnToMenu);
+  const pendingBeats = useCareerStore((s) => s.pendingBeats);
+  const guidedChanceSeen = useCareerStore((s) => s.guidedChanceSeen);
 
   if (!hydrated) {
     return (
@@ -83,6 +87,15 @@ export default function CareerApp() {
 
   if (nationality && !playerName && phase !== 'menu' && phase !== 'nationality-choice' && phase !== 'player-name' && phase !== 'club-choice') {
     return <PlayerNameScreen />;
+  }
+
+  const nextBeat = pendingBeats?.[0];
+  if (nextBeat && phase !== 'menu' && phase !== 'nationality-choice' && phase !== 'player-name' && phase !== 'club-choice') {
+    return <CareerBeatScreen beat={nextBeat} />;
+  }
+
+  if (!guidedChanceSeen && phase === 'match' && (liveMatch || openingCampaign)) {
+    return <GuidedFirstChanceScreen />;
   }
 
   switch (phase) {

@@ -1,6 +1,6 @@
 import type { CalendarFixture, DomesticCupStage, LeaguesCupStage, PlayoffRound, SeasonCalendar, SuperCupStage } from './calendar';
 import type { SquadStatus } from './types';
-import { buildSeasonCalendar, fixtureIsHome, internationalVenueFlags } from './calendar';
+import { buildSeasonCalendar, fixtureIsHome, internationalVenueFlags, scoreboardPlayerOnLeft } from './calendar';
 import { leaguePhaseOpponents } from './continentalDraw';
 import {
   chancesForKnockoutTie,
@@ -71,9 +71,11 @@ import { clubEligibleForNationalTeam, getNation, isSelectedForNationalTeam, NATI
 import {
   applyMatchToTable,
   clubsForContinentalCup,
+  emptyEuropeanTable,
   emptyStanding,
   formatHomeAwayScore,
   simulateClubMatch,
+  simulateRestOfEuropeanRound,
   simulateRestOfLeagueRound,
   applyPlayerGoalsFloor,
   expectedScore,
@@ -114,6 +116,8 @@ export interface SeasonSimState {
   fixtureIndex: number;
   leagueTable: LeagueStanding[];
   europeanStanding: EuropeanStanding | null;
+  /** League-phase table for the player's continental cup. */
+  europeanTable: LeagueStanding[];
   europeanGroupPoints: number;
   europeanGroupPlayed: number;
   knockoutAggFor: number;
@@ -196,7 +200,7 @@ export function liveMatchBoardLine(args: {
 }): string {
   const { sim, fixture, club, live, seasonNumber } = args;
   if (live.penaltyKick && live.ninetyScoreFor != null && live.ninetyScoreAgainst != null) {
-    return formatHomeAwayScore(live.ninetyScoreFor, live.ninetyScoreAgainst, fixtureIsHome(fixture));
+    return formatHomeAwayScore(live.ninetyScoreFor, live.ninetyScoreAgainst, scoreboardPlayerOnLeft(fixture));
   }
   const rng = mulberry32(liveMatchScoreSeed(seasonNumber, live.fixtureIndex, club.id));
   const isHome = fixtureIsHome(fixture);
@@ -232,7 +236,26 @@ export function liveMatchBoardLine(args: {
     result = { scoreFor: result.scoreAgainst, scoreAgainst: result.scoreAgainst, outcome: 'draw' };
   }
   result = applyPlayerGoalsFloor(result, live.goals);
-  return formatHomeAwayScore(result.scoreFor, result.scoreAgainst, isHome);
+  return formatHomeAwayScore(result.scoreFor, result.scoreAgainst, scoreboardPlayerOnLeft(fixture));
+}
+
+export function liveMatchBoardScores(args: {
+  sim: SeasonSimState;
+  fixture: CalendarFixture;
+  club: Club;
+  live: LiveMatch;
+  seasonNumber: number;
+}): { scoreFor: number; scoreAgainst: number; line: string } {
+  const line = liveMatchBoardLine(args);
+  const [left, right] = line.split('\u2013').map((part) => Number(part));
+  const playerOnLeft = scoreboardPlayerOnLeft(args.fixture);
+  const scoreFor = playerOnLeft ? left : right;
+  const scoreAgainst = playerOnLeft ? right : left;
+  return {
+    scoreFor: Number.isFinite(scoreFor) ? scoreFor : 0,
+    scoreAgainst: Number.isFinite(scoreAgainst) ? scoreAgainst : 0,
+    line,
+  };
 }
 
 export interface HydrateSeasonParams {
@@ -378,6 +401,7 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
   const leagueClubs = clubsForSeason(club, league);
   const leagueTable = leagueClubs.map((c) => emptyStanding(c.id));
   const europeanStanding: EuropeanStanding | null = cup ? { cup, stage: 'group' } : null;
+  const europeanTable = cup ? emptyEuropeanTable(clubsForContinentalCup(cup)) : [];
   const domesticCup = calendar.domesticCup ?? null;
   const hasFriendlies = calendar.fixtures.some((f) => f.internationalRound === 'friendly');
   const titleRival = pickTitleRival(club, league);
@@ -395,6 +419,7 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
       fixtureIndex: 0,
       leagueTable,
       europeanStanding,
+      europeanTable,
       europeanGroupPoints: 0,
       europeanGroupPlayed: 0,
       knockoutAggFor: 0,
@@ -1221,9 +1246,11 @@ export function applyEuropeanResult(
   sim: SeasonSimState,
   fixture: CalendarFixture,
   result: { outcome: 'win' | 'draw' | 'loss'; scoreFor: number; scoreAgainst: number; penalties?: { won: boolean } },
+  playerClubId?: string,
+  rng: () => number = Math.random,
 ): SeasonSimState {
   if (!sim.europeanStanding || !fixture.continentalCup) return sim;
-  const next = { ...sim, europeanStanding: { ...sim.europeanStanding } };
+  const next = { ...sim, europeanStanding: { ...sim.europeanStanding }, europeanTable: (sim.europeanTable ?? []).map((row) => ({ ...row })) };
 
   if (fixture.kind === 'super-cup') {
     if (fixture.domesticSuperCup) {
@@ -1252,6 +1279,18 @@ export function applyEuropeanResult(
     next.europeanGroupPlayed += 1;
     if (result.outcome === 'win') next.europeanGroupPoints += 3;
     else if (result.outcome === 'draw') next.europeanGroupPoints += 1;
+    if (playerClubId && fixture.opponentId) {
+      let table = next.europeanTable.length ? next.europeanTable : emptyEuropeanTable(clubsForContinentalCup(fixture.continentalCup));
+      if (!table.some((row) => row.clubId === playerClubId)) table = [...table, emptyStanding(playerClubId)];
+      if (!table.some((row) => row.clubId === fixture.opponentId)) table = [...table, emptyStanding(fixture.opponentId)];
+      table = applyMatchToTable(table, playerClubId, fixture.opponentId, {
+        outcome: result.outcome,
+        scoreFor: result.scoreFor,
+        scoreAgainst: result.scoreAgainst,
+      });
+      table = simulateRestOfEuropeanRound(table, playerClubId, fixture.opponentId, rng, `eu${fixture.week}`);
+      next.europeanTable = table;
+    }
     if (next.europeanGroupPlayed >= GROUP_GAMES) {
       if (next.europeanGroupPoints >= GROUP_ADVANCE_POINTS) {
         next.europeanStanding.stage = 'round-of-16';
@@ -1776,7 +1815,7 @@ export function resolveFixture(
   } else if (fixture.kind === 'playoff') {
     next = applyPlayoffResult(next, fixture, result, playerClub.id);
   } else if (fixture.kind.startsWith('continental') || fixture.kind === 'super-cup') {
-    next = applyEuropeanResult(next, fixture, result);
+    next = applyEuropeanResult(next, fixture, result, playerClub.id, rng);
   } else if (isInternational) {
     next = applyInternationalResult(next, fixture, scored, result.outcome, result.scoreFor, result.scoreAgainst);
   }

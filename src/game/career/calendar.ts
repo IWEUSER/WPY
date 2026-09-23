@@ -123,6 +123,11 @@ export function fixtureVenueLabel(fixture: CalendarFixture): 'Neutral' | 'Home' 
   return fixtureIsHome(fixture) ? 'Home' : 'Away';
 }
 
+/** Neutral boards put the player's team on the left. Real home/away stay traditional. */
+export function scoreboardPlayerOnLeft(fixture: CalendarFixture): boolean {
+  return fixtureIsNeutral(fixture) || fixtureIsHome(fixture);
+}
+
 /** Player's side is at home. Prefers the stored flag, then two-legged legs, then week parity. */
 export function fixtureIsHome(fixture: CalendarFixture): boolean {
   if (fixtureIsNeutral(fixture)) return false;

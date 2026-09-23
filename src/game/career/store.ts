@@ -27,6 +27,16 @@ import { evaluateInternationalTournamentAwards } from './internationalAwards';
 import { countsTowardCareerRecord, displaySeasonNumber } from './seasonDisplay';
 import { trophyLabels } from './honoursDisplay';
 import {
+  careerHadTrophies,
+  firstCapBeat,
+  firstTitleBeat,
+  pushCareerBeat,
+  recordBeat,
+  retirementBeat,
+  soldBeat,
+} from './careerBeat';
+import { inputWithoutSeason, seasonLegacyHighlights } from './legacyRecords';
+import {
   bumpInternationalSeason,
   isInternationalFinalsRound,
   callUpRatio,
@@ -735,6 +745,9 @@ function initialState(): CareerState {
     rulesStamp: CURRENT_RULES_STAMP,
     legacyReturnPhase: null,
     profileReturnPhase: null,
+    pendingBeats: [],
+    seenBeatKinds: [],
+    guidedChanceSeen: false,
   };
 }
 
@@ -865,6 +878,8 @@ interface CareerActions {
   recordMatchChance: (result: ShotResult) => void;
   finishLiveMatch: () => void;
   acknowledgeMatchResult: () => void;
+  acknowledgeBeat: () => void;
+  markGuidedChanceSeen: () => void;
   /** Season 1 one-shot matches still call this. */
   recordMatchShot: (result: ShotResult) => void;
   continueAfterSeason: () => void;
@@ -1281,6 +1296,7 @@ function finishResolvedLiveMatch(
   );
 
   const isInternational = fixture.kind === 'international';
+  const prevCaps = state.nationalTeam?.caps ?? 0;
   let availability = state.availability;
   let nationalTeam = state.nationalTeam;
   if (isInternational && nationalTeam) {
@@ -1369,6 +1385,22 @@ function finishResolvedLiveMatch(
         awarded.season,
       );
 
+  let pendingBeats = state.pendingBeats ?? [];
+  if (isInternational && prevCaps === 0 && (nationalTeam?.caps ?? 0) > 0) {
+    const nationName = state.nationality ? getNation(state.nationality)?.name : undefined;
+    pendingBeats = pushCareerBeat(pendingBeats, state.seenBeatKinds, firstCapBeat(nationName ?? 'Your country'));
+  }
+  if (
+    complete
+    && !recap.lastMatchResult.isFinal
+    && !careerHadTrophies(state.seasonHistory)
+  ) {
+    const titles = trophyLabels(withHonours.honours, club, state.clubLeague);
+    if (titles[0]) {
+      pendingBeats = pushCareerBeat(pendingBeats, state.seenBeatKinds, firstTitleBeat(titles[0]));
+    }
+  }
+
   return {
     seasonSim: withHonours,
     seasonCalendar: nextCalendar,
@@ -1385,6 +1417,7 @@ function finishResolvedLiveMatch(
     careerGames: counts ? state.careerGames + 1 : state.careerGames,
     careerEarnings: paid.careerEarnings,
     injuryGamesRemaining,
+    pendingBeats,
     phase: recap.lastMatchResult.isFinal ? 'match-result' : afterPhase,
     wpyResult: awarded.wpyResult,
   };
@@ -1691,9 +1724,30 @@ export const useCareerStore = create<CareerStore>()(
           return finishResolvedLiveMatch(state, resolution, live);
         }),
 
+      acknowledgeBeat: () =>
+        set((state) => {
+          const [current, ...rest] = state.pendingBeats ?? [];
+          if (!current) return {};
+          const seen = state.seenBeatKinds ?? [];
+          return {
+            pendingBeats: rest,
+            seenBeatKinds: seen.includes(current.kind) ? seen : [...seen, current.kind],
+          };
+        }),
+
+      markGuidedChanceSeen: () => set({ guidedChanceSeen: true }),
+
       acknowledgeMatchResult: () =>
         set((state) => {
           const after = state.lastMatchResult?.afterPhase;
+          const seen = state.seenBeatKinds ?? [];
+          const firstTitleSeen =
+            state.lastMatchResult?.isFinal
+            && state.lastMatchResult.won
+            && state.lastMatchResult.trophyName
+            && !seen.includes('first-title')
+              ? [...seen, 'first-title' as const]
+              : seen;
           if (after === 'match' && state.openingCampaign) {
             const live = liveFromOpening(state.openingCampaign);
             return {
@@ -1701,6 +1755,7 @@ export const useCareerStore = create<CareerStore>()(
               liveMatch: live,
               lastMatchResult: null,
               seasonCalendar: state.openingCampaign.calendar,
+              seenBeatKinds: firstTitleSeen,
             };
           }
           if (after === 'opening-brief') {
@@ -1708,17 +1763,18 @@ export const useCareerStore = create<CareerStore>()(
               state.openingCampaign && state.nationality
                 ? repairOpeningCampaign(state.openingCampaign, state.nationality)
                 : state.openingCampaign;
-            return { phase: 'opening-brief', lastMatchResult: null, openingCampaign: opening };
+            return { phase: 'opening-brief', lastMatchResult: null, openingCampaign: opening, seenBeatKinds: firstTitleSeen };
           }
           if (after === 'club-offer') {
-            return { phase: 'club-offer', lastMatchResult: null };
+            return { phase: 'club-offer', lastMatchResult: null, seenBeatKinds: firstTitleSeen };
           }
           if (after === 'hub') {
-            return { phase: 'hub', lastMatchResult: null };
+            return { phase: 'hub', lastMatchResult: null, seenBeatKinds: firstTitleSeen };
           }
           return {
             phase: after ?? (state.clubId ? 'hub' : 'menu'),
             lastMatchResult: null,
+            seenBeatKinds: firstTitleSeen,
           };
         }),
 
@@ -1831,6 +1887,11 @@ export const useCareerStore = create<CareerStore>()(
               seasonHistory,
               currentSeason: finishedSeason,
               pendingTransfer: null,
+              pendingBeats: pushCareerBeat(
+                state.pendingBeats,
+                state.seenBeatKinds,
+                retirementBeat(state.playerName?.trim() || 'You', club?.name ?? null),
+              ),
               phase: 'career-end' as const,
             };
           }
@@ -1922,6 +1983,32 @@ export const useCareerStore = create<CareerStore>()(
             };
           }
 
+          const highlight = seasonLegacyHighlights(
+            inputWithoutSeason({
+              seasons: seasonHistory,
+              nationalTeam,
+              nationality: state.nationality,
+              playerName: state.playerName,
+            }, finishedSeason),
+            {
+              seasons: seasonHistory,
+              nationalTeam,
+              nationality: state.nationality,
+              playerName: state.playerName,
+            },
+            finishedSeason,
+          )[0];
+          let pendingBeats = state.pendingBeats ?? [];
+          if (highlight) {
+            pendingBeats = pushCareerBeat(
+              pendingBeats,
+              state.seenBeatKinds,
+              recordBeat(highlight, state.playerName?.trim() || 'You'),
+            );
+          }
+          if (transition.pendingTransfer?.kind === 'sold' && club) {
+            pendingBeats = pushCareerBeat(pendingBeats, state.seenBeatKinds, soldBeat(club.name));
+          }
           return {
             seasonHistory,
             seasonNumber: nextSeasonNumber,
@@ -1932,6 +2019,7 @@ export const useCareerStore = create<CareerStore>()(
             previousChampionClubId: previousContinentalChampion ? state.clubId : null,
             qualifiedContinentalCup,
             nationalTeam,
+            pendingBeats,
             phase: 'transfer-choice',
           };
         }),
@@ -1995,7 +2083,7 @@ export const useCareerStore = create<CareerStore>()(
               squadStatus: stayStatus,
               lastTransferRejection: null,
               seasonsAtCurrentClub: stay.seasonsAtCurrentClub,
-              weeklyWage: stay.weeklyWage ?? state.weeklyWage,
+              weeklyWage: stay.weeklyWage != null && stay.weeklyWage > 0 ? stay.weeklyWage : state.weeklyWage,
               contractYearsRemaining: stay.contractYearsRemaining,
               contractYears: stay.contractYearsRemaining,
               homeContractYearsRemaining: stay.role === 'loan' ? state.homeContractYearsRemaining : null,
@@ -2258,7 +2346,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 36,
+      version: 37,
       migrate: (persisted) => {
         try {
           return migrateCareerPersist(persisted);
@@ -2387,6 +2475,7 @@ function migrateCareerPersist(persisted: unknown): CareerState {
                   internationalGroup: sim.internationalGroup ?? null,
                   friendlyPlayed: sim.friendlyPlayed ?? 0,
                   knockoutGamesScored: sim.knockoutGamesScored ?? 0,
+                  europeanTable: sim.europeanTable ?? [],
                 },
                 state.seasonCalendar,
                 state.seasonNumber ?? 1,
@@ -2421,6 +2510,9 @@ function migrateCareerPersist(persisted: unknown): CareerState {
           lastSuperCupOpponentId: state.lastSuperCupOpponentId ?? null,
           legacyReturnPhase: state.legacyReturnPhase ?? null,
           profileReturnPhase: state.profileReturnPhase ?? null,
+          pendingBeats: state.pendingBeats ?? [],
+          seenBeatKinds: state.seenBeatKinds ?? [],
+          guidedChanceSeen: state.guidedChanceSeen ?? false,
           squadStatus: (() => {
             const status = normalizeSquadStatus(state.squadStatus, state.role ?? 'reserve');
             if (

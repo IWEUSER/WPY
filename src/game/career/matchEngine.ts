@@ -69,9 +69,9 @@ export function missedChanceWinFactor(misses: number): number {
   return 0.35;
 }
 
-/** Traditional scoreboard: home on the left, away on the right. */
-export function formatHomeAwayScore(scoreFor: number, scoreAgainst: number, isHome: boolean): string {
-  return isHome
+/** Traditional scoreboard: home on the left, away on the right. Neutral uses player-left. */
+export function formatHomeAwayScore(scoreFor: number, scoreAgainst: number, playerOnLeft: boolean): string {
+  return playerOnLeft
     ? `${scoreFor}\u2013${scoreAgainst}`
     : `${scoreAgainst}\u2013${scoreFor}`;
 }
@@ -338,6 +338,21 @@ export function pairClubs(clubIds: string[]): [string, string][] {
     if (a && b) pairs.push([a, b]);
   }
   return pairs;
+}
+
+/** Simulate the rest of a continental league-phase matchday. */
+export function simulateRestOfEuropeanRound(
+  table: LeagueStanding[],
+  playerClubId: string,
+  playerOpponentId: string,
+  rng: () => number = Math.random,
+  pairingSeed = '',
+): LeagueStanding[] {
+  return simulateRestOfLeagueRound(table, playerClubId, playerOpponentId, rng, pairingSeed);
+}
+
+export function emptyEuropeanTable(clubIds: string[]): LeagueStanding[] {
+  return clubIds.map((id) => emptyStanding(id));
 }
 
 /** Simulate every *other* league fixture this matchweek so the table moves

@@ -17,7 +17,7 @@ import {
 import { displaySeasonLabel, displaySeasonNumber } from '../seasonDisplay';
 import { clubEligibleForNationalTeam, callUpLeagueRequirement, callUpRatio, getNation, isSelectedForNationalTeam, SEASON_1_CALL_UP_MIN_WEEK, selectionRatioForNation } from '../international';
 import { formatEuros, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
-import type { SeasonStandings } from '../matchEngine';
+import { rankLeagueTable, type SeasonStandings } from '../matchEngine';
 import { conferenceTable, ensureInternationalGroup, fixtureTitle, internationalRoundLabel, nextActionableFixture, type SeasonSimState } from '../seasonSim';
 import { nextMatchBriefing, playerGoalsLine, sitOutRecapLine } from '../matchBriefing';
 import { groupPosition, sortGroupTable } from '../internationalTable';
@@ -371,7 +371,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         <details className={DATA_CARD}>
           <summary className="cursor-pointer list-none text-sm font-semibold text-white/85 [&::-webkit-details-marker]:hidden">
             Tables
-            <span className="mt-0.5 block text-xs font-medium text-white/40">League, cups, internationals</span>
+            <span className="mt-0.5 block text-xs font-medium text-white/40">League, Europe, internationals</span>
           </summary>
           <div className="mt-4 flex flex-col gap-5">
             {seasonStandings && (
@@ -382,6 +382,13 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
                 cupStage={seasonSim?.domesticCupStage ?? null}
                 sim={seasonSimWithGroup}
                 nested
+              />
+            )}
+            {seasonSimWithGroup && (
+              <EuropeanTableCard
+                table={seasonSimWithGroup.europeanTable ?? []}
+                clubId={club.id}
+                standing={seasonSimWithGroup.europeanStanding}
               />
             )}
             {nation && role !== 'reserve' && seasonSimWithGroup?.internationalGroup && (
@@ -539,6 +546,52 @@ function StandingsCard({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function EuropeanTableCard({
+  table,
+  clubId,
+  standing,
+}: {
+  table: SeasonSimState['europeanTable'];
+  clubId: string;
+  standing: SeasonSimState['europeanStanding'];
+}) {
+  const cupName = standing ? (CONTINENTAL_CUPS[standing.cup]?.name ?? standing.cup) : null;
+  const rows = rankLeagueTable(table ?? []).filter((row) => row.played > 0);
+  if (!cupName || rows.length === 0) return null;
+
+  return (
+    <div>
+      <p className="text-xs uppercase tracking-wide text-white/40">
+        {cupName}
+        {standing?.stage ? ` · ${competitionStageLabel(standing.stage)}` : ''}
+      </p>
+      <table className="mt-3 w-full table-fixed border-collapse text-left text-xs">
+        <thead>
+          <tr className="text-[10px] uppercase tracking-wide text-white/40">
+            <th className="pb-1 font-medium">Club</th>
+            <th className="w-10 pb-1 text-right font-medium">P</th>
+            <th className="w-10 pb-1 text-right font-medium">GD</th>
+            <th className="w-10 pb-1 text-right font-medium">Pts</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const name = getClub(row.clubId)?.name ?? row.clubId;
+            return (
+              <tr key={row.clubId} className={row.clubId === clubId ? 'font-semibold text-white' : 'text-white/70'}>
+                <td className="py-0.5 pr-2">{row.position}. {name}</td>
+                <td className="py-0.5 text-right tabular-nums">{row.played}</td>
+                <td className="py-0.5 text-right tabular-nums">{row.goalsFor - row.goalsAgainst}</td>
+                <td className="py-0.5 text-right tabular-nums">{row.points}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
