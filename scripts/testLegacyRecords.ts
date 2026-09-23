@@ -14,6 +14,7 @@ import {
   rankForGoals,
   revealForRank,
   seasonLegacyHighlights,
+  seasonOutrightRecordHighlights,
   viewForBoard,
   type LegacyCareerInput,
 } from '../src/game/career/legacyRecords';
@@ -322,6 +323,68 @@ const allTimeHighlights = seasonLegacyHighlights({ seasons: [], nationalTeam: nu
 assert(
   allTimeHighlights.some((item) => item.kind === 'all-time'),
   'breaking into the all-time top 10 should show on the season review',
+);
+
+const franceSeason = season({
+  clubId: 'psg',
+  league: 'Ligue 1',
+  leagueGoals: 20,
+  leagueGames: 30,
+  international: {
+    tournament: 'world-cup',
+    qualifyingGames: 0,
+    qualifyingGoals: 0,
+    qualifyingOutcome: 'qualified',
+    finalsGames: 7,
+    finalsGoals: 11,
+    tournamentOutcome: 'champion',
+    playerOfTheTournament: false,
+    topGoalscorer: false,
+  },
+});
+const franceTeam: NationalTeamState = {
+  ...emptyTeam('france'),
+  caps: 7,
+  goals: 11,
+  byCompetition: [
+    { ...emptyCompetitionRecord('world-cup'), finalsGoals: 11, finalsGames: 7 },
+  ],
+};
+const franceInput: LegacyCareerInput = {
+  seasons: [franceSeason],
+  nationalTeam: franceTeam,
+  nationality: 'france',
+};
+const franceBoards = careerLegacyBoards(franceInput);
+const franceWc = franceBoards.filter((board) => board.def.id.includes('world-cup') && board.reveal === 'top10');
+assert(
+  franceWc.some((board) => board.def.id === 'nation-tournament:career:france:world-cup' && board.rank === 4),
+  `11 France WC career goals should be 4th on the France board, got ${franceWc.map((b) => `${b.def.id}:${b.rank}`).join(', ')}`,
+);
+assert(
+  franceWc.some((board) => board.def.id === 'nation-tournament:season:france:world-cup' && board.rank === 2),
+  '11 France WC finals goals should be 2nd on the France single-edition board',
+);
+assert(
+  franceWc.some((board) => board.def.id === 'intl-tournament:career:world-cup'),
+  '11 World Cup goals must also sit on the all-country all-time board',
+);
+assert(
+  franceWc.some((board) => board.def.id === 'intl-tournament:season:world-cup'),
+  '11 World Cup goals must also sit on the all-country single-edition board',
+);
+assert(franceWc.length >= 4, `11 France WC goals should unlock 4 boards, got ${franceWc.length}`);
+
+const outright = seasonOutrightRecordHighlights({ seasons: [], nationalTeam: null }, allTimeAfter, allTimeSeason);
+assert(outright.every((item) => item.rank === 1), 'outright record beats are rank 1 only');
+assert(
+  seasonOutrightRecordHighlights(previous, after, currentSeason).some((item) => item.playerGoals === 36 && item.rank === 1),
+  '36 PL goals is the single-season record and may get a beat',
+);
+assert(
+  !seasonOutrightRecordHighlights({ seasons: [], nationalTeam: emptyTeam('france') }, franceInput, franceSeason)
+    .some((item) => item.title.includes('World Cup') && item.rank !== 1),
+  '11 World Cup goals is a top-10 inclusion, not an outright record beat',
 );
 
 const stripped = inputWithoutSeason(allTimeAfter, allTimeSeason);

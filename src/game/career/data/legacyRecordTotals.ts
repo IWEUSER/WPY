@@ -595,3 +595,29 @@ export function nationTournamentLadders(
 ): NationTournamentLadders | null {
   return NATION_TOURNAMENT[nationId]?.[tournament] ?? null;
 }
+
+/**
+ * All-country tournament ladders. A France World Cup haul sits on both the
+ * France board and these general World Cup boards.
+ */
+export const INTL_TOURNAMENT_CAREER: Record<string, number[]> = {
+  'world-cup': [16, 15, 14, 13, 12, 11, 11, 10, 10, 10],
+  euro: [14, 9, 9, 7, 6, 6, 5, 5, 5, 4],
+  'copa-america': [17, 17, 15, 13, 13, 12, 11, 10, 10, 9],
+  'gold-cup': [18, 17, 14, 13, 12, 11, 9, 8, 8, 7],
+  afcon: [18, 16, 13, 13, 12, 11, 10, 10, 9, 8],
+  'asian-cup': [16, 14, 12, 11, 10, 9, 8, 8, 7, 7],
+  'ofc-nations-cup': [17, 14, 12, 10, 8, 7, 6, 6, 5, 5],
+  'nations-league': [14, 8, 6, 5, 5, 4, 4, 3, 3, 3],
+};
+
+export const INTL_TOURNAMENT_SEASON: Record<string, number[]> = {
+  'world-cup': [13, 11, 10, 9, 9, 8, 8, 7, 7, 6],
+  euro: [9, 6, 5, 5, 4, 4, 3, 3, 3, 3],
+  'copa-america': [9, 8, 8, 7, 6, 6, 5, 5, 5, 4],
+  'gold-cup': [7, 6, 6, 5, 5, 4, 4, 4, 3, 3],
+  afcon: [8, 7, 6, 6, 5, 5, 5, 4, 4, 4],
+  'asian-cup': [8, 6, 6, 5, 5, 4, 4, 3, 3, 3],
+  'ofc-nations-cup': [10, 8, 7, 6, 5, 4, 4, 3, 3, 3],
+  'nations-league': [6, 4, 3, 3, 2, 2, 2, 2, 2, 1],
+};

@@ -54,7 +54,7 @@ export interface DefenderPose {
   hairColor?: string;
 }
 
-export type ChanceKind = 'open' | 'penalty';
+export type ChanceKind = 'open' | 'penalty' | 'cross';
 
 export interface ChanceSetup {
   kind: ChanceKind;
@@ -342,6 +342,7 @@ export interface RollChanceOptions {
   skinPalette?: SkinPalette;
   allowPenalties?: boolean;
   forceDualDefenders?: boolean;
+  forceKind?: ChanceKind;
 }
 
 export function chanceDefenders(setup: Pick<ChanceSetup, 'defender' | 'defenders'>): DefenderPose[] {
@@ -452,6 +453,28 @@ export function rollChanceSetup(options: RollChanceOptions = {}): ChanceSetup {
       ballStartXRatio: 0.5,
       defender: null,
       defenders: [],
+    };
+  }
+
+  const CROSS_CHANCE = 0.26;
+  const wantCross = options.forceKind === 'cross' || (
+    options.forceKind !== 'open'
+    && options.forceDistanceM === undefined
+    && rng() < CROSS_CHANCE
+  );
+  if (wantCross) {
+    const left = rng() < 0.5;
+    const distanceM = FIFA.sixYardDepth + rng() * 4.2;
+    const ballStartXRatio = left ? 0.08 + rng() * 0.12 : 0.80 + rng() * 0.12;
+    const first = options.disableDefender
+      ? null
+      : placeDefender(distanceM, ballStartXRatio, rng, options.skinPalette ?? 'any');
+    return {
+      kind: 'cross',
+      distanceM,
+      ballStartXRatio,
+      defender: first,
+      defenders: first ? [first] : [],
     };
   }
 

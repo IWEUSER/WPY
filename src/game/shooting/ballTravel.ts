@@ -7,11 +7,38 @@ export const BALL_TRAVEL_MAX_X = 1 - BALL_TRAVEL_MIN_X;
 
 /** Screen-width fraction the ball covers per second on open play. */
 export const BALL_TRAVEL_SPEED = 0.22;
+/** A ball whipped across the face of goal. */
+export const CROSS_TRAVEL_SPEED = 0.86;
+export const BALL_BOUNCE_PERIOD_S = 0.92;
+export const BALL_BOUNCE_HEIGHT_RATIO = 0.038;
 
 export type BallTravelDir = -1 | 1;
 
-export function chanceBallTravels(kind: 'open' | 'penalty'): boolean {
+export function chanceBallTravels(kind: string): boolean {
   return kind !== 'penalty';
+}
+
+export function ballTravelSpeedForKind(kind: string): number {
+  return kind === 'cross' ? CROSS_TRAVEL_SPEED : BALL_TRAVEL_SPEED;
+}
+
+/** 0 on the turf, 1 at the peak of the bounce. */
+export function ballBounceLift(elapsedS: number): number {
+  const t = ((elapsedS % BALL_BOUNCE_PERIOD_S) + BALL_BOUNCE_PERIOD_S) % BALL_BOUNCE_PERIOD_S;
+  return Math.sin((t / BALL_BOUNCE_PERIOD_S) * Math.PI);
+}
+
+/** How much an under-swipe should loft the ball, given bounce height. */
+export function underSwipeLift(
+  startScreenY: number,
+  ballY: number,
+  ballRadius: number,
+  bounceHeight: number,
+): number {
+  const ballBottom = ballY + ballRadius * 0.85;
+  const under = startScreenY - ballBottom;
+  const raw = clamp(under / Math.max(18, ballRadius * 2.4), 0, 1);
+  return raw * (0.55 + (1 - bounceHeight) * 0.45);
 }
 
 export function pickBallTravelDir(xRatio: number, rng: () => number = Math.random): BallTravelDir {
@@ -59,10 +86,12 @@ export function advanceBallTravel(
  * 1 when the ball is central (easiest body position), 0 at the travel edges.
  * Swiping on the roll still works at the sides — just a more awkward take.
  */
-export function takeQualityFromXRatio(xRatio: number): number {
+export function takeQualityFromXRatio(xRatio: number, kind?: string): number {
   const half = (BALL_TRAVEL_MAX_X - BALL_TRAVEL_MIN_X) / 2;
   const t = Math.min(1, Math.abs(xRatio - 0.5) / Math.max(1e-4, half));
-  return 1 - t * t;
+  const base = 1 - t * t;
+  if (kind === 'cross') return clamp(base ** 1.65 * 0.72, 0.08, 0.78);
+  return base;
 }
 
 function clamp(value: number, min: number, max: number): number {

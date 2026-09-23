@@ -24,6 +24,24 @@ export function bumpContinentalStats(
   return next;
 }
 
+/** Club goals/games only — national-team appearances never count here. */
+export function clubSeasonTotals(season: SeasonRecord): { goals: number; games: number } {
+  const intlGoals = (season.international?.qualifyingGoals ?? 0) + (season.international?.finalsGoals ?? 0);
+  const intlGames = (season.international?.qualifyingGames ?? 0) + (season.international?.finalsGames ?? 0);
+  const leagueGoals = season.leagueGoals ?? 0;
+  const cupGoals = season.cupGoals ?? 0;
+  const continentalGoals = (season.continentalStats ?? []).reduce((sum, row) => sum + row.goals, 0);
+  const splitGoals = leagueGoals + cupGoals + continentalGoals;
+  const leagueGames = season.leagueGames ?? 0;
+  const cupGames = season.cupGames ?? 0;
+  const continentalGames = (season.continentalStats ?? []).reduce((sum, row) => sum + row.games, 0);
+  const splitGames = leagueGames + cupGames + continentalGames;
+  return {
+    goals: splitGoals > 0 ? splitGoals : Math.max(0, season.goals - intlGoals),
+    games: splitGames > 0 ? splitGames : Math.max(0, season.gamesPlayed - intlGames),
+  };
+}
+
 export function recordClubAppearanceStats(
   season: SeasonRecord,
   fixture: CalendarFixture,

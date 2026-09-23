@@ -37,6 +37,10 @@ export interface SwipeGesture {
    * Omitted (or 1) on a planted penalty.
    */
   takeQuality?: number;
+  /** 0–1 how far under the ball the swipe started. */
+  contactLift?: number;
+  /** 0–1 current bounce height when the swipe started. */
+  bounceHeight?: number;
 }
 
 /** How the same upward swipe was struck — poke, chip, drive, or lofted floater. */

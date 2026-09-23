@@ -52,23 +52,51 @@ export function chanceBeatLine(
   return 'Here we go';
 }
 
-const MINUTE_BANDS: Record<ChanceStake, number[]> = {
+const MINUTE_BANDS: Record<Exclude<ChanceStake, 'penalty'>, number[]> = {
   league: [54, 67, 78, 87],
   cup: [62, 74, 83, 89],
   final: [68, 79, 88, 90],
-  penalty: [120, 120, 120, 120],
 };
+
+/**
+ * Minutes for every chance in this match, assigned once and always increasing.
+ * In-play penalties keep their slot — only a shootout uses 120.
+ */
+export function chanceMinutesForMatch(total: number, stake: ChanceStake): number[] {
+  const n = Math.max(1, total);
+  if (stake === 'penalty') return Array.from({ length: n }, () => 120);
+  const band = MINUTE_BANDS[stake] ?? MINUTE_BANDS.league;
+  const minutes: number[] = [];
+  if (n === 1) {
+    minutes.push(band[Math.max(0, band.length - 2)] ?? band[0] ?? 78);
+  } else if (n <= band.length) {
+    for (let i = 0; i < n; i++) {
+      const idx = Math.round((i * (band.length - 1)) / (n - 1));
+      minutes.push(band[idx] ?? band[band.length - 1] ?? 87);
+    }
+  } else {
+    minutes.push(...band);
+    let extra = 91;
+    while (minutes.length < n) {
+      minutes.push(extra);
+      extra += 2;
+    }
+  }
+  for (let i = 1; i < minutes.length; i++) {
+    if (minutes[i]! <= minutes[i - 1]!) minutes[i] = minutes[i - 1]! + 3;
+  }
+  return minutes;
+}
 
 /** Minute the next chance falls in, from 0-based index. */
 export function chanceMinute(taken: number, total: number, stake: ChanceStake): number {
-  const band = MINUTE_BANDS[stake] ?? MINUTE_BANDS.league;
-  if (total <= 1) return band[band.length - 1] ?? 87;
-  const last = Math.min(total, band.length) - 1;
-  const idx = Math.min(Math.max(0, taken), last);
-  return band[idx] ?? band[band.length - 1] ?? 87;
+  const plan = chanceMinutesForMatch(total, stake);
+  const idx = Math.min(Math.max(0, taken), plan.length - 1);
+  return plan[idx] ?? 87;
 }
 
 export function formatChanceMinute(minute: number): string {
+  if (minute >= 120) return 'Penalties';
   if (minute > 90) return `90+${minute - 90}`;
   if (minute === 90) return '90th minute';
   const mod = minute % 10;
@@ -94,19 +122,14 @@ export function chanceImportanceLine(
   const need = scoreAgainst - scoreFor;
   if (!knockout && remaining > 1 && need <= 0) return null;
   if (need > remaining) {
-    return knockout
-      ? `Even ${remaining} goal${remaining === 1 ? '' : 's'} leave you behind`
-      : null;
-  }
-  if (need === remaining && need > 0) {
-    return remaining === 1
-      ? (knockout ? 'Score or go out' : 'Score here to stay in it')
-      : `Score all ${remaining} to ${knockout ? 'stay in the tie' : 'level it'}`;
+    return knockout ? 'Even a goal leaves you behind' : null;
   }
   if (need > 0) {
-    return `Need ${need} more from ${remaining} to level it`;
+    return knockout
+      ? (need === remaining && remaining === 1 ? 'Score or go out' : 'Need a goal to stay in the tie')
+      : 'Score here to stay in it';
   }
-  if (knockout && remaining === 1) return 'A goal can win it';
+  if (knockout) return 'A goal can win it';
   return null;
 }
 

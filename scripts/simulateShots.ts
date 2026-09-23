@@ -70,11 +70,15 @@ import {
   applyHorizontalKnock,
   BALL_TRAVEL_MAX_X,
   BALL_TRAVEL_MIN_X,
+  CROSS_TRAVEL_SPEED,
+  ballBounceLift,
+  ballTravelSpeedForKind,
   chanceBallTravels,
   knockForceFromSwipe,
   pickBallTravelDir,
   swipeIsHorizontalKnock,
   takeQualityFromXRatio,
+  underSwipeLift,
 } from '../src/game/shooting/ballTravel';
 import { chanceBeatLine, crowdReactsToOutcome, introHoldMs, resultHoldMs } from '../src/game/shooting/chanceAtmosphere';
 import { nationStrength } from '../src/game/career/data/fifaRankings';
@@ -995,8 +999,38 @@ if (Math.abs(rolledRate - p70) > 0.012) {
 }
 
 console.log('\n--- Open-play ball rolls across; penalties stay planted ---');
-if (chanceBallTravels('penalty') || !chanceBallTravels('open')) {
+if (chanceBallTravels('penalty') || !chanceBallTravels('open') || !chanceBallTravels('cross')) {
   console.error('FAIL: only open-play chances should roll the ball');
+  process.exitCode = 1;
+}
+const forcedCross = rollChanceSetup({ forceKind: 'cross', rng: () => 0.1, disableDefender: true });
+if (forcedCross.kind !== 'cross' || forcedCross.distanceM > 11) {
+  console.error('FAIL: a cross chance must start close to goal');
+  process.exitCode = 1;
+}
+if (ballTravelSpeedForKind('cross') < CROSS_TRAVEL_SPEED - 1e-6) {
+  console.error('FAIL: a cross must travel faster than a normal roll');
+  process.exitCode = 1;
+}
+if (takeQualityFromXRatio(0.5, 'cross') >= takeQualityFromXRatio(0.5)) {
+  console.error('FAIL: a ball across goal must be a harder take');
+  process.exitCode = 1;
+}
+if (ballBounceLift(0) > 0.05 || ballBounceLift(0.46) < 0.9) {
+  console.error('FAIL: the idle ball must bounce off the turf');
+  process.exitCode = 1;
+}
+const under = computeIntendedShot({
+  ...gestureFor(0, 0.45, 1),
+  contactLift: 0.9,
+});
+const clean = computeIntendedShot(gestureFor(0, 0.45, 1));
+if (under.aim.y <= clean.aim.y) {
+  console.error('FAIL: swiping underneath a bouncing ball must send it up');
+  process.exitCode = 1;
+}
+if (underSwipeLift(400, 300, 12, 0) <= 0) {
+  console.error('FAIL: a swipe that starts under the ball must register as lift');
   process.exitCode = 1;
 }
 

@@ -92,10 +92,8 @@ export default function MatchScreen() {
       ? `The tie is level ${ninetyLine} — take your penalty`
       : 'The tie is level — take your penalty'
     : simulated
-    ? chances === 1
-      ? 'One chance this game — make it count'
-      : `${chances} chances this game`
-    : 'Your one big chance this game - make it count';
+    ? 'A chance to change the game'
+    : 'Your chance this game — make it count';
 
   const weekLabel = simulated && calendar && liveMatch
     ? `Week ${currentCalendarWeek(calendar, liveMatch.fixtureIndex)} of ${calendar.totalWeeks}`
@@ -108,7 +106,7 @@ export default function MatchScreen() {
         ? 'First of two legs'
         : null;
   const progressLabel = simulated && calendar && liveMatch
-    ? `${weekLabel}${competitionName ? ` · ${competitionName}` : ''}${venueLabel ? ` · ${venueLabel}` : ''}${tieStake ? ` · ${tieStake}` : ''}${penaltyKick ? ' · Penalty shootout' : ` · ${chances} chance${chances === 1 ? '' : 's'}`}`
+    ? `${weekLabel}${competitionName ? ` · ${competitionName}` : ''}${venueLabel ? ` · ${venueLabel}` : ''}${tieStake ? ` · ${tieStake}` : ''}${penaltyKick ? ' · Penalty shootout' : ''}`
     : weekLabel;
 
   const stadium = resolveCareerStadium({

@@ -1,10 +1,11 @@
 import type { SeasonLegacyHighlight } from './legacyRecords';
 import { INTERNATIONAL_TOURNAMENTS } from './data/competitions';
-import { leagueTrophyLabel } from './honoursDisplay';
+import { awardLabels, leagueTrophyLabel } from './honoursDisplay';
 import type { Club } from './data/clubs';
 import type { SeasonHonours } from './seasonSim';
+import type { SeasonRecord } from './types';
 
-export type CareerBeatKind = 'first-cap' | 'first-title' | 'title' | 'sold' | 'record' | 'retirement';
+export type CareerBeatKind = 'first-cap' | 'first-title' | 'title' | 'sold' | 'record' | 'retirement' | 'award';
 
 export interface CareerBeat {
   kind: CareerBeatKind;
@@ -64,11 +65,65 @@ export function soldBeat(clubName: string): CareerBeat {
 export function recordBeat(highlight: SeasonLegacyHighlight, playerName: string): CareerBeat {
   return {
     kind: 'record',
-    eyebrow: highlight.kind === 'season' ? 'Season record' : 'All-time top 10',
+    eyebrow: highlight.kind === 'season' ? 'Season record' : 'All-time record',
     headline: `${playerName} — ${highlight.rankLabel}`,
     copy: `${highlight.title}. ${highlight.subtitle}. A line on the board that used to belong to someone else.`,
     portrait: 'both',
   };
+}
+
+const NATION_AWARD = /World Cup|European Championship|Copa América|Gold Cup|Africa Cup|Asian Cup|Nations Cup|Nations League/i;
+
+export function awardBeat(awardName: string, playerName: string, reason?: string | null): CareerBeat {
+  const world = /World Player/i.test(awardName);
+  return {
+    kind: 'award',
+    eyebrow: 'Award',
+    headline: `${playerName} — ${awardName}`,
+    copy: reason?.trim()
+      || 'A personal honour written into the season. The table is one thing; this is yours.',
+    portrait: world ? 'both' : NATION_AWARD.test(awardName) ? 'nation' : 'club',
+  };
+}
+
+export function seasonAwardBeats(season: SeasonRecord, playerName: string): CareerBeat[] {
+  const names = [
+    ...awardLabels(season),
+    ...(season.wonWpy ? ['World Player of the Year'] : []),
+  ];
+  return names.map((name) => {
+    const reason = name === 'League top goalscorer'
+      ? season.topGoalscorerReason
+      : name === 'League player of the year'
+        ? season.playerOfTheYearReason
+        : name === 'World Player of the Year'
+          ? season.wpyReason
+          : null;
+    return awardBeat(name, playerName, reason);
+  });
+}
+
+export function enqueueEndOfSeasonBeats(
+  pending: CareerBeat[] | null | undefined,
+  seen: CareerBeatKind[] | null | undefined,
+  args: {
+    season: SeasonRecord;
+    playerName: string;
+    outrightRecords: SeasonLegacyHighlight[];
+    soldClubName?: string | null;
+  },
+): CareerBeat[] {
+  let next = pending ?? [];
+  for (const beat of seasonAwardBeats(args.season, args.playerName)) {
+    next = pushCareerBeat(next, seen, beat);
+  }
+  for (const highlight of args.outrightRecords) {
+    next = pushCareerBeat(next, seen, recordBeat(highlight, args.playerName));
+  }
+  if (args.soldClubName) {
+    next = pushCareerBeat(next, seen, soldBeat(args.soldClubName));
+  }
+  return next;
 }
 
 export function retirementBeat(playerName: string, clubName: string | null): CareerBeat {

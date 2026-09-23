@@ -24,6 +24,8 @@ import {
   LEAGUE_SEASON,
   LEGACY_TOP_N,
   OVERALL_CLUB_CAREER,
+  INTL_TOURNAMENT_CAREER,
+  INTL_TOURNAMENT_SEASON,
   nationOverallTotals,
   nationTournamentLadders,
 } from './data/legacyRecordTotals';
@@ -233,10 +235,10 @@ export function playerGoalsForBoard(def: LegacyBoardDef, input: LegacyCareerInpu
   if (def.id.startsWith('nation-overall:')) {
     return input.nationalTeam?.goals ?? 0;
   }
-  if (def.id.startsWith('nation-tournament:')) {
+  if (def.id.startsWith('nation-tournament:') || def.id.startsWith('intl-tournament:')) {
     const parts = def.id.split(':');
     const span = parts[1] as LegacySpan;
-    const tournament = parts[3] as InternationalTournamentId;
+    const tournament = (def.id.startsWith('intl-tournament:') ? parts[2] : parts[3]) as InternationalTournamentId;
     if (span === 'season') {
       return countedSeasons(input.seasons).reduce((best, season) => {
         if (season.international?.tournament !== tournament) return best;
@@ -283,8 +285,10 @@ function thisSeasonGoalsForBoard(def: LegacyBoardDef, season: SeasonRecord): num
     return continentalGoals(season, cup);
   }
   if (def.id.startsWith('nation-overall:')) return 0;
-  if (def.id.startsWith('nation-tournament:')) {
-    const tournament = def.id.split(':')[3] as InternationalTournamentId;
+  if (def.id.startsWith('nation-tournament:') || def.id.startsWith('intl-tournament:')) {
+    const tournament = (def.id.startsWith('intl-tournament:')
+      ? def.id.split(':')[2]
+      : def.id.split(':')[3]) as InternationalTournamentId;
     if (season.international?.tournament !== tournament) return 0;
     return season.international.finalsGoals ?? 0;
   }
@@ -321,6 +325,10 @@ function historicalFor(def: LegacyBoardDef): number[] {
   }
   if (def.id.startsWith('nation-overall:')) {
     return nationOverallTotals(def.id.slice('nation-overall:'.length));
+  }
+  if (def.id.startsWith('intl-tournament:')) {
+    const [, span, tournament] = def.id.split(':');
+    return (span === 'season' ? INTL_TOURNAMENT_SEASON : INTL_TOURNAMENT_CAREER)[tournament] ?? [];
   }
   if (def.id.startsWith('nation-tournament:')) {
     const parts = def.id.split(':');
@@ -531,14 +539,15 @@ export function participatedLegacyBoards(input: LegacyCareerInput): LegacyBoardD
     }
     for (const tournament of tournaments) {
       const ladders = nationTournamentLadders(nationId, tournament);
-      const title = `${nationName} · ${INTERNATIONAL_TOURNAMENTS[tournament]?.name ?? tournament}`;
+      const cupName = INTERNATIONAL_TOURNAMENTS[tournament]?.name ?? tournament;
+      const title = `${nationName} · ${cupName}`;
       if (ladders?.career?.length) {
         defs.push({
           id: `nation-tournament:career:${nationId}:${tournament}`,
           domain: 'nation',
           span: 'career',
           title,
-          subtitle: `All-time ${INTERNATIONAL_TOURNAMENTS[tournament]?.name ?? tournament} goals`,
+          subtitle: `All-time ${cupName} goals`,
           group: 'nation',
           tone: 'all-time',
         });
@@ -549,7 +558,29 @@ export function participatedLegacyBoards(input: LegacyCareerInput): LegacyBoardD
           domain: 'nation',
           span: 'season',
           title,
-          subtitle: `Single ${INTERNATIONAL_TOURNAMENTS[tournament]?.name ?? tournament} goals`,
+          subtitle: `Single ${cupName} goals`,
+          group: 'nation',
+          tone: 'season-intl',
+        });
+      }
+      if (INTL_TOURNAMENT_CAREER[tournament]?.length) {
+        defs.push({
+          id: `intl-tournament:career:${tournament}`,
+          domain: 'nation',
+          span: 'career',
+          title: cupName,
+          subtitle: `All-time ${cupName} goals`,
+          group: 'nation',
+          tone: 'all-time',
+        });
+      }
+      if (INTL_TOURNAMENT_SEASON[tournament]?.length) {
+        defs.push({
+          id: `intl-tournament:season:${tournament}`,
+          domain: 'nation',
+          span: 'season',
+          title: cupName,
+          subtitle: `Single ${cupName} goals`,
           group: 'nation',
           tone: 'season-intl',
         });
@@ -572,6 +603,7 @@ export interface SeasonLegacyHighlight {
   title: string;
   subtitle: string;
   rankLabel: string;
+  rank: number;
   playerGoals: number;
   kind: 'season' | 'all-time';
 }
@@ -624,6 +656,7 @@ export function seasonLegacyHighlights(
         title: board.def.title,
         subtitle: board.def.subtitle,
         rankLabel: ordinal(seasonRank),
+        rank: seasonRank,
         playerGoals: seasonGoals,
         kind: 'season',
       });
@@ -635,11 +668,21 @@ export function seasonLegacyHighlights(
       title: board.def.title,
       subtitle: board.def.subtitle,
       rankLabel: board.rankLabel,
+      rank: board.rank,
       playerGoals: board.playerGoals,
       kind: 'all-time',
     });
   }
   return highlights;
+}
+
+/** Beat screens are for holding the record, not merely entering the top 10. */
+export function seasonOutrightRecordHighlights(
+  previous: LegacyCareerInput,
+  current: LegacyCareerInput,
+  thisSeason: SeasonRecord,
+): SeasonLegacyHighlight[] {
+  return seasonLegacyHighlights(previous, current, thisSeason).filter((item) => item.rank === 1);
 }
 
 export function defaultPlayerName(): string {

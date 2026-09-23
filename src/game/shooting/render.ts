@@ -58,7 +58,17 @@ export function randomBallStartXRatio(rng: () => number = Math.random): number {
 }
 
 export function randomShotDistanceM(rng: () => number = Math.random): number {
-  return MIN_SHOT_DISTANCE_M + rng() * (MAX_SHOT_DISTANCE_M - MIN_SHOT_DISTANCE_M);
+  const roll = rng();
+  if (roll < 0.22) {
+    return MIN_SHOT_DISTANCE_M + rng() * (8.5 - MIN_SHOT_DISTANCE_M);
+  }
+  if (roll < 0.78) {
+    return 8.5 + rng() * (FIFA.eighteenYardDepth - 8.5);
+  }
+  if (roll < 0.93) {
+    return FIFA.eighteenYardDepth + rng() * (22 * YARD_M - FIFA.eighteenYardDepth);
+  }
+  return 22 * YARD_M + rng() * (MAX_SHOT_DISTANCE_M - 22 * YARD_M);
 }
 
 export interface GoalFrame {

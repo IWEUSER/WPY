@@ -385,6 +385,13 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
               />
             )}
             {seasonSimWithGroup && (
+              <LeagueTableCard
+                table={seasonSimWithGroup.leagueTable}
+                clubId={club.id}
+                leagueName={leagueDisplayName(clubLeague ?? club.league)}
+              />
+            )}
+            {seasonSimWithGroup && (
               <EuropeanTableCard
                 table={seasonSimWithGroup.europeanTable ?? []}
                 clubId={club.id}
@@ -546,6 +553,52 @@ function StandingsCard({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function LeagueTableCard({
+  table,
+  clubId,
+  leagueName,
+}: {
+  table: SeasonSimState['leagueTable'];
+  clubId: string;
+  leagueName: string;
+}) {
+  const inMls = Boolean(mlsConferenceOf(clubId));
+  const source = inMls ? conferenceTable(table ?? [], clubId) : (table ?? []);
+  const rows = rankLeagueTable(source).filter((row) => row.played > 0);
+  if (rows.length === 0) return null;
+
+  return (
+    <div>
+      <p className="text-xs uppercase tracking-wide text-white/40">
+        {inMls ? `${leagueName} · ${conferenceLabel(mlsConferenceOf(clubId))}` : leagueName}
+      </p>
+      <table className="mt-3 w-full table-fixed border-collapse text-left text-xs">
+        <thead>
+          <tr className="text-[10px] uppercase tracking-wide text-white/40">
+            <th className="pb-1 font-medium">Club</th>
+            <th className="w-10 pb-1 text-right font-medium">P</th>
+            <th className="w-10 pb-1 text-right font-medium">GD</th>
+            <th className="w-10 pb-1 text-right font-medium">Pts</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const name = getClub(row.clubId)?.name ?? row.clubId;
+            return (
+              <tr key={row.clubId} className={row.clubId === clubId ? 'font-semibold text-white' : 'text-white/70'}>
+                <td className="py-0.5 pr-2">{row.position}. {name}</td>
+                <td className="py-0.5 text-right tabular-nums">{row.played}</td>
+                <td className="py-0.5 text-right tabular-nums">{row.goalsFor - row.goalsAgainst}</td>
+                <td className="py-0.5 text-right tabular-nums">{row.points}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

@@ -47,9 +47,9 @@ import { fifaRank, knockoutRankCap, nationStrength, nationsInConfederation, tour
 import { countsTowardCareerRecord, displaySeasonLabel, displaySeasonNumber, isFirstPublicSeason } from '../src/game/career/seasonDisplay';
 import { bumpInternationalSeason, callUpRatio, isInternationalFinalsRound, isSelectedForNationalTeam, leagueEligibleForNationalTeam, markInjuryMissedFinals, SEASON_1_CALL_UP_MIN_WEEK, selectionRatioForNation } from '../src/game/career/international';
 import { blowoutScorePossible, formatHomeAwayScore, missedChanceWinFactor, plausibleGoalCaps, simulateClubMatch, simulateLeagueSeason, simulateMatchTimeline } from '../src/game/career/matchEngine';
-import { chanceImportanceLine, chanceMinute, chancesLeftLine, formatChanceMinute } from '../src/game/shooting/chanceAtmosphere';
-import { enqueueLeagueTitleBeat, firstCapBeat, firstTitleBeat, portraitForTrophyName, pushCareerBeat, retirementBeat, soldBeat, titleBeat } from '../src/game/career/careerBeat';
-import { aggregateContinental, aggregateDomesticSplit, recordClubAppearanceStats, seasonDomesticSplit } from '../src/game/career/seasonStats';
+import { chanceImportanceLine, chanceMinute, chanceMinutesForMatch, chancesLeftLine, formatChanceMinute } from '../src/game/shooting/chanceAtmosphere';
+import { awardBeat, enqueueLeagueTitleBeat, firstCapBeat, firstTitleBeat, portraitForTrophyName, pushCareerBeat, retirementBeat, seasonAwardBeats, soldBeat, titleBeat } from '../src/game/career/careerBeat';
+import { aggregateContinental, aggregateDomesticSplit, clubSeasonTotals, recordClubAppearanceStats, seasonDomesticSplit } from '../src/game/career/seasonStats';
 import { evaluateClubPlayerOfTheTournament } from '../src/game/career/clubInternationalAwards';
 import { leaguePhaseOpponents, pickSuperCupOpponent } from '../src/game/career/continentalDraw';
 import { settleDrawOnPenalties } from '../src/game/career/penalties';
@@ -7814,12 +7814,79 @@ console.log('\n--- Career beats, chance cards, Europe tables, neutral boards ---
     console.error('chance minutes must land in the late game');
     process.exitCode = 1;
   }
+  const threeLeague = chanceMinutesForMatch(3, 'league');
+  if (threeLeague.length !== 3 || threeLeague[0]! >= threeLeague[1]! || threeLeague[1]! >= threeLeague[2]!) {
+    console.error('match minutes must rise in order, never 90 then 90+30 then 78');
+    process.exitCode = 1;
+  }
+  if (chanceMinute(0, 1, 'final') === 90 || formatChanceMinute(120) !== 'Penalties') {
+    console.error('a lone open-play chance must not jump to the 90th, and 120 is a shootout');
+    process.exitCode = 1;
+  }
   if (chancesLeftLine(2) !== '2 chances left') {
     console.error('remaining chances must be spelled out');
     process.exitCode = 1;
   }
-  if (chanceImportanceLine(1, 3, 2, true) !== 'Score all 2 to stay in the tie') {
-    console.error('a knockout 3–1 with two chances left must say score both');
+  if (chanceImportanceLine(1, 3, 2, true) !== 'Need a goal to stay in the tie') {
+    console.error('in-game copy must not reveal how many chances are left');
+    process.exitCode = 1;
+  }
+  const awards = seasonAwardBeats({
+    seasonNumber: 2,
+    clubId: 'real-madrid',
+    role: 'first-team',
+    matches: [],
+    goals: 24,
+    gamesPlayed: 38,
+    ratioMet: true,
+    age: 18,
+    leagueGoals: 24,
+    trophies: [],
+    topGoalscorer: true,
+    playerOfTheYear: false,
+    wonWpy: true,
+    topGoalscorerReason: 'Won the La Liga golden boot with 24 league goals.',
+  }, 'Alex Rivera');
+  if (awards.length !== 2 || awards.some((beat) => beat.kind !== 'award')) {
+    console.error('each individual award must get its own end-of-season screen');
+    process.exitCode = 1;
+  }
+  if (awardBeat('World Cup top goalscorer', 'Alex').portrait !== 'nation') {
+    console.error('international awards must use the nation kit');
+    process.exitCode = 1;
+  }
+  const mixedClub = clubSeasonTotals({
+    seasonNumber: 2,
+    clubId: 'psg',
+    role: 'first-team',
+    matches: [],
+    goals: 31,
+    gamesPlayed: 45,
+    ratioMet: true,
+    age: 18,
+    leagueGoals: 18,
+    leagueGames: 30,
+    cupGoals: 2,
+    cupGames: 4,
+    continentalStats: [],
+    trophies: [],
+    topGoalscorer: false,
+    playerOfTheYear: false,
+    wonWpy: false,
+    international: {
+      tournament: 'world-cup',
+      qualifyingGames: 0,
+      qualifyingGoals: 0,
+      qualifyingOutcome: 'qualified',
+      finalsGames: 7,
+      finalsGoals: 11,
+      tournamentOutcome: 'champion',
+      playerOfTheTournament: false,
+      topGoalscorer: false,
+    },
+  });
+  if (mixedClub.goals !== 20 || mixedClub.games !== 34) {
+    console.error(`club totals must ignore national-team goals, got ${mixedClub.goals}/${mixedClub.games}`);
     process.exitCode = 1;
   }
   const madridClub = getClub('real-madrid')!;

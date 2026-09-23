@@ -4,7 +4,7 @@ import { getClub } from './data/clubs';
 import { createNationalTeamState, recordInternationalAppearance } from './international';
 import { mlsConferenceOf } from './data/leagueFormat';
 import { applyMatchToTable, buildSeasonStandings, rankLeagueTable } from './matchEngine';
-import { firstCapBeat, firstTitleBeat, recordBeat, retirementBeat, soldBeat, titleBeat } from './careerBeat';
+import { awardBeat, firstCapBeat, firstTitleBeat, recordBeat, retirementBeat, soldBeat, titleBeat } from './careerBeat';
 import { newContractYears, playerMarketValueFromSeasons, weeklyWageForClub } from './playerValue';
 import { applyTrialMatch, applyYouthMatch, assignOpeningTrialClub, beginClubTrial, beginFavouriteClubTrial, chooseTrialClub, createYouthCampaign, failClubTrial } from './openingFlow';
 import { hydrateSeason, nextActionableFixture } from './seasonSim';
@@ -1380,10 +1380,13 @@ export function applyCareerLayoutPreview(): void {
               ? [recordBeat({
                 title: 'La Liga season',
                 subtitle: 'Goals in a single league season',
-                rankLabel: '3rd',
+                rankLabel: '1st',
+                rank: 1,
                 playerGoals: 38,
                 kind: 'season',
               }, 'Alex Rivera')]
+              : preview === 'beat-award'
+                ? [awardBeat('League top goalscorer', 'Alex Rivera', 'Won the La Liga golden boot with 24 league goals.')]
               : preview === 'beat-retire'
                 ? [retirementBeat('Alex Rivera', 'Inter Miami')]
                 : [],

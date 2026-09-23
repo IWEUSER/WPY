@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { applyMatchResult, createAvailability, isAvailable, serveBannedGame } from './availabilityEngine';
 import { rollInjuryAbsence, sitOutGamesAfterPlayedMatch } from './injury';
-import { recordClubAppearanceStats } from './seasonStats';
+import { clubSeasonTotals, recordClubAppearanceStats } from './seasonStats';
 import { FORM_WINDOW_GAMES, RETIREMENT_AGE, SEASON_LENGTH, STARTING_AGE } from './constants';
 import { planSuperCup } from './continentalDraw';
 import { planDomesticSuperCup } from './domesticSuperCup';
@@ -27,14 +27,13 @@ import { evaluateInternationalTournamentAwards } from './internationalAwards';
 import { countsTowardCareerRecord, displaySeasonNumber } from './seasonDisplay';
 import { trophyLabels } from './honoursDisplay';
 import {
+  enqueueEndOfSeasonBeats,
   enqueueLeagueTitleBeat,
   firstCapBeat,
   pushCareerBeat,
-  recordBeat,
   retirementBeat,
-  soldBeat,
 } from './careerBeat';
-import { inputWithoutSeason, seasonLegacyHighlights } from './legacyRecords';
+import { inputWithoutSeason, seasonOutrightRecordHighlights } from './legacyRecords';
 import {
   bumpInternationalSeason,
   isInternationalFinalsRound,
@@ -794,8 +793,9 @@ function recountCareerTotals(history: SeasonRecord[], current: SeasonRecord | nu
   let games = 0;
   for (const season of [...history, ...(current ? [current] : [])]) {
     if (!countsTowardCareerRecord(season.seasonNumber, season.role)) continue;
-    goals += season.goals;
-    games += season.gamesPlayed;
+    const club = clubSeasonTotals(season);
+    goals += club.goals;
+    games += club.games;
   }
   return { careerGoals: goals, careerGames: games };
 }
@@ -1182,9 +1182,13 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
       sim = { ...resolution.sim, fixtureIndex: sim.fixtureIndex + 1 };
       const record: MatchRecord = { matchNumber: season.matches.length + 1, played: true, scored: false };
       const noChancePay = withWeeklyPay(season, careerEarnings, state.weeklyWage);
-      season = { ...noChancePay.season, matches: [...noChancePay.season.matches, record], gamesPlayed: noChancePay.season.gamesPlayed + 1 };
+      season = {
+        ...noChancePay.season,
+        matches: [...noChancePay.season.matches, record],
+        gamesPlayed: noChancePay.season.gamesPlayed + (isInternational ? 0 : 1),
+      };
       careerEarnings = noChancePay.careerEarnings;
-      if (countsTowardCareerRecord(state.seasonNumber, state.role)) {
+      if (countsTowardCareerRecord(state.seasonNumber, state.role) && !isInternational) {
         careerGames += 1;
         formWindow = pushForm(formWindow, 0);
       }
@@ -1297,22 +1301,22 @@ function finishResolvedLiveMatch(
   const nextCalendar = syncInternationalCalendar(calendar, nextSim);
   const scored = live.goals > 0;
   const openPlayScored = (live.openPlayGoals ?? 0) > 0;
+  const isInternational = fixture.kind === 'international';
+  const clubAppearance = !isInternational;
   const record: MatchRecord = { matchNumber: season.matches.length + 1, played: true, scored };
   const paid = withWeeklyPay(season, state.careerEarnings, state.weeklyWage);
   const updatedSeason: SeasonRecord = recordClubAppearanceStats(
     {
       ...paid.season,
       matches: [...paid.season.matches, record],
-      goals: paid.season.goals + live.goals,
-      gamesPlayed: paid.season.gamesPlayed + 1,
+      goals: paid.season.goals + (clubAppearance ? live.goals : 0),
+      gamesPlayed: paid.season.gamesPlayed + (clubAppearance ? 1 : 0),
       leagueGoals: paid.season.leagueGoals + (fixture.kind === 'league' ? live.goals : 0),
     },
     fixture,
     live.goals,
     true,
   );
-
-  const isInternational = fixture.kind === 'international';
   const prevCaps = state.nationalTeam?.caps ?? 0;
   let availability = state.availability;
   let nationalTeam = state.nationalTeam;
@@ -1345,8 +1349,9 @@ function finishResolvedLiveMatch(
     : updatedSeason;
 
   const counts = countsTowardCareerRecord(state.seasonNumber, state.role);
-  const nextCareerGoals = counts ? state.careerGoals + live.goals : state.careerGoals;
-  const nextCareerGames = counts ? state.careerGames + 1 : state.careerGames;
+  const clubCounts = counts && clubAppearance;
+  const nextCareerGoals = clubCounts ? state.careerGoals + live.goals : state.careerGoals;
+  const nextCareerGames = clubCounts ? state.careerGames + 1 : state.careerGames;
   const selectedSim = withInternationalForm(
     nextSim,
     withIntlSeason,
@@ -1430,8 +1435,8 @@ function finishResolvedLiveMatch(
     lastMatchSummary: recap.lastMatchSummary,
     lastMatchResult: recap.lastMatchResult,
     formWindow: merged.formWindow,
-    careerGoals: counts ? state.careerGoals + live.goals : state.careerGoals,
-    careerGames: counts ? state.careerGames + 1 : state.careerGames,
+    careerGoals: nextCareerGoals,
+    careerGames: nextCareerGames,
     careerEarnings: paid.careerEarnings,
     injuryGamesRemaining,
     pendingBeats,
@@ -1866,7 +1871,8 @@ export const useCareerStore = create<CareerStore>()(
           const club = getClub(state.clubId);
           const parent = state.parentClubId ? getClub(state.parentClubId) : undefined;
           const threshold = club ? requiredGoalRatio(state.role, club, parent) : 0;
-          const ratio = season.gamesPlayed > 0 ? season.goals / season.gamesPlayed : 0;
+          const clubTotals = clubSeasonTotals(season);
+          const ratio = clubTotals.games > 0 ? clubTotals.goals / clubTotals.games : 0;
           const publicSeason = displaySeasonNumber(state.seasonNumber, {
             role: state.role,
             careerStart: state.careerStart,
@@ -1899,15 +1905,34 @@ export const useCareerStore = create<CareerStore>()(
             finishedSeason.international?.tournament,
             finishedSeason.international?.qualifyingOutcome ?? 'none',
           );
+          const playerName = state.playerName?.trim() || 'You';
           if (state.age >= RETIREMENT_AGE) {
             return {
               seasonHistory,
               currentSeason: finishedSeason,
               pendingTransfer: null,
               pendingBeats: pushCareerBeat(
-                state.pendingBeats,
+                enqueueEndOfSeasonBeats(state.pendingBeats, state.seenBeatKinds, {
+                  season: finishedSeason,
+                  playerName,
+                  outrightRecords: seasonOutrightRecordHighlights(
+                    inputWithoutSeason({
+                      seasons: seasonHistory,
+                      nationalTeam: state.nationalTeam,
+                      nationality: state.nationality,
+                      playerName: state.playerName,
+                    }, finishedSeason),
+                    {
+                      seasons: seasonHistory,
+                      nationalTeam: state.nationalTeam,
+                      nationality: state.nationality,
+                      playerName: state.playerName,
+                    },
+                    finishedSeason,
+                  ),
+                }),
                 state.seenBeatKinds,
-                retirementBeat(state.playerName?.trim() || 'You', club?.name ?? null),
+                retirementBeat(playerName, club?.name ?? null),
               ),
               phase: 'career-end' as const,
             };
@@ -1952,6 +1977,25 @@ export const useCareerStore = create<CareerStore>()(
                 : nextClub
                   ? clubContinentalCup(nextClub)
                   : null;
+            const pendingBeats = enqueueEndOfSeasonBeats(state.pendingBeats, state.seenBeatKinds, {
+              season: finishedSeason,
+              playerName,
+              outrightRecords: seasonOutrightRecordHighlights(
+                inputWithoutSeason({
+                  seasons: seasonHistory,
+                  nationalTeam,
+                  nationality: state.nationality,
+                  playerName: state.playerName,
+                }, finishedSeason),
+                {
+                  seasons: seasonHistory,
+                  nationalTeam,
+                  nationality: state.nationality,
+                  playerName: state.playerName,
+                },
+                finishedSeason,
+              ),
+            });
             return {
               seasonHistory,
               clubId,
@@ -1997,35 +2041,30 @@ export const useCareerStore = create<CareerStore>()(
                   squadStatus: transition.immediate.squadStatus ?? nextStatus,
                 },
               ),
+              pendingBeats,
             };
           }
 
-          const highlight = seasonLegacyHighlights(
-            inputWithoutSeason({
-              seasons: seasonHistory,
-              nationalTeam,
-              nationality: state.nationality,
-              playerName: state.playerName,
-            }, finishedSeason),
-            {
-              seasons: seasonHistory,
-              nationalTeam,
-              nationality: state.nationality,
-              playerName: state.playerName,
-            },
-            finishedSeason,
-          )[0];
-          let pendingBeats = state.pendingBeats ?? [];
-          if (highlight) {
-            pendingBeats = pushCareerBeat(
-              pendingBeats,
-              state.seenBeatKinds,
-              recordBeat(highlight, state.playerName?.trim() || 'You'),
-            );
-          }
-          if (transition.pendingTransfer?.kind === 'sold' && club) {
-            pendingBeats = pushCareerBeat(pendingBeats, state.seenBeatKinds, soldBeat(club.name));
-          }
+          const pendingBeats = enqueueEndOfSeasonBeats(state.pendingBeats, state.seenBeatKinds, {
+            season: finishedSeason,
+            playerName,
+            outrightRecords: seasonOutrightRecordHighlights(
+              inputWithoutSeason({
+                seasons: seasonHistory,
+                nationalTeam,
+                nationality: state.nationality,
+                playerName: state.playerName,
+              }, finishedSeason),
+              {
+                seasons: seasonHistory,
+                nationalTeam,
+                nationality: state.nationality,
+                playerName: state.playerName,
+              },
+              finishedSeason,
+            ),
+            soldClubName: transition.pendingTransfer?.kind === 'sold' && club ? club.name : null,
+          });
           return {
             seasonHistory,
             seasonNumber: nextSeasonNumber,

@@ -180,11 +180,15 @@ export function computeIntendedShot(gesture: SwipeGesture): IntendedShot {
   const rawAim = screenRayAim(gesture) ?? displacementAim(gesture);
   const style = classifyShotStyle(gesture);
   const shaped = applyShotStyle(rawAim, rawPower, clamp(gesture.curl ?? 0, -1, 1), style);
+  const loft = gesture.contactLift ?? 0;
+  const aim = loft > 0.08
+    ? { x: shaped.aim.x, y: clamp(shaped.aim.y + loft * 0.42, 0, 1.48) }
+    : shaped.aim;
 
   const powerDamping = 1 - clamp(shaped.power - 1, 0, 0.8) * 0.25;
   const curl = shaped.curl * powerDamping * 0.55;
 
-  return { aim: shaped.aim, power: shaped.power, curl, style };
+  return { aim, power: shaped.power, curl, style };
 }
 
 function displacementAim(gesture: SwipeGesture): AimPoint {
