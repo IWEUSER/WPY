@@ -466,6 +466,28 @@ function clubLeagueOf(clubId: string): string | undefined {
   return getClub(clubId)?.league;
 }
 
+/**
+ * Listed starter wage is the 1.0 goals-per-game rate.
+ * A 0.66 season is offered 66% of that club's top wage; 1.0 or higher is the full band.
+ */
+export function wageRatioScale(ratio: number | null | undefined): number {
+  if (ratio == null || Number.isNaN(ratio)) return 1;
+  return Math.min(1, Math.max(0, ratio));
+}
+
+/** Scale a club's listed wage by last season's goals-per-game, capped at 1.0. */
+export function weeklyWageForRatio(
+  club: Club,
+  marketValue: number,
+  ratio: number | null | undefined,
+  status: SquadStatus,
+  playingLeague?: string | null,
+): number {
+  const top = weeklyWageForSquadStatus(club, marketValue, status, playingLeague);
+  if (status !== 'starter') return top;
+  return roundWeeklyWage(top * wageRatioScale(ratio));
+}
+
 /** Starter, Rising star, and reserve wages so transfer offers are not all the same band. */
 export function weeklyWageForSquadStatus(
   club: Club,

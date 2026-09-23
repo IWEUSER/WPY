@@ -13,7 +13,7 @@ import {
 } from '../src/game/career/chanceEngine';
 import { assignClubTier, CLUBS, clubsForSeason, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, leagueMatchWeeks, playableClubsGroupedByLeague, SECOND_DIVISIONS, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
 import { playoffGamesFromOpening, playoffOpeningForPosition } from '../src/game/career/data/leagueFormat';
-import { clubTransferBudget, consecutivePoorFactor, contractValueFactor, DEFAULT_CONTRACT_YEARS, ELITE_TRANSFER_VALUE_FLOOR, FIRST_CONTRACT_YEARS, firstTopFlightValueCap, formAdjustedRatio, isSeason1ValueLocked, leagueValueWeight, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, MIN_ACCEPTED_FEE_RATIO, newContractYears, playerMarketValue, playerMarketValueFromSeasons, RESERVE_CONTRACT_YEARS, RESERVE_WAGE_FACTOR, RESERVE_WEEKLY_WAGE, seasonalSponsorship, tierForMarketValue, TOP_LEAGUES, transferFeeFromValue, weeklyWageForClub, weeklyWageForSquadStatus, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
+import { clubTransferBudget, consecutivePoorFactor, contractValueFactor, DEFAULT_CONTRACT_YEARS, ELITE_TRANSFER_VALUE_FLOOR, FIRST_CONTRACT_YEARS, firstTopFlightValueCap, formAdjustedRatio, isSeason1ValueLocked, leagueValueWeight, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, MIN_ACCEPTED_FEE_RATIO, newContractYears, playerMarketValue, playerMarketValueFromSeasons, RESERVE_CONTRACT_YEARS, RESERVE_WAGE_FACTOR, RESERVE_WEEKLY_WAGE, seasonalSponsorship, tierForMarketValue, TOP_LEAGUES, transferFeeFromValue, weeklyWageForClub, weeklyWageForRatio, weeklyWageForSquadStatus, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { nationKit } from '../src/game/career/data/nationColours';
 import { reserveStadium, resolveCareerStadium, resolveMatchStadium, trialStadium } from '../src/game/career/matchVenue';
@@ -46,9 +46,9 @@ import { cupFromLeaguePosition, continentalQualificationForNextSeason } from '..
 import { fifaRank, knockoutRankCap, nationStrength, nationsInConfederation, tournamentOpponents, worldCupKnockoutRankCap } from '../src/game/career/data/fifaRankings';
 import { countsTowardCareerRecord, displaySeasonLabel, displaySeasonNumber, isFirstPublicSeason } from '../src/game/career/seasonDisplay';
 import { bumpInternationalSeason, callUpRatio, isInternationalFinalsRound, isSelectedForNationalTeam, leagueEligibleForNationalTeam, markInjuryMissedFinals, SEASON_1_CALL_UP_MIN_WEEK, selectionRatioForNation } from '../src/game/career/international';
-import { blowoutScorePossible, formatHomeAwayScore, missedChanceWinFactor, plausibleGoalCaps, simulateClubMatch, simulateLeagueSeason } from '../src/game/career/matchEngine';
+import { blowoutScorePossible, formatHomeAwayScore, missedChanceWinFactor, plausibleGoalCaps, simulateClubMatch, simulateLeagueSeason, simulateMatchTimeline } from '../src/game/career/matchEngine';
 import { chanceImportanceLine, chanceMinute, chancesLeftLine, formatChanceMinute } from '../src/game/shooting/chanceAtmosphere';
-import { firstCapBeat, firstTitleBeat, pushCareerBeat, retirementBeat, soldBeat } from '../src/game/career/careerBeat';
+import { enqueueLeagueTitleBeat, firstCapBeat, firstTitleBeat, portraitForTrophyName, pushCareerBeat, retirementBeat, soldBeat, titleBeat } from '../src/game/career/careerBeat';
 import { aggregateContinental, aggregateDomesticSplit, recordClubAppearanceStats, seasonDomesticSplit } from '../src/game/career/seasonStats';
 import { evaluateClubPlayerOfTheTournament } from '../src/game/career/clubInternationalAwards';
 import { leaguePhaseOpponents, pickSuperCupOpponent } from '../src/game/career/continentalDraw';
@@ -2120,9 +2120,15 @@ if (barca && hilal && lafc) {
   }
   const madridWage = weeklyWageForClub(getClub('real-madrid')!, 0);
   const risingMadrid = weeklyWageForSquadStatus(getClub('real-madrid')!, 0, 'rising-star');
-  console.log('listed RM starter/rising', madridWage, risingMadrid);
+  const madridAt066 = weeklyWageForRatio(getClub('real-madrid')!, 0, 0.66, 'starter');
+  const madridAt12 = weeklyWageForRatio(getClub('real-madrid')!, 0, 1.2, 'starter');
+  console.log('listed RM starter/rising/0.66', madridWage, risingMadrid, madridAt066);
   if (madridWage < 600_000 || risingMadrid < 20_000 || risingMadrid > 22_000) {
     console.error('Real Madrid starter must use the listed top wage and Rising star 10% of the squad average');
+    process.exitCode = 1;
+  }
+  if (madridAt066 !== Math.round((madridWage * 0.66) / 500) * 500 || madridAt12 !== madridWage) {
+    console.error('starter offers must pay last season’s ratio of the club’s 1.0 wage, capped at the listed band');
     process.exitCode = 1;
   }
   const getafeWage = getClub('getafe') ? weeklyWageForClub(getClub('getafe')!, 0) : 0;
@@ -3083,7 +3089,7 @@ if (barca && hilal && lafc) {
     });
     if (missLoans.some((o) => {
       const dest = getClub(o.clubId);
-      return !dest || o.contractYears !== 1 || o.weeklyWage !== weeklyWageForSquadStatus(dest, reserveMissValue, 'starter', dest.league);
+      return !dest || o.contractYears !== 1 || o.weeklyWage !== weeklyWageForRatio(dest, reserveMissValue, 2 / 38, 'starter', dest.league);
     })) {
       console.error('reserve-miss loans must pay each destination’s starter wage, not a flat reserve salary');
       process.exitCode = 1;
@@ -3743,7 +3749,7 @@ if (loanMiss.immediate?.role === 'reserve' || loanOffers !== LOAN_OFFER_COUNT ||
   }
   if (nextLoans.some((o) => {
     const dest = getClub(o.clubId);
-    return !dest || o.weeklyWage !== weeklyWageForSquadStatus(dest, missValue, 'starter', dest.league);
+    return !dest || o.weeklyWage !== weeklyWageForRatio(dest, missValue, 10 / 24, 'starter', dest.league);
   })) {
     console.error('loan offers must pay the destination starter wage');
     process.exitCode = 1;
@@ -4833,78 +4839,53 @@ if (madrid) {
         process.exitCode = 1;
       }
 
-      let drawSeed: number | null = null;
-      const rngFrom = (seed: number) => {
-        let s = seed >>> 0;
-        return () => {
-          s = (Math.imul(1664525, s) + 1013904223) >>> 0;
-          return s / 4294967296;
-        };
-      };
-      for (let seed = 1; seed < 8000; seed++) {
-        if (resolveFixture(hydrated.sim, finalFx, hamburg, 0, rngFrom(seed), { settlePenalties: false }).needsPenalty) {
-          drawSeed = seed;
-          break;
-        }
-      }
-      if (drawSeed == null) {
-        console.error('could not find a cup-final draw seed for the shootout store test');
-        process.exitCode = 1;
-      } else {
-        useCareerStore.getState().resetCareer();
-        useCareerStore.setState({
-          phase: 'match',
+      useCareerStore.getState().resetCareer();
+      useCareerStore.setState({
+        phase: 'match',
+        clubId: hamburg.id,
+        parentClubId: hamburg.id,
+        role: 'first-team',
+        squadStatus: 'starter',
+        nationality: 'germany',
+        seasonNumber: 2,
+        careerStart: 'favourite-first-team',
+        currentSeason: {
+          ...dummySeason,
           clubId: hamburg.id,
-          parentClubId: hamburg.id,
           role: 'first-team',
-          squadStatus: 'starter',
-          nationality: 'germany',
-          seasonNumber: 2,
-          careerStart: 'favourite-first-team',
-          currentSeason: {
-            ...dummySeason,
-            clubId: hamburg.id,
-            role: 'first-team',
-            goals: 8,
-            gamesPlayed: 20,
-          },
-          seasonCalendar: hydrated.calendar,
-          seasonSim: { ...hydrated.sim, fixtureIndex: finalIdx },
-          availability: createAvailability(),
-          injuryGamesRemaining: 0,
-          weeklyWage: 2000,
-          careerEarnings: 0,
-          openingCampaign: null,
-          liveMatch: {
-            fixtureIndex: finalIdx,
-            chancesTotal: 1,
-            chancesTaken: 1,
-            goals: 0,
-            openPlayGoals: 0,
-          },
-        });
-        const realRandom = Math.random;
-        Math.random = rngFrom(drawSeed);
-        useCareerStore.getState().finishLiveMatch();
-        const paused = useCareerStore.getState();
-        if (!paused.liveMatch?.penaltyKick || paused.phase !== 'match' || paused.lastMatchResult) {
-          Math.random = realRandom;
-          console.error('a drawn cup final must stay on the pitch for the player’s penalty');
-          process.exitCode = 1;
-        } else {
-          Math.random = () => 0.99;
-          useCareerStore.getState().finishLiveMatch();
-          const recap = useCareerStore.getState();
-          Math.random = realRandom;
-          console.log('store cup pens', recap.phase, recap.lastMatchResult?.headline);
-          if (recap.liveMatch || !/penalt/i.test(recap.lastMatchResult?.headline ?? '')) {
-            console.error('after the shootout kick the recap must show the penalty result');
-            process.exitCode = 1;
-          }
-        }
-        Math.random = realRandom;
-        useCareerStore.getState().resetCareer();
+          goals: 8,
+          gamesPlayed: 20,
+        },
+        seasonCalendar: hydrated.calendar,
+        seasonSim: { ...hydrated.sim, fixtureIndex: finalIdx },
+        availability: createAvailability(),
+        injuryGamesRemaining: 0,
+        weeklyWage: 2000,
+        careerEarnings: 0,
+        openingCampaign: null,
+        liveMatch: {
+          fixtureIndex: finalIdx,
+          chancesTotal: 1,
+          chancesTaken: 1,
+          goals: 0,
+          openPlayGoals: 0,
+          penaltyKick: true,
+          goalsAtNinety: 0,
+          ninetyScoreFor: 1,
+          ninetyScoreAgainst: 1,
+        },
+      });
+      const realRandom = Math.random;
+      Math.random = () => 0.99;
+      useCareerStore.getState().finishLiveMatch();
+      const recap = useCareerStore.getState();
+      Math.random = realRandom;
+      console.log('store cup pens', recap.phase, recap.lastMatchResult?.headline);
+      if (recap.liveMatch || !/penalt/i.test(recap.lastMatchResult?.headline ?? '')) {
+        console.error('after the shootout kick the recap must show the penalty result');
+        process.exitCode = 1;
       }
+      useCareerStore.getState().resetCareer();
     }
   }
 }
@@ -5050,9 +5031,22 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
   }
   const stayWage = promoted.pendingTransfer?.stay?.weeklyWage ?? 0;
   const stayYears = promoted.pendingTransfer?.stay?.contractYearsRemaining;
-  console.log('promotion stay wage', stayWage, 'years', stayYears);
-  if (stayWage < 32_000 || stayYears == null || stayYears < 1) {
-    console.error('promotion stay terms must include a Premier League wage and contract length');
+  const stayStatus = promoted.pendingTransfer?.stay?.squadStatus ?? 'starter';
+  const promoValue = playerMarketValueFromSeasons({
+    age: 22,
+    careerGoals: 40,
+    careerGames: 70,
+    seasons: [{ ...dummySeason, clubId: 'leicester', goals: 20, gamesPlayed: 38 }],
+    fallbackClub: leicester,
+    contractYearsRemaining: DEFAULT_CONTRACT_YEARS,
+    seasonNumber: dummySeason.seasonNumber,
+    calendarWeek: 99,
+    role: 'first-team',
+  });
+  const expectedStayWage = weeklyWageForRatio(leicester, promoValue, 20 / 38, stayStatus, 'Premier League');
+  console.log('promotion stay wage', stayWage, 'years', stayYears, 'expected', expectedStayWage);
+  if (stayWage !== expectedStayWage || stayYears == null || stayYears < 1) {
+    console.error('promotion stay terms must include a Premier League wage scaled by last season’s ratio');
     process.exitCode = 1;
   }
   const promotedLowRatio = resolveSeasonTransition({
@@ -6168,7 +6162,7 @@ console.log('\n--- Player goals cannot produce a 1–0 when the player scored tw
   }
 }
 
-console.log('\n--- Live board is home–away and stays frozen through the player\'s chances ---');
+console.log('\n--- Live board is home–away and updates after each chance ---');
 {
   if (formatHomeAwayScore(4, 1, true) !== '4\u20131' || formatHomeAwayScore(4, 1, false) !== '1\u20134') {
     console.error('the score line must put the home team on the left');
@@ -6263,12 +6257,41 @@ console.log('\n--- Live board is home–away and stays frozen through the player
       console.error('adding player goals must not re-roll teammate or opponent scores');
       process.exitCode = 1;
     }
-    if (line3 !== finishedLine) {
-      console.error('the match-screen board must match the last-match score');
+    const away0 = line0.split('\u2013').map(Number);
+    const away3 = line3.split('\u2013').map(Number);
+    const finishedParts = finishedLine.split('\u2013').map(Number);
+    if (away3[1] < away0[1] + 3) {
+      console.error('scoring three away goals must raise the right-hand score by at least three');
+      process.exitCode = 1;
+    }
+    if (finishedParts[0] < away3[0]) {
+      console.error('full time must not drop opponent goals already shown on the live board');
       process.exitCode = 1;
     }
     if (line0.split('\u2013')[0] === String(peek0.scoreFor) && peek0.scoreFor !== peek0.scoreAgainst) {
       console.error('an away board must not put the player\'s team on the left');
+      process.exitCode = 1;
+    }
+    let beforeFirst = 0;
+    let betweenChances = 0;
+    let afterLast = 0;
+    const firstMinute = chanceMinute(0, 4, 'league');
+    const lastMinute = chanceMinute(3, 4, 'league');
+    for (let seed = 1; seed <= 400; seed++) {
+      const timeline = simulateMatchTimeline(
+        { clubStrength: madridClub.strength, opponentStrength: burnley.strength, isHome: true },
+        mulberry32(seed * 7919),
+        4,
+      );
+      if (timeline.goals.some((goal) => goal.side === 'against' && goal.minute < firstMinute)) beforeFirst += 1;
+      if (timeline.goals.some((goal) => goal.side === 'against' && goal.minute >= firstMinute && goal.minute < lastMinute)) {
+        betweenChances += 1;
+      }
+      if (timeline.goals.some((goal) => goal.side === 'against' && goal.minute >= lastMinute)) afterLast += 1;
+    }
+    console.log('opponent goals before/between/after chances', beforeFirst, betweenChances, afterLast);
+    if (beforeFirst === 0 || betweenChances === 0 || afterLast === 0) {
+      console.error('opponent goals must be able to land before, between, and after the player\'s chances');
       process.exitCode = 1;
     }
   }
@@ -7752,9 +7775,29 @@ console.log('\n--- Career beats, chance cards, Europe tables, neutral boards ---
     console.error('career beats must keep a headline and a kind');
     process.exitCode = 1;
   }
+  if (portraitForTrophyName('La Liga') !== 'club' || portraitForTrophyName('World Cup') !== 'nation') {
+    console.error('title portraits must be club for leagues and nation for international tournaments');
+    process.exitCode = 1;
+  }
+  if (firstTitleBeat('European Championship').portrait !== 'nation' || titleBeat('Premier League').kind !== 'title') {
+    console.error('a national title must show the nation kit; later league wins must be repeatable');
+    process.exitCode = 1;
+  }
   const once = pushCareerBeat([], ['first-title'], firstTitleBeat('La Liga'));
   if (once.length !== 0) {
     console.error('first-title must not fire twice');
+    process.exitCode = 1;
+  }
+  const laterLeague = enqueueLeagueTitleBeat(
+    [],
+    ['first-title'],
+    { leagueChampion: true, domesticCup: null, domesticSuperCup: null, superCup: false, continentalChampion: null, internationalChampion: null },
+    getClub('real-madrid')!,
+    'La Liga',
+    [{ trophies: ['La Liga'] }],
+  );
+  if (laterLeague.length !== 1 || laterLeague[0].kind !== 'title' || laterLeague[0].portrait !== 'club') {
+    console.error('winning the league again must show a club-kit title beat');
     process.exitCode = 1;
   }
   const sold = pushCareerBeat([], [], soldBeat('Real Madrid'));

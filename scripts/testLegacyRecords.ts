@@ -243,6 +243,30 @@ const plOnly: LegacyCareerInput = {
 };
 const participated = participatedLegacyBoards(plOnly);
 assert(participated.some((def) => def.id === 'league:career:premier-league'), 'PL appearance should unlock the PL board');
+assert(
+  participated.some((def) => def.id === 'cup:season:fa-cup' && def.subtitle === 'Single-season FA Cup goals'),
+  'cup season records must name the tournament',
+);
+const withUcl: LegacyCareerInput = {
+  ...plOnly,
+  seasons: [
+    season({
+      clubId: 'arsenal',
+      league: 'Premier League',
+      leagueGoals: 20,
+      leagueGames: 30,
+      cupGames: 4,
+      cupGoals: 2,
+      continentalStats: [{ cup: 'ucl', games: 12, goals: 8 }],
+    }),
+  ],
+};
+assert(
+  participatedLegacyBoards(withUcl).some(
+    (def) => def.id === 'continental:season:ucl' && def.subtitle === 'Single-season Champions League goals',
+  ),
+  'continental season records must name the tournament',
+);
 assert(!participated.some((def) => def.id.includes('la-liga')), 'unplayed leagues must stay hidden');
 assert(!participated.some((def) => def.id.includes('world-cup')), 'unplayed tournaments must stay hidden');
 assert(!participated.some((def) => def.group === 'nation'), 'zero caps must hide nation boards');
@@ -254,6 +278,10 @@ const withCaps: LegacyCareerInput = {
 const nationBoards = participatedLegacyBoards(withCaps);
 assert(nationBoards.some((def) => def.id === 'nation-overall:england'), 'caps should unlock England overall');
 assert(nationBoards.some((def) => def.id.includes('world-cup')), 'World Cup finals should unlock that board');
+assert(
+  nationBoards.some((def) => def.id.includes('world-cup') && def.span === 'season' && def.subtitle === 'Single World Cup goals'),
+  'nation season records must name the tournament',
+);
 assert(!nationBoards.some((def) => def.id.includes('copa-america')), 'England must not show Copa América');
 
 const identity = identityLegacyBoards({

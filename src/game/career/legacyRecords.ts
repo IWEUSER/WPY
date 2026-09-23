@@ -4,6 +4,7 @@ import {
   DOMESTIC_CUPS,
   INTERNATIONAL_TOURNAMENTS,
   SUPER_CUP,
+  clubContinentalCup,
   domesticCupForCountry,
   type ContinentalCupId,
   type DomesticCupId,
@@ -414,13 +415,15 @@ export function participatedLegacyBoards(input: LegacyCareerInput): LegacyBoardD
           tone: 'season-club',
         });
       }
+      const clubCupId = clubContinentalCup(club);
+      const clubCupName = clubCupId ? CONTINENTAL_CUPS[clubCupId].name : 'tournament';
       if (CLUB_TOURNAMENT_CAREER[clubId]) {
         defs.push({
           id: `club-tournament:career:${clubId}`,
           domain: 'club',
           span: 'career',
           title: club.name,
-          subtitle: 'All-time tournament goals',
+          subtitle: `All-time ${clubCupName} goals`,
           group: 'continental',
           tone: 'all-time',
         });
@@ -431,7 +434,7 @@ export function participatedLegacyBoards(input: LegacyCareerInput): LegacyBoardD
           domain: 'club',
           span: 'season',
           title: club.name,
-          subtitle: 'Single-season tournament goals',
+          subtitle: `Single-season ${clubCupName} goals`,
           group: 'continental',
           tone: 'season-club',
         });
@@ -470,7 +473,7 @@ export function participatedLegacyBoards(input: LegacyCareerInput): LegacyBoardD
       domain: 'club',
       span: 'career',
       title,
-      subtitle: 'All-time cup goals',
+      subtitle: `All-time ${title} goals`,
       group: 'cup',
       tone: 'all-time',
     });
@@ -479,7 +482,7 @@ export function participatedLegacyBoards(input: LegacyCareerInput): LegacyBoardD
       domain: 'club',
       span: 'season',
       title,
-      subtitle: 'Single-season cup goals',
+      subtitle: `Single-season ${title} goals`,
       group: 'cup',
       tone: 'season-overall',
     });
@@ -494,7 +497,7 @@ export function participatedLegacyBoards(input: LegacyCareerInput): LegacyBoardD
       domain: 'club',
       span: 'career',
       title,
-      subtitle: 'All-time tournament goals',
+      subtitle: `All-time ${title} goals`,
       group: 'continental',
       tone: 'all-time',
     });
@@ -503,7 +506,7 @@ export function participatedLegacyBoards(input: LegacyCareerInput): LegacyBoardD
       domain: 'club',
       span: 'season',
       title,
-      subtitle: 'Single-season tournament goals',
+      subtitle: `Single-season ${title} goals`,
       group: 'continental',
       tone: 'season-overall',
     });
@@ -535,7 +538,7 @@ export function participatedLegacyBoards(input: LegacyCareerInput): LegacyBoardD
           domain: 'nation',
           span: 'career',
           title,
-          subtitle: tournament === 'world-cup' ? 'All-time World Cup goals' : 'All-time continental tournament goals',
+          subtitle: `All-time ${INTERNATIONAL_TOURNAMENTS[tournament]?.name ?? tournament} goals`,
           group: 'nation',
           tone: 'all-time',
         });
@@ -546,7 +549,7 @@ export function participatedLegacyBoards(input: LegacyCareerInput): LegacyBoardD
           domain: 'nation',
           span: 'season',
           title,
-          subtitle: tournament === 'world-cup' ? 'Single World Cup goals' : 'Single continental tournament goals',
+          subtitle: `Single ${INTERNATIONAL_TOURNAMENTS[tournament]?.name ?? tournament} goals`,
           group: 'nation',
           tone: 'season-intl',
         });

@@ -1,6 +1,10 @@
 import type { SeasonLegacyHighlight } from './legacyRecords';
+import { INTERNATIONAL_TOURNAMENTS } from './data/competitions';
+import { leagueTrophyLabel } from './honoursDisplay';
+import type { Club } from './data/clubs';
+import type { SeasonHonours } from './seasonSim';
 
-export type CareerBeatKind = 'first-cap' | 'first-title' | 'sold' | 'record' | 'retirement';
+export type CareerBeatKind = 'first-cap' | 'first-title' | 'title' | 'sold' | 'record' | 'retirement';
 
 export interface CareerBeat {
   kind: CareerBeatKind;
@@ -8,6 +12,16 @@ export interface CareerBeat {
   headline: string;
   copy: string;
   portrait: 'club' | 'nation' | 'both';
+}
+
+const INTERNATIONAL_TROPHY_NAMES = new Set(
+  Object.values(INTERNATIONAL_TOURNAMENTS).map((tournament) => tournament.name),
+);
+
+/** Club cups and leagues use the club kit; World Cup / Euro / Copa use the nation kit. */
+export function portraitForTrophyName(trophyName: string | null | undefined): 'club' | 'nation' {
+  if (!trophyName) return 'club';
+  return INTERNATIONAL_TROPHY_NAMES.has(trophyName) ? 'nation' : 'club';
 }
 
 export function firstCapBeat(nationName: string): CareerBeat {
@@ -20,14 +34,21 @@ export function firstCapBeat(nationName: string): CareerBeat {
   };
 }
 
-export function firstTitleBeat(trophyName: string): CareerBeat {
+export function titleBeat(trophyName: string, opts?: { first?: boolean }): CareerBeat {
+  const first = Boolean(opts?.first);
   return {
-    kind: 'first-title',
-    eyebrow: 'First title',
+    kind: first ? 'first-title' : 'title',
+    eyebrow: first ? 'First title' : 'Champions',
     headline: `You won the ${trophyName}`,
-    copy: 'The first one is the one you remember. The dressing room will never be this new again.',
-    portrait: 'club',
+    copy: first
+      ? 'The first one is the one you remember. The dressing room will never be this new again.'
+      : 'Another night that stays. The dressing room is bouncing.',
+    portrait: portraitForTrophyName(trophyName),
   };
+}
+
+export function firstTitleBeat(trophyName: string): CareerBeat {
+  return titleBeat(trophyName, { first: true });
 }
 
 export function soldBeat(clubName: string): CareerBeat {
@@ -80,4 +101,22 @@ export function pushCareerBeat(
     }
   }
   return [...queue, beat];
+}
+
+/** Repeatable league-win beat. The first career title still uses first-title. */
+export function enqueueLeagueTitleBeat(
+  pending: CareerBeat[] | null | undefined,
+  seen: CareerBeatKind[] | null | undefined,
+  honours: SeasonHonours | null | undefined,
+  club: Club | undefined,
+  league: string | null | undefined,
+  seasonHistory: { trophies?: string[] }[],
+): CareerBeat[] {
+  if (!honours?.leagueChampion || !club) return pending ?? [];
+  const name = leagueTrophyLabel(club, league);
+  const first =
+    !careerHadTrophies(seasonHistory)
+    && !(seen ?? []).includes('first-title')
+    && !(pending ?? []).some((item) => item.kind === 'first-title');
+  return pushCareerBeat(pending, seen, titleBeat(name, { first }));
 }

@@ -1,3 +1,4 @@
+import { portraitForTrophyName } from '../careerBeat';
 import { getClub } from '../data/clubs';
 import { getNation } from '../international';
 import { playerGoalsLine, sitOutRecapLine } from '../matchBriefing';
@@ -18,6 +19,7 @@ export default function MatchResultScreen() {
 
   const celebrate = result.isFinal && result.won && result.trophyName;
   const firstTitle = Boolean(celebrate && !(seenBeatKinds ?? []).includes('first-title'));
+  const portrait = portraitForTrophyName(result.trophyName);
   const headline = result.headline ?? result.summary;
   const playerLine =
     result.playerGoals != null && result.chances != null
@@ -34,14 +36,12 @@ export default function MatchResultScreen() {
         <div className="w-full max-w-sm rounded-3xl bg-gradient-to-b from-amber-300/30 via-emerald-400/15 to-transparent px-5 py-8 shadow-lg shadow-amber-400/20">
           <p className="text-xs uppercase tracking-[0.3em] text-amber-200">{firstTitle ? 'First title' : 'Champions'}</p>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-amber-100">You won the {result.trophyName}</h1>
-          {firstTitle && (
-            <PlayerKitPortrait
-              name={playerName?.trim() || 'You'}
-              club={club}
-              nation={nation}
-              look={look}
-            />
-          )}
+          <PlayerKitPortrait
+            name={playerName?.trim() || 'You'}
+            club={portrait === 'club' ? club : undefined}
+            nation={portrait === 'nation' ? nation : undefined}
+            look={look}
+          />
           <p className="mt-4 text-lg font-semibold text-white/90">{headline}</p>
           {playerLine && <p className="mt-2 text-sm text-white/70">{playerLine}</p>}
           {sitOutLine && (

@@ -27,9 +27,8 @@ import { evaluateInternationalTournamentAwards } from './internationalAwards';
 import { countsTowardCareerRecord, displaySeasonNumber } from './seasonDisplay';
 import { trophyLabels } from './honoursDisplay';
 import {
-  careerHadTrophies,
+  enqueueLeagueTitleBeat,
   firstCapBeat,
-  firstTitleBeat,
   pushCareerBeat,
   recordBeat,
   retirementBeat,
@@ -977,6 +976,16 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
       liveMatch: null,
       phase: 'match-result',
       wpyResult: awarded.wpyResult,
+      pendingBeats: complete
+        ? enqueueLeagueTitleBeat(
+          state.pendingBeats,
+          state.seenBeatKinds,
+          withHonours.honours,
+          club,
+          state.clubLeague,
+          state.seasonHistory,
+        )
+        : state.pendingBeats,
     };
   };
 
@@ -1006,6 +1015,14 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
         seasonStandings: buildSeasonStandings(withHonours.leagueTable, withHonours.europeanStanding),
         phase: 'season-summary',
         wpyResult: awarded.wpyResult,
+        pendingBeats: enqueueLeagueTitleBeat(
+          state.pendingBeats,
+          state.seenBeatKinds,
+          withHonours.honours,
+          club,
+          state.clubLeague,
+          state.seasonHistory,
+        ),
       };
     }
     const reviewed = reviewedSquadFields(state, season);
@@ -1390,15 +1407,15 @@ function finishResolvedLiveMatch(
     const nationName = state.nationality ? getNation(state.nationality)?.name : undefined;
     pendingBeats = pushCareerBeat(pendingBeats, state.seenBeatKinds, firstCapBeat(nationName ?? 'Your country'));
   }
-  if (
-    complete
-    && !recap.lastMatchResult.isFinal
-    && !careerHadTrophies(state.seasonHistory)
-  ) {
-    const titles = trophyLabels(withHonours.honours, club, state.clubLeague);
-    if (titles[0]) {
-      pendingBeats = pushCareerBeat(pendingBeats, state.seenBeatKinds, firstTitleBeat(titles[0]));
-    }
+  if (complete) {
+    pendingBeats = enqueueLeagueTitleBeat(
+      pendingBeats,
+      state.seenBeatKinds,
+      withHonours.honours,
+      club,
+      state.clubLeague,
+      state.seasonHistory,
+    );
   }
 
   return {

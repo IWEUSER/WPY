@@ -93,12 +93,33 @@ export function plausibleGoalCaps(
   return { maxFor, maxAgainst };
 }
 
-export function simulateClubMatch(
+export interface NpcMatchScore {
+  teammateGoals: number;
+  goalsAgainst: number;
+  us: number;
+  them: number;
+  eliteClash: boolean;
+  knockout: boolean;
+  gap: number;
+}
+
+export interface TimedNpcGoal {
+  side: 'for' | 'against';
+  minute: number;
+}
+
+export interface MatchTimeline {
+  teammateGoals: number;
+  goalsAgainst: number;
+  goals: TimedNpcGoal[];
+}
+
+/** Teammate and opponent goals before the player's finishes are added. */
+export function rollNpcScore(
   context: ClubMatchContext,
   rng: () => number = Math.random,
-  playerGoals = 0,
   playerChances?: number,
-): ClubMatchResult {
+): NpcMatchScore {
   const us = resolveStrength(context.clubStrength, context.clubTier) + (context.isHome ? 3.5 : 0);
   const them = resolveStrength(context.opponentStrength, context.opponentTier);
   const diff = us - them;
@@ -146,21 +167,83 @@ export function simulateClubMatch(
     }
   }
 
-  scoreFor += Math.max(0, playerGoals);
-  scoreAgainst = Math.min(6, scoreAgainst);
-  if (eliteClash) {
+  return { teammateGoals: scoreFor, goalsAgainst: scoreAgainst, us, them, eliteClash, knockout, gap };
+}
+
+function rollGoalMinute(rng: () => number): number {
+  const secondHalf = rng() >= 0.42;
+  return secondHalf ? 46 + Math.floor(rng() * 45) : 1 + Math.floor(rng() * 45);
+}
+
+export function assignNpcGoalMinutes(
+  teammateGoals: number,
+  goalsAgainst: number,
+  rng: () => number,
+): TimedNpcGoal[] {
+  const goals: TimedNpcGoal[] = [];
+  for (let i = 0; i < teammateGoals; i++) goals.push({ side: 'for', minute: rollGoalMinute(rng) });
+  for (let i = 0; i < goalsAgainst; i++) goals.push({ side: 'against', minute: rollGoalMinute(rng) });
+  return goals.sort((a, b) => a.minute - b.minute || (a.side === 'for' ? -1 : 1));
+}
+
+/** Same NPC totals as simulateClubMatch, plus a minute for each non-player goal. */
+export function simulateMatchTimeline(
+  context: ClubMatchContext,
+  rng: () => number = Math.random,
+  playerChances?: number,
+): MatchTimeline {
+  const npc = rollNpcScore(context, rng, playerChances);
+  return {
+    teammateGoals: npc.teammateGoals,
+    goalsAgainst: npc.goalsAgainst,
+    goals: assignNpcGoalMinutes(npc.teammateGoals, npc.goalsAgainst, rng),
+  };
+}
+
+export function liveScoreFromTimeline(
+  timeline: MatchTimeline,
+  minute: number,
+  playerGoals: number,
+): { scoreFor: number; scoreAgainst: number } {
+  let teammate = 0;
+  let against = 0;
+  for (const goal of timeline.goals) {
+    if (goal.minute < minute) {
+      if (goal.side === 'for') teammate += 1;
+      else against += 1;
+    }
+  }
+  return {
+    scoreFor: teammate + Math.max(0, playerGoals),
+    scoreAgainst: against,
+  };
+}
+
+function finishClubMatch(npc: NpcMatchScore, playerGoals: number): ClubMatchResult {
+  let scoreFor = npc.teammateGoals + Math.max(0, playerGoals);
+  let scoreAgainst = Math.min(6, npc.goalsAgainst);
+  if (npc.eliteClash) {
     scoreFor = Math.min(scoreFor, Math.max(playerGoals, 4));
     scoreAgainst = Math.min(scoreAgainst, 3);
     if (scoreFor + scoreAgainst > 6) {
       scoreAgainst = Math.max(0, 6 - scoreFor);
     }
   }
-  if (knockout) {
-    const capped = capKnockoutScoreline(scoreFor, scoreAgainst, gap, playerGoals);
+  if (npc.knockout) {
+    const capped = capKnockoutScoreline(scoreFor, scoreAgainst, npc.gap, playerGoals);
     scoreFor = capped.scoreFor;
     scoreAgainst = capped.scoreAgainst;
   }
   return applyPlayerGoalsFloor({ scoreFor, scoreAgainst, outcome: outcomeOf(scoreFor, scoreAgainst) }, playerGoals);
+}
+
+export function simulateClubMatch(
+  context: ClubMatchContext,
+  rng: () => number = Math.random,
+  playerGoals = 0,
+  playerChances?: number,
+): ClubMatchResult {
+  return finishClubMatch(rollNpcScore(context, rng, playerChances), playerGoals);
 }
 
 /** World Cup last-16 blowouts like 5–0 vs a much weaker side are not realistic. */

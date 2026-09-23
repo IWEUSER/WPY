@@ -19,6 +19,7 @@ import {
   TOP_LEAGUES,
   transferFeeFromValue,
   weeklyWageForClub,
+  weeklyWageForRatio,
   weeklyWageForSquadStatus,
 } from './playerValue';
 import { displaySeasonNumber, isFirstPublicSeason } from './seasonDisplay';
@@ -756,7 +757,7 @@ function offerTerms(
         clubId: club.id,
         move,
         fee: 0,
-        weeklyWage: weeklyWageForSquadStatus(club, value, 'starter', club.league),
+        weeklyWage: weeklyWageForRatio(club, value, extras?.playerRatio, 'starter', club.league),
         contractYears: 1,
         squadStatus: 'starter' as const,
       };
@@ -767,7 +768,7 @@ function offerTerms(
       clubId: club.id,
       move,
       fee: Math.min(fee, clubTransferBudget(club)),
-      weeklyWage: weeklyWageForSquadStatus(club, value, status),
+      weeklyWage: weeklyWageForRatio(club, value, extras?.playerRatio, status),
       contractYears: years,
       squadStatus: status,
     };
@@ -978,7 +979,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
           role: 'first-team',
           contractYearsRemaining: FIRST_CONTRACT_YEARS,
           squadStatus: openingSquadStatus('first-team'),
-          weeklyWage: weeklyWageForSquadStatus(club, value, openingSquadStatus('first-team')),
+          weeklyWage: weeklyWageForRatio(club, value, ratio, openingSquadStatus('first-team')),
         }),
       };
     }
@@ -993,7 +994,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
           clubId: c.id,
           move: 'loan' as const,
           fee: 0,
-          weeklyWage: weeklyWageForSquadStatus(c, value, 'starter', c.league),
+          weeklyWage: weeklyWageForRatio(c, value, ratio, 'starter', c.league),
           contractYears: 1,
           squadStatus: 'starter' as const,
         })),
@@ -1032,7 +1033,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
           contractYearsRemaining: recalledYears,
           clubLeague: parentClub.league,
           squadStatus: recallStatus,
-          weeklyWage: weeklyWageForSquadStatus(parentClub, value, recallStatus, parentClub.league),
+          weeklyWage: weeklyWageForRatio(parentClub, value, ratio, recallStatus, parentClub.league),
         }),
         value,
         fee,
@@ -1123,7 +1124,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       `${club.name} have been promoted to the ${nextLeague}!`,
       `Finished ${params.leaguePosition}${params.leaguePosition === 1 ? 'st' : 'nd'} in ${currentLeague}. Stay and play in the ${nextLeague} next season.`,
       stayOn({
-        weeklyWage: weeklyWageForSquadStatus(club, value, nextIfStay, nextLeague),
+        weeklyWage: weeklyWageForRatio(club, value, ratio, nextIfStay, nextLeague),
       }),
       value,
       fee,
@@ -1294,9 +1295,13 @@ function attachCurrentClubRenewal(
   const yearsLeft = params.contractYearsRemaining ?? 0;
   if (yearsLeft < 1 || yearsLeft > 3) return result;
   const years = newContractYears(params.age);
-  const wage = weeklyWageForSquadStatus(
+  const seasonRatio = params.season.gamesPlayed > 0
+    ? params.season.goals / params.season.gamesPlayed
+    : undefined;
+  const wage = weeklyWageForRatio(
     club,
     value,
+    seasonRatio,
     stayStatus ?? params.squadStatus ?? 'starter',
     params.clubLeague,
   );

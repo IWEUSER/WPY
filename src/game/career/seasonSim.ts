@@ -1,6 +1,6 @@
 import type { CalendarFixture, DomesticCupStage, LeaguesCupStage, PlayoffRound, SeasonCalendar, SuperCupStage } from './calendar';
 import type { SquadStatus } from './types';
-import { buildSeasonCalendar, fixtureIsHome, internationalVenueFlags, scoreboardPlayerOnLeft } from './calendar';
+import { buildSeasonCalendar, fixtureIsHome, internationalVenueFlags, isFinalFixture, scoreboardPlayerOnLeft } from './calendar';
 import { leaguePhaseOpponents } from './continentalDraw';
 import {
   chancesForKnockoutTie,
@@ -74,7 +74,9 @@ import {
   emptyEuropeanTable,
   emptyStanding,
   formatHomeAwayScore,
+  liveScoreFromTimeline,
   simulateClubMatch,
+  simulateMatchTimeline,
   simulateRestOfEuropeanRound,
   simulateRestOfLeagueRound,
   applyPlayerGoalsFloor,
@@ -85,6 +87,7 @@ import {
 } from './matchEngine';
 import { shuffle } from './util';
 import { describeDrawSettledOnPenalties, settleDrawOnPenalties } from './penalties';
+import { chanceMinute, type ChanceStake } from '../shooting/chanceAtmosphere';
 
 export type InternationalStage =
   | 'not-selected'
@@ -191,6 +194,12 @@ export function mulberry32(seed: number): () => number {
   };
 }
 
+export function fixtureChanceStake(fixture: CalendarFixture): ChanceStake {
+  if (isFinalFixture(fixture)) return 'final';
+  if (fixture.kind !== 'league' && fixture.kind !== 'rest') return 'cup';
+  return 'league';
+}
+
 export function liveMatchBoardLine(args: {
   sim: SeasonSimState;
   fixture: CalendarFixture;
@@ -212,30 +221,26 @@ export function liveMatchBoardLine(args: {
   const them = isInternational
     ? (fixture.opponentId ? nationStrength(fixture.opponentId) : 70)
     : (clubOpp?.strength ?? 70);
-  let result = isInternational
-    ? simulateClubMatch(
-      { clubStrength: us, opponentStrength: them, isHome, knockout: isOneOffKnockout(fixture) },
-      rng,
-      live.goals,
-      fixture.playerChances,
-    )
-    : simulateClubMatch(
-      {
-        clubTier: club.tier,
-        opponentTier: clubOpp?.tier ?? 3,
-        clubStrength: club.strength,
-        opponentStrength: clubOpp?.strength,
-        isHome,
-      },
-      rng,
-      live.goals,
-      fixture.playerChances,
-    );
-  const isTitleRival = fixture.kind === 'league' && fixture.opponentId === sim.titleRivalId;
-  if (isTitleRival && live.goals > 0 && result.outcome === 'loss') {
-    result = { scoreFor: result.scoreAgainst, scoreAgainst: result.scoreAgainst, outcome: 'draw' };
-  }
-  result = applyPlayerGoalsFloor(result, live.goals);
+  const context = isInternational
+    ? { clubStrength: us, opponentStrength: them, isHome, knockout: isOneOffKnockout(fixture) }
+    : {
+      clubTier: club.tier,
+      opponentTier: clubOpp?.tier ?? 3,
+      clubStrength: club.strength,
+      opponentStrength: clubOpp?.strength,
+      isHome,
+    };
+  const timeline = simulateMatchTimeline(context, rng, fixture.playerChances);
+  const minute = chanceMinute(
+    live.chancesTaken,
+    Math.max(1, live.chancesTotal || fixture.playerChances || 1),
+    fixtureChanceStake(fixture),
+  );
+  const sliced = liveScoreFromTimeline(timeline, minute, live.goals);
+  const result = applyPlayerGoalsFloor(
+    { scoreFor: sliced.scoreFor, scoreAgainst: sliced.scoreAgainst, outcome: 'draw' },
+    live.goals,
+  );
   return formatHomeAwayScore(result.scoreFor, result.scoreAgainst, scoreboardPlayerOnLeft(fixture));
 }
 

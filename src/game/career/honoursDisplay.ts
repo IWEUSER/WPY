@@ -4,6 +4,12 @@ import { leagueDisplayName } from './data/leagueFormat';
 import type { SeasonHonours } from './seasonSim';
 import type { InternationalSeasonRecord, SeasonRecord, TournamentSeasonOutcome } from './types';
 
+/** League title as shown on trophies and celebration screens. */
+export function leagueTrophyLabel(club: Club | undefined, league?: string | null): string {
+  if (league === 'MLS' || club?.league === 'MLS') return 'MLS Cup';
+  return league ?? club?.league ?? 'league';
+}
+
 /** Competition titles won this season, in display order. */
 export function trophyLabels(
   honours: SeasonHonours | null | undefined,
@@ -13,7 +19,7 @@ export function trophyLabels(
   if (!honours || !club) return [];
   const labels: string[] = [];
   if (honours.leagueChampion) {
-    labels.push(league === 'MLS' || club.league === 'MLS' ? 'MLS Cup' : (league ?? club.league));
+    labels.push(leagueTrophyLabel(club, league));
   }
   if (honours.domesticCup) labels.push(DOMESTIC_CUPS[honours.domesticCup].name);
   if (honours.domesticSuperCup) labels.push(honours.domesticSuperCup);

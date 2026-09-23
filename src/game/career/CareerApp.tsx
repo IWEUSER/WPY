@@ -89,6 +89,10 @@ export default function CareerApp() {
     return <PlayerNameScreen />;
   }
 
+  if (phase === 'match-result' && lastMatchResult) {
+    return <MatchResultScreen />;
+  }
+
   const nextBeat = pendingBeats?.[0];
   if (nextBeat && phase !== 'menu' && phase !== 'nationality-choice' && phase !== 'player-name' && phase !== 'club-choice') {
     return <CareerBeatScreen beat={nextBeat} />;

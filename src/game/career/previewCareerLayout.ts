@@ -4,7 +4,7 @@ import { getClub } from './data/clubs';
 import { createNationalTeamState, recordInternationalAppearance } from './international';
 import { mlsConferenceOf } from './data/leagueFormat';
 import { applyMatchToTable, buildSeasonStandings, rankLeagueTable } from './matchEngine';
-import { firstCapBeat, firstTitleBeat, recordBeat, retirementBeat, soldBeat } from './careerBeat';
+import { firstCapBeat, firstTitleBeat, recordBeat, retirementBeat, soldBeat, titleBeat } from './careerBeat';
 import { newContractYears, playerMarketValueFromSeasons, weeklyWageForClub } from './playerValue';
 import { applyTrialMatch, applyYouthMatch, assignOpeningTrialClub, beginClubTrial, beginFavouriteClubTrial, chooseTrialClub, createYouthCampaign, failClubTrial } from './openingFlow';
 import { hydrateSeason, nextActionableFixture } from './seasonSim';
@@ -1370,6 +1370,10 @@ export function applyCareerLayoutPreview(): void {
         ? [firstCapBeat('Spain')]
         : preview === 'beat-title'
           ? [firstTitleBeat('La Liga')]
+          : preview === 'beat-title-nation'
+            ? [firstTitleBeat('European Championship')]
+            : preview === 'beat-league'
+              ? [titleBeat('Premier League')]
           : preview === 'beat-sold'
             ? [soldBeat('Real Madrid')]
             : preview === 'beat-record'
