@@ -32,6 +32,7 @@ import {
   pickPlayerLook,
   pickPlayerSkin,
   worldToScreen,
+  headerBallLiftRatio,
   type KeeperPose,
   type SkinPalette,
 } from './render';
@@ -62,9 +63,9 @@ import {
   BALL_BOUNCE_PERIOD_S,
   ballBounceLift,
   chanceBallTravels,
+  bouncePeriodS,
+  flightBounces,
   idleBallHeightRatio,
-  isAerialFlight,
-  KNOCK_HOLD_MS,
   KNOCK_SLIDE_MS,
   pickBallTravelDir,
   swipeIsHorizontalKnock,
@@ -905,41 +906,12 @@ export default function ShootingGame({
               anim.ballStartXRatio = anim.knockFromX + (anim.knockToX - anim.knockFromX) * eased;
               anim.ballRotation += anim.ballTravelDir * dt * 16;
             } else {
-              const holdKnock = anim.knockHoldUntilMs > now;
               const rolled = advanceBallTravel(anim.ballStartXRatio, anim.ballTravelDir, dt, {
-                bounce: false,
-                speed: holdKnock ? 0 : anim.travelSpeed,
+                speed: anim.travelSpeed,
               });
               anim.ballStartXRatio = rolled.xRatio;
               anim.ballTravelDir = rolled.direction;
               anim.ballRotation += rolled.direction * dt * 9;
-              if (rolled.lost) {
-                const gone: ShotResult = {
-                  outcome: 'wide',
-                  aim: { x: anim.ballTravelDir, y: 0.08 },
-                  intendedAim: { x: anim.ballTravelDir, y: 0.08 },
-                  power: 0.25,
-                  curl: 0,
-                  travelTimeMs: 280,
-                  keeperDive: {
-                    target: { x: 0, y: 0.28 },
-                    hand: { x: 0, y: 0.28 },
-                    reactionMs: 0,
-                    diveDurationMs: 280,
-                    reach: 0,
-                    direction: 0,
-                    stretch: 0,
-                    layout: 0,
-                    elevation: 0,
-                  },
-                  saveMargin: 0,
-                  outOfPlay: true,
-                };
-                anim.result = gone;
-                anim.phase = 'result';
-                anim.resultAtMs = now;
-                finishShot(gone);
-              }
             }
           }
           if (hintRef.current) {
@@ -956,17 +928,23 @@ export default function ShootingGame({
                 dt,
                 opponentStrengthRef.current ?? 70,
                 paired,
+                anim.ballFlight === 'header',
               ),
             );
             anim.defender = anim.defenders[0] ?? null;
           }
-          if (anim.ballTravelActive && dt > 0 && anim.ballFlight === 'bounce') {
+          if (anim.ballTravelActive && dt > 0 && flightBounces(anim.ballFlight)) {
             anim.bounceElapsedS += dt;
           }
           const start = ballStartPixel(view, anim.ballStartXRatio);
           const liftRatio = idleBallHeightRatio(
             anim.ballFlight,
-            anim.ballFlight === 'bounce' ? ballBounceLift(anim.bounceElapsedS) : 0,
+            flightBounces(anim.ballFlight)
+              ? ballBounceLift(anim.bounceElapsedS, bouncePeriodS(anim.ballFlight))
+              : 0,
+            anim.ballFlight === 'header'
+              ? headerBallLiftRatio(view, anim.defender ?? anim.defenders[0] ?? null)
+              : undefined,
           );
           anim.ballPixel = { x: start.x, y: start.y - liftRatio * h };
           anim.ballRadius = ballRadiusNear(view);
@@ -997,7 +975,12 @@ export default function ShootingGame({
           const grounded = ballStartPixel(view, anim.ballStartXRatio);
           const startLift = idleBallHeightRatio(
             anim.ballFlight,
-            anim.ballFlight === 'bounce' ? ballBounceLift(anim.bounceElapsedS) : 0,
+            flightBounces(anim.ballFlight)
+              ? ballBounceLift(anim.bounceElapsedS, bouncePeriodS(anim.ballFlight))
+              : 0,
+            anim.ballFlight === 'header'
+              ? headerBallLiftRatio(view, anim.defender ?? anim.defenders[0] ?? null)
+              : undefined,
           );
           const start = { x: grounded.x, y: grounded.y - startLift * h };
           // The ball always flies to where it truly ends up - never redirect
@@ -1170,7 +1153,12 @@ export default function ShootingGame({
       const grounded = ballStartPixel(view, anim.ballStartXRatio);
       const liftRatio = idleBallHeightRatio(
         anim.ballFlight,
-        anim.ballFlight === 'bounce' ? ballBounceLift(anim.bounceElapsedS) : 0,
+        flightBounces(anim.ballFlight)
+          ? ballBounceLift(anim.bounceElapsedS, bouncePeriodS(anim.ballFlight))
+          : 0,
+        anim.ballFlight === 'header'
+          ? headerBallLiftRatio(view, anim.defender ?? anim.defenders[0] ?? null)
+          : undefined,
       );
       const ball = { x: grounded.x, y: grounded.y - liftRatio * h };
       const gesture: SwipeGesture = {
@@ -1189,57 +1177,32 @@ export default function ShootingGame({
         contactLift: anim.ballTravelActive && anim.ballFlight !== 'header'
           ? underSwipeLift(start.y, ball.y, anim.ballRadius, liftRatio)
           : 0,
-        bounceHeight: anim.ballFlight === 'bounce' ? ballBounceLift(anim.bounceElapsedS) : liftRatio,
+        bounceHeight: flightBounces(anim.ballFlight)
+          ? ballBounceLift(anim.bounceElapsedS, bouncePeriodS(anim.ballFlight))
+          : liftRatio,
         ballFlight: anim.ballFlight,
-        contactHeight: anim.ballFlight === 'header' ? 0.95 : anim.ballFlight === 'volley' ? 0.64 : liftRatio > 0 ? 0.35 : 0,
+        contactHeight: anim.ballFlight === 'header'
+          ? 0.95
+          : anim.ballFlight === 'volley'
+            ? 0.38 + liftRatio * 2.2
+            : liftRatio > 0 ? 0.35 : 0,
       };
 
       anim.dragStart = null;
       anim.dragPoints = [];
 
       if (anim.ballTravelActive && swipeIsHorizontalKnock(dx, dy)) {
-        const knock = applyHorizontalKnock(anim.ballStartXRatio, dx, durationMs, {
-          aerial: isAerialFlight(anim.ballFlight),
-          travelSpeed: anim.travelSpeed,
-        });
+        const knock = applyHorizontalKnock(anim.ballStartXRatio, dx, durationMs);
         anim.knockFromX = anim.ballStartXRatio;
         anim.knockToX = knock.xRatio;
         anim.ballTravelDir = knock.direction;
         const now = performance.now();
         anim.knockUntilMs = now + KNOCK_SLIDE_MS;
-        anim.knockHoldUntilMs = isAerialFlight(anim.ballFlight) ? 0 : now + KNOCK_SLIDE_MS + KNOCK_HOLD_MS;
+        anim.knockHoldUntilMs = 0;
         anim.phase = 'idle';
         setUiPhase('idle');
         audio.playKnock();
         haptics.hapticKnock();
-        if (knock.lost) {
-          anim.ballStartXRatio = knock.xRatio;
-          const gone: ShotResult = {
-            outcome: 'wide',
-            aim: { x: knock.direction, y: 0.08 },
-            intendedAim: { x: knock.direction, y: 0.08 },
-            power: 0.25,
-            curl: 0,
-            travelTimeMs: 280,
-            keeperDive: {
-              target: { x: 0, y: 0.28 },
-              hand: { x: 0, y: 0.28 },
-              reactionMs: 0,
-              diveDurationMs: 280,
-              reach: 0,
-              direction: 0,
-              stretch: 0,
-              layout: 0,
-              elevation: 0,
-            },
-            saveMargin: 0,
-            outOfPlay: true,
-          };
-          anim.result = gone;
-          anim.phase = 'result';
-          anim.resultAtMs = now;
-          finishShot(gone);
-        }
         return;
       }
 
@@ -1356,9 +1319,9 @@ export default function ShootingGame({
               {chanceKind === 'penalty'
                 ? 'Swipe up on the ball to shoot ⬆'
                 : ballFlight === 'header'
-                  ? 'Header — curl it down or glance it in'
+                  ? 'Header — meet it at the head'
                   : ballFlight === 'volley'
-                    ? 'Volley — curl it or smash it down'
+                    ? 'High bounce — volley it'
                     : chanceKind === 'cross'
                       ? 'Ball whipping across — swipe quickly'
                       : 'Swipe sideways to move · jab, drive, or loft'}

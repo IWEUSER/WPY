@@ -10,9 +10,12 @@ export const BALL_TRAVEL_SPEED = 0.22;
 /** Upper end of a whipped ball across the face of goal. */
 export const CROSS_TRAVEL_SPEED = 1.28;
 export const BALL_BOUNCE_PERIOD_S = 0.92;
+export const VOLLEY_BOUNCE_PERIOD_S = 1.14;
 export const BALL_BOUNCE_HEIGHT_RATIO = 0.038;
-export const VOLLEY_HEIGHT_RATIO = 0.11;
-export const HEADER_HEIGHT_RATIO = 0.185;
+/** Volley is the same bounce, just higher as it comes across. */
+export const VOLLEY_BOUNCE_HEIGHT_RATIO = 0.112;
+/** Fallback when no defender is on the pitch — about a standing head. */
+export const HEADER_HEIGHT_RATIO = 0.155;
 
 export type BallFlight = 'roll' | 'bounce' | 'volley' | 'header';
 
@@ -20,9 +23,21 @@ export function isAerialFlight(flight: BallFlight | null | undefined): boolean {
   return flight === 'volley' || flight === 'header';
 }
 
-export function idleBallHeightRatio(flight: BallFlight | null | undefined, bounceLift = 0): number {
-  if (flight === 'header') return HEADER_HEIGHT_RATIO;
-  if (flight === 'volley') return VOLLEY_HEIGHT_RATIO;
+export function flightBounces(flight: BallFlight | null | undefined): boolean {
+  return flight === 'bounce' || flight === 'volley';
+}
+
+export function bouncePeriodS(flight: BallFlight | null | undefined): number {
+  return flight === 'volley' ? VOLLEY_BOUNCE_PERIOD_S : BALL_BOUNCE_PERIOD_S;
+}
+
+export function idleBallHeightRatio(
+  flight: BallFlight | null | undefined,
+  bounceLift = 0,
+  headerLift = HEADER_HEIGHT_RATIO,
+): number {
+  if (flight === 'header') return headerLift;
+  if (flight === 'volley') return bounceLift * VOLLEY_BOUNCE_HEIGHT_RATIO;
   if (flight === 'bounce') return bounceLift * BALL_BOUNCE_HEIGHT_RATIO;
   return 0;
 }
@@ -64,9 +79,10 @@ export function pickBallTravelSpeed(
 }
 
 /** 0 on the turf, 1 at the peak of the bounce. */
-export function ballBounceLift(elapsedS: number): number {
-  const t = ((elapsedS % BALL_BOUNCE_PERIOD_S) + BALL_BOUNCE_PERIOD_S) % BALL_BOUNCE_PERIOD_S;
-  return Math.sin((t / BALL_BOUNCE_PERIOD_S) * Math.PI);
+export function ballBounceLift(elapsedS: number, periodS = BALL_BOUNCE_PERIOD_S): number {
+  const period = periodS > 0 ? periodS : BALL_BOUNCE_PERIOD_S;
+  const t = ((elapsedS % period) + period) % period;
+  return Math.sin((t / period) * Math.PI);
 }
 
 /** How much an under-swipe should loft the ball, given bounce height. */
@@ -99,20 +115,17 @@ export function advanceBallTravel(
     maxX?: number;
     bounce?: boolean;
   },
-): { xRatio: number; direction: BallTravelDir; lost: boolean } {
+): { xRatio: number; direction: BallTravelDir } {
   const speed = opts?.speed ?? BALL_TRAVEL_SPEED;
   const minX = opts?.minX ?? BALL_TRAVEL_MIN_X;
   const maxX = opts?.maxX ?? BALL_TRAVEL_MAX_X;
-  const bounce = opts?.bounce === true;
+  const bounce = opts?.bounce !== false;
   const span = Math.max(1e-4, maxX - minX);
   const step = speed * Math.min(0.05, Math.max(0, dtSeconds));
   let next = xRatio + direction * step;
   let dir = direction;
   if (!bounce) {
-    if (next > maxX || next < minX) {
-      return { xRatio: clamp(next, minX, maxX), direction: dir, lost: true };
-    }
-    return { xRatio: next, direction: dir, lost: false };
+    return { xRatio: clamp(next, minX, maxX), direction: dir };
   }
   if (next > maxX) {
     const over = next - maxX;
@@ -123,7 +136,7 @@ export function advanceBallTravel(
     next = minX + (over % span);
     dir = 1;
   }
-  return { xRatio: next, direction: dir, lost: false };
+  return { xRatio: next, direction: dir };
 }
 
 /**
@@ -173,28 +186,21 @@ export function knockForceFromSwipe(dx: number, durationMs: number): number {
 }
 
 /**
- * Shove the rolling ball sideways. Direction follows the swipe, so knocking
- * against the current roll (and a chasing defender) opens space.
+ * Shove the rolling ball sideways. Direction follows the swipe; the ball
+ * keeps its travel pace after the slide instead of stopping dead.
  */
 export function applyHorizontalKnock(
   xRatio: number,
   dx: number,
   durationMs: number,
-  opts?: { aerial?: boolean; travelSpeed?: number },
-): { xRatio: number; direction: BallTravelDir; force: number; delta: number; lost: boolean } {
+): { xRatio: number; direction: BallTravelDir; force: number; delta: number } {
   const force = knockForceFromSwipe(dx, durationMs);
   const direction: BallTravelDir = dx >= 0 ? 1 : -1;
-  const base = lerp(KNOCK_SOFT_RATIO, KNOCK_HARD_RATIO, force);
-  const speed = opts?.travelSpeed ?? BALL_TRAVEL_SPEED;
-  const aerialMul = opts?.aerial ? 1.35 + speed * 1.9 : 1;
-  const delta = direction * base * aerialMul;
-  const next = xRatio + delta;
-  const lost = next <= BALL_TRAVEL_MIN_X || next >= BALL_TRAVEL_MAX_X;
+  const delta = direction * lerp(KNOCK_SOFT_RATIO, KNOCK_HARD_RATIO, force);
   return {
-    xRatio: clamp(next, BALL_TRAVEL_MIN_X, BALL_TRAVEL_MAX_X),
+    xRatio: clamp(xRatio + delta, BALL_TRAVEL_MIN_X, BALL_TRAVEL_MAX_X),
     direction,
     force,
     delta,
-    lost,
   };
 }

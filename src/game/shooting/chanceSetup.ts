@@ -159,10 +159,28 @@ export function placeDefender(
   return { worldX, z, coverSide, duty: 'press', stride: 0, skinTone: look.skin, hairColor: look.hair };
 }
 
+/** Stand almost on the shooting line so the ball comes across at their head. */
+export function placeHeaderDefender(
+  shotDistanceM: number,
+  ballStartXRatio: number,
+  rng: () => number = Math.random,
+  palette: SkinPalette = 'any',
+): DefenderPose {
+  const ballWorldX = ballWorldXFromRatio(ballStartXRatio);
+  const coverSide: -1 | 1 = rng() < 0.5 ? -1 : 1;
+  const z = clamp(shotDistanceM - 0.82, 1.7, shotDistanceM - 0.52);
+  const offset = 0.22 + rng() * 0.28;
+  const worldX = clamp(lineToGoalCentreX(ballWorldX, shotDistanceM, z) + coverSide * offset, -3.2, 3.2);
+  const look = pickPlayerLook(rng() * 1_000_000, palette);
+  return { worldX, z, coverSide, duty: 'press', stride: 0, skinTone: look.skin, hairColor: look.hair };
+}
+
 export interface DefenderCloseOpts {
   duty?: DefenderDuty;
   /** Two-defender looks hold their lanes instead of collapsing onto the shooting line. */
   paired?: boolean;
+  /** Header: stay on the shooting line so the ball meets their head. */
+  header?: boolean;
 }
 
 /** Point they rush — a few metres in front of the ball, on their own lane. */
@@ -176,12 +194,14 @@ export function defenderCloseTarget(
   const near = !canKeepTenYardGap(shotDistanceM);
   const paired = Boolean(opts?.paired || opts?.duty === 'cover');
   const duty: DefenderDuty = opts?.duty ?? 'press';
-  const pressStop = near ? DEFENDER_CLOSE_STOP_GAP_NEAR_M : DEFENDER_CLOSE_STOP_GAP_M;
+  const pressStop = opts?.header
+    ? 0.7
+    : near ? DEFENDER_CLOSE_STOP_GAP_NEAR_M : DEFENDER_CLOSE_STOP_GAP_M;
   const pressZ = clamp(shotDistanceM - pressStop, 1.35, shotDistanceM - 0.9);
   const farPostX = (FIFA.goalWidth / 2) * coverSide * 0.9;
   if (!paired) {
     const lineX = lineToGoalCentreX(ballWorldX, shotDistanceM, pressZ);
-    const offset = near ? 0.72 : 0.16;
+    const offset = opts?.header ? 0.24 : near ? 0.72 : 0.16;
     return { worldX: clamp(lineX + coverSide * offset, -7.5, 7.5), z: pressZ };
   }
   if (duty === 'cover') {
@@ -219,10 +239,12 @@ export function advanceDefender(
   dtSeconds: number,
   opponentStrength = 70,
   paired = false,
+  header = false,
 ): DefenderPose {
   const target = defenderCloseTarget(shotDistanceM, ballStartXRatio, defender.coverSide, {
     duty: defender.duty ?? 'press',
     paired: paired || defender.duty === 'cover',
+    header,
   });
   const dx = target.worldX - defender.worldX;
   const dz = target.z - defender.z;
@@ -474,10 +496,12 @@ export function rollChanceSetup(options: RollChanceOptions = {}): ChanceSetup {
     const left = rng() < 0.5;
     const distanceM = FIFA.sixYardDepth + rng() * 4.2;
     const ballStartXRatio = left ? 0.08 + rng() * 0.12 : 0.80 + rng() * 0.12;
+    const flight = pickBallFlight(distanceM, options.forceFlight, rng);
     const first = options.disableDefender
       ? null
-      : placeDefender(distanceM, ballStartXRatio, rng, options.skinPalette ?? 'any');
-    const flight = pickBallFlight(distanceM, options.forceFlight, rng);
+      : flight === 'header'
+        ? placeHeaderDefender(distanceM, ballStartXRatio, rng, options.skinPalette ?? 'any')
+        : placeDefender(distanceM, ballStartXRatio, rng, options.skinPalette ?? 'any');
     return {
       kind: 'cross',
       distanceM,
@@ -491,18 +515,21 @@ export function rollChanceSetup(options: RollChanceOptions = {}): ChanceSetup {
 
   const distanceM = options.forceDistanceM ?? randomShotDistanceM(rng);
   const ballStartXRatio = randomBallStartXRatio(rng);
+  const flight = pickBallFlight(distanceM, options.forceFlight, rng);
   const wantCover = Boolean(
     !options.disableDefender
+    && flight !== 'header'
     && (options.forceDualDefenders || opponentStrength >= ELITE_DUAL_DEFENDER_STRENGTH),
   );
   const first = options.disableDefender
     ? null
-    : placeDefender(distanceM, ballStartXRatio, rng, options.skinPalette ?? 'any', { wideLane: wantCover });
+    : flight === 'header'
+      ? placeHeaderDefender(distanceM, ballStartXRatio, rng, options.skinPalette ?? 'any')
+      : placeDefender(distanceM, ballStartXRatio, rng, options.skinPalette ?? 'any', { wideLane: wantCover });
   const cover = wantCover && first
     ? placeCoverDefender(first, distanceM, ballStartXRatio, rng, options.skinPalette ?? 'any')
     : null;
   const defenders = first ? (cover ? [first, cover] : [first]) : [];
-  const flight = pickBallFlight(distanceM, options.forceFlight, rng);
   return {
     kind: 'open',
     distanceM,

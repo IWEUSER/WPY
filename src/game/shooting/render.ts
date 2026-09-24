@@ -140,6 +140,35 @@ export function ballStartPixel(view: PitchView, xRatio = 0.5): { x: number; y: n
   return { x: xRatio * view.w, y: BALL_SCREEN_Y * view.h };
 }
 
+const DEFENDER_HEIGHT_M = 1.82;
+/** 8-head figure: hips at 4 heads, skull centre 3.22 heads above the hips. */
+const DEFENDER_HEAD_FROM_FEET_HEADS = 7.22;
+
+/** Screen Y of a standing defender's head, so a header can sit on it. */
+export function defenderHeadScreenY(
+  view: PitchView,
+  defender: { worldX: number; z: number },
+): number {
+  const feet = worldToScreen(view, defender.worldX, defender.z);
+  const meterPx = view.halfWidthPx(1, defender.z);
+  const H = (DEFENDER_HEIGHT_M * meterPx) / 8;
+  return feet.y - DEFENDER_HEAD_FROM_FEET_HEADS * H;
+}
+
+/** How far to lift the idle ball so it meets the nearest defender's head. */
+export function headerBallLiftRatio(
+  view: PitchView,
+  defender: { worldX: number; z: number } | null | undefined,
+): number {
+  const groundY = BALL_SCREEN_Y * view.h;
+  if (!defender) {
+    const meterPx = view.halfWidthPx(1, view.distanceM);
+    return clamp((1.68 * meterPx) / view.h, 0.08, 0.22);
+  }
+  const headY = defenderHeadScreenY(view, defender);
+  return clamp((groundY - headY) / view.h, 0.08, 0.34);
+}
+
 /** World X,Z (metres; z = 0 at the goal line) → canvas pixels. Feet / grass. */
 export function worldToScreen(view: PitchView, worldX: number, worldZ: number): { x: number; y: number } {
   return {

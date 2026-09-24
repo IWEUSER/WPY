@@ -18,6 +18,8 @@ import {
   randomBallStartXRatio,
   randomShotDistanceM,
   worldToScreen,
+  defenderHeadScreenY,
+  headerBallLiftRatio,
   PLAYER_SKIN_TONES,
   type KeeperPose,
 } from '../src/game/shooting/render';
@@ -45,6 +47,7 @@ import {
   headerDistanceOk,
   pickBallFlight,
   placeDefender,
+  placeHeaderDefender,
   rollChanceSetup,
   shotLineHitsDefender,
 } from '../src/game/shooting/chanceSetup';
@@ -76,8 +79,11 @@ import {
   CROSS_TRAVEL_SPEED,
   ballBounceLift,
   ballTravelSpeedForKind,
+  BALL_BOUNCE_HEIGHT_RATIO,
+  VOLLEY_BOUNCE_HEIGHT_RATIO,
   idleBallHeightRatio,
   isAerialFlight,
+  flightBounces,
   pickBallTravelSpeed,
   chanceBallTravels,
   knockForceFromSwipe,
@@ -1048,8 +1054,8 @@ if (travel.xRatio <= BALL_TRAVEL_MIN_X + 0.02) {
 }
 let ranOut = { xRatio: BALL_TRAVEL_MAX_X - 0.01, direction: 1 as const };
 ranOut = advanceBallTravel(ranOut.xRatio, ranOut.direction, 0.2);
-if (!ranOut.lost || ranOut.xRatio > BALL_TRAVEL_MAX_X + 1e-6) {
-  console.error('FAIL: a ball that reaches the side must go out of play, not rebound');
+if (ranOut.direction !== -1 || ranOut.xRatio > BALL_TRAVEL_MAX_X + 1e-6) {
+  console.error('FAIL: a ball that reaches the side must rebound and keep rolling');
   process.exitCode = 1;
 }
 if (pickBallTravelDir(BALL_TRAVEL_MIN_X) !== 1 || pickBallTravelDir(BALL_TRAVEL_MAX_X) !== -1) {
@@ -1109,7 +1115,7 @@ if (held.direction !== 1 || held.xRatio !== BALL_TRAVEL_MAX_X) {
   process.exitCode = 1;
 }
 
-console.log('\n--- Volley / header height, curl, ground skip, speed spectrum ---');
+console.log('\n--- Volley bounce, header at the defender, rebound, speed spectrum ---');
 if (!headerDistanceOk(FIFA.sixYardDepth) || headerDistanceOk(12)) {
   console.error('FAIL: headers must only spawn next to the 6-yard line');
   process.exitCode = 1;
@@ -1124,6 +1130,18 @@ if (!flights.has('roll') || !flights.has('bounce')) {
   console.error('FAIL: ground chances must rotate between a roll and a bounce');
   process.exitCode = 1;
 }
+if (!flightBounces('volley') || flightBounces('header') || flightBounces('roll')) {
+  console.error('FAIL: a volley is a higher bounce, not a floated ball');
+  process.exitCode = 1;
+}
+if (idleBallHeightRatio('volley', 0) !== 0 || idleBallHeightRatio('volley', 1) <= idleBallHeightRatio('bounce', 1) * 1.8) {
+  console.error('FAIL: a volley must bounce higher than a normal bounce');
+  process.exitCode = 1;
+}
+if (VOLLEY_BOUNCE_HEIGHT_RATIO <= BALL_BOUNCE_HEIGHT_RATIO * 2) {
+  console.error('FAIL: the volley bounce must be clearly taller');
+  process.exitCode = 1;
+}
 const headerAim = applyContactHeightToAim({ x: 0, y: 0.45 }, { dx: 0, dy: 80, durationMs: 180, curl: 0, ballFlight: 'header', contactHeight: 0.95 });
 const curledHeader = applyContactHeightToAim({ x: 0, y: 0.45 }, { dx: 0, dy: 80, durationMs: 180, curl: 0.85, ballFlight: 'header', contactHeight: 0.95 });
 if (headerAim.aim.y <= 0.55 || curledHeader.aim.y >= headerAim.aim.y) {
@@ -1135,23 +1153,37 @@ if (!smashed.groundBounce || smashed.aim.y <= 0) {
   console.error('FAIL: a downward volley into the turf must bounce');
   process.exitCode = 1;
 }
-if (idleBallHeightRatio('header') <= idleBallHeightRatio('volley') || idleBallHeightRatio('roll') !== 0) {
-  console.error('FAIL: headers sit above volleys; rolls stay on the turf');
+if (idleBallHeightRatio('roll') !== 0) {
+  console.error('FAIL: rolls stay on the turf');
   process.exitCode = 1;
 }
 if (!isAerialFlight('volley') || isAerialFlight('roll')) {
-  console.error('FAIL: only volleys and headers are aerial');
+  console.error('FAIL: only volleys and headers are aerial takes');
   process.exitCode = 1;
 }
-const airKnock = applyHorizontalKnock(0.5, 80, 160, { aerial: true, travelSpeed: 1.2 });
-const groundKnock = applyHorizontalKnock(0.5, 80, 160);
-if (Math.abs(airKnock.delta) <= Math.abs(groundKnock.delta) * 1.3) {
-  console.error('FAIL: a sideways swipe on an aerial ball must send it further');
+const headerDist = FIFA.sixYardDepth + 0.35;
+const headerView = createPitchView(390, 844, headerDist);
+const headerDef = placeHeaderDefender(headerDist, 0.5, () => 0.3);
+const openDef = placeDefender(headerDist, 0.5, () => 0.3);
+const headerLift = headerBallLiftRatio(headerView, headerDef);
+const headY = defenderHeadScreenY(headerView, headerDef);
+const ballY = BALL_SCREEN_Y * 844 - headerLift * 844;
+if (Math.abs(ballY - headY) > 6) {
+  console.error('FAIL: a header must sit on the defender’s head');
+  process.exitCode = 1;
+}
+if (defenderDistanceFromBallM(headerDef, headerDist, 0.5) >= defenderDistanceFromBallM(openDef, headerDist, 0.5) - 0.15) {
+  console.error('FAIL: the header defender must stand closer to the ball');
+  process.exitCode = 1;
+}
+const keptPace = applyHorizontalKnock(0.5, 80, 160);
+if (keptPace.direction !== 1 || Math.abs(keptPace.delta) < 0.04) {
+  console.error('FAIL: a side swipe must change direction and keep the ball moving');
   process.exitCode = 1;
 }
 const fastCross = pickBallTravelSpeed('cross', 'volley', 94, () => 0.95);
 const slowRoll = pickBallTravelSpeed('open', 'roll', 52, () => 0.05);
-console.log(`speed spectrum cross=${fastCross.toFixed(2)} roll=${slowRoll.toFixed(2)} cap=${CROSS_TRAVEL_SPEED}`);
+console.log(`speed spectrum cross=${fastCross.toFixed(2)} roll=${slowRoll.toFixed(2)} cap=${CROSS_TRAVEL_SPEED} headerGap=${defenderDistanceFromBallM(headerDef, headerDist, 0.5).toFixed(2)}`);
 if (fastCross < 1.05 || slowRoll > 0.28 || CROSS_TRAVEL_SPEED < 1.2) {
   console.error('FAIL: crosses must be faster than before and sit on a wider speed spectrum');
   process.exitCode = 1;
