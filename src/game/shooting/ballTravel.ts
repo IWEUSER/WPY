@@ -5,12 +5,27 @@ import { BALL_SPAWN_X_MARGIN } from './render';
 export const BALL_TRAVEL_MIN_X = BALL_SPAWN_X_MARGIN + 0.04;
 export const BALL_TRAVEL_MAX_X = 1 - BALL_TRAVEL_MIN_X;
 
-/** Screen-width fraction the ball covers per second on open play. */
+/** Screen-width fraction the ball covers per second on a typical roll. */
 export const BALL_TRAVEL_SPEED = 0.22;
-/** A ball whipped across the face of goal. */
-export const CROSS_TRAVEL_SPEED = 0.86;
+/** Upper end of a whipped ball across the face of goal. */
+export const CROSS_TRAVEL_SPEED = 1.28;
 export const BALL_BOUNCE_PERIOD_S = 0.92;
 export const BALL_BOUNCE_HEIGHT_RATIO = 0.038;
+export const VOLLEY_HEIGHT_RATIO = 0.11;
+export const HEADER_HEIGHT_RATIO = 0.185;
+
+export type BallFlight = 'roll' | 'bounce' | 'volley' | 'header';
+
+export function isAerialFlight(flight: BallFlight | null | undefined): boolean {
+  return flight === 'volley' || flight === 'header';
+}
+
+export function idleBallHeightRatio(flight: BallFlight | null | undefined, bounceLift = 0): number {
+  if (flight === 'header') return HEADER_HEIGHT_RATIO;
+  if (flight === 'volley') return VOLLEY_HEIGHT_RATIO;
+  if (flight === 'bounce') return bounceLift * BALL_BOUNCE_HEIGHT_RATIO;
+  return 0;
+}
 
 export type BallTravelDir = -1 | 1;
 
@@ -18,8 +33,34 @@ export function chanceBallTravels(kind: string): boolean {
   return kind !== 'penalty';
 }
 
-export function ballTravelSpeedForKind(kind: string): number {
-  return kind === 'cross' ? CROSS_TRAVEL_SPEED : BALL_TRAVEL_SPEED;
+export function ballTravelSpeedForKind(kind: string, flight?: BallFlight | null): number {
+  if (kind === 'cross') return flight === 'roll' ? 0.78 : CROSS_TRAVEL_SPEED;
+  if (flight === 'volley') return 0.52;
+  if (flight === 'header') return 0.4;
+  if (flight === 'bounce') return 0.3;
+  return BALL_TRAVEL_SPEED;
+}
+
+/** Sample a travel speed. Crosses sit on the high end; stronger sides see more of the fast ones. */
+export function pickBallTravelSpeed(
+  kind: string,
+  flight: BallFlight,
+  opponentStrength = 70,
+  rng: () => number = Math.random,
+): number {
+  const elite = clamp((opponentStrength - 52) / 42, 0, 1);
+  const pick = (min: number, max: number, bias = 0) => {
+    const t = clamp(rng() * (1 - bias * 0.35) + rng() * elite * bias, 0, 1);
+    return min + (max - min) * t;
+  };
+  if (kind === 'cross') {
+    const floor = flight === 'roll' ? 0.58 : flight === 'bounce' ? 0.64 : 0.72;
+    return pick(floor, CROSS_TRAVEL_SPEED, 0.85);
+  }
+  if (flight === 'header') return pick(0.22, 0.72, 0.45);
+  if (flight === 'volley') return pick(0.3, 0.96, 0.55);
+  if (flight === 'bounce') return pick(0.16, 0.5, 0.35);
+  return pick(0.14, 0.4, 0.25);
 }
 
 /** 0 on the turf, 1 at the peak of the bounce. */
@@ -58,17 +99,20 @@ export function advanceBallTravel(
     maxX?: number;
     bounce?: boolean;
   },
-): { xRatio: number; direction: BallTravelDir } {
+): { xRatio: number; direction: BallTravelDir; lost: boolean } {
   const speed = opts?.speed ?? BALL_TRAVEL_SPEED;
   const minX = opts?.minX ?? BALL_TRAVEL_MIN_X;
   const maxX = opts?.maxX ?? BALL_TRAVEL_MAX_X;
-  const bounce = opts?.bounce !== false;
+  const bounce = opts?.bounce === true;
   const span = Math.max(1e-4, maxX - minX);
   const step = speed * Math.min(0.05, Math.max(0, dtSeconds));
   let next = xRatio + direction * step;
   let dir = direction;
   if (!bounce) {
-    return { xRatio: clamp(next, minX, maxX), direction: dir };
+    if (next > maxX || next < minX) {
+      return { xRatio: clamp(next, minX, maxX), direction: dir, lost: true };
+    }
+    return { xRatio: next, direction: dir, lost: false };
   }
   if (next > maxX) {
     const over = next - maxX;
@@ -79,7 +123,7 @@ export function advanceBallTravel(
     next = minX + (over % span);
     dir = 1;
   }
-  return { xRatio: next, direction: dir };
+  return { xRatio: next, direction: dir, lost: false };
 }
 
 /**
@@ -136,14 +180,21 @@ export function applyHorizontalKnock(
   xRatio: number,
   dx: number,
   durationMs: number,
-): { xRatio: number; direction: BallTravelDir; force: number; delta: number } {
+  opts?: { aerial?: boolean; travelSpeed?: number },
+): { xRatio: number; direction: BallTravelDir; force: number; delta: number; lost: boolean } {
   const force = knockForceFromSwipe(dx, durationMs);
   const direction: BallTravelDir = dx >= 0 ? 1 : -1;
-  const delta = direction * lerp(KNOCK_SOFT_RATIO, KNOCK_HARD_RATIO, force);
+  const base = lerp(KNOCK_SOFT_RATIO, KNOCK_HARD_RATIO, force);
+  const speed = opts?.travelSpeed ?? BALL_TRAVEL_SPEED;
+  const aerialMul = opts?.aerial ? 1.35 + speed * 1.9 : 1;
+  const delta = direction * base * aerialMul;
+  const next = xRatio + delta;
+  const lost = next <= BALL_TRAVEL_MIN_X || next >= BALL_TRAVEL_MAX_X;
   return {
-    xRatio: clamp(xRatio + delta, BALL_TRAVEL_MIN_X, BALL_TRAVEL_MAX_X),
+    xRatio: clamp(next, BALL_TRAVEL_MIN_X, BALL_TRAVEL_MAX_X),
     direction,
     force,
     delta,
+    lost,
   };
 }

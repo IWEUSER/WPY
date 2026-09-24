@@ -116,6 +116,30 @@ export interface IntendedShot {
   power: number;
   curl: number;
   style: ShotStyle;
+  groundBounce?: boolean;
+}
+
+export function aerialLiftBias(flight: SwipeGesture['ballFlight']): number {
+  if (flight === 'header') return 0.38;
+  if (flight === 'volley') return 0.22;
+  if (flight === 'bounce') return 0.06;
+  return 0;
+}
+
+/** High balls rise unless curled or smashed down; a turf skip can still bounce in. */
+export function applyContactHeightToAim(aim: AimPoint, gesture: SwipeGesture): { aim: AimPoint; groundBounce: boolean } {
+  const flight = gesture.ballFlight ?? 'roll';
+  const curlKeep = 1 - Math.min(1, Math.abs(gesture.curl ?? 0) * 1.2);
+  const height = gesture.contactHeight ?? (flight === 'header' ? 0.92 : flight === 'volley' ? 0.62 : 0);
+  let y = aim.y + aerialLiftBias(flight) * curlKeep * (0.55 + height * 0.45);
+  const down = gesture.dy < 0 ? clamp(-gesture.dy / MAX_SWIPE_DISTANCE, 0, 1) : 0;
+  if (down > 0.08 && (flight === 'volley' || flight === 'header' || flight === 'bounce')) {
+    y -= down * (flight === 'header' ? 0.74 : 0.56);
+    if (y < 0) {
+      return { aim: { x: aim.x, y: Math.min(0.55, Math.abs(y) * 0.62) }, groundBounce: true };
+    }
+  }
+  return { aim: { x: aim.x, y: clamp(y, 0, 1.55) }, groundBounce: false };
 }
 
 /**
@@ -181,14 +205,15 @@ export function computeIntendedShot(gesture: SwipeGesture): IntendedShot {
   const style = classifyShotStyle(gesture);
   const shaped = applyShotStyle(rawAim, rawPower, clamp(gesture.curl ?? 0, -1, 1), style);
   const loft = gesture.contactLift ?? 0;
-  const aim = loft > 0.08
+  const lifted = loft > 0.08
     ? { x: shaped.aim.x, y: clamp(shaped.aim.y + loft * 0.42, 0, 1.48) }
     : shaped.aim;
+  const aerial = applyContactHeightToAim(lifted, gesture);
 
   const powerDamping = 1 - clamp(shaped.power - 1, 0, 0.8) * 0.25;
   const curl = shaped.curl * powerDamping * 0.55;
 
-  return { aim, power: shaped.power, curl, style };
+  return { aim: aerial.aim, power: shaped.power, curl, style, groundBounce: aerial.groundBounce };
 }
 
 function displacementAim(gesture: SwipeGesture): AimPoint {
@@ -484,7 +509,7 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
   const difficulty = options.difficulty ?? DEFAULT_DIFFICULTY;
   const rng = options.rng ?? defaultRandom;
 
-  const { aim: intendedAim, power, curl, style } = computeIntendedShot(gesture);
+  const { aim: intendedAim, power, curl, style, groundBounce } = computeIntendedShot(gesture);
   const takeQuality = gesture.takeQuality ?? 1;
   const distanceM = gesture.distanceM ?? 16.5;
   let noise = computeNoise(power, curl, difficulty) + (1 - takeQuality) * difficulty.baseNoise * 1.6;
@@ -514,6 +539,7 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
       penalty: Boolean(options.penalty),
       takeQuality,
       shotStyle: style,
+      groundBounce: Boolean(groundBounce),
     };
   }
 
@@ -531,6 +557,7 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
       penalty: Boolean(options.penalty),
       takeQuality,
       shotStyle: style,
+      groundBounce: Boolean(groundBounce),
     };
   }
 
@@ -556,5 +583,6 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
     penalty: Boolean(options.penalty),
     takeQuality,
     shotStyle: style,
+    groundBounce: Boolean(groundBounce),
   };
 }

@@ -135,6 +135,11 @@ export function aggregateDomesticSplit(seasons: SeasonRecord[]): DomesticSplit {
   return next;
 }
 
+/** Sum of transfer fees paid to acquire the player across counted seasons. */
+export function careerTransferFeesPaid(seasons: SeasonRecord[]): number {
+  return seasons.reduce((sum, season) => sum + (season.transferFeePaid ?? 0), 0);
+}
+
 export function aggregateContinental(seasons: SeasonRecord[]): ContinentalSeasonStat[] {
   const byCup = new Map<ContinentalStatKey, ContinentalSeasonStat>();
   for (const season of seasons) {

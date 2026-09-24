@@ -468,14 +468,32 @@ function clubLeagueOf(clubId: string): string | undefined {
 
 /**
  * Listed starter wage is the 1.0 goals-per-game rate.
- * A 0.66 season is offered 66% of that club's top wage; 1.0 or higher is the full band.
+ * A 0.66 career ratio is offered 66% of that club's top wage; 1.0 or higher is the full band.
  */
 export function wageRatioScale(ratio: number | null | undefined): number {
   if (ratio == null || Number.isNaN(ratio)) return 1;
   return Math.min(1, Math.max(0, ratio));
 }
 
-/** Scale a club's listed wage by last season's goals-per-game, capped at 1.0. */
+/**
+ * Full 1.0 starter money only after five counted seasons.
+ * 1 season → 50%, 2 → 60%, 3 → 70%, 4 → 80%, 5+ → 100%.
+ */
+export function wageCareerMaturityScale(countedSeasonsCompleted: number): number {
+  const n = Math.max(0, Math.floor(countedSeasonsCompleted));
+  if (n >= 5) return 1;
+  if (n === 4) return 0.8;
+  if (n === 3) return 0.7;
+  if (n === 2) return 0.6;
+  if (n === 1) return 0.5;
+  return 0.5;
+}
+
+export function countedSeasonsCompleted(seasons: SeasonRecord[]): number {
+  return seasons.filter((season) => countsTowardCareerRecord(season.seasonNumber, season.role)).length;
+}
+
+/** Scale a club's listed wage by goals-per-game, capped at 1.0. */
 export function weeklyWageForRatio(
   club: Club,
   marketValue: number,
@@ -486,6 +504,20 @@ export function weeklyWageForRatio(
   const top = weeklyWageForSquadStatus(club, marketValue, status, playingLeague);
   if (status !== 'starter') return top;
   return roundWeeklyWage(top * wageRatioScale(ratio));
+}
+
+/** Incoming transfer / loan offer: career ratio of the listed 1.0 wage, then the 5-season discount. */
+export function weeklyWageForTransferOffer(
+  club: Club,
+  marketValue: number,
+  careerRatio: number | null | undefined,
+  countedSeasonsCompleted: number,
+  status: SquadStatus,
+  playingLeague?: string | null,
+): number {
+  const atRatio = weeklyWageForRatio(club, marketValue, careerRatio, status, playingLeague);
+  if (status !== 'starter') return atRatio;
+  return roundWeeklyWage(atRatio * wageCareerMaturityScale(countedSeasonsCompleted));
 }
 
 /** Starter, Rising star, and reserve wages so transfer offers are not all the same band. */

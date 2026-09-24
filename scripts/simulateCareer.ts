@@ -13,7 +13,7 @@ import {
 } from '../src/game/career/chanceEngine';
 import { assignClubTier, CLUBS, clubsForSeason, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, leagueMatchWeeks, playableClubsGroupedByLeague, SECOND_DIVISIONS, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
 import { playoffGamesFromOpening, playoffOpeningForPosition } from '../src/game/career/data/leagueFormat';
-import { clubTransferBudget, consecutivePoorFactor, contractValueFactor, DEFAULT_CONTRACT_YEARS, ELITE_TRANSFER_VALUE_FLOOR, FIRST_CONTRACT_YEARS, firstTopFlightValueCap, formAdjustedRatio, isSeason1ValueLocked, leagueValueWeight, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, MIN_ACCEPTED_FEE_RATIO, newContractYears, playerMarketValue, playerMarketValueFromSeasons, RESERVE_CONTRACT_YEARS, RESERVE_WAGE_FACTOR, RESERVE_WEEKLY_WAGE, seasonalSponsorship, tierForMarketValue, TOP_LEAGUES, transferFeeFromValue, weeklyWageForClub, weeklyWageForRatio, weeklyWageForSquadStatus, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
+import { clubTransferBudget, consecutivePoorFactor, contractValueFactor, DEFAULT_CONTRACT_YEARS, ELITE_TRANSFER_VALUE_FLOOR, FIRST_CONTRACT_YEARS, firstTopFlightValueCap, formAdjustedRatio, isSeason1ValueLocked, leagueValueWeight, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, MIN_ACCEPTED_FEE_RATIO, newContractYears, playerMarketValue, playerMarketValueFromSeasons, RESERVE_CONTRACT_YEARS, RESERVE_WAGE_FACTOR, RESERVE_WEEKLY_WAGE, seasonalSponsorship, tierForMarketValue, TOP_LEAGUES, transferFeeFromValue, wageCareerMaturityScale, weeklyWageForClub, weeklyWageForRatio, weeklyWageForSquadStatus, weeklyWageForTransferOffer, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { nationKit } from '../src/game/career/data/nationColours';
 import { reserveStadium, resolveCareerStadium, resolveMatchStadium, trialStadium } from '../src/game/career/matchVenue';
@@ -48,8 +48,8 @@ import { countsTowardCareerRecord, displaySeasonLabel, displaySeasonNumber, isFi
 import { bumpInternationalSeason, callUpRatio, isInternationalFinalsRound, isSelectedForNationalTeam, leagueEligibleForNationalTeam, markInjuryMissedFinals, SEASON_1_CALL_UP_MIN_WEEK, selectionRatioForNation } from '../src/game/career/international';
 import { blowoutScorePossible, formatHomeAwayScore, missedChanceWinFactor, plausibleGoalCaps, simulateClubMatch, simulateLeagueSeason, simulateMatchTimeline } from '../src/game/career/matchEngine';
 import { chanceImportanceLine, chanceMinute, chanceMinutesForMatch, chancesLeftLine, formatChanceMinute } from '../src/game/shooting/chanceAtmosphere';
-import { awardBeat, enqueueLeagueTitleBeat, firstCapBeat, firstTitleBeat, portraitForTrophyName, pushCareerBeat, retirementBeat, seasonAwardBeats, soldBeat, titleBeat } from '../src/game/career/careerBeat';
-import { aggregateContinental, aggregateDomesticSplit, clubSeasonTotals, recordClubAppearanceStats, seasonDomesticSplit } from '../src/game/career/seasonStats';
+import { awardBeat, enqueueLeagueTitleBeat, firstCapBeat, firstTitleBeat, portraitForTrophyName, pushCareerBeat, retirementBeat, seasonAwardBeats, soldBeat, titleBeat, tournamentCallUpBeat } from '../src/game/career/careerBeat';
+import { aggregateContinental, aggregateDomesticSplit, careerTransferFeesPaid, clubSeasonTotals, recordClubAppearanceStats, seasonDomesticSplit } from '../src/game/career/seasonStats';
 import { evaluateClubPlayerOfTheTournament } from '../src/game/career/clubInternationalAwards';
 import { leaguePhaseOpponents, pickSuperCupOpponent } from '../src/game/career/continentalDraw';
 import { settleDrawOnPenalties } from '../src/game/career/penalties';
@@ -3089,7 +3089,7 @@ if (barca && hilal && lafc) {
     });
     if (missLoans.some((o) => {
       const dest = getClub(o.clubId);
-      return !dest || o.contractYears !== 1 || o.weeklyWage !== weeklyWageForRatio(dest, reserveMissValue, 2 / 38, 'starter', dest.league);
+      return !dest || o.contractYears !== 1 || o.weeklyWage !== weeklyWageForTransferOffer(dest, reserveMissValue, 2 / 38, 0, 'starter', dest.league);
     })) {
       console.error('reserve-miss loans must pay each destination’s starter wage, not a flat reserve salary');
       process.exitCode = 1;
@@ -3749,7 +3749,7 @@ if (loanMiss.immediate?.role === 'reserve' || loanOffers !== LOAN_OFFER_COUNT ||
   }
   if (nextLoans.some((o) => {
     const dest = getClub(o.clubId);
-    return !dest || o.weeklyWage !== weeklyWageForRatio(dest, missValue, 10 / 24, 'starter', dest.league);
+    return !dest || o.weeklyWage !== weeklyWageForTransferOffer(dest, missValue, 10 / 24, 1, 'starter', dest.league);
   })) {
     console.error('loan offers must pay the destination starter wage');
     process.exitCode = 1;
@@ -7925,6 +7925,56 @@ console.log('\n--- Career beats, chance cards, Europe tables, neutral boards ---
   const awayLeague = calendar.fixtures.find((f) => f.kind === 'league' && f.isHome === false);
   if (awayLeague && scoreboardPlayerOnLeft(awayLeague)) {
     console.error('real away games must keep the home side on the left');
+    process.exitCode = 1;
+  }
+}
+
+console.log('\n--- Call-up beats, transfer fees, 5-season wage discount ---');
+{
+  if (firstCapBeat('France').eyebrow !== 'Call-up' || tournamentCallUpBeat('France', 'World Cup').kind !== 'tournament-callup') {
+    console.error('call-up beats must fire before the first cap and before a tournament');
+    process.exitCode = 1;
+  }
+  const onceCap = pushCareerBeat([firstCapBeat('France')], [], firstCapBeat('France'));
+  if (onceCap.length !== 1) {
+    console.error('the first-cap screen must not queue twice');
+    process.exitCode = 1;
+  }
+  const twoCups = pushCareerBeat(
+    [tournamentCallUpBeat('France', 'World Cup')],
+    [],
+    tournamentCallUpBeat('France', 'European Championship'),
+  );
+  if (twoCups.length !== 2) {
+    console.error('each tournament must get its own call-up screen');
+    process.exitCode = 1;
+  }
+  const feeSeasons = [
+    { ...dummySeason, seasonNumber: 3, clubId: 'barcelona', transferFeePaid: 80_000_000, transferFromClubId: 'real-madrid' },
+    { ...dummySeason, seasonNumber: 4, clubId: 'barcelona', transferFeePaid: 0 },
+  ];
+  if (careerTransferFeesPaid(feeSeasons) !== 80_000_000) {
+    console.error('career history must total the transfer fees paid for the player');
+    process.exitCode = 1;
+  }
+  const madrid = getClub('real-madrid')!;
+  const listed = weeklyWageForClub(madrid, 0);
+  const atOne = weeklyWageForRatio(madrid, 0, 1, 'starter');
+  if (wageCareerMaturityScale(1) !== 0.5 || wageCareerMaturityScale(4) !== 0.8 || wageCareerMaturityScale(5) !== 1) {
+    console.error('full 1.0 starter money must wait until five counted seasons');
+    process.exitCode = 1;
+  }
+  const year1 = weeklyWageForTransferOffer(madrid, 0, 1, 1, 'starter');
+  const year4 = weeklyWageForTransferOffer(madrid, 0, 1, 4, 'starter');
+  const year5 = weeklyWageForTransferOffer(madrid, 0, 1, 5, 'starter');
+  const year2at06 = weeklyWageForTransferOffer(madrid, 0, 0.6, 2, 'starter');
+  console.log('transfer wages 1.0 y1/y4/y5', year1, year4, year5, '0.6 y2', year2at06);
+  if (year1 !== Math.round((atOne * 0.5) / 500) * 500 || year4 !== Math.round((atOne * 0.8) / 500) * 500 || year5 !== atOne) {
+    console.error('a 1.0 career ratio must be discounted 50/40/30/20/0% across the first five seasons');
+    process.exitCode = 1;
+  }
+  if (year2at06 !== Math.round((listed * 0.6 * 0.6) / 500) * 500) {
+    console.error('transfer offers must use career ratio, then the season discount');
     process.exitCode = 1;
   }
 }

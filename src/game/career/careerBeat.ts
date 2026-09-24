@@ -5,7 +5,7 @@ import type { Club } from './data/clubs';
 import type { SeasonHonours } from './seasonSim';
 import type { SeasonRecord } from './types';
 
-export type CareerBeatKind = 'first-cap' | 'first-title' | 'title' | 'sold' | 'record' | 'retirement' | 'award';
+export type CareerBeatKind = 'first-cap' | 'tournament-callup' | 'first-title' | 'title' | 'sold' | 'record' | 'retirement' | 'award';
 
 export interface CareerBeat {
   kind: CareerBeatKind;
@@ -28,9 +28,19 @@ export function portraitForTrophyName(trophyName: string | null | undefined): 'c
 export function firstCapBeat(nationName: string): CareerBeat {
   return {
     kind: 'first-cap',
-    eyebrow: 'First cap',
+    eyebrow: 'Call-up',
     headline: `${nationName} call you up`,
     copy: 'The anthem, the shirt, a night that stays. Everything after this is a career.',
+    portrait: 'nation',
+  };
+}
+
+export function tournamentCallUpBeat(nationName: string, tournamentName: string): CareerBeat {
+  return {
+    kind: 'tournament-callup',
+    eyebrow: 'Tournament squad',
+    headline: `${nationName} name you in the ${tournamentName} squad`,
+    copy: 'The finals start here. The shirt is the same — the nights are not.',
     portrait: 'nation',
   };
 }

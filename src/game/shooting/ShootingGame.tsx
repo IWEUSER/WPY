@@ -27,6 +27,7 @@ import {
   drawPitch,
   drawTrail,
   goalToPixel,
+  FIFA,
   idleKeeperPose,
   pickPlayerLook,
   pickPlayerSkin,
@@ -58,17 +59,18 @@ import StatsBar, { type ShotStats } from './StatsBar';
 import {
   advanceBallTravel,
   applyHorizontalKnock,
-  BALL_BOUNCE_HEIGHT_RATIO,
   BALL_BOUNCE_PERIOD_S,
   ballBounceLift,
-  ballTravelSpeedForKind,
-  KNOCK_HOLD_MS,
   chanceBallTravels,
+  idleBallHeightRatio,
+  isAerialFlight,
+  KNOCK_HOLD_MS,
   KNOCK_SLIDE_MS,
   pickBallTravelDir,
   swipeIsHorizontalKnock,
   takeQualityFromXRatio,
   underSwipeLift,
+  type BallFlight,
   type BallTravelDir,
 } from './ballTravel';
 
@@ -108,6 +110,8 @@ interface AnimState {
   /** Metres from the ball to the goal line. */
   shotDistanceM: number;
   chanceKind: ChanceKind;
+  ballFlight: BallFlight;
+  travelSpeed: number;
   defender: DefenderPose | null;
   defenders: DefenderPose[];
   lastTickMs: number;
@@ -196,6 +200,14 @@ function readDevChanceKind(): ChanceKind | null {
   if (!import.meta.env.DEV) return null;
   const raw = new URLSearchParams(window.location.search).get('kind');
   if (raw === 'open' || raw === 'penalty' || raw === 'cross') return raw;
+  return null;
+}
+
+function readDevFlight(): BallFlight | null {
+  if (!import.meta.env.DEV) return null;
+  const q = new URLSearchParams(window.location.search);
+  const raw = q.get('flight') ?? q.get('kind');
+  if (raw === 'roll' || raw === 'bounce' || raw === 'volley' || raw === 'header') return raw;
   return null;
 }
 
@@ -347,16 +359,22 @@ function nextChance(
 ): ChanceSetup {
   const forcePenalty = (allowPenalties && readDevPenalty()) || forcePenaltyChance;
   const forceDistance = readDevDistance();
+  const flight = readDevFlight();
   return rollChanceSetup({
     clubStrength,
     opponentStrength: opponentStrength ?? readDevOpponentStrength(),
     forcePenalty,
-    forceDistanceM: forcePenalty ? undefined : (forceDistance ?? undefined),
+    forceDistanceM: forcePenalty
+      ? undefined
+      : flight === 'header'
+        ? FIFA.sixYardDepth + 0.35
+        : (forceDistance ?? undefined),
     disableDefender: readDevDefenderOff(),
     skinPalette,
     allowPenalties,
     forceDualDefenders: readDevDualDefenders(),
     forceKind: forcePenalty ? 'penalty' : readDevChanceKind() ?? undefined,
+    forceFlight: flight ?? undefined,
   });
 }
 
@@ -501,6 +519,7 @@ export default function ShootingGame({
   );
   const [ballHintX, setBallHintX] = useState(initialChance.ballStartXRatio);
   const [chanceKind, setChanceKind] = useState<ChanceKind>(initialChance.kind);
+  const [ballFlight, setBallFlight] = useState<BallFlight>(initialChance.flight ?? 'roll');
   const [defenderCount, setDefenderCount] = useState(chanceDefenders(initialChance).length);
 
   const shotsTakenRef = useRef(0);
@@ -565,6 +584,8 @@ export default function ShootingGame({
     knockHoldUntilMs: 0,
     shotDistanceM: initialChance.distanceM,
     chanceKind: initialChance.kind,
+    ballFlight: initialChance.flight ?? 'roll',
+    travelSpeed: initialChance.travelSpeed ?? 0.22,
     defender: initialChance.defender,
     defenders: chanceDefenders(initialChance),
     lastTickMs: 0,
@@ -658,6 +679,7 @@ export default function ShootingGame({
   useEffect(() => {
     setBallHintX(animRef.current.ballStartXRatio);
     setChanceKind(animRef.current.chanceKind);
+    setBallFlight(animRef.current.ballFlight);
   }, []);
 
   useEffect(() => {
@@ -712,6 +734,8 @@ export default function ShootingGame({
     anim.knockHoldUntilMs = 0;
     anim.shotDistanceM = chance.distanceM;
     anim.chanceKind = chance.kind;
+    anim.ballFlight = chance.flight ?? 'roll';
+    anim.travelSpeed = chance.travelSpeed ?? 0.22;
     anim.defender = chance.defender;
     anim.defenders = chanceDefenders(chance);
     anim.lastTickMs = 0;
@@ -725,6 +749,7 @@ export default function ShootingGame({
     anim.bounceElapsedS = Math.random() * BALL_BOUNCE_PERIOD_S;
     setBallHintX(chance.ballStartXRatio);
     setChanceKind(chance.kind);
+    setBallFlight(chance.flight ?? 'roll');
     setDefenderCount(chanceDefenders(chance).length);
     setResultLabel(null);
     beginChanceIntro(false, chance.kind);
@@ -797,12 +822,13 @@ export default function ShootingGame({
     });
     const detailParts = [
       result.shotStyle ? SHOT_STYLE_LABEL[result.shotStyle] : null,
+      result.groundBounce ? 'Bounced' : null,
       powerTierLabel(result.power),
       curlStyleLabel(result),
       takeTimingLabel(result.takeQuality),
     ].filter(Boolean) as string[];
     setResultLabel({
-      text: OUTCOME_LABEL[result.outcome],
+      text: result.outOfPlay ? 'OUT OF PLAY' : OUTCOME_LABEL[result.outcome],
       color: OUTCOME_COLOR[result.outcome],
       detail: detailParts.length > 0 ? detailParts.join(' \u00b7 ') : null,
     });
@@ -881,12 +907,39 @@ export default function ShootingGame({
             } else {
               const holdKnock = anim.knockHoldUntilMs > now;
               const rolled = advanceBallTravel(anim.ballStartXRatio, anim.ballTravelDir, dt, {
-                bounce: !holdKnock,
-                speed: ballTravelSpeedForKind(anim.chanceKind),
+                bounce: false,
+                speed: holdKnock ? 0 : anim.travelSpeed,
               });
               anim.ballStartXRatio = rolled.xRatio;
               anim.ballTravelDir = rolled.direction;
               anim.ballRotation += rolled.direction * dt * 9;
+              if (rolled.lost) {
+                const gone: ShotResult = {
+                  outcome: 'wide',
+                  aim: { x: anim.ballTravelDir, y: 0.08 },
+                  intendedAim: { x: anim.ballTravelDir, y: 0.08 },
+                  power: 0.25,
+                  curl: 0,
+                  travelTimeMs: 280,
+                  keeperDive: {
+                    target: { x: 0, y: 0.28 },
+                    hand: { x: 0, y: 0.28 },
+                    reactionMs: 0,
+                    diveDurationMs: 280,
+                    reach: 0,
+                    direction: 0,
+                    stretch: 0,
+                    layout: 0,
+                    elevation: 0,
+                  },
+                  saveMargin: 0,
+                  outOfPlay: true,
+                };
+                anim.result = gone;
+                anim.phase = 'result';
+                anim.resultAtMs = now;
+                finishShot(gone);
+              }
             }
           }
           if (hintRef.current) {
@@ -907,12 +960,15 @@ export default function ShootingGame({
             );
             anim.defender = anim.defenders[0] ?? null;
           }
-          if (anim.ballTravelActive && dt > 0) {
+          if (anim.ballTravelActive && dt > 0 && anim.ballFlight === 'bounce') {
             anim.bounceElapsedS += dt;
           }
           const start = ballStartPixel(view, anim.ballStartXRatio);
-          const lift = anim.ballTravelActive ? ballBounceLift(anim.bounceElapsedS) : 0;
-          anim.ballPixel = { x: start.x, y: start.y - lift * h * BALL_BOUNCE_HEIGHT_RATIO };
+          const liftRatio = idleBallHeightRatio(
+            anim.ballFlight,
+            anim.ballFlight === 'bounce' ? ballBounceLift(anim.bounceElapsedS) : 0,
+          );
+          anim.ballPixel = { x: start.x, y: start.y - liftRatio * h };
           anim.ballRadius = ballRadiusNear(view);
           const devPose = readDevKeeperPose();
           const devCell = readDevPoseCell();
@@ -939,8 +995,11 @@ export default function ShootingGame({
           const eased = t * t * (3 - 2 * t); // smoothstep
 
           const grounded = ballStartPixel(view, anim.ballStartXRatio);
-          const lift = anim.ballTravelActive ? ballBounceLift(anim.bounceElapsedS) : 0;
-          const start = { x: grounded.x, y: grounded.y - lift * h * BALL_BOUNCE_HEIGHT_RATIO };
+          const startLift = idleBallHeightRatio(
+            anim.ballFlight,
+            anim.ballFlight === 'bounce' ? ballBounceLift(anim.bounceElapsedS) : 0,
+          );
+          const start = { x: grounded.x, y: grounded.y - startLift * h };
           // The ball always flies to where it truly ends up - never redirect
           // its visual path toward the keeper - so what you see is always
           // consistent with the outcome (no more "that went in" saves).
@@ -955,10 +1014,11 @@ export default function ShootingGame({
 
           // Gentle banana: a little early bow, then settle into the aimed
           // point so the shot does not whip sideways at the end.
+          const skip = result.groundBounce ? h * 0.12 : 0;
           const c1x = lerpNum(start.x, end.x, 0.38) + bend;
-          const c1y = lerpNum(start.y, end.y, 0.38) - arcHeight;
+          const c1y = lerpNum(start.y, end.y, 0.38) - arcHeight + skip;
           const c2x = lerpNum(start.x, end.x, 0.78) + bend * 0.2;
-          const c2y = lerpNum(start.y, end.y, 0.78) - arcHeight * 0.22;
+          const c2y = lerpNum(start.y, end.y, 0.78) - arcHeight * 0.22 - skip * 0.35;
 
           const x = cubicBezier(start.x, c1x, c2x, end.x, eased);
           const y = cubicBezier(start.y, c1y, c2y, end.y, eased);
@@ -1108,8 +1168,11 @@ export default function ShootingGame({
       const { w, h } = sizeRef.current;
       const view = createPitchView(w, h, anim.shotDistanceM);
       const grounded = ballStartPixel(view, anim.ballStartXRatio);
-      const lift = anim.ballTravelActive ? ballBounceLift(anim.bounceElapsedS) : 0;
-      const ball = { x: grounded.x, y: grounded.y - lift * h * BALL_BOUNCE_HEIGHT_RATIO };
+      const liftRatio = idleBallHeightRatio(
+        anim.ballFlight,
+        anim.ballFlight === 'bounce' ? ballBounceLift(anim.bounceElapsedS) : 0,
+      );
+      const ball = { x: grounded.x, y: grounded.y - liftRatio * h };
       const gesture: SwipeGesture = {
         dx,
         dy,
@@ -1123,27 +1186,60 @@ export default function ShootingGame({
         canvasH: h,
         distanceM: anim.shotDistanceM,
         takeQuality: anim.ballTravelActive ? takeQualityFromXRatio(anim.ballStartXRatio, anim.chanceKind) : 1,
-        contactLift: anim.ballTravelActive
-          ? underSwipeLift(start.y, ball.y, anim.ballRadius, ballBounceLift(anim.bounceElapsedS))
+        contactLift: anim.ballTravelActive && anim.ballFlight !== 'header'
+          ? underSwipeLift(start.y, ball.y, anim.ballRadius, liftRatio)
           : 0,
-        bounceHeight: anim.ballTravelActive ? ballBounceLift(anim.bounceElapsedS) : 0,
+        bounceHeight: anim.ballFlight === 'bounce' ? ballBounceLift(anim.bounceElapsedS) : liftRatio,
+        ballFlight: anim.ballFlight,
+        contactHeight: anim.ballFlight === 'header' ? 0.95 : anim.ballFlight === 'volley' ? 0.64 : liftRatio > 0 ? 0.35 : 0,
       };
 
       anim.dragStart = null;
       anim.dragPoints = [];
 
       if (anim.ballTravelActive && swipeIsHorizontalKnock(dx, dy)) {
-        const knock = applyHorizontalKnock(anim.ballStartXRatio, dx, durationMs);
+        const knock = applyHorizontalKnock(anim.ballStartXRatio, dx, durationMs, {
+          aerial: isAerialFlight(anim.ballFlight),
+          travelSpeed: anim.travelSpeed,
+        });
         anim.knockFromX = anim.ballStartXRatio;
         anim.knockToX = knock.xRatio;
         anim.ballTravelDir = knock.direction;
         const now = performance.now();
         anim.knockUntilMs = now + KNOCK_SLIDE_MS;
-        anim.knockHoldUntilMs = now + KNOCK_SLIDE_MS + KNOCK_HOLD_MS;
+        anim.knockHoldUntilMs = isAerialFlight(anim.ballFlight) ? 0 : now + KNOCK_SLIDE_MS + KNOCK_HOLD_MS;
         anim.phase = 'idle';
         setUiPhase('idle');
         audio.playKnock();
         haptics.hapticKnock();
+        if (knock.lost) {
+          anim.ballStartXRatio = knock.xRatio;
+          const gone: ShotResult = {
+            outcome: 'wide',
+            aim: { x: knock.direction, y: 0.08 },
+            intendedAim: { x: knock.direction, y: 0.08 },
+            power: 0.25,
+            curl: 0,
+            travelTimeMs: 280,
+            keeperDive: {
+              target: { x: 0, y: 0.28 },
+              hand: { x: 0, y: 0.28 },
+              reactionMs: 0,
+              diveDurationMs: 280,
+              reach: 0,
+              direction: 0,
+              stretch: 0,
+              layout: 0,
+              elevation: 0,
+            },
+            saveMargin: 0,
+            outOfPlay: true,
+          };
+          anim.result = gone;
+          anim.phase = 'result';
+          anim.resultAtMs = now;
+          finishShot(gone);
+        }
         return;
       }
 
@@ -1166,7 +1262,7 @@ export default function ShootingGame({
       canvas.removeEventListener('pointerup', onPointerUp);
       canvas.removeEventListener('pointercancel', onPointerUp);
     };
-  }, [launchShot]);
+  }, [launchShot, finishShot]);
 
   return (
     <div className="relative flex h-full w-full flex-col">
@@ -1193,6 +1289,16 @@ export default function ShootingGame({
             {chanceKind === 'cross' && (
               <p className="inline-block rounded-full bg-orange-400/20 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-orange-200">
                 Ball across goal
+              </p>
+            )}
+            {ballFlight === 'volley' && (
+              <p className="inline-block rounded-full bg-violet-400/20 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-violet-200">
+                Volley
+              </p>
+            )}
+            {ballFlight === 'header' && (
+              <p className="inline-block rounded-full bg-rose-400/20 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-rose-200">
+                Header
               </p>
             )}
           </div>
@@ -1249,9 +1355,13 @@ export default function ShootingGame({
             <div className="animate-pulse rounded-full bg-black/40 px-4 py-1.5 text-sm text-white/80 backdrop-blur">
               {chanceKind === 'penalty'
                 ? 'Swipe up on the ball to shoot ⬆'
-                : chanceKind === 'cross'
-                  ? 'Ball whipping across — swipe quickly'
-                  : 'Swipe sideways to move · jab, drive, or loft'}
+                : ballFlight === 'header'
+                  ? 'Header — curl it down or glance it in'
+                  : ballFlight === 'volley'
+                    ? 'Volley — curl it or smash it down'
+                    : chanceKind === 'cross'
+                      ? 'Ball whipping across — swipe quickly'
+                      : 'Swipe sideways to move · jab, drive, or loft'}
             </div>
           </div>
         )}

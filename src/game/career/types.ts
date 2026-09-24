@@ -127,6 +127,10 @@ export interface SeasonRecord {
   league?: string;
   /** Qualifying + tournament outcome for this season’s international campaign. */
   international?: InternationalSeasonRecord;
+  /** Fee the buying club paid to bring you in for this season. Loans and stays are 0. */
+  transferFeePaid?: number;
+  /** Club you left when that fee was paid. */
+  transferFromClubId?: string | null;
 }
 
 export interface TrialState {

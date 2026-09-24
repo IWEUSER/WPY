@@ -42,6 +42,8 @@ import {
   oppositionCloseSpeedScale,
   penaltyChanceProbability,
   placeCoverDefender,
+  headerDistanceOk,
+  pickBallFlight,
   placeDefender,
   rollChanceSetup,
   shotLineHitsDefender,
@@ -49,6 +51,7 @@ import {
 import {
   aimToSaveCell,
   cellCenter,
+  applyContactHeightToAim,
   classifyShotStyle,
   computeIntendedShot,
   computeKeeperDive,
@@ -73,6 +76,9 @@ import {
   CROSS_TRAVEL_SPEED,
   ballBounceLift,
   ballTravelSpeedForKind,
+  idleBallHeightRatio,
+  isAerialFlight,
+  pickBallTravelSpeed,
   chanceBallTravels,
   knockForceFromSwipe,
   pickBallTravelDir,
@@ -851,20 +857,20 @@ const argentinaScale = oppositionCloseSpeedScale(nationStrength('argentina'));
 console.log(
   `close-down scale weak=${weakScale.toFixed(2)} mid=${midScale.toFixed(2)} strong=${strongScale.toFixed(2)} elite=${eliteScale.toFixed(2)} argentina=${argentinaScale.toFixed(2)}`,
 );
-if (!(weakScale < midScale && midScale < strongScale && strongScale < eliteScale) || midScale < 0.99 || midScale > 1.01 || eliteScale < 1.42 || eliteScale > 1.62) {
-  console.error('FAIL: elite and strong defenders must close faster than mid-table, without changing the mid-table jog');
-  process.exitCode = 1;
-}
+if (!(weakScale < midScale && midScale < strongScale && strongScale <= eliteScale + 1e-6) || weakScale < 1.15 || midScale < 1.28 || eliteScale < 1.55) {
+    console.error('FAIL: non-elite defenders must close quickly enough to force the take');
+    process.exitCode = 1;
+  }
 if (argentinaScale < strongScale) {
   console.error('FAIL: a world-ranked international side must close at least as fast as a strong club');
   process.exitCode = 1;
 }
 const eliteSpeed = defenderCloseSpeedMps(18, 94);
 const midSpeed = defenderCloseSpeedMps(18, 70);
-if (!(eliteSpeed > midSpeed + 0.9) || Math.abs(midSpeed - DEFENDER_CLOSE_SPEED_MPS) > 0.05) {
-  console.error('FAIL: 18-yard elite close-down must be quicker than the current mid-table speed');
-  process.exitCode = 1;
-}
+if (!(eliteSpeed > midSpeed) || midSpeed < DEFENDER_CLOSE_SPEED_MPS * 1.2) {
+    console.error('FAIL: 18-yard close-down must be a real press, faster for elite sides');
+    process.exitCode = 1;
+  }
 
 let eliteSettled = { ...closeStart };
 for (let i = 0; i < 400; i++) eliteSettled = advanceDefender(eliteSettled, 18, 0.5, 0.04, 94);
@@ -1040,10 +1046,10 @@ if (travel.xRatio <= BALL_TRAVEL_MIN_X + 0.02) {
   console.error('FAIL: the ball must roll across the shooting line');
   process.exitCode = 1;
 }
-let bounced = { xRatio: BALL_TRAVEL_MAX_X - 0.01, direction: 1 as const };
-bounced = advanceBallTravel(bounced.xRatio, bounced.direction, 0.2);
-if (bounced.direction !== -1 || bounced.xRatio > BALL_TRAVEL_MAX_X + 1e-6) {
-  console.error('FAIL: the rolling ball must bounce at the edge and come back');
+let ranOut = { xRatio: BALL_TRAVEL_MAX_X - 0.01, direction: 1 as const };
+ranOut = advanceBallTravel(ranOut.xRatio, ranOut.direction, 0.2);
+if (!ranOut.lost || ranOut.xRatio > BALL_TRAVEL_MAX_X + 1e-6) {
+  console.error('FAIL: a ball that reaches the side must go out of play, not rebound');
   process.exitCode = 1;
 }
 if (pickBallTravelDir(BALL_TRAVEL_MIN_X) !== 1 || pickBallTravelDir(BALL_TRAVEL_MAX_X) !== -1) {
@@ -1100,5 +1106,57 @@ if (pinched.xRatio > BALL_TRAVEL_MAX_X) {
 const held = advanceBallTravel(BALL_TRAVEL_MAX_X, 1, 0.05, { bounce: false });
 if (held.direction !== 1 || held.xRatio !== BALL_TRAVEL_MAX_X) {
   console.error('FAIL: a knock hold must keep the shove direction at the edge instead of bouncing back');
+  process.exitCode = 1;
+}
+
+console.log('\n--- Volley / header height, curl, ground skip, speed spectrum ---');
+if (!headerDistanceOk(FIFA.sixYardDepth) || headerDistanceOk(12)) {
+  console.error('FAIL: headers must only spawn next to the 6-yard line');
+  process.exitCode = 1;
+}
+if (pickBallFlight(8, 'header') !== 'volley' || pickBallFlight(5.6, 'header') !== 'header') {
+  console.error('FAIL: a forced header too far from goal must become a volley');
+  process.exitCode = 1;
+}
+const flights = new Set<string>();
+for (let i = 0; i < 80; i++) flights.add(pickBallFlight(6.2, undefined, () => (i % 4) / 4));
+if (!flights.has('roll') || !flights.has('bounce')) {
+  console.error('FAIL: ground chances must rotate between a roll and a bounce');
+  process.exitCode = 1;
+}
+const headerAim = applyContactHeightToAim({ x: 0, y: 0.45 }, { dx: 0, dy: 80, durationMs: 180, curl: 0, ballFlight: 'header', contactHeight: 0.95 });
+const curledHeader = applyContactHeightToAim({ x: 0, y: 0.45 }, { dx: 0, dy: 80, durationMs: 180, curl: 0.85, ballFlight: 'header', contactHeight: 0.95 });
+if (headerAim.aim.y <= 0.55 || curledHeader.aim.y >= headerAim.aim.y) {
+  console.error('FAIL: a header must rise unless the swipe curls it down');
+  process.exitCode = 1;
+}
+const smashed = applyContactHeightToAim({ x: 0, y: 0.4 }, { dx: 10, dy: -220, durationMs: 160, curl: 0, ballFlight: 'volley', contactHeight: 0.64 });
+if (!smashed.groundBounce || smashed.aim.y <= 0) {
+  console.error('FAIL: a downward volley into the turf must bounce');
+  process.exitCode = 1;
+}
+if (idleBallHeightRatio('header') <= idleBallHeightRatio('volley') || idleBallHeightRatio('roll') !== 0) {
+  console.error('FAIL: headers sit above volleys; rolls stay on the turf');
+  process.exitCode = 1;
+}
+if (!isAerialFlight('volley') || isAerialFlight('roll')) {
+  console.error('FAIL: only volleys and headers are aerial');
+  process.exitCode = 1;
+}
+const airKnock = applyHorizontalKnock(0.5, 80, 160, { aerial: true, travelSpeed: 1.2 });
+const groundKnock = applyHorizontalKnock(0.5, 80, 160);
+if (Math.abs(airKnock.delta) <= Math.abs(groundKnock.delta) * 1.3) {
+  console.error('FAIL: a sideways swipe on an aerial ball must send it further');
+  process.exitCode = 1;
+}
+const fastCross = pickBallTravelSpeed('cross', 'volley', 94, () => 0.95);
+const slowRoll = pickBallTravelSpeed('open', 'roll', 52, () => 0.05);
+console.log(`speed spectrum cross=${fastCross.toFixed(2)} roll=${slowRoll.toFixed(2)} cap=${CROSS_TRAVEL_SPEED}`);
+if (fastCross < 1.05 || slowRoll > 0.28 || CROSS_TRAVEL_SPEED < 1.2) {
+  console.error('FAIL: crosses must be faster than before and sit on a wider speed spectrum');
+  process.exitCode = 1;
+}
+if (ballTravelSpeedForKind('cross') < CROSS_TRAVEL_SPEED - 1e-6) {
+  console.error('FAIL: the default cross speed must use the new cap');
   process.exitCode = 1;
 }

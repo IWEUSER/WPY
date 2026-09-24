@@ -11,6 +11,7 @@ import {
   type PitchView,
 } from './render';
 import type { AimPoint } from './types';
+import { pickBallTravelSpeed, type BallFlight } from './ballTravel';
 
 /** Minimum gap from the ball to an open-play defender, when the pitch allows it. */
 export const DEFENDER_GAP_YARDS = 10;
@@ -19,9 +20,9 @@ export const DEFENDER_GAP_M = DEFENDER_GAP_YARDS * YARD_M;
 /** Don't plant a defender on the goal line itself. */
 const MIN_DEFENDER_Z_M = 2.2;
 /** Jog toward the ball — urgent, but a swipe still has time to land. */
-export const DEFENDER_CLOSE_SPEED_MPS = 3.15;
+export const DEFENDER_CLOSE_SPEED_MPS = 3.85;
 /** Slower press when they already start next to a 6-yard kick. */
-export const DEFENDER_CLOSE_SPEED_NEAR_MPS = 1.65;
+export const DEFENDER_CLOSE_SPEED_NEAR_MPS = 2.15;
 /** Stop this far from the ball on an open-play close-down. */
 export const DEFENDER_CLOSE_STOP_GAP_M = 2.7;
 export const DEFENDER_CLOSE_STOP_GAP_NEAR_M = 1.4;
@@ -55,6 +56,7 @@ export interface DefenderPose {
 }
 
 export type ChanceKind = 'open' | 'penalty' | 'cross';
+export type { BallFlight } from './ballTravel';
 
 export interface ChanceSetup {
   kind: ChanceKind;
@@ -63,6 +65,8 @@ export interface ChanceSetup {
   defender: DefenderPose | null;
   /** All outfield defenders on this chance. Empty on a penalty. */
   defenders?: DefenderPose[];
+  flight?: import('./ballTravel').BallFlight;
+  travelSpeed?: number;
 }
 
 /** Opposition at this strength spawn a second defender on open-play chances. */
@@ -194,11 +198,12 @@ export function defenderCloseTarget(
  * FIFA rank already maps onto this strength) close down faster.
  */
 export function oppositionCloseSpeedScale(opponentStrength = 70): number {
-  if (opponentStrength <= 70) {
-    return clamp(1 + (opponentStrength - 70) * 0.012, 0.9, 1);
-  }
-  const t = (opponentStrength - 70) / 24;
-  return clamp(1 + t * 0.55, 1, 1.58);
+  const t = clamp((opponentStrength - 52) / 42, 0, 1);
+  return lerp(1.18, 1.6, t);
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
 }
 
 export function defenderCloseSpeedMps(shotDistanceM: number, opponentStrength = 70): number {
@@ -343,6 +348,7 @@ export interface RollChanceOptions {
   allowPenalties?: boolean;
   forceDualDefenders?: boolean;
   forceKind?: ChanceKind;
+  forceFlight?: BallFlight;
 }
 
 export function chanceDefenders(setup: Pick<ChanceSetup, 'defender' | 'defenders'>): DefenderPose[] {
@@ -453,6 +459,8 @@ export function rollChanceSetup(options: RollChanceOptions = {}): ChanceSetup {
       ballStartXRatio: 0.5,
       defender: null,
       defenders: [],
+      flight: 'roll',
+      travelSpeed: 0,
     };
   }
 
@@ -469,12 +477,15 @@ export function rollChanceSetup(options: RollChanceOptions = {}): ChanceSetup {
     const first = options.disableDefender
       ? null
       : placeDefender(distanceM, ballStartXRatio, rng, options.skinPalette ?? 'any');
+    const flight = pickBallFlight(distanceM, options.forceFlight, rng);
     return {
       kind: 'cross',
       distanceM,
       ballStartXRatio,
       defender: first,
       defenders: first ? [first] : [],
+      flight,
+      travelSpeed: pickBallTravelSpeed('cross', flight, opponentStrength, rng),
     };
   }
 
@@ -491,11 +502,33 @@ export function rollChanceSetup(options: RollChanceOptions = {}): ChanceSetup {
     ? placeCoverDefender(first, distanceM, ballStartXRatio, rng, options.skinPalette ?? 'any')
     : null;
   const defenders = first ? (cover ? [first, cover] : [first]) : [];
+  const flight = pickBallFlight(distanceM, options.forceFlight, rng);
   return {
     kind: 'open',
     distanceM,
     ballStartXRatio,
     defender: first,
     defenders,
+    flight,
+    travelSpeed: pickBallTravelSpeed('open', flight, opponentStrength, rng),
   };
+}
+
+/** Headers only near the 6-yard line. Ground chances rotate roll vs bounce. */
+export function headerDistanceOk(distanceM: number): boolean {
+  return distanceM <= FIFA.sixYardDepth + 1.8;
+}
+
+export function pickBallFlight(
+  distanceM: number,
+  force?: BallFlight,
+  rng: () => number = Math.random,
+): BallFlight {
+  if (force) {
+    if (force === 'header' && !headerDistanceOk(distanceM)) return 'volley';
+    return force;
+  }
+  if (headerDistanceOk(distanceM) && rng() < 0.16) return 'header';
+  if (rng() < 0.22) return 'volley';
+  return rng() < 0.5 ? 'bounce' : 'roll';
 }

@@ -4,7 +4,7 @@ import { getClub } from './data/clubs';
 import { createNationalTeamState, recordInternationalAppearance } from './international';
 import { mlsConferenceOf } from './data/leagueFormat';
 import { applyMatchToTable, buildSeasonStandings, rankLeagueTable } from './matchEngine';
-import { awardBeat, firstCapBeat, firstTitleBeat, recordBeat, retirementBeat, soldBeat, titleBeat } from './careerBeat';
+import { awardBeat, firstCapBeat, firstTitleBeat, recordBeat, retirementBeat, soldBeat, titleBeat, tournamentCallUpBeat } from './careerBeat';
 import { newContractYears, playerMarketValueFromSeasons, weeklyWageForClub } from './playerValue';
 import { applyTrialMatch, applyYouthMatch, assignOpeningTrialClub, beginClubTrial, beginFavouriteClubTrial, chooseTrialClub, createYouthCampaign, failClubTrial } from './openingFlow';
 import { hydrateSeason, nextActionableFixture } from './seasonSim';
@@ -140,6 +140,8 @@ export function applyCareerLayoutPreview(): void {
       earnings: 1_200_000,
       sponsorship: 0,
       league: 'Championship',
+      transferFeePaid: 18_000_000,
+      transferFromClubId: 'real-madrid',
     }),
     season({
       seasonNumber: 7,
@@ -1382,6 +1384,8 @@ export function applyCareerLayoutPreview(): void {
     pendingBeats:
       preview === 'beat-cap'
         ? [firstCapBeat('Spain')]
+        : preview === 'beat-tournament'
+          ? [tournamentCallUpBeat('Spain', 'World Cup')]
         : preview === 'beat-title'
           ? [firstTitleBeat('La Liga')]
           : preview === 'beat-title-nation'

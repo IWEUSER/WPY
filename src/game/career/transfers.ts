@@ -18,9 +18,11 @@ import {
   tierForMarketValue,
   TOP_LEAGUES,
   transferFeeFromValue,
+  countedSeasonsCompleted,
   weeklyWageForClub,
   weeklyWageForRatio,
   weeklyWageForSquadStatus,
+  weeklyWageForTransferOffer,
 } from './playerValue';
 import { displaySeasonNumber, isFirstPublicSeason } from './seasonDisplay';
 import {
@@ -723,6 +725,7 @@ interface OfferTermExtras {
   currentWeeklyWage?: number;
   originClub?: Club | null;
   playerRatio?: number;
+  countedSeasons?: number;
   allowRisingStar?: boolean;
 }
 
@@ -757,7 +760,14 @@ function offerTerms(
         clubId: club.id,
         move,
         fee: 0,
-        weeklyWage: weeklyWageForRatio(club, value, extras?.playerRatio, 'starter', club.league),
+        weeklyWage: weeklyWageForTransferOffer(
+          club,
+          value,
+          extras?.playerRatio,
+          extras?.countedSeasons ?? 0,
+          'starter',
+          club.league,
+        ),
         contractYears: 1,
         squadStatus: 'starter' as const,
       };
@@ -768,7 +778,13 @@ function offerTerms(
       clubId: club.id,
       move,
       fee: Math.min(fee, clubTransferBudget(club)),
-      weeklyWage: weeklyWageForRatio(club, value, extras?.playerRatio, status),
+      weeklyWage: weeklyWageForTransferOffer(
+        club,
+        value,
+        extras?.playerRatio,
+        extras?.countedSeasons ?? 0,
+        status,
+      ),
       contractYears: years,
       squadStatus: status,
     };
@@ -945,7 +961,8 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     withTwilightMlsOffers(offers, age, value, fee, [club.id, parentClubId]);
   const permYears = newContractYears(age);
   const loanYears = 1;
-  const careerRatio = careerGames > 0 ? careerGoals / careerGames : 0;
+  const careerRatio = careerGames > 0 ? careerGoals / careerGames : ratio;
+  const seasonsDone = countedSeasonsCompleted(seasons);
   const transferTier = transferOfferTier({
     marketValue: value,
     lastRatio: ratio,
@@ -962,7 +979,8 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
   const offerExtras: OfferTermExtras = {
     currentWeeklyWage: params.weeklyWage,
     originClub: club,
-    playerRatio: ratio,
+    playerRatio: careerRatio,
+    countedSeasons: seasonsDone,
     allowRisingStar,
   };
 
@@ -994,7 +1012,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
           clubId: c.id,
           move: 'loan' as const,
           fee: 0,
-          weeklyWage: weeklyWageForRatio(c, value, ratio, 'starter', c.league),
+          weeklyWage: weeklyWageForTransferOffer(c, value, careerRatio, seasonsDone, 'starter', c.league),
           contractYears: 1,
           squadStatus: 'starter' as const,
         })),

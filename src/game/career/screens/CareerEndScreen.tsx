@@ -1,7 +1,8 @@
 import { getClub } from '../data/clubs';
 import { formatInternationalSeason, seasonClubName, seasonLeagueLabel } from '../honoursDisplay';
+import { formatEuros } from '../playerValue';
 import { countsTowardCareerRecord, displaySeasonLabel } from '../seasonDisplay';
-import { aggregateContinental, aggregateDomesticSplit, seasonDomesticSplit } from '../seasonStats';
+import { aggregateContinental, aggregateDomesticSplit, careerTransferFeesPaid, seasonDomesticSplit } from '../seasonStats';
 import { useCareerStore } from '../store';
 import type { SeasonRecord } from '../types';
 import { DATA_CARD, DATA_TILE } from './dataUi';
@@ -27,6 +28,7 @@ export default function CareerEndScreen() {
   });
   const domestic = aggregateDomesticSplit(seasons);
   const continental = aggregateContinental(seasons);
+  const feesPaid = careerTransferFeesPaid(seasons);
   const ratio = careerGames > 0 ? careerGoals / careerGames : 0;
   const lastClub = clubId ? getClub(clubId) : undefined;
   const lastSeason = seasons[seasons.length - 1];
@@ -45,6 +47,9 @@ export default function CareerEndScreen() {
         <StatTile value={String(careerGames)} label="Club games" />
         <StatTile value={String(careerGoals)} label="Club goals" />
         <StatTile value={ratio.toFixed(2)} label="Club ratio" />
+      </div>
+      <div className="mt-2 grid grid-cols-1 gap-2">
+        <StatTile value={feesPaid > 0 ? formatEuros(feesPaid) : '—'} label="Transfer fees paid" />
       </div>
 
       <div className={`mt-3 ${DATA_CARD} text-sm`}>
@@ -101,6 +106,12 @@ function SeasonCard({ season }: { season: SeasonRecord }) {
       </p>
       <h2 className="text-lg font-extrabold">{seasonClubName(season)}</h2>
       <p className="text-xs text-white/50">{seasonLeagueLabel(season)}</p>
+      {(season.transferFeePaid ?? 0) > 0 && (
+        <p className="mt-1 text-xs font-semibold text-amber-200/90">
+          Transfer fee {formatEuros(season.transferFeePaid ?? 0)}
+          {season.transferFromClubId ? ` from ${getClub(season.transferFromClubId)?.name ?? season.transferFromClubId}` : ''}
+        </p>
+      )}
       <ClubCompetitionTable
         split={seasonDomesticSplit(season)}
         continental={season.continentalStats ?? []}

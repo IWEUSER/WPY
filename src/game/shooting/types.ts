@@ -41,6 +41,10 @@ export interface SwipeGesture {
   contactLift?: number;
   /** 0–1 current bounce height when the swipe started. */
   bounceHeight?: number;
+  /** How the idle ball is travelling — roll, bounce, volley, or header. */
+  ballFlight?: 'roll' | 'bounce' | 'volley' | 'header';
+  /** 0 ground … 1 head height, used to loft the strike. */
+  contactHeight?: number;
 }
 
 /** How the same upward swipe was struck — poke, chip, drive, or lofted floater. */
@@ -101,6 +105,10 @@ export interface ShotResult {
   takeQuality?: number;
   /** Which strike the swipe produced. */
   shotStyle?: ShotStyle;
+  /** True when a downward air strike skipped off the turf before the goal. */
+  groundBounce?: boolean;
+  /** True when the rolling ball ran out of play. */
+  outOfPlay?: boolean;
 }
 
 export interface ShotDifficulty {
