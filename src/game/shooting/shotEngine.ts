@@ -134,9 +134,10 @@ export function applyContactHeightToAim(aim: AimPoint, gesture: SwipeGesture): {
   let y = aim.y + aerialLiftBias(flight) * curlKeep * (0.55 + height * 0.45);
   const down = gesture.dy < 0 ? clamp(-gesture.dy / MAX_SWIPE_DISTANCE, 0, 1) : 0;
   if (down > 0.08 && (flight === 'volley' || flight === 'header' || flight === 'bounce')) {
-    y -= down * (flight === 'header' ? 0.74 : 0.56);
-    if (y < 0) {
-      return { aim: { x: aim.x, y: Math.min(0.55, Math.abs(y) * 0.62) }, groundBounce: true };
+    y -= down * (flight === 'header' ? 0.86 : 0.72) + down * height * 0.22;
+    if (y < 0 || (down > 0.55 && y < 0.16 + height * 0.08)) {
+      const skip = Math.min(0.55, Math.max(0.05, Math.abs(Math.min(y, 0)) * 0.62 + down * 0.12));
+      return { aim: { x: aim.x, y: skip }, groundBounce: true };
     }
   }
   return { aim: { x: aim.x, y: clamp(y, 0, 1.55) }, groundBounce: false };

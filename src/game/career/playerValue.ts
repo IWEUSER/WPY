@@ -515,9 +515,11 @@ export function weeklyWageForTransferOffer(
   status: SquadStatus,
   playingLeague?: string | null,
 ): number {
-  const atRatio = weeklyWageForRatio(club, marketValue, careerRatio, status, playingLeague);
-  if (status !== 'starter') return atRatio;
-  return roundWeeklyWage(atRatio * wageCareerMaturityScale(countedSeasonsCompleted));
+  const top = weeklyWageForSquadStatus(club, marketValue, status, playingLeague);
+  if (status !== 'starter') return top;
+  return roundWeeklyWage(
+    top * wageRatioScale(careerRatio) * wageCareerMaturityScale(countedSeasonsCompleted),
+  );
 }
 
 /** Starter, Rising star, and reserve wages so transfer offers are not all the same band. */
