@@ -239,6 +239,7 @@ export function applyCareerLayoutPreview(): void {
     : preview === 'galatasaray' || preview === 'match-galatasaray' ? 'turkey'
     : preview === 's1-summary' ? 'england'
     : preview === 'rising-loans' || preview === 'rising-loans-s2' ? 'england'
+    : preview === 'copa-final' ? 'brazil'
     : 'spain';
   const { calendar, sim } = hydrateSeason({
     seasonNumber: preview === 'hub-qualifying' || preview === 'hub-rising-star' || preview === 'hub-rotation' || preview === 's1-summary' ? 1 : 4,
@@ -365,6 +366,7 @@ export function applyCareerLayoutPreview(): void {
     || preview === 'match-intl' || preview === 'match-ucl' || preview === 'match-intl-ko'
     || preview === 'match-africa' || preview === 'match-overcast'
     || preview === 'match-sweden' || preview === 'match-poland' || preview === 'match-brazil'
+    || preview === 'match-colombia' || preview === 'match-peru'
     || preview === 'match-psg' || preview === 'match-city'
     || preview === 'match-benfica' || preview === 'match-ajax' || preview === 'match-galatasaray'
     || preview === 'cup-pens';
@@ -432,6 +434,15 @@ export function applyCareerLayoutPreview(): void {
     sim.internationalStage = 'group';
     sim.internationalSelected = true;
     sim.internationalGroup = createGroupState('B', ['spain', 'germany', 'brazil', 'serbia']);
+  } else if (preview === 'copa-final') {
+    const finalIdx = calendar.fixtures.findIndex((f) => f.kind === 'international' && f.internationalRound === 'final');
+    if (finalIdx >= 0) sim.fixtureIndex = finalIdx;
+    calendar.internationalTournament = 'copa-america';
+    sim.internationalTournament = 'copa-america';
+    sim.internationalSelected = true;
+    sim.internationalStage = 'final';
+    sim.internationalReached = 'semi-final';
+    sim.nationId = 'brazil';
   } else if (preview === 'hub-qualifying') {
     const idx = calendar.fixtures.findIndex((f) => f.kind === 'international');
     if (idx >= 0) sim.fixtureIndex = idx;
@@ -511,7 +522,7 @@ export function applyCareerLayoutPreview(): void {
       fx.isHome = true;
       fx.playerChances = 2;
     }
-  } else if (preview === 'match-sweden' || preview === 'match-poland' || preview === 'match-brazil') {
+  } else if (preview === 'match-sweden' || preview === 'match-poland' || preview === 'match-brazil' || preview === 'match-colombia' || preview === 'match-peru') {
     const idx = calendar.fixtures.findIndex((f) => f.kind === 'international');
     if (idx >= 0) matchFixtureIndex = idx;
     const fx = calendar.fixtures[matchFixtureIndex];
@@ -519,7 +530,11 @@ export function applyCareerLayoutPreview(): void {
       ? { id: 'sweden', label: 'Sweden' }
       : preview === 'match-poland'
         ? { id: 'poland', label: 'Poland' }
-        : { id: 'brazil', label: 'Brazil' };
+        : preview === 'match-colombia'
+          ? { id: 'colombia', label: 'Colombia' }
+          : preview === 'match-peru'
+            ? { id: 'peru', label: 'Peru' }
+            : { id: 'brazil', label: 'Brazil' };
     if (fx) {
       fx.kind = 'international';
       fx.internationalRound = 'group';
@@ -1108,7 +1123,9 @@ export function applyCareerLayoutPreview(): void {
                 ? 'netherlands'
                 : preview === 'galatasaray' || preview === 'match-galatasaray'
                   ? 'turkey'
-                  : 'spain',
+                  : preview === 'copa-final'
+                    ? 'brazil'
+                    : 'spain',
     playerName: preview === 'player-name' ? null : 'Alex Rivera',
     playerSkin: '#e8b88a',
     playerHair: '#2c1810',
@@ -1294,6 +1311,8 @@ export function applyCareerLayoutPreview(): void {
           }),
     lastMatchSummary: preview === 'hub-rotation' || preview === 's1-summary'
       ? null
+      : preview === 'copa-final'
+      ? 'Brazil won 1–0 vs Paraguay · through to the final · 0 goals from 1 chance'
       : preview === 'hub-sitout'
       ? 'Andorra lost 0–2 vs Denmark · out of the tournament'
       : isYouthNextPreview
@@ -1331,6 +1350,19 @@ export function applyCareerLayoutPreview(): void {
           chances: 2,
           aggregateLine: 'Aggregate 1–0 · second leg to come',
           nextLine: 'Next: Bayern Munich · Away · Champions League quarter-final 2nd leg · 1–0 up from the first leg',
+        }
+      : preview === 'copa-final'
+      ? {
+          summary: 'Brazil won 1–0 vs Paraguay · through to the final · 0 goals from 1 chance',
+          headline: 'Brazil won 1–0 vs Paraguay · through to the final',
+          isFinal: false,
+          won: true,
+          trophyName: null,
+          afterPhase: 'hub',
+          playerGoals: 0,
+          chances: 1,
+          aggregateLine: null,
+          nextLine: computedNextLine,
         }
       : preview === 'result-pens'
       ? {
