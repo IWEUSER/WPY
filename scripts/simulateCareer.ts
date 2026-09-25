@@ -8129,7 +8129,7 @@ console.log('\n--- Free practice covers every chance type ---');
     process.exitCode = 1;
   }
   const penalty = rollChanceSetup({ ...practiceChanceOptions('penalty'), rng: () => 0.99 });
-  const cross = rollChanceSetup({ ...practiceChanceOptions('cross'), rng: () => 0.01 });
+  const cross = rollChanceSetup({ ...practiceChanceOptions('cross'), rng: () => 0.01 }); // would be a penalty if unlocked
   const volley = rollChanceSetup({ ...practiceChanceOptions('volley'), rng: () => 0.5 });
   const header = rollChanceSetup({ ...practiceChanceOptions('header'), rng: () => 0.2 });
   const roll = rollChanceSetup({ ...practiceChanceOptions('roll'), rng: () => 0.4 });

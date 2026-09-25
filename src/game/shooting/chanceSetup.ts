@@ -555,8 +555,10 @@ export function rollChanceSetup(options: RollChanceOptions = {}): ChanceSetup {
   const clubStrength = options.clubStrength ?? 70;
   const opponentStrength = options.opponentStrength ?? 70;
   const allowPenalties = options.allowPenalties !== false;
-  const takePenalty = allowPenalties && (Boolean(options.forcePenalty) || (
-    options.forceDistanceM === undefined && rollIsPenalty(clubStrength, rng)
+  const takePenalty = allowPenalties && (Boolean(options.forcePenalty) || options.forceKind === 'penalty' || (
+    options.forceKind == null
+    && options.forceDistanceM === undefined
+    && rollIsPenalty(clubStrength, rng)
   ));
 
   if (takePenalty) {
