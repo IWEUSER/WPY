@@ -11,7 +11,6 @@ let crowdBed: GainNode | null = null;
 let crowdCheer: GainNode | null = null;
 let crowdGroan: GainNode | null = null;
 let crowdStarted = false;
-let crowdTargetGain = 0;
 
 function getCtx(): AudioContext | null {
   if (typeof window === 'undefined') return null;
@@ -198,7 +197,6 @@ function hushCrowd(seconds: number): void {
 
 /** The old looping wash read as ocean, not a crowd — stay silent until an outcome. */
 export function startCrowdBed(_level: CrowdBedLevel = {}): void {
-  crowdTargetGain = 0;
   hushCrowd(0.08);
 }
 

@@ -44,6 +44,6 @@ export const RECORD_KIND_BADGE: Record<RecordColorKind, string> = {
   international: 'bg-emerald-400/20 text-emerald-200',
 };
 
-export function colorKindForDef(def: Pick<LegacyBoardDef, 'group' | 'id' | 'domain'>): RecordColorKind {
+export function colorKindForDef(def: Pick<LegacyBoardDef, 'group' | 'domain'>): RecordColorKind {
   return recordColorKind(def);
 }

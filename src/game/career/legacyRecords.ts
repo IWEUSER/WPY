@@ -45,9 +45,9 @@ export type LegacyTone = 'season-overall' | 'season-club' | 'season-intl' | 'all
 /** Profile / season-end colour: club, domestic, club tournament, international. */
 export type RecordColorKind = 'club' | 'internal' | 'tournament' | 'international';
 
-export function recordColorKind(def: Pick<LegacyBoardDef, 'group' | 'id' | 'domain'>): RecordColorKind {
+export function recordColorKind(def: Pick<LegacyBoardDef, 'group' | 'domain'>): RecordColorKind {
   if (def.domain === 'nation' || def.group === 'nation') return 'international';
-  if (def.group === 'continental' || def.id.startsWith('club-tournament:')) return 'tournament';
+  if (def.group === 'continental') return 'tournament';
   if (def.group === 'league' || def.group === 'cup') return 'internal';
   return 'club';
 }
