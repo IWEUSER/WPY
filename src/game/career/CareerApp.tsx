@@ -21,8 +21,9 @@ import CareerBeatScreen from './screens/CareerBeatScreen';
 import GuidedFirstChanceScreen from './screens/GuidedFirstChanceScreen';
 import { useCareerStore } from './store';
 import { applyCareerLayoutPreview } from './previewCareerLayout';
+import { allowLayoutPreview } from '../previewTools';
 
-if (import.meta.env.DEV) {
+if (allowLayoutPreview()) {
   (window as unknown as { __careerStore: typeof useCareerStore }).__careerStore = useCareerStore;
   const applyPreview = () => {
     if (new URLSearchParams(window.location.search).has('preview-career')) {
@@ -36,7 +37,7 @@ if (import.meta.env.DEV) {
 export default function CareerApp() {
   const [hydrated, setHydrated] = useState(() => useCareerStore.persist.hasHydrated());
   const [practicing, setPracticing] = useState(
-    () => import.meta.env.DEV && new URLSearchParams(window.location.search).has('practice'),
+    () => allowLayoutPreview() && new URLSearchParams(window.location.search).has('practice'),
   );
   useEffect(() => {
     const unsub = useCareerStore.persist.onFinishHydration(() => setHydrated(true));

@@ -43,6 +43,7 @@ import { getClub } from '../career/data/clubs';
 import { clubKit } from '../career/data/clubKits';
 import { nationStrength } from '../career/data/fifaRankings';
 import { TOP_LEAGUES } from '../career/playerValue';
+import { allowLayoutPreview } from '../previewTools';
 import {
   advanceDefender,
   ballHasReachedDefender,
@@ -207,7 +208,7 @@ function readDevChanceKind(): ChanceKind | null {
 }
 
 function readDevFlight(): BallFlight | null {
-  if (!import.meta.env.DEV) return null;
+  if (!allowLayoutPreview()) return null;
   const q = new URLSearchParams(window.location.search);
   const raw = q.get('flight') ?? q.get('kind');
   if (raw === 'roll' || raw === 'bounce' || raw === 'volley' || raw === 'header') return raw;
