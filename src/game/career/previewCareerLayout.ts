@@ -366,7 +366,7 @@ export function applyCareerLayoutPreview(): void {
     || preview === 'match-intl' || preview === 'match-ucl' || preview === 'match-intl-ko'
     || preview === 'match-africa' || preview === 'match-overcast'
     || preview === 'match-sweden' || preview === 'match-poland' || preview === 'match-brazil'
-    || preview === 'match-colombia' || preview === 'match-peru'
+    || preview === 'match-colombia' || preview === 'match-peru' || preview === 'match-paraguay'
     || preview === 'match-psg' || preview === 'match-city'
     || preview === 'match-benfica' || preview === 'match-ajax' || preview === 'match-galatasaray'
     || preview === 'cup-pens';
@@ -522,7 +522,7 @@ export function applyCareerLayoutPreview(): void {
       fx.isHome = true;
       fx.playerChances = 2;
     }
-  } else if (preview === 'match-sweden' || preview === 'match-poland' || preview === 'match-brazil' || preview === 'match-colombia' || preview === 'match-peru') {
+  } else if (preview === 'match-sweden' || preview === 'match-poland' || preview === 'match-brazil' || preview === 'match-colombia' || preview === 'match-peru' || preview === 'match-paraguay') {
     const idx = calendar.fixtures.findIndex((f) => f.kind === 'international');
     if (idx >= 0) matchFixtureIndex = idx;
     const fx = calendar.fixtures[matchFixtureIndex];
@@ -534,6 +534,8 @@ export function applyCareerLayoutPreview(): void {
           ? { id: 'colombia', label: 'Colombia' }
           : preview === 'match-peru'
             ? { id: 'peru', label: 'Peru' }
+            : preview === 'match-paraguay'
+              ? { id: 'paraguay', label: 'Paraguay' }
             : { id: 'brazil', label: 'Brazil' };
     if (fx) {
       fx.kind = 'international';

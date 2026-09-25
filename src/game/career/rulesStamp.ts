@@ -3,6 +3,7 @@ import { getClub } from './data/clubs';
 import { clubContinentalCup, internationalCalendarSeason } from './data/competitions';
 import { callUpRatio, isSelectedForNationalTeam, qualifierExcludeIds } from './international';
 import { buildSeasonStandings } from './matchEngine';
+import { expandChampionsLeagueTable, fillMissingEuropeanRounds } from './matchEngine';
 import { ensureInternationalGroup, hydrateSeason, internationalStageWhenSelected, type SeasonSimState } from './seasonSim';
 import type { CareerState } from './types';
 
@@ -122,7 +123,16 @@ export function rebuildCurrentSeason(state: CareerState): Partial<CareerState> {
       ...sim,
       leagueTable: sameTable ? old.leagueTable : sim.leagueTable,
       europeanStanding: old.europeanStanding ?? sim.europeanStanding,
-      europeanTable: old.europeanTable ?? sim.europeanTable,
+      europeanTable: (() => {
+        const cup = (old.europeanStanding ?? sim.europeanStanding)?.cup;
+        const merged = cup === 'ucl'
+          ? expandChampionsLeagueTable(old.europeanTable ?? sim.europeanTable, state.clubId)
+          : (old.europeanTable ?? sim.europeanTable);
+        if (cup === 'ucl' && state.clubId) {
+          return fillMissingEuropeanRounds(merged, state.clubId, old.europeanGroupPlayed ?? 0);
+        }
+        return merged;
+      })(),
       europeanGroupPoints: old.europeanGroupPoints,
       europeanGroupPlayed: old.europeanGroupPlayed,
       knockoutAggFor: old.knockoutAggFor,

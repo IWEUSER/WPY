@@ -4,7 +4,7 @@ import {
   clubContinentalCup,
   type ContinentalCupId,
 } from './data/competitions';
-import { championsLeagueField } from './continentalDraw';
+import { CHAMPIONS_LEAGUE_FIELD_SIZE, championsLeagueField } from './continentalDraw';
 
 /**
  * Probabilistic club-vs-club engine for seasons 2-20. Stronger squads
@@ -413,6 +413,16 @@ function pairingHash(key: string): number {
   return h >>> 0;
 }
 
+function seededRng(seed: number): () => number {
+  let t = seed >>> 0;
+  return () => {
+    t += 0x6D2B79F5;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 /** Pair leftover clubs for a matchweek (first of each pair is treated as home). */
 export function pairClubs(clubIds: string[]): [string, string][] {
   const ids = [...clubIds];
@@ -438,6 +448,68 @@ export function simulateRestOfEuropeanRound(
 
 export function emptyEuropeanTable(clubIds: string[]): LeagueStanding[] {
   return clubIds.map((id) => emptyStanding(id));
+}
+
+/** Keep earned rows and pad the rest of the 36-club Champions League field. */
+export function expandChampionsLeagueTable(
+  table: LeagueStanding[] | undefined,
+  playerClubId?: string | null,
+): LeagueStanding[] {
+  const field = championsLeagueField(playerClubId);
+  const byId = new Map((table ?? []).map((row) => [row.clubId, row]));
+  return rankLeagueTable(field.map((id) => byId.get(id) ?? emptyStanding(id)));
+}
+
+export function championsLeagueTableNeedsRepair(
+  table: LeagueStanding[] | undefined,
+  cup?: ContinentalCupId | null,
+): boolean {
+  return cup === 'ucl' && (table?.length ?? 0) !== CHAMPIONS_LEAGUE_FIELD_SIZE;
+}
+
+/**
+ * After expanding an old 8-club group table, fill the new sides so they
+ * have played the same number of league-phase matches as the player.
+ */
+export function fillMissingEuropeanRounds(
+  table: LeagueStanding[],
+  playerClubId: string,
+  targetPlayed: number,
+): LeagueStanding[] {
+  if (targetPlayed <= 0) return rankLeagueTable(table);
+  let next = table.map((row) => ({ ...row }));
+  for (let round = 0; round < targetPlayed; round++) {
+    const need = next
+      .filter((row) => row.clubId !== playerClubId && row.played < targetPlayed)
+      .map((row) => row.clubId);
+    if (need.length < 2) break;
+    const ordered = [...need].sort((a, b) => {
+      const ha = pairingHash(`ucl-fill|${round}|${a}`);
+      const hb = pairingHash(`ucl-fill|${round}|${b}`);
+      return ha - hb || a.localeCompare(b);
+    });
+    for (const [homeId, awayId] of pairClubs(ordered)) {
+      const home = getClub(homeId);
+      const away = getClub(awayId);
+      if (!home || !away) continue;
+      const result = simulateClubMatch(
+        {
+          clubStrength: home.strength,
+          opponentStrength: away.strength,
+          clubTier: home.tier,
+          opponentTier: away.tier,
+          isHome: true,
+        },
+        seededRng(pairingHash(`ucl-fill-match|${round}|${homeId}|${awayId}`)),
+      );
+      next = applyMatchToTable(next, homeId, awayId, {
+        scoreFor: result.scoreFor,
+        scoreAgainst: result.scoreAgainst,
+        outcome: result.outcome,
+      });
+    }
+  }
+  return rankLeagueTable(next);
 }
 
 /** Simulate every *other* league fixture this matchweek so the table moves

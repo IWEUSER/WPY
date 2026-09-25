@@ -58,6 +58,68 @@ export interface DefenderPose {
 export type ChanceKind = 'open' | 'penalty' | 'cross';
 export type { BallFlight } from './ballTravel';
 
+export type PracticeChanceId =
+  | 'random'
+  | 'penalty'
+  | 'cross'
+  | 'volley'
+  | 'header'
+  | 'roll'
+  | 'bounce';
+
+export const PRACTICE_CHANCES: {
+  id: PracticeChanceId;
+  label: string;
+  detail: string;
+}[] = [
+  { id: 'random', label: 'Random mix', detail: 'Every chance type, shuffled' },
+  { id: 'penalty', label: 'Penalties', detail: 'Spot kicks, no defender' },
+  { id: 'cross', label: 'Ball across the box', detail: 'Whipped in from the flank' },
+  { id: 'volley', label: 'Volleys', detail: 'High bouncing ball' },
+  { id: 'header', label: 'Headers', detail: 'Near the six-yard box' },
+  { id: 'roll', label: 'Ground ball', detail: 'Rolling across the turf' },
+  { id: 'bounce', label: 'Bouncing ball', detail: 'Standard bounce, not a volley' },
+];
+
+export function practiceChanceOptions(id?: PracticeChanceId | null): {
+  forceKind?: ChanceKind;
+  forceFlight?: BallFlight;
+  forcePenalty?: boolean;
+  forceDistanceM?: number;
+} {
+  switch (id) {
+    case 'penalty':
+      return { forceKind: 'penalty', forcePenalty: true };
+    case 'cross':
+      return { forceKind: 'cross' };
+    case 'volley':
+      return { forceKind: 'open', forceFlight: 'volley' };
+    case 'header':
+      return { forceFlight: 'header', forceDistanceM: FIFA.sixYardDepth + 0.35 };
+    case 'roll':
+      return { forceKind: 'open', forceFlight: 'roll' };
+    case 'bounce':
+      return { forceKind: 'open', forceFlight: 'bounce' };
+    default:
+      return {};
+  }
+}
+
+export function parsePracticeChanceId(raw: string | null | undefined): PracticeChanceId | null {
+  if (
+    raw === 'random'
+    || raw === 'penalty'
+    || raw === 'cross'
+    || raw === 'volley'
+    || raw === 'header'
+    || raw === 'roll'
+    || raw === 'bounce'
+  ) {
+    return raw;
+  }
+  return null;
+}
+
 export interface ChanceSetup {
   kind: ChanceKind;
   distanceM: number;

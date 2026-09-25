@@ -51,10 +51,13 @@ import {
   defenderBlocksBall,
   defenderScreenBody,
   shotLineHitsDefender,
+  PRACTICE_CHANCES,
+  practiceChanceOptions,
   rollChanceSetup,
   type ChanceKind,
   type ChanceSetup,
   type DefenderPose,
+  type PracticeChanceId,
 } from './chanceSetup';
 import type { ShotOutcomeKind, ShotResult, ShotStyle, SwipeGesture } from './types';
 import StatsBar, { type ShotStats } from './StatsBar';
@@ -360,10 +363,12 @@ function nextChance(
   allowPenalties = true,
   opponentStrength?: number,
   forcePenaltyChance = false,
+  practiceChance?: PracticeChanceId,
 ): ChanceSetup {
-  const forcePenalty = (allowPenalties && readDevPenalty()) || forcePenaltyChance;
+  const practice = practiceChanceOptions(practiceChance);
+  const forcePenalty = (allowPenalties && readDevPenalty()) || forcePenaltyChance || Boolean(practice.forcePenalty);
   const forceDistance = readDevDistance();
-  const flight = readDevFlight();
+  const flight = readDevFlight() ?? practice.forceFlight;
   return rollChanceSetup({
     clubStrength,
     opponentStrength: opponentStrength ?? readDevOpponentStrength(),
@@ -372,12 +377,12 @@ function nextChance(
       ? undefined
       : flight === 'header'
         ? FIFA.sixYardDepth + 0.35
-        : (forceDistance ?? undefined),
+        : (practice.forceDistanceM ?? forceDistance ?? undefined),
     disableDefender: readDevDefenderOff(),
     skinPalette,
     allowPenalties,
     forceDualDefenders: readDevDualDefenders(),
-    forceKind: forcePenalty ? 'penalty' : readDevChanceKind() ?? undefined,
+    forceKind: forcePenalty ? 'penalty' : readDevChanceKind() ?? practice.forceKind,
     forceFlight: flight ?? undefined,
   });
 }
@@ -474,6 +479,9 @@ export interface ShootingGameProps {
   chanceTotal?: number;
   /** Knockout / must-score nights get extra stake copy. */
   knockoutChance?: boolean;
+  /** Free-practice lock: one chance type, or a random mix. */
+  practiceChance?: PracticeChanceId;
+  onPracticeChanceChange?: (id: PracticeChanceId) => void;
 }
 
 export default function ShootingGame({
@@ -500,6 +508,8 @@ export default function ShootingGame({
   chanceTaken,
   chanceTotal,
   knockoutChance = false,
+  practiceChance,
+  onPracticeChanceChange,
 }: ShootingGameProps = {}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -519,7 +529,7 @@ export default function ShootingGame({
   } | null>(null);
 
   const [initialChance] = useState(() =>
-    nextChance(clubStrength, opponentSkinPalette, allowPenalties, opponentStrength, forcePenalty),
+    nextChance(clubStrength, opponentSkinPalette, allowPenalties, opponentStrength, forcePenalty, practiceChance),
   );
   const [ballHintX, setBallHintX] = useState(initialChance.ballStartXRatio);
   const [chanceKind, setChanceKind] = useState<ChanceKind>(initialChance.kind);
@@ -563,6 +573,8 @@ export default function ShootingGame({
   chanceTotalRef.current = chanceTotal;
   const knockoutChanceRef = useRef(knockoutChance);
   knockoutChanceRef.current = knockoutChance;
+  const practiceChanceRef = useRef(practiceChance);
+  practiceChanceRef.current = practiceChance;
   const introStartedRef = useRef(false);
 
   const animRef = useRef<AnimState>({
@@ -721,6 +733,7 @@ export default function ShootingGame({
       allowPenaltiesRef.current,
       opponentStrengthRef.current,
       forcePenaltyRef.current,
+      practiceChanceRef.current,
     );
     const view = createPitchView(w, h, chance.distanceM);
     const start = ballStartPixel(view, chance.ballStartXRatio);
@@ -758,6 +771,15 @@ export default function ShootingGame({
     setResultLabel(null);
     beginChanceIntro(false, chance.kind);
   }, [beginChanceIntro]);
+
+  const practiceChanceReady = useRef(false);
+  useEffect(() => {
+    if (!practiceChanceReady.current) {
+      practiceChanceReady.current = true;
+      return;
+    }
+    resetForNextShot();
+  }, [practiceChance, resetForNextShot]);
 
   const launchShot = useCallback((gesture: SwipeGesture) => {
     const anim = animRef.current;
@@ -1280,6 +1302,16 @@ export default function ShootingGame({
                 Header
               </p>
             )}
+            {chanceKind !== 'penalty' && ballFlight === 'roll' && (
+              <p className="inline-block rounded-full bg-lime-400/15 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-lime-200">
+                Ground ball
+              </p>
+            )}
+            {chanceKind !== 'penalty' && ballFlight === 'bounce' && (
+              <p className="inline-block rounded-full bg-cyan-400/15 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-cyan-200">
+                Bouncing ball
+              </p>
+            )}
           </div>
         </div>
         {!hideMuteButton && (
@@ -1340,7 +1372,11 @@ export default function ShootingGame({
                     ? 'High bounce — volley it'
                     : chanceKind === 'cross'
                       ? 'Ball whipping across — swipe quickly'
-                      : 'Swipe sideways to move · jab, drive, or loft'}
+                      : ballFlight === 'bounce'
+                        ? 'Bouncing ball — time the bounce'
+                        : ballFlight === 'roll'
+                          ? 'Ground ball — knock, then strike'
+                          : 'Swipe sideways to move · jab, drive, or loft'}
             </div>
           </div>
         )}
@@ -1359,6 +1395,28 @@ export default function ShootingGame({
           </div>
         )}
       </div>
+
+      {onPracticeChanceChange && (
+        <div className="z-10 flex gap-1.5 overflow-x-auto px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
+          {PRACTICE_CHANCES.map((chance) => {
+            const selected = (practiceChance ?? 'random') === chance.id;
+            return (
+              <button
+                key={chance.id}
+                type="button"
+                onClick={() => onPracticeChanceChange(chance.id)}
+                className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
+                  selected
+                    ? 'bg-emerald-400 text-black'
+                    : 'bg-white/10 text-white/75'
+                }`}
+              >
+                {chance.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <style>{`
         @keyframes pop {

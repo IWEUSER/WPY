@@ -1,7 +1,7 @@
 import type { CalendarFixture, DomesticCupStage, LeaguesCupStage, PlayoffRound, SeasonCalendar, SuperCupStage } from './calendar';
 import type { SquadStatus } from './types';
 import { buildSeasonCalendar, fixtureIsHome, internationalVenueFlags, isFinalFixture, scoreboardPlayerOnLeft } from './calendar';
-import { leaguePhaseOpponents } from './continentalDraw';
+import { CHAMPIONS_LEAGUE_FIELD_SIZE, leaguePhaseOpponents } from './continentalDraw';
 import {
   chancesForKnockoutTie,
   chancesForLeagueMatch,
@@ -70,9 +70,12 @@ import {
 import { clubEligibleForNationalTeam, getNation, isSelectedForNationalTeam, NATIONS } from './international';
 import {
   applyMatchToTable,
+  championsLeagueTableNeedsRepair,
   clubsForContinentalCup,
   emptyEuropeanTable,
   emptyStanding,
+  expandChampionsLeagueTable,
+  fillMissingEuropeanRounds,
   formatHomeAwayScore,
   liveScoreFromTimeline,
   simulateClubMatch,
@@ -1504,8 +1507,67 @@ export function applyInternationalResult(
   return next;
 }
 
+/**
+ * Existing careers still hold the old 8-club Champions League group.
+ * Expand the table to the 36-club Swiss field and redraw unplayed
+ * league-phase ties from that field. Eight matches stay — that is the
+ * Swiss format — but the opponents come from all 36 clubs.
+ */
+export function repairChampionsLeagueSeason(params: {
+  clubId?: string | null;
+  calendar?: SeasonCalendar | null;
+  sim?: SeasonSimState | null;
+}): { calendar?: SeasonCalendar | null; sim?: SeasonSimState | null } {
+  const { clubId, calendar, sim } = params;
+  if (!sim?.europeanStanding || sim.europeanStanding.cup !== 'ucl') {
+    return { calendar, sim };
+  }
+  const wasShort = championsLeagueTableNeedsRepair(sim.europeanTable, 'ucl');
+  let table = expandChampionsLeagueTable(sim.europeanTable, clubId);
+  if (clubId) {
+    table = fillMissingEuropeanRounds(table, clubId, sim.europeanGroupPlayed ?? 0);
+  }
+  const nextSim: SeasonSimState = { ...sim, europeanTable: table };
+
+  if (!wasShort || !calendar || !clubId) {
+    return { calendar, sim: nextSim };
+  }
+  const club = getClub(clubId);
+  if (!club) return { calendar, sim: nextSim };
+
+  const fixtures = calendar.fixtures.map((f) => ({ ...f }));
+  const slots = fixtures
+    .map((f, i) => ({ f, i }))
+    .filter(({ f }) => f.kind === 'continental-group');
+  const playedIds = new Set(
+    slots
+      .filter(({ i }) => i < sim.fixtureIndex)
+      .map(({ f }) => f.opponentId)
+      .filter((id): id is string => Boolean(id)),
+  );
+  const remaining = slots.filter(({ i }) => i >= sim.fixtureIndex);
+  if (remaining.length === 0) {
+    return { calendar: { ...calendar, fixtures }, sim: nextSim };
+  }
+  const drawn = leaguePhaseOpponents(club, 'ucl', 8);
+  const unused = drawn.filter((c) => !playedIds.has(c.id));
+  const extra = leaguePhaseOpponents(club, 'ucl', 8).filter(
+    (c) => !playedIds.has(c.id) && !unused.some((u) => u.id === c.id),
+  );
+  const pool = [...unused, ...extra];
+  remaining.forEach(({ f }, n) => {
+    const opp = pool[n];
+    if (!opp) return;
+    f.opponentId = opp.id;
+    f.opponentLabel = opp.name;
+  });
+  return { calendar: { ...calendar, fixtures }, sim: nextSim };
+}
+
 export const GROUP_STAGE_MATCHDAYS = GROUP_GAMES;
 export const GROUP_POINTS_TO_ADVANCE = GROUP_ADVANCE_POINTS;
+export const CHAMPIONS_LEAGUE_LEAGUE_PHASE_MATCHES = GROUP_GAMES;
+export const CHAMPIONS_LEAGUE_TABLE_SIZE = CHAMPIONS_LEAGUE_FIELD_SIZE;
 
 export function internationalRoundLabel(
   round: CalendarFixture['internationalRound'],

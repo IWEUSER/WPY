@@ -135,6 +135,7 @@ const SECONDARY: Record<string, string> = {
   'new-zealand': '#FFFFFF',
   uruguay: '#000000',
   ecuador: '#0033A0',
+  paraguay: '#FFFFFF',
 };
 
 const FALLBACK = [
@@ -163,6 +164,7 @@ const PATTERN: Record<string, ShirtPattern> = {
   argentina: 'vertical',
   uruguay: 'hoops',
   croatia: 'vertical',
+  paraguay: 'vertical',
 };
 
 const SHORTS: Record<string, string> = {
@@ -178,6 +180,7 @@ const SHORTS: Record<string, string> = {
   'republic-of-ireland': '#FFFFFF',
   colombia: '#003893',
   peru: '#FFFFFF',
+  paraguay: '#0038A8',
 };
 
 const SLEEVES: Record<string, string> = {
@@ -202,6 +205,7 @@ const SOCKS: Record<string, string> = {
   uruguay: '#7BADE3',
   colombia: '#C8102E',
   peru: '#FFFFFF',
+  paraguay: '#0038A8',
 };
 
 export function nationKit(id: string): KitScheme {

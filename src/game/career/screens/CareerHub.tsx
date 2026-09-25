@@ -396,6 +396,14 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
                 table={seasonSimWithGroup.europeanTable ?? []}
                 clubId={club.id}
                 standing={seasonSimWithGroup.europeanStanding}
+                remainingOpponents={(seasonCalendar?.fixtures ?? [])
+                  .map((fixture, index) => ({ fixture, index }))
+                  .filter(({ fixture, index }) =>
+                    fixture.kind === 'continental-group'
+                    && index >= (seasonSimWithGroup.fixtureIndex ?? 0)
+                    && Boolean(fixture.opponentLabel),
+                  )
+                  .map(({ fixture }) => fixture.opponentLabel!)}
               />
             )}
             {nation && role !== 'reserve' && seasonSimWithGroup?.internationalGroup && (
@@ -493,7 +501,9 @@ function StandingsCard({
   if (europe) {
     competitions.push({
       name: CONTINENTAL_CUPS[europe.cup]?.name ?? europe.cup,
-      stage: competitionStageLabel(europe.stage),
+      stage: competitionStageLabel(europe.stage, {
+        leaguePhase: europe.cup === 'ucl' || europe.cup === 'uel' || europe.cup === 'uecl',
+      }),
     });
   } else if (sim?.leaguesCupStage && sim.leaguesCupStage !== 'not-entered') {
     competitions.push({
@@ -607,22 +617,31 @@ function EuropeanTableCard({
   table,
   clubId,
   standing,
+  remainingOpponents = [],
 }: {
   table: SeasonSimState['europeanTable'];
   clubId: string;
   standing: SeasonSimState['europeanStanding'];
+  remainingOpponents?: string[];
 }) {
   const cupName = standing ? (CONTINENTAL_CUPS[standing.cup]?.name ?? standing.cup) : null;
   const rows = rankLeagueTable(table ?? []);
   if (!cupName || rows.length === 0) return null;
+  const leaguePhase = standing?.cup === 'ucl' || standing?.cup === 'uel' || standing?.cup === 'uecl';
 
   return (
     <div>
       <p className="text-xs uppercase tracking-wide text-white/40">
         {cupName}
-        {standing?.stage ? ` · ${competitionStageLabel(standing.stage)}` : ''}
-        {rows.length >= 24 ? ` · ${rows.length} clubs` : ''}
+        {standing?.stage ? ` · ${competitionStageLabel(standing.stage, { leaguePhase })}` : ''}
+        {leaguePhase || rows.length >= 24 ? ` · ${rows.length} clubs` : ''}
+        {standing?.cup === 'ucl' ? ' · 8 matches' : ''}
       </p>
+      {remainingOpponents.length > 0 && standing?.cup === 'ucl' && (
+        <p className="mt-1 text-[11px] text-white/50">
+          Remaining ties: {remainingOpponents.join(' · ')}
+        </p>
+      )}
       <div className="mt-3 max-h-72 overflow-y-auto pr-1">
       <table className="w-full table-fixed border-collapse text-left text-xs">
         <thead>

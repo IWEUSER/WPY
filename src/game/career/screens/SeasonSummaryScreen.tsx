@@ -121,7 +121,11 @@ export default function SeasonSummaryScreen() {
         : null;
   const clubIntlOutcome = (() => {
     if (seasonSim?.honours.continentalChampion) return 'Champions';
-    if (europe) return competitionStageLabel(europe.stage);
+    if (europe) {
+      return competitionStageLabel(europe.stage, {
+        leaguePhase: europe.cup === 'ucl' || europe.cup === 'uel' || europe.cup === 'uecl',
+      });
+    }
     if (seasonSim?.leaguesCupStage && seasonSim.leaguesCupStage !== 'not-entered') {
       return competitionStageLabel(seasonSim.leaguesCupStage);
     }

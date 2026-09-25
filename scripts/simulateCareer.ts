@@ -20,7 +20,7 @@ import { reserveStadium, resolveCareerStadium, resolveMatchStadium, trialStadium
 import { crowdSwatch, kitFromColor, kitFromScheme, luminance } from '../src/game/shooting/kitPalette';
 import { AFRICA_SKIN_TONES, createPitchView, idleKeeperPose, MAX_SHOT_DISTANCE_M, MIN_SHOT_DISTANCE_M, PLAYER_SKIN_TONES, pickPlayerLook, pickPlayerSkin, SHORTS_HALF_H, THIGH_SHARE } from '../src/game/shooting/render';
 import { appearanceRegionForNation, HAIR_SWATCHES, isBlackHair, isBlondeHair, isFairSkin, SKIN_SWATCHES } from '../src/game/shooting/appearance';
-import { rollChanceSetup } from '../src/game/shooting/chanceSetup';
+import { practiceChanceOptions, PRACTICE_CHANCES, rollChanceSetup } from '../src/game/shooting/chanceSetup';
 import { applyMatchResult, createAvailability } from '../src/game/career/availabilityEngine';
 import { useCareerStore } from '../src/game/career/store';
 import { standBottomY, crowdCellSize, pitchQualityFromStrength, stadiumLayout, stadiumRoofBand } from '../src/game/shooting/stadium';
@@ -46,7 +46,7 @@ import { cupFromLeaguePosition, continentalQualificationForNextSeason } from '..
 import { fifaRank, knockoutRankCap, nationStrength, nationsInConfederation, tournamentOpponents, worldCupKnockoutRankCap } from '../src/game/career/data/fifaRankings';
 import { countsTowardCareerRecord, displaySeasonLabel, displaySeasonNumber, isFirstPublicSeason } from '../src/game/career/seasonDisplay';
 import { bumpInternationalSeason, callUpRatio, isInternationalFinalsRound, isSelectedForNationalTeam, leagueEligibleForNationalTeam, markInjuryMissedFinals, SEASON_1_CALL_UP_MIN_WEEK, selectionRatioForNation } from '../src/game/career/international';
-import { blowoutScorePossible, formatHomeAwayScore, missedChanceWinFactor, plausibleGoalCaps, simulateClubMatch, simulateLeagueSeason, simulateMatchTimeline } from '../src/game/career/matchEngine';
+import { blowoutScorePossible, emptyStanding, expandChampionsLeagueTable, formatHomeAwayScore, missedChanceWinFactor, plausibleGoalCaps, simulateClubMatch, simulateLeagueSeason, simulateMatchTimeline } from '../src/game/career/matchEngine';
 import { chanceImportanceLine, chanceMinute, chanceMinutesForMatch, chancesLeftLine, formatChanceMinute } from '../src/game/shooting/chanceAtmosphere';
 import { awardBeat, enqueueLeagueTitleBeat, firstCapBeat, firstTitleBeat, portraitForTrophyName, pushCareerBeat, retirementBeat, seasonAwardBeats, soldBeat, titleBeat, tournamentCallUpBeat } from '../src/game/career/careerBeat';
 import { aggregateContinental, aggregateDomesticSplit, careerTransferFeesPaid, clubSeasonTotals, recordClubAppearanceStats, seasonDomesticSplit } from '../src/game/career/seasonStats';
@@ -55,7 +55,7 @@ import { championsLeagueField, leaguePhaseOpponents, pickSuperCupOpponent, seedC
 import { settleDrawOnPenalties } from '../src/game/career/penalties';
 import { planDomesticSuperCup } from '../src/game/career/domesticSuperCup';
 import { firstLegStakeLine, formatNextLine, nextMatchBriefing, sitOutRecapLine } from '../src/game/career/matchBriefing';
-import { applyInternationalResult, canWinLeague, continentalAggregateLine, ensureInternationalGroup, fixtureTitle, hydrateSeason, internationalStageWhenSelected, leagueFixtureIsHome, liveMatchBoardLine, liveMatchScoreSeed, mulberry32, nextActionableFixture, nextPlayableFixture, pickDomesticCupOpponent, pickTitleRival, remainingPlayableCount, resolveFixture, shouldSimulateNationQualifier, shouldSkipFixture } from '../src/game/career/seasonSim';
+import { applyInternationalResult, canWinLeague, continentalAggregateLine, ensureInternationalGroup, fixtureTitle, hydrateSeason, internationalStageWhenSelected, leagueFixtureIsHome, liveMatchBoardLine, liveMatchScoreSeed, mulberry32, nextActionableFixture, nextPlayableFixture, pickDomesticCupOpponent, pickTitleRival, remainingPlayableCount, repairChampionsLeagueSeason, resolveFixture, shouldSimulateNationQualifier, shouldSkipFixture } from '../src/game/career/seasonSim';
 import { applyPlayerGroupResult, createGroupState, nationCanProgressKnockout, nationCanWinMajor, simulateNpcRoundAfterPlayerMatch } from '../src/game/career/internationalTable';
 import {
   applyTrialMatch,
@@ -4941,6 +4941,48 @@ if (madrid) {
     console.error('the Champions League table must list all 36 clubs');
     process.exitCode = 1;
   }
+  const staleTable = [
+    emptyStanding('real-madrid'),
+    emptyStanding('bayern'),
+    emptyStanding('psg'),
+    emptyStanding('man-city'),
+    emptyStanding('inter'),
+    emptyStanding('barcelona'),
+    emptyStanding('liverpool'),
+    emptyStanding('dortmund'),
+  ].map((row, i) => (row.clubId === 'real-madrid' ? { ...row, played: 2, won: 2, points: 6, goalsFor: 4, goalsAgainst: 1 } : { ...row, played: 2, points: i % 3 }));
+  const repaired = repairChampionsLeagueSeason({
+    clubId: 'real-madrid',
+    calendar: noCup.calendar,
+    sim: {
+      ...noCup.sim,
+      europeanTable: staleTable,
+      europeanGroupPlayed: 2,
+      fixtureIndex: 0,
+    },
+  });
+  const repairedIds = new Set((repaired.sim?.europeanTable ?? []).map((row) => row.clubId));
+  const repairedGroups = (repaired.calendar?.fixtures ?? []).filter((f) => f.kind === 'continental-group');
+  const repairedOpp = new Set(repairedGroups.map((f) => f.opponentId).filter(Boolean));
+  console.log('repaired UCL table', repaired.sim?.europeanTable.length, 'group unique', repairedOpp.size);
+  if ((repaired.sim?.europeanTable.length ?? 0) !== 36 || !repairedIds.has('club-brugge') || !repairedIds.has('bodo-glimt')) {
+    console.error('an old 8-club Champions League save must expand to the 36-club Swiss table');
+    process.exitCode = 1;
+  }
+  if (repairedGroups.length !== 8 || repairedOpp.size !== 8) {
+    console.error('repaired Champions League seasons must keep eight unique league-phase opponents');
+    process.exitCode = 1;
+  }
+  const madridRow = repaired.sim?.europeanTable.find((row) => row.clubId === 'real-madrid');
+  if (!madridRow || madridRow.played !== 2 || madridRow.points !== 6) {
+    console.error('expanding the Champions League table must keep the player club’s existing results');
+    process.exitCode = 1;
+  }
+  const expanded = expandChampionsLeagueTable(staleTable, 'real-madrid');
+  if (expanded.length !== 36) {
+    console.error('expandChampionsLeagueTable must pad to 36 clubs');
+    process.exitCode = 1;
+  }
   if (phase.some((c) => c.country === madrid.country)) {
     console.error('Champions League opponents must not come from the same country');
     process.exitCode = 1;
@@ -7086,12 +7128,22 @@ console.log('\n--- Kits, cup nights, FA Cup semis, sun, World Cup copy, African 
   const brazil = nationKit('brazil');
   const colombia = nationKit('colombia');
   const peru = nationKit('peru');
+  const paraguay = nationKit('paraguay');
   if (colombia.shorts !== '#003893' || colombia.socks !== '#C8102E') {
     console.error('Colombia must wear blue shorts and red socks');
     process.exitCode = 1;
   }
   if (peru.primary !== '#FFFFFF' || peru.shorts !== '#FFFFFF' || peru.socks !== '#FFFFFF' || peru.sleeves !== '#D91023') {
     console.error('Peru must wear all white with red sleeves');
+    process.exitCode = 1;
+  }
+  if (
+    paraguay.pattern !== 'vertical'
+    || paraguay.secondary !== '#FFFFFF'
+    || paraguay.shorts !== '#0038A8'
+    || paraguay.socks !== '#0038A8'
+  ) {
+    console.error('Paraguay must wear red and white stripes, blue shorts and blue socks');
     process.exitCode = 1;
   }
   console.log('portugal kit', portugal.primary, portugal.shorts, portugal.socks);
@@ -8065,6 +8117,30 @@ console.log('\n--- Call-up beats, transfer fees, 5-season wage discount ---');
   }
   if (year2at06 !== Math.round((listed * 0.6 * 0.6) / 500) * 500) {
     console.error('transfer offers must use career ratio, then the season discount');
+    process.exitCode = 1;
+  }
+}
+
+console.log('\n--- Free practice covers every chance type ---');
+{
+  const ids = PRACTICE_CHANCES.map((c) => c.id);
+  if (!ids.includes('random') || !ids.includes('penalty') || !ids.includes('cross') || !ids.includes('volley') || !ids.includes('header') || !ids.includes('roll') || !ids.includes('bounce')) {
+    console.error('practice must offer random, penalties, ball across the box, volleys, headers, ground balls and bounces');
+    process.exitCode = 1;
+  }
+  const penalty = rollChanceSetup({ ...practiceChanceOptions('penalty'), rng: () => 0.99 });
+  const cross = rollChanceSetup({ ...practiceChanceOptions('cross'), rng: () => 0.01 });
+  const volley = rollChanceSetup({ ...practiceChanceOptions('volley'), rng: () => 0.5 });
+  const header = rollChanceSetup({ ...practiceChanceOptions('header'), rng: () => 0.2 });
+  const roll = rollChanceSetup({ ...practiceChanceOptions('roll'), rng: () => 0.4 });
+  const bounce = rollChanceSetup({ ...practiceChanceOptions('bounce'), rng: () => 0.7 });
+  console.log('practice kinds', penalty.kind, cross.kind, volley.flight, header.flight, roll.flight, bounce.flight);
+  if (penalty.kind !== 'penalty' || cross.kind !== 'cross') {
+    console.error('practice penalties and ball-across-the-box must lock those looks');
+    process.exitCode = 1;
+  }
+  if (volley.flight !== 'volley' || header.flight !== 'header' || roll.flight !== 'roll' || bounce.flight !== 'bounce') {
+    console.error('practice must lock volleys, headers, ground balls and bouncing balls');
     process.exitCode = 1;
   }
 }

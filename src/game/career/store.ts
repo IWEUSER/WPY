@@ -55,6 +55,7 @@ import {
   canWinLeague,
   ensureInternationalGroup,
   hydrateSeason,
+  repairChampionsLeagueSeason,
   liveMatchScoreSeed,
   mulberry32,
   remainingPlayableCount,
@@ -2422,7 +2423,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 37,
+      version: 38,
       migrate: (persisted) => {
         try {
           return migrateCareerPersist(persisted);
@@ -2472,50 +2473,8 @@ function migrateCareerPersist(persisted: unknown): CareerState {
           ? padSeason(state.currentSeason, state.seasonHistory?.length ?? 0)
           : null;
         const totals = recountCareerTotals(seasonHistory, currentSeason);
-        return {
-          ...state,
-          openingCampaign: state.openingCampaign
-            ? repairOpeningCampaign(
-                {
-                  ...state.openingCampaign,
-                  bestTrialRatio: state.openingCampaign.bestTrialRatio ?? 0,
-                  rejectedClubIds: state.openingCampaign.rejectedClubIds ?? [],
-                  openingTier: state.openingCampaign.openingTier ?? state.openingCampaign.trialTier ?? null,
-                  originCountry: state.openingCampaign.originCountry ?? null,
-                  originClubId: state.openingCampaign.originClubId ?? null,
-                },
-                state.nationality ?? null,
-              )
-            : null,
-          careerStart: state.careerStart ?? null,
-          nationality: state.nationality ?? null,
-          playerName: state.playerName?.trim() ? state.playerName : 'Player',
-          playerSkin: state.playerSkin ?? null,
-          playerHair: state.playerHair ?? null,
-          nationalTeam: state.nationalTeam
-            ? {
-                ...state.nationalTeam,
-                byCompetition: state.nationalTeam.byCompetition ?? [],
-                recentQualifierOpponentIds: state.nationalTeam.recentQualifierOpponentIds ?? [],
-              }
-            : null,
-          seasonCalendar: state.seasonCalendar
-            ? { ...state.seasonCalendar, fixtures: reassignLeagueHomeAway(state.seasonCalendar.fixtures) }
-            : null,
-          seasonStandings: state.seasonStandings ?? null,
-          seasonHistory,
-          currentSeason,
-          careerGoals: totals.careerGoals,
-          careerGames: totals.careerGames,
-          intlQualifying: state.intlQualifying
-            ? {
-                ...state.intlQualifying,
-                opponentIds: state.intlQualifying.opponentIds ?? [],
-                group: state.intlQualifying.group,
-              }
-            : null,
-          seasonSim: sim
-            ? ensureInternationalGroup(
+        const paddedSim = sim
+          ? ensureInternationalGroup(
                 {
                   ...sim,
                   domesticCup: sim.domesticCup ?? null,
@@ -2556,7 +2515,55 @@ function migrateCareerPersist(persisted: unknown): CareerState {
                 state.seasonCalendar,
                 state.seasonNumber ?? 1,
               )
+          : null;
+        const repaired = repairChampionsLeagueSeason({
+          clubId: state.clubId,
+          calendar: state.seasonCalendar
+            ? { ...state.seasonCalendar, fixtures: reassignLeagueHomeAway(state.seasonCalendar.fixtures) }
             : null,
+          sim: paddedSim,
+        });
+        return {
+          ...state,
+          openingCampaign: state.openingCampaign
+            ? repairOpeningCampaign(
+                {
+                  ...state.openingCampaign,
+                  bestTrialRatio: state.openingCampaign.bestTrialRatio ?? 0,
+                  rejectedClubIds: state.openingCampaign.rejectedClubIds ?? [],
+                  openingTier: state.openingCampaign.openingTier ?? state.openingCampaign.trialTier ?? null,
+                  originCountry: state.openingCampaign.originCountry ?? null,
+                  originClubId: state.openingCampaign.originClubId ?? null,
+                },
+                state.nationality ?? null,
+              )
+            : null,
+          careerStart: state.careerStart ?? null,
+          nationality: state.nationality ?? null,
+          playerName: state.playerName?.trim() ? state.playerName : 'Player',
+          playerSkin: state.playerSkin ?? null,
+          playerHair: state.playerHair ?? null,
+          nationalTeam: state.nationalTeam
+            ? {
+                ...state.nationalTeam,
+                byCompetition: state.nationalTeam.byCompetition ?? [],
+                recentQualifierOpponentIds: state.nationalTeam.recentQualifierOpponentIds ?? [],
+              }
+            : null,
+          seasonCalendar: repaired.calendar ?? null,
+          seasonStandings: state.seasonStandings ?? null,
+          seasonHistory,
+          currentSeason,
+          careerGoals: totals.careerGoals,
+          careerGames: totals.careerGames,
+          intlQualifying: state.intlQualifying
+            ? {
+                ...state.intlQualifying,
+                opponentIds: state.intlQualifying.opponentIds ?? [],
+                group: state.intlQualifying.group,
+              }
+            : null,
+          seasonSim: repaired.sim ?? null,
           liveMatch: state.liveMatch ?? null,
           formWindow: (state.seasonNumber ?? 1) < 2 ? [] : (state.formWindow ?? []),
           wpyResult: state.wpyResult ?? null,

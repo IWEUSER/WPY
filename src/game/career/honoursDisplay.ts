@@ -106,8 +106,12 @@ export function seasonRatio(season: Pick<SeasonRecord, 'goals' | 'gamesPlayed'>)
   return season.gamesPlayed > 0 ? season.goals / season.gamesPlayed : 0;
 }
 
-export function competitionStageLabel(stage: string | null | undefined): string {
+export function competitionStageLabel(
+  stage: string | null | undefined,
+  opts?: { leaguePhase?: boolean },
+): string {
   if (!stage || stage === 'not-entered' || stage === 'pending' || stage === 'none') return '—';
+  if (stage === 'group' && opts?.leaguePhase) return 'League phase';
   const labels: Record<string, string> = {
     group: 'Group stage',
     'round-of-32': 'Round of 32',

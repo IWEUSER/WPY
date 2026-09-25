@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { GAME_LOGO_SRC, GAME_TAGLINE, GAME_TITLE, liveMenuStamp } from '../../branding';
+import { PRACTICE_CHANCES, type PracticeChanceId } from '../../shooting/chanceSetup';
 import { getClub } from '../data/clubs';
 import { displaySeasonLabel } from '../seasonDisplay';
 import { useCareerStore } from '../store';
 
-export default function HomeScreen({ onPractice }: { onPractice: () => void }) {
+export default function HomeScreen({ onPractice }: { onPractice: (chance: PracticeChanceId) => void }) {
   const clubId = useCareerStore((s) => s.clubId);
   const seasonNumber = useCareerStore((s) => s.seasonNumber);
   const opening = useCareerStore((s) => s.openingCampaign);
@@ -15,6 +16,7 @@ export default function HomeScreen({ onPractice }: { onPractice: () => void }) {
   const resetCareer = useCareerStore((s) => s.resetCareer);
   const advance = useCareerStore((s) => s.advance);
   const [careerOpen, setCareerOpen] = useState(false);
+  const [practiceOpen, setPracticeOpen] = useState(false);
 
   const club = clubId ? getClub(clubId) : undefined;
   const inProgress = Boolean(clubId || opening);
@@ -92,11 +94,26 @@ export default function HomeScreen({ onPractice }: { onPractice: () => void }) {
 
         <button
           type="button"
-          onClick={onPractice}
+          onClick={() => setPracticeOpen((open) => !open)}
           className="rounded-2xl bg-white/8 px-6 py-3 text-sm font-semibold text-white/75 backdrop-blur transition active:scale-[0.98]"
         >
           Free practice mode
+          <span className="mt-1 block text-xs font-medium text-white/45">
+            Pick a chance type, or a random mix
+          </span>
         </button>
+
+        {practiceOpen && PRACTICE_CHANCES.map((chance) => (
+          <button
+            key={chance.id}
+            type="button"
+            onClick={() => onPractice(chance.id)}
+            className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-left transition active:scale-[0.98]"
+          >
+            <span className="block text-sm font-bold text-white">{chance.label}</span>
+            <span className="mt-0.5 block text-xs font-medium text-white/55">{chance.detail}</span>
+          </button>
+        ))}
 
         {inProgress && (
           <button

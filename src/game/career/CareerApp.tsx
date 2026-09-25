@@ -22,6 +22,13 @@ import GuidedFirstChanceScreen from './screens/GuidedFirstChanceScreen';
 import { useCareerStore } from './store';
 import { applyCareerLayoutPreview } from './previewCareerLayout';
 import { allowLayoutPreview } from '../previewTools';
+import { parsePracticeChanceId, type PracticeChanceId } from '../shooting/chanceSetup';
+
+function practiceChanceFromQuery(): PracticeChanceId {
+  if (!allowLayoutPreview()) return 'random';
+  const q = new URLSearchParams(window.location.search);
+  return parsePracticeChanceId(q.get('flight') ?? q.get('kind') ?? q.get('practice')) ?? 'random';
+}
 
 if (allowLayoutPreview()) {
   (window as unknown as { __careerStore: typeof useCareerStore }).__careerStore = useCareerStore;
@@ -39,6 +46,7 @@ export default function CareerApp() {
   const [practicing, setPracticing] = useState(
     () => allowLayoutPreview() && new URLSearchParams(window.location.search).has('practice'),
   );
+  const [practiceChance, setPracticeChance] = useState<PracticeChanceId>(practiceChanceFromQuery);
   useEffect(() => {
     const unsub = useCareerStore.persist.onFinishHydration(() => setHydrated(true));
     if (useCareerStore.persist.hasHydrated()) setHydrated(true);
@@ -68,7 +76,10 @@ export default function CareerApp() {
   if (practicing) {
     return (
       <div className="relative h-full w-full">
-        <ShootingGame />
+        <ShootingGame
+          practiceChance={practiceChance}
+          onPracticeChanceChange={setPracticeChance}
+        />
         <button
           type="button"
           onClick={() => setPracticing(false)}
@@ -151,6 +162,13 @@ export default function CareerApp() {
     case 'career-end':
       return <CareerEndScreen />;
     default:
-      return <HomeScreen onPractice={() => setPracticing(true)} />;
+      return (
+        <HomeScreen
+          onPractice={(chance) => {
+            setPracticeChance(chance);
+            setPracticing(true);
+          }}
+        />
+      );
   }
 }
