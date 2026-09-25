@@ -406,7 +406,7 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
   const leagueClubs = clubsForSeason(club, league);
   const leagueTable = leagueClubs.map((c) => emptyStanding(c.id));
   const europeanStanding: EuropeanStanding | null = cup ? { cup, stage: 'group' } : null;
-  const europeanTable = cup ? emptyEuropeanTable(clubsForContinentalCup(cup)) : [];
+  const europeanTable = cup ? emptyEuropeanTable(clubsForContinentalCup(cup, club.id)) : [];
   const domesticCup = calendar.domesticCup ?? null;
   const hasFriendlies = calendar.fixtures.some((f) => f.internationalRound === 'friendly');
   const titleRival = pickTitleRival(club, league);
@@ -743,7 +743,7 @@ function assignOpponentsAndChances(
   const leagueRivals = leagueOpponentQueue(club, league);
   const leaguePhase = cup ? leaguePhaseOpponents(club, cup, 8) : [];
   const euroRivals = cup
-    ? shuffle(clubsForContinentalCup(cup).filter((id) => id !== club.id))
+    ? shuffle(clubsForContinentalCup(cup, club.id).filter((id) => id !== club.id))
     : [];
   const usedCupIds = new Set<string>();
   const leaguesCupRivals = [
@@ -1285,7 +1285,7 @@ export function applyEuropeanResult(
     if (result.outcome === 'win') next.europeanGroupPoints += 3;
     else if (result.outcome === 'draw') next.europeanGroupPoints += 1;
     if (playerClubId && fixture.opponentId) {
-      let table = next.europeanTable.length ? next.europeanTable : emptyEuropeanTable(clubsForContinentalCup(fixture.continentalCup));
+      let table = next.europeanTable.length ? next.europeanTable : emptyEuropeanTable(clubsForContinentalCup(fixture.continentalCup, playerClubId));
       if (!table.some((row) => row.clubId === playerClubId)) table = [...table, emptyStanding(playerClubId)];
       if (!table.some((row) => row.clubId === fixture.opponentId)) table = [...table, emptyStanding(fixture.opponentId)];
       table = applyMatchToTable(table, playerClubId, fixture.opponentId, {

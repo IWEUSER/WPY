@@ -85,6 +85,16 @@ const KITS: Record<string, KitScheme> = {
   konyaspor: { primary: '#007A33', secondary: '#FFFFFF', pattern: 'vertical', shorts: '#007A33', socks: '#FFFFFF' },
   antalyaspor: { primary: '#E30613', secondary: '#FFFFFF', pattern: 'vertical', shorts: '#FFFFFF', socks: '#E30613' },
   'istanbul-basaksehir': { primary: '#F68B1F', secondary: '#003399', pattern: 'vertical', shorts: '#003399', socks: '#F68B1F' },
+
+  'bodo-glimt': { primary: '#FFD100', shorts: '#111111', socks: '#FFD100' },
+  viking: { primary: '#111111', secondary: '#FFFFFF', pattern: 'vertical', shorts: '#111111', socks: '#111111' },
+  lask: { primary: '#111111', secondary: '#FFFFFF', pattern: 'vertical', shorts: '#111111', socks: '#111111' },
+  sabah: { primary: '#E30613', secondary: '#111111', pattern: 'vertical', shorts: '#111111', socks: '#E30613' },
+  'club-brugge': { primary: '#003DA5', secondary: '#111111', pattern: 'vertical', shorts: '#111111', socks: '#003DA5' },
+  'slavia-prague': { primary: '#E30613', secondary: '#FFFFFF', pattern: 'vertical', shorts: '#FFFFFF', socks: '#E30613' },
+  'aek-athens': { primary: '#FFD100', secondary: '#111111', pattern: 'vertical', shorts: '#111111', socks: '#FFD100' },
+  'slovan-bratislava': { primary: '#6EC1E4', shorts: '#FFFFFF', socks: '#6EC1E4' },
+  shakhtar: { primary: '#F68712', secondary: '#111111', pattern: 'vertical', shorts: '#111111', socks: '#F68712' },
 };
 
 /**

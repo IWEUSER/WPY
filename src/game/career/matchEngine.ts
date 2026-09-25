@@ -4,6 +4,7 @@ import {
   clubContinentalCup,
   type ContinentalCupId,
 } from './data/competitions';
+import { championsLeagueField } from './continentalDraw';
 
 /**
  * Probabilistic club-vs-club engine for seasons 2-20. Stronger squads
@@ -398,7 +399,8 @@ export function buildSeasonStandings(
   return { league: rankLeagueTable(league), europeanStanding };
 }
 
-export function clubsForContinentalCup(cup: ContinentalCupId): string[] {
+export function clubsForContinentalCup(cup: ContinentalCupId, playerClubId?: string | null): string[] {
+  if (cup === 'ucl') return championsLeagueField(playerClubId);
   return CLUBS.filter((c) => clubContinentalCup(c) === cup).map((c) => c.id);
 }
 

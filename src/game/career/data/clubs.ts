@@ -502,6 +502,17 @@ const CLUB_SEED: Club[] = [
   { id: 'persepolis', name: 'Persepolis', country: 'Iran', league: 'Persian Gulf Pro League', tier: 2, strength: 73, color: '#E30613', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32, playable: false },
   { id: 'esteghlal', name: 'Esteghlal', country: 'Iran', league: 'Persian Gulf Pro League', tier: 2, strength: 72, color: '#003DA5', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32, playable: false },
   { id: 'shanghai-port', name: 'Shanghai Port', country: 'China PR', league: 'Chinese Super League', tier: 2, strength: 73, color: '#E30613', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32, playable: false },
+
+  // Champions League guests from associations outside the playable pyramid
+  { id: 'bodo-glimt', name: 'Bodø/Glimt', country: 'Norway', league: 'Eliteserien', tier: 3, strength: 76, color: '#FFD100', reserveGoalRatio: 0.42, firstTeamGoalRatio: 0.34, playable: false },
+  { id: 'viking', name: 'Viking', country: 'Norway', league: 'Eliteserien', tier: 4, strength: 68, color: '#111111', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28, playable: false },
+  { id: 'lask', name: 'LASK', country: 'Austria', league: 'Austrian Bundesliga', tier: 3, strength: 72, color: '#111111', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32, playable: false },
+  { id: 'sabah', name: 'Sabah', country: 'Azerbaijan', league: 'Azerbaijan Premier League', tier: 4, strength: 64, color: '#E30613', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26, playable: false },
+  { id: 'club-brugge', name: 'Club Brugge', country: 'Belgium', league: 'Belgian Pro League', tier: 2, strength: 80, color: '#003DA5', reserveGoalRatio: 0.5, firstTeamGoalRatio: 0.4, playable: false },
+  { id: 'slavia-prague', name: 'Slavia Prague', country: 'Czechia', league: 'Czech First League', tier: 3, strength: 78, color: '#E30613', reserveGoalRatio: 0.45, firstTeamGoalRatio: 0.36, playable: false },
+  { id: 'aek-athens', name: 'AEK Athens', country: 'Greece', league: 'Super League Greece', tier: 3, strength: 74, color: '#FFD100', reserveGoalRatio: 0.42, firstTeamGoalRatio: 0.34, playable: false },
+  { id: 'slovan-bratislava', name: 'Slovan Bratislava', country: 'Slovakia', league: 'Slovak Super Liga', tier: 4, strength: 70, color: '#6EC1E4', reserveGoalRatio: 0.38, firstTeamGoalRatio: 0.3, playable: false },
+  { id: 'shakhtar', name: 'Shakhtar Donetsk', country: 'Ukraine', league: 'Ukrainian Premier League', tier: 2, strength: 79, color: '#F68712', reserveGoalRatio: 0.48, firstTeamGoalRatio: 0.38, playable: false },
 ];
 
 export const CLUBS: Club[] = CLUB_SEED.map((club) => {

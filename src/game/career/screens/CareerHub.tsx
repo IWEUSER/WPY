@@ -613,7 +613,7 @@ function EuropeanTableCard({
   standing: SeasonSimState['europeanStanding'];
 }) {
   const cupName = standing ? (CONTINENTAL_CUPS[standing.cup]?.name ?? standing.cup) : null;
-  const rows = rankLeagueTable(table ?? []).filter((row) => row.played > 0);
+  const rows = rankLeagueTable(table ?? []);
   if (!cupName || rows.length === 0) return null;
 
   return (
@@ -621,8 +621,10 @@ function EuropeanTableCard({
       <p className="text-xs uppercase tracking-wide text-white/40">
         {cupName}
         {standing?.stage ? ` · ${competitionStageLabel(standing.stage)}` : ''}
+        {rows.length >= 24 ? ` · ${rows.length} clubs` : ''}
       </p>
-      <table className="mt-3 w-full table-fixed border-collapse text-left text-xs">
+      <div className="mt-3 max-h-72 overflow-y-auto pr-1">
+      <table className="w-full table-fixed border-collapse text-left text-xs">
         <thead>
           <tr className="text-[10px] uppercase tracking-wide text-white/40">
             <th className="pb-1 font-medium">Club</th>
@@ -645,6 +647,7 @@ function EuropeanTableCard({
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
