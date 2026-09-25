@@ -51,11 +51,11 @@ import { chanceImportanceLine, chanceMinute, chanceMinutesForMatch, chancesLeftL
 import { awardBeat, enqueueLeagueTitleBeat, firstCapBeat, firstTitleBeat, portraitForTrophyName, pushCareerBeat, retirementBeat, seasonAwardBeats, soldBeat, titleBeat, tournamentCallUpBeat } from '../src/game/career/careerBeat';
 import { aggregateContinental, aggregateDomesticSplit, careerTransferFeesPaid, clubSeasonTotals, recordClubAppearanceStats, seasonDomesticSplit } from '../src/game/career/seasonStats';
 import { evaluateClubPlayerOfTheTournament } from '../src/game/career/clubInternationalAwards';
-import { leaguePhaseOpponents, pickSuperCupOpponent } from '../src/game/career/continentalDraw';
+import { championsLeagueField, leaguePhaseOpponents, pickSuperCupOpponent, seedChampionsLeaguePots } from '../src/game/career/continentalDraw';
 import { settleDrawOnPenalties } from '../src/game/career/penalties';
 import { planDomesticSuperCup } from '../src/game/career/domesticSuperCup';
 import { firstLegStakeLine, formatNextLine, nextMatchBriefing, sitOutRecapLine } from '../src/game/career/matchBriefing';
-import { canWinLeague, continentalAggregateLine, ensureInternationalGroup, fixtureTitle, hydrateSeason, internationalStageWhenSelected, leagueFixtureIsHome, liveMatchBoardLine, liveMatchScoreSeed, mulberry32, nextActionableFixture, nextPlayableFixture, pickDomesticCupOpponent, pickTitleRival, remainingPlayableCount, resolveFixture, shouldSimulateNationQualifier, shouldSkipFixture } from '../src/game/career/seasonSim';
+import { applyInternationalResult, canWinLeague, continentalAggregateLine, ensureInternationalGroup, fixtureTitle, hydrateSeason, internationalStageWhenSelected, leagueFixtureIsHome, liveMatchBoardLine, liveMatchScoreSeed, mulberry32, nextActionableFixture, nextPlayableFixture, pickDomesticCupOpponent, pickTitleRival, remainingPlayableCount, resolveFixture, shouldSimulateNationQualifier, shouldSkipFixture } from '../src/game/career/seasonSim';
 import { applyPlayerGroupResult, createGroupState, nationCanProgressKnockout, nationCanWinMajor, simulateNpcRoundAfterPlayerMatch } from '../src/game/career/internationalTable';
 import {
   applyTrialMatch,
@@ -2646,30 +2646,30 @@ if (barca && hilal && lafc) {
     console.error('Europa League and lower continental cups must be prioritised for a reserve');
     process.exitCode = 1;
   }
-  const arsenalCal = hydrateSeason({
+  const chelseaCal = hydrateSeason({
     seasonNumber: 2,
-    club: getClub('arsenal')!,
+    club: getClub('chelsea')!,
     careerGoalRatio: 0.6,
     nationId: 'england',
   });
   let europaSits = 0;
   let europaPlays = 0;
-  let arsenalLeagueSits = 0;
-  let arsenalCompleted = 0;
-  for (const fixture of arsenalCal.calendar.fixtures) {
-    if (shouldSkipFixture(fixture, arsenalCal.sim)) continue;
-    const sits = isSquadRotationSitOut('first-team', 'reserve', fixture.kind, arsenalCompleted, {
+  let chelseaLeagueSits = 0;
+  let chelseaCompleted = 0;
+  for (const fixture of chelseaCal.calendar.fixtures) {
+    if (shouldSkipFixture(fixture, chelseaCal.sim)) continue;
+    const sits = isSquadRotationSitOut('first-team', 'reserve', fixture.kind, chelseaCompleted, {
       continentalCup: fixture.continentalCup,
     });
     if (reservePrioritisesContinental(fixture.kind, fixture.continentalCup)) {
       if (sits) europaSits += 1;
       else europaPlays += 1;
     }
-    if (fixture.kind === 'league' && sits) arsenalLeagueSits += 1;
-    arsenalCompleted += 1;
+    if (fixture.kind === 'league' && sits) chelseaLeagueSits += 1;
+    chelseaCompleted += 1;
   }
-  console.log('arsenal reserve europa sit/play', europaSits, europaPlays, 'league sits', arsenalLeagueSits);
-  if (europaSits !== 0 || europaPlays < 4 || arsenalLeagueSits < 4) {
+  console.log('chelsea reserve europa sit/play', europaSits, europaPlays, 'league sits', chelseaLeagueSits);
+  if (europaSits !== 0 || europaPlays < 4 || chelseaLeagueSits < 4) {
     console.error('a Europa League reserve must play every European night and sit league games instead');
     process.exitCode = 1;
   }
@@ -4928,8 +4928,39 @@ if (madrid) {
     console.error('league-phase draw must return 8 unique opponents');
     process.exitCode = 1;
   }
-  if (phase.some((c) => c.id === 'wolves' || clubContinentalCup(c) === 'uecl')) {
+  if (phase.some((c) => c.id === 'wolves' || c.id === madrid.id)) {
     console.error('Champions League opponents must not include Conference League sides such as Wolves');
+    process.exitCode = 1;
+  }
+  const field = championsLeagueField(madrid.id);
+  if (field.length !== 36 || new Set(field).size !== 36 || !field.includes('bodo-glimt') || !field.includes('club-brugge')) {
+    console.error('the Champions League field must be the 36-club Swiss league');
+    process.exitCode = 1;
+  }
+  if (noCup.sim.europeanTable.length !== 36) {
+    console.error('the Champions League table must list all 36 clubs');
+    process.exitCode = 1;
+  }
+  if (phase.some((c) => c.country === madrid.country)) {
+    console.error('Champions League opponents must not come from the same country');
+    process.exitCode = 1;
+  }
+  const countryCounts = new Map<string, number>();
+  for (const opp of phase) {
+    countryCounts.set(opp.country, (countryCounts.get(opp.country) ?? 0) + 1);
+  }
+  if ([...countryCounts.values()].some((n) => n > 2)) {
+    console.error('a Champions League side may play at most two clubs from any other country');
+    process.exitCode = 1;
+  }
+  const pots = seedChampionsLeaguePots(field.map((id) => getClub(id)!).filter(Boolean), 'real-madrid');
+  if (pots.length !== 4 || pots.some((pot) => pot.length !== 9) || pots[0]?.[0]?.id !== 'real-madrid') {
+    console.error('Champions League pots must be four groups of nine with the titleholder first');
+    process.exitCode = 1;
+  }
+  const fromPots = pots.map((pot) => phase.filter((opp) => pot.some((c) => c.id === opp.id)).length);
+  if (fromPots.some((n) => n !== 2)) {
+    console.error('the league-phase draw must take two opponents from each pot');
     process.exitCode = 1;
   }
   const wcFinal = noCup.calendar.fixtures.find((f) => f.kind === 'international' && f.internationalRound === 'final');
@@ -7053,6 +7084,16 @@ console.log('\n--- Kits, cup nights, FA Cup semis, sun, World Cup copy, African 
   const portugal = nationKit('portugal');
   const argentina = nationKit('argentina');
   const brazil = nationKit('brazil');
+  const colombia = nationKit('colombia');
+  const peru = nationKit('peru');
+  if (colombia.shorts !== '#003893' || colombia.socks !== '#C8102E') {
+    console.error('Colombia must wear blue shorts and red socks');
+    process.exitCode = 1;
+  }
+  if (peru.primary !== '#FFFFFF' || peru.shorts !== '#FFFFFF' || peru.socks !== '#FFFFFF' || peru.sleeves !== '#D91023') {
+    console.error('Peru must wear all white with red sleeves');
+    process.exitCode = 1;
+  }
   console.log('portugal kit', portugal.primary, portugal.shorts, portugal.socks);
   console.log('argentina kit', argentina.pattern, argentina.shorts, argentina.socks);
   console.log('brazil kit', brazil.primary, brazil.shorts, brazil.socks);
@@ -7323,9 +7364,58 @@ console.log('\n--- Kits, cup nights, FA Cup semis, sun, World Cup copy, African 
     console.error('major-tournament win rules must allow top 5 freely and top 20 only with 3 knockout scores');
     process.exitCode = 1;
   }
-  if (nationCanProgressKnockout('france', false, 'round-of-16') !== true || nationCanProgressKnockout('belgium', false, 'quarter-final') !== false) {
-    console.error('only top-5 sides may progress early knockouts without a player goal');
+  if (nationCanProgressKnockout('france', false, 'round-of-16') !== true || nationCanProgressKnockout('belgium', false, 'quarter-final') !== true) {
+    console.error('a team win must carry any nation through knockout to the final');
     process.exitCode = 1;
+  }
+  if (nationCanProgressKnockout('belgium', false, 'final') !== false) {
+    console.error('the final still requires nationCanWinMajor / a player goal for non-top sides');
+    process.exitCode = 1;
+  }
+
+  {
+    const { sim: brazilSim } = hydrateSeason({
+      seasonNumber: 4,
+      club: getClub('real-madrid')!,
+      careerGoalRatio: 0.8,
+      nationId: 'brazil',
+    });
+    const afterSf = applyInternationalResult(
+      {
+        ...brazilSim,
+        internationalSelected: true,
+        internationalStage: 'semi-final',
+        internationalTournament: 'copa-america',
+      },
+      {
+        week: 44,
+        kind: 'international',
+        isDecisive: true,
+        internationalRound: 'semi-final',
+        opponentId: 'paraguay',
+        opponentLabel: 'Paraguay',
+      },
+      false,
+      'win',
+      1,
+      0,
+    );
+    if (afterSf.internationalStage !== 'final') {
+      console.error('Brazil winning a Copa semi-final 1–0 must play the final even with 0 player goals');
+      process.exitCode = 1;
+    }
+    const { calendar: brazilCal } = hydrateSeason({
+      seasonNumber: 4,
+      club: getClub('real-madrid')!,
+      careerGoalRatio: 0.8,
+      nationId: 'brazil',
+    });
+    const sfIndex = brazilCal.fixtures.findIndex((f) => f.kind === 'international' && f.internationalRound === 'semi-final');
+    const nextFinal = nextPlayableFixture(brazilCal, { ...afterSf, fixtureIndex: Math.max(0, sfIndex + 1) });
+    if (nextFinal?.internationalRound !== 'final') {
+      console.error('hub next-match must offer the Copa final after a winning semi');
+      process.exitCode = 1;
+    }
   }
 
   const nlSpain = hydrateSeason({ seasonNumber: 3, club: getClub('real-madrid')!, careerGoalRatio: 0.8, nationId: 'spain' });

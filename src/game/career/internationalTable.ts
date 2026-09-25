@@ -243,14 +243,12 @@ export function nationCanWinMajor(nationId: string, knockoutGamesScored: number)
   return false;
 }
 
-/** Progress a knockout without a player goal only for the very top sides in early rounds. */
+/** A team win carries any nation through knockout. The final still uses `nationCanWinMajor`. */
 export function nationCanProgressKnockout(
-  nationId: string,
+  _nationId: string,
   playerScored: boolean,
   round: string,
 ): boolean {
   if (playerScored) return true;
-  const rank = fifaRank(nationId);
-  if (rank <= 5 && (round === 'round-of-32' || round === 'round-of-16')) return true;
-  return false;
+  return round !== 'final';
 }
