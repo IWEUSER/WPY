@@ -159,7 +159,27 @@ export function placeDefender(
   return { worldX, z, coverSide, duty: 'press', stride: 0, skinTone: look.skin, hairColor: look.hair };
 }
 
-/** Stand almost on the shooting line so the ball comes across at their head. */
+/** In-box start so a header comes across, not in from the touchline. */
+export const HEADER_SPAWN_LEFT_MIN = 0.26;
+export const HEADER_SPAWN_LEFT_MAX = 0.34;
+export const HEADER_SPAWN_RIGHT_MIN = 0.66;
+export const HEADER_SPAWN_RIGHT_MAX = 0.74;
+/** Some headers are unmarked — the defender is not glued to the shooter. */
+export const HEADER_DEFENDER_CHANCE = 0.55;
+
+/** Spawn inside the box on one flank, never hugging the side. */
+export function headerStartXRatio(rng: () => number = Math.random): number {
+  const left = rng() < 0.5;
+  if (left) {
+    return HEADER_SPAWN_LEFT_MIN + rng() * (HEADER_SPAWN_LEFT_MAX - HEADER_SPAWN_LEFT_MIN);
+  }
+  return HEADER_SPAWN_RIGHT_MIN + rng() * (HEADER_SPAWN_RIGHT_MAX - HEADER_SPAWN_RIGHT_MIN);
+}
+
+/**
+ * Stand on the flank the ball is coming from, well off the shooting line,
+ * so they do not immediately screen the goal.
+ */
 export function placeHeaderDefender(
   shotDistanceM: number,
   ballStartXRatio: number,
@@ -167,19 +187,19 @@ export function placeHeaderDefender(
   palette: SkinPalette = 'any',
 ): DefenderPose {
   const ballWorldX = ballWorldXFromRatio(ballStartXRatio);
-  const coverSide: -1 | 1 = rng() < 0.5 ? -1 : 1;
-  const z = clamp(shotDistanceM - 0.82, 1.7, shotDistanceM - 0.52);
-  const offset = 0.22 + rng() * 0.28;
-  const worldX = clamp(lineToGoalCentreX(ballWorldX, shotDistanceM, z) + coverSide * offset, -3.2, 3.2);
+  const incomingSide: -1 | 1 = ballWorldX >= 0 ? 1 : -1;
+  const z = clamp(shotDistanceM * 0.44, 2.05, Math.max(2.05, shotDistanceM - 1.55));
+  const offset = 1.85 + rng() * 0.9;
+  const worldX = clamp(ballWorldX + incomingSide * offset, -5.8, 5.8);
   const look = pickPlayerLook(rng() * 1_000_000, palette);
-  return { worldX, z, coverSide, duty: 'press', stride: 0, skinTone: look.skin, hairColor: look.hair };
+  return { worldX, z, coverSide: incomingSide, duty: 'press', stride: 0, skinTone: look.skin, hairColor: look.hair };
 }
 
 export interface DefenderCloseOpts {
   duty?: DefenderDuty;
   /** Two-defender looks hold their lanes instead of collapsing onto the shooting line. */
   paired?: boolean;
-  /** Header: stay on the shooting line so the ball meets their head. */
+  /** Header: hold the incoming flank instead of collapsing onto the shooting line. */
   header?: boolean;
 }
 
@@ -194,14 +214,17 @@ export function defenderCloseTarget(
   const near = !canKeepTenYardGap(shotDistanceM);
   const paired = Boolean(opts?.paired || opts?.duty === 'cover');
   const duty: DefenderDuty = opts?.duty ?? 'press';
-  const pressStop = opts?.header
-    ? 0.7
-    : near ? DEFENDER_CLOSE_STOP_GAP_NEAR_M : DEFENDER_CLOSE_STOP_GAP_M;
+  const pressStop = near ? DEFENDER_CLOSE_STOP_GAP_NEAR_M : DEFENDER_CLOSE_STOP_GAP_M;
   const pressZ = clamp(shotDistanceM - pressStop, 1.35, shotDistanceM - 0.9);
   const farPostX = (FIFA.goalWidth / 2) * coverSide * 0.9;
+  if (opts?.header) {
+    const incoming: -1 | 1 = ballWorldX >= 0 ? 1 : -1;
+    const z = clamp(shotDistanceM - 1.55, 1.85, shotDistanceM - 1.15);
+    return { worldX: clamp(ballWorldX + incoming * 1.75, -5.8, 5.8), z };
+  }
   if (!paired) {
     const lineX = lineToGoalCentreX(ballWorldX, shotDistanceM, pressZ);
-    const offset = opts?.header ? 0.24 : near ? 0.72 : 0.16;
+    const offset = near ? 0.72 : 0.16;
     return { worldX: clamp(lineX + coverSide * offset, -7.5, 7.5), z: pressZ };
   }
   if (duty === 'cover') {
@@ -495,9 +518,11 @@ export function rollChanceSetup(options: RollChanceOptions = {}): ChanceSetup {
   if (wantCross) {
     const left = rng() < 0.5;
     const distanceM = FIFA.sixYardDepth + rng() * 4.2;
-    const ballStartXRatio = left ? 0.08 + rng() * 0.12 : 0.80 + rng() * 0.12;
     const flight = pickBallFlight(distanceM, options.forceFlight, rng);
-    const first = options.disableDefender
+    const ballStartXRatio = flight === 'header'
+      ? headerStartXRatio(rng)
+      : left ? 0.08 + rng() * 0.12 : 0.80 + rng() * 0.12;
+    const first = options.disableDefender || (flight === 'header' && rng() >= HEADER_DEFENDER_CHANCE)
       ? null
       : flight === 'header'
         ? placeHeaderDefender(distanceM, ballStartXRatio, rng, options.skinPalette ?? 'any')
@@ -514,14 +539,14 @@ export function rollChanceSetup(options: RollChanceOptions = {}): ChanceSetup {
   }
 
   const distanceM = options.forceDistanceM ?? randomShotDistanceM(rng);
-  const ballStartXRatio = randomBallStartXRatio(rng);
   const flight = pickBallFlight(distanceM, options.forceFlight, rng);
+  const ballStartXRatio = flight === 'header' ? headerStartXRatio(rng) : randomBallStartXRatio(rng);
   const wantCover = Boolean(
     !options.disableDefender
     && flight !== 'header'
     && (options.forceDualDefenders || opponentStrength >= ELITE_DUAL_DEFENDER_STRENGTH),
   );
-  const first = options.disableDefender
+  const first = options.disableDefender || (flight === 'header' && rng() >= HEADER_DEFENDER_CHANCE)
     ? null
     : flight === 'header'
       ? placeHeaderDefender(distanceM, ballStartXRatio, rng, options.skinPalette ?? 'any')

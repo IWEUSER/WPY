@@ -587,3 +587,28 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
     groundBounce: Boolean(groundBounce),
   };
 }
+
+/** Header that drifted off the far side of the box — the chance is gone. */
+export function outOfPlayResult(): ShotResult {
+  return {
+    outcome: 'wide',
+    aim: { x: 1.35, y: 0.32 },
+    intendedAim: { x: 1.35, y: 0.32 },
+    power: 0,
+    curl: 0,
+    travelTimeMs: 280,
+    keeperDive: {
+      target: { x: 0, y: 0.2 },
+      hand: { x: 0, y: 0.2 },
+      reactionMs: 0,
+      diveDurationMs: 200,
+      reach: 0,
+      direction: 0,
+      stretch: 0,
+      layout: 0,
+      elevation: 0,
+    },
+    saveMargin: 0,
+    outOfPlay: true,
+  };
+}

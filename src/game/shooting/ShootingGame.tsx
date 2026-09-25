@@ -13,7 +13,7 @@ import {
   type ChanceStake,
 } from './chanceAtmosphere';
 import { MAX_ARC_ALONG_PATH, MAX_BEND_RATIO, MIN_ARC_ALONG_PATH, DEFAULT_DIFFICULTY } from './constants';
-import { cellCenter, computeKeeperDive, computeSwipeCurl, isValidSwipe, resolveShot } from './shotEngine';
+import { cellCenter, computeKeeperDive, computeSwipeCurl, isValidSwipe, outOfPlayResult, resolveShot } from './shotEngine';
 import {
   BALL_SCREEN_Y,
   ballRadiusAtGoal,
@@ -65,6 +65,8 @@ import {
   chanceBallTravels,
   bouncePeriodS,
   flightBounces,
+  headerRanOutOfPlay,
+  headerTravelBounds,
   idleBallHeightRatio,
   KNOCK_SLIDE_MS,
   pickBallTravelDir,
@@ -577,7 +579,7 @@ export default function ShootingGame({
     shakeMagnitude: 0,
     shakeUntilMs: 0,
     ballStartXRatio: initialChance.ballStartXRatio,
-    ballTravelDir: pickBallTravelDir(initialChance.ballStartXRatio),
+    ballTravelDir: pickBallTravelDir(initialChance.ballStartXRatio, Math.random, initialChance.flight),
     ballTravelActive: chanceBallTravels(initialChance.kind) && !readDevTravelOff(),
     knockFromX: initialChance.ballStartXRatio,
     knockToX: initialChance.ballStartXRatio,
@@ -727,7 +729,7 @@ export default function ShootingGame({
     anim.dragPoints = [];
     anim.result = null;
     anim.ballStartXRatio = chance.ballStartXRatio;
-    anim.ballTravelDir = pickBallTravelDir(chance.ballStartXRatio);
+    anim.ballTravelDir = pickBallTravelDir(chance.ballStartXRatio, Math.random, chance.flight);
     anim.ballTravelActive = chanceBallTravels(chance.kind) && !readDevTravelOff();
     anim.knockFromX = chance.ballStartXRatio;
     anim.knockToX = chance.ballStartXRatio;
@@ -906,12 +908,25 @@ export default function ShootingGame({
               anim.ballStartXRatio = anim.knockFromX + (anim.knockToX - anim.knockFromX) * eased;
               anim.ballRotation += anim.ballTravelDir * dt * 16;
             } else {
+              const header = anim.ballFlight === 'header';
+              const bounds = header ? headerTravelBounds() : undefined;
               const rolled = advanceBallTravel(anim.ballStartXRatio, anim.ballTravelDir, dt, {
                 speed: anim.travelSpeed,
+                bounce: !header,
+                minX: bounds?.minX,
+                maxX: bounds?.maxX,
               });
               anim.ballStartXRatio = rolled.xRatio;
               anim.ballTravelDir = rolled.direction;
               anim.ballRotation += rolled.direction * dt * 9;
+              if (header && headerRanOutOfPlay(rolled.xRatio, rolled.direction)) {
+                anim.ballTravelActive = false;
+                const lost = outOfPlayResult();
+                anim.result = lost;
+                anim.phase = 'result';
+                anim.resultAtMs = now;
+                finishShot(lost);
+              }
             }
           }
           if (hintRef.current) {
@@ -1191,7 +1206,7 @@ export default function ShootingGame({
       anim.dragStart = null;
       anim.dragPoints = [];
 
-      if (anim.ballTravelActive && swipeIsHorizontalKnock(dx, dy)) {
+      if (anim.ballTravelActive && anim.ballFlight !== 'header' && swipeIsHorizontalKnock(dx, dy)) {
         const knock = applyHorizontalKnock(anim.ballStartXRatio, dx, durationMs);
         anim.knockFromX = anim.ballStartXRatio;
         anim.knockToX = knock.xRatio;
@@ -1319,7 +1334,7 @@ export default function ShootingGame({
               {chanceKind === 'penalty'
                 ? 'Swipe up on the ball to shoot ⬆'
                 : ballFlight === 'header'
-                  ? 'Header — meet it at the head'
+                  ? 'Header — one swipe as it comes across'
                   : ballFlight === 'volley'
                     ? 'High bounce — volley it'
                     : chanceKind === 'cross'

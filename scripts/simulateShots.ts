@@ -48,6 +48,11 @@ import {
   pickBallFlight,
   placeDefender,
   placeHeaderDefender,
+  headerStartXRatio,
+  HEADER_SPAWN_LEFT_MIN,
+  HEADER_SPAWN_LEFT_MAX,
+  HEADER_SPAWN_RIGHT_MIN,
+  HEADER_SPAWN_RIGHT_MAX,
   rollChanceSetup,
   shotLineHitsDefender,
 } from '../src/game/shooting/chanceSetup';
@@ -88,6 +93,10 @@ import {
   chanceBallTravels,
   knockForceFromSwipe,
   pickBallTravelDir,
+  headerTravelDir,
+  headerRanOutOfPlay,
+  HEADER_TRAVEL_MIN_X,
+  HEADER_TRAVEL_MAX_X,
   swipeIsHorizontalKnock,
   takeQualityFromXRatio,
   underSwipeLift,
@@ -1163,8 +1172,8 @@ if (!isAerialFlight('volley') || isAerialFlight('roll')) {
 }
 const headerDist = FIFA.sixYardDepth + 0.35;
 const headerView = createPitchView(390, 844, headerDist);
-const headerDef = placeHeaderDefender(headerDist, 0.5, () => 0.3);
-const openDef = placeDefender(headerDist, 0.5, () => 0.3);
+const headerFromLeft = 0.28;
+const headerDef = placeHeaderDefender(headerDist, headerFromLeft, () => 0.3);
 const headerLift = headerBallLiftRatio(headerView, headerDef);
 const headY = defenderHeadScreenY(headerView, headerDef);
 const ballY = BALL_SCREEN_Y * 844 - headerLift * 844;
@@ -1172,8 +1181,45 @@ if (Math.abs(ballY - headY) > 6) {
   console.error('FAIL: a header must sit on the defender’s head');
   process.exitCode = 1;
 }
-if (defenderDistanceFromBallM(headerDef, headerDist, 0.5) >= defenderDistanceFromBallM(openDef, headerDist, 0.5) - 0.15) {
-  console.error('FAIL: the header defender must stand closer to the ball');
+const headerBallX = ballWorldXFromRatio(headerFromLeft);
+if (Math.sign(headerDef.worldX) !== Math.sign(headerBallX) && headerBallX !== 0) {
+  console.error('FAIL: the header defender must stand on the side the ball comes from');
+  process.exitCode = 1;
+}
+if (defenderOffsetFromShootingLineM(headerDef, headerDist, headerFromLeft) < 1.4) {
+  console.error('FAIL: the header defender must stay off the shooting line');
+  process.exitCode = 1;
+}
+const headerSpawns = Array.from({ length: 24 }, (_, i) => headerStartXRatio(() => (i % 8) / 8));
+if (headerSpawns.some((x) => x < HEADER_SPAWN_LEFT_MIN - 1e-6 || (x > HEADER_SPAWN_LEFT_MAX + 1e-6 && x < HEADER_SPAWN_RIGHT_MIN - 1e-6) || x > HEADER_SPAWN_RIGHT_MAX + 1e-6)) {
+  console.error('FAIL: headers must spawn in the box, not on the touchline');
+  process.exitCode = 1;
+}
+if (headerTravelDir(0.28) !== 1 || headerTravelDir(0.72) !== -1) {
+  console.error('FAIL: a header must travel toward the far side of the box');
+  process.exitCode = 1;
+}
+const drifted = advanceBallTravel(HEADER_TRAVEL_MAX_X - 0.01, 1, 0.2, {
+  bounce: false,
+  speed: 0.8,
+  minX: HEADER_TRAVEL_MIN_X,
+  maxX: HEADER_TRAVEL_MAX_X,
+});
+if (!headerRanOutOfPlay(drifted.xRatio, drifted.direction) || drifted.xRatio < HEADER_TRAVEL_MAX_X - 1e-6) {
+  console.error('FAIL: a header that runs off the far side must be lost');
+  process.exitCode = 1;
+}
+const headerLooks = Array.from({ length: 40 }, (_, i) => rollChanceSetup({
+  forceFlight: 'header',
+  forceDistanceM: headerDist,
+  rng: () => (i * 17 + 3) % 100 / 100,
+}));
+if (headerLooks.every((look) => look.defender) || headerLooks.every((look) => !look.defender)) {
+  console.error('FAIL: headers must sometimes be unmarked');
+  process.exitCode = 1;
+}
+if (headerLooks.some((look) => look.ballStartXRatio < HEADER_SPAWN_LEFT_MIN || (look.ballStartXRatio > HEADER_SPAWN_LEFT_MAX && look.ballStartXRatio < HEADER_SPAWN_RIGHT_MIN) || look.ballStartXRatio > HEADER_SPAWN_RIGHT_MAX)) {
+  console.error('FAIL: rolled headers must stay inside the box');
   process.exitCode = 1;
 }
 const keptPace = applyHorizontalKnock(0.5, 80, 160);
@@ -1183,7 +1229,7 @@ if (keptPace.direction !== 1 || Math.abs(keptPace.delta) < 0.04) {
 }
 const fastCross = pickBallTravelSpeed('cross', 'volley', 94, () => 0.95);
 const slowRoll = pickBallTravelSpeed('open', 'roll', 52, () => 0.05);
-console.log(`speed spectrum cross=${fastCross.toFixed(2)} roll=${slowRoll.toFixed(2)} cap=${CROSS_TRAVEL_SPEED} headerGap=${defenderDistanceFromBallM(headerDef, headerDist, 0.5).toFixed(2)}`);
+console.log(`speed spectrum cross=${fastCross.toFixed(2)} roll=${slowRoll.toFixed(2)} cap=${CROSS_TRAVEL_SPEED} headerGap=${defenderDistanceFromBallM(headerDef, headerDist, headerFromLeft).toFixed(2)}`);
 if (fastCross < 1.05 || slowRoll > 0.28 || CROSS_TRAVEL_SPEED < 1.2) {
   console.error('FAIL: crosses must be faster than before and sit on a wider speed spectrum');
   process.exitCode = 1;

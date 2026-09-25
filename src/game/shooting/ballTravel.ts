@@ -4,6 +4,9 @@ import { BALL_SPAWN_X_MARGIN } from './render';
 /** How far the rolling ball stays in from each canvas edge. */
 export const BALL_TRAVEL_MIN_X = BALL_SPAWN_X_MARGIN + 0.04;
 export const BALL_TRAVEL_MAX_X = 1 - BALL_TRAVEL_MIN_X;
+/** Header sweep stays inside the box — running to the touchline loses the chance. */
+export const HEADER_TRAVEL_MIN_X = 0.22;
+export const HEADER_TRAVEL_MAX_X = 1 - HEADER_TRAVEL_MIN_X;
 
 /** Screen-width fraction the ball covers per second on a typical roll. */
 export const BALL_TRAVEL_SPEED = 0.22;
@@ -98,7 +101,27 @@ export function underSwipeLift(
   return raw * (0.55 + (1 - bounceHeight) * 0.45);
 }
 
-export function pickBallTravelDir(xRatio: number, rng: () => number = Math.random): BallTravelDir {
+/** A header always travels toward the far side of the box. */
+export function headerTravelDir(xRatio: number): BallTravelDir {
+  return xRatio < 0.5 ? 1 : -1;
+}
+
+export function headerTravelBounds(): { minX: number; maxX: number } {
+  return { minX: HEADER_TRAVEL_MIN_X, maxX: HEADER_TRAVEL_MAX_X };
+}
+
+/** True once a header has drifted off the far side of the box. */
+export function headerRanOutOfPlay(xRatio: number, direction: BallTravelDir): boolean {
+  if (direction > 0) return xRatio >= HEADER_TRAVEL_MAX_X - 1e-6;
+  return xRatio <= HEADER_TRAVEL_MIN_X + 1e-6;
+}
+
+export function pickBallTravelDir(
+  xRatio: number,
+  rng: () => number = Math.random,
+  flight?: BallFlight | null,
+): BallTravelDir {
+  if (flight === 'header') return headerTravelDir(xRatio);
   if (xRatio <= BALL_TRAVEL_MIN_X + 0.02) return 1;
   if (xRatio >= BALL_TRAVEL_MAX_X - 0.02) return -1;
   return rng() < 0.5 ? 1 : -1;
