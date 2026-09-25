@@ -78,7 +78,7 @@ export function recordBeat(highlight: SeasonLegacyHighlight, playerName: string)
     eyebrow: highlight.kind === 'season' ? 'Season record' : 'All-time record',
     headline: `${playerName} — ${highlight.rankLabel}`,
     copy: `${highlight.title}. ${highlight.subtitle}. A line on the board that used to belong to someone else.`,
-    portrait: 'both',
+    portrait: highlight.domain === 'nation' ? 'nation' : 'club',
   };
 }
 

@@ -69,8 +69,9 @@ import {
   chanceBallTravels,
   bouncePeriodS,
   flightBounces,
+  headerLiftAtProgress,
   headerRanOutOfPlay,
-  headerTravelBounds,
+  headerTravelBoundsForView,
   idleBallHeightRatio,
   KNOCK_SLIDE_MS,
   pickBallTravelDir,
@@ -125,10 +126,31 @@ interface AnimState {
   introUntilMs: number;
   resultHoldMs: number;
   bounceElapsedS: number;
+  headerStartXRatio: number;
+  headerPeakLift: number;
+  headerFloorLift: number;
+  headerLandingXRatio: number;
 }
 
 const SHAKE_DURATION_MS = 280;
 const MAX_DRAG_POINTS = 400;
+
+function headerLiftFromAnim(
+  anim: Pick<AnimState, 'ballFlight' | 'ballStartXRatio' | 'headerStartXRatio' | 'headerLandingXRatio' | 'headerPeakLift' | 'headerFloorLift' | 'defender' | 'defenders'>,
+  view: ReturnType<typeof createPitchView>,
+): number | undefined {
+  if (anim.ballFlight !== 'header') return undefined;
+  if (anim.headerPeakLift > 0) {
+    return headerLiftAtProgress(
+      anim.ballStartXRatio,
+      anim.headerStartXRatio,
+      anim.headerLandingXRatio,
+      anim.headerPeakLift,
+      anim.headerFloorLift,
+    );
+  }
+  return headerBallLiftRatio(view, anim.defender ?? anim.defenders[0] ?? null);
+}
 
 const SHOT_STYLE_LABEL: Record<ShotStyle, string> = {
   poke: 'Poke',
@@ -608,6 +630,10 @@ export default function ShootingGame({
     introUntilMs: 0,
     resultHoldMs: 1600,
     bounceElapsedS: Math.random() * BALL_BOUNCE_PERIOD_S,
+    headerStartXRatio: initialChance.ballStartXRatio,
+    headerPeakLift: initialChance.headerPeakLift ?? 0,
+    headerFloorLift: initialChance.headerFloorLift ?? 0,
+    headerLandingXRatio: initialChance.headerLandingXRatio ?? initialChance.ballStartXRatio,
   });
 
   const effectiveStake = useCallback((kind: ChanceKind): ChanceStake => {
@@ -764,6 +790,10 @@ export default function ShootingGame({
     anim.shakeMagnitude = 0;
     anim.shakeUntilMs = 0;
     anim.bounceElapsedS = Math.random() * BALL_BOUNCE_PERIOD_S;
+    anim.headerStartXRatio = chance.ballStartXRatio;
+    anim.headerPeakLift = chance.headerPeakLift ?? 0;
+    anim.headerFloorLift = chance.headerFloorLift ?? 0;
+    anim.headerLandingXRatio = chance.headerLandingXRatio ?? chance.ballStartXRatio;
     setBallHintX(chance.ballStartXRatio);
     setChanceKind(chance.kind);
     setBallFlight(chance.flight ?? 'roll');
@@ -932,7 +962,7 @@ export default function ShootingGame({
               anim.ballRotation += anim.ballTravelDir * dt * 16;
             } else {
               const header = anim.ballFlight === 'header';
-              const bounds = header ? headerTravelBounds() : undefined;
+              const bounds = header ? headerTravelBoundsForView(view) : undefined;
               const rolled = advanceBallTravel(anim.ballStartXRatio, anim.ballTravelDir, dt, {
                 speed: anim.travelSpeed,
                 bounce: !header,
@@ -942,7 +972,7 @@ export default function ShootingGame({
               anim.ballStartXRatio = rolled.xRatio;
               anim.ballTravelDir = rolled.direction;
               anim.ballRotation += rolled.direction * dt * 9;
-              if (header && headerRanOutOfPlay(rolled.xRatio, rolled.direction)) {
+              if (header && headerRanOutOfPlay(rolled.xRatio, rolled.direction, bounds)) {
                 anim.ballTravelActive = false;
                 const lost = outOfPlayResult();
                 anim.result = lost;
@@ -967,6 +997,7 @@ export default function ShootingGame({
                 opponentStrengthRef.current ?? 70,
                 paired,
                 anim.ballFlight === 'header',
+                anim.headerLandingXRatio,
               ),
             );
             anim.defender = anim.defenders[0] ?? null;
@@ -980,9 +1011,7 @@ export default function ShootingGame({
             flightBounces(anim.ballFlight)
               ? ballBounceLift(anim.bounceElapsedS, bouncePeriodS(anim.ballFlight))
               : 0,
-            anim.ballFlight === 'header'
-              ? headerBallLiftRatio(view, anim.defender ?? anim.defenders[0] ?? null)
-              : undefined,
+            headerLiftFromAnim(anim, view),
           );
           anim.ballPixel = { x: start.x, y: start.y - liftRatio * h };
           anim.ballRadius = ballRadiusNear(view);
@@ -1016,9 +1045,7 @@ export default function ShootingGame({
             flightBounces(anim.ballFlight)
               ? ballBounceLift(anim.bounceElapsedS, bouncePeriodS(anim.ballFlight))
               : 0,
-            anim.ballFlight === 'header'
-              ? headerBallLiftRatio(view, anim.defender ?? anim.defenders[0] ?? null)
-              : undefined,
+            headerLiftFromAnim(anim, view),
           );
           const start = { x: grounded.x, y: grounded.y - startLift * h };
           // The ball always flies to where it truly ends up - never redirect
@@ -1194,9 +1221,7 @@ export default function ShootingGame({
         flightBounces(anim.ballFlight)
           ? ballBounceLift(anim.bounceElapsedS, bouncePeriodS(anim.ballFlight))
           : 0,
-        anim.ballFlight === 'header'
-          ? headerBallLiftRatio(view, anim.defender ?? anim.defenders[0] ?? null)
-          : undefined,
+        headerLiftFromAnim(anim, view),
       );
       const ball = { x: grounded.x, y: grounded.y - liftRatio * h };
       const gesture: SwipeGesture = {
@@ -1220,7 +1245,7 @@ export default function ShootingGame({
           : liftRatio,
         ballFlight: anim.ballFlight,
         contactHeight: anim.ballFlight === 'header'
-          ? 0.95
+          ? Math.min(0.98, Math.max(0.52, 0.42 + liftRatio * 1.55))
           : anim.ballFlight === 'volley'
             ? 0.38 + liftRatio * 2.2
             : liftRatio > 0 ? 0.35 : 0,

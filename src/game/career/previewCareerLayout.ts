@@ -1436,6 +1436,8 @@ export function applyCareerLayoutPreview(): void {
                 rank: 1,
                 playerGoals: 38,
                 kind: 'season',
+                domain: 'club',
+                group: 'league',
               }, 'Alex Rivera')]
               : preview === 'beat-award'
                 ? [awardBeat('League top goalscorer', 'Alex Rivera', 'Won the La Liga golden boot with 24 league goals.')]

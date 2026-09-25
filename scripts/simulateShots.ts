@@ -18,8 +18,6 @@ import {
   randomBallStartXRatio,
   randomShotDistanceM,
   worldToScreen,
-  defenderHeadScreenY,
-  headerBallLiftRatio,
   PLAYER_SKIN_TONES,
   type KeeperPose,
 } from '../src/game/shooting/render';
@@ -95,8 +93,9 @@ import {
   pickBallTravelDir,
   headerTravelDir,
   headerRanOutOfPlay,
-  HEADER_TRAVEL_MIN_X,
-  HEADER_TRAVEL_MAX_X,
+  headerTravelBoundsForView,
+  headerLiftAtProgress,
+  HEADER_PAST_POST,
   swipeIsHorizontalKnock,
   takeQualityFromXRatio,
   underSwipeLift,
@@ -1173,20 +1172,14 @@ if (!isAerialFlight('volley') || isAerialFlight('roll')) {
 const headerDist = FIFA.sixYardDepth + 0.35;
 const headerView = createPitchView(390, 844, headerDist);
 const headerFromLeft = 0.28;
-const headerDef = placeHeaderDefender(headerDist, headerFromLeft, () => 0.3);
-const headerLift = headerBallLiftRatio(headerView, headerDef);
-const headY = defenderHeadScreenY(headerView, headerDef);
-const ballY = BALL_SCREEN_Y * 844 - headerLift * 844;
-if (Math.abs(ballY - headY) > 6) {
-  console.error('FAIL: a header must sit on the defender’s head');
+const headerLanding = 0.68;
+const headerDef = placeHeaderDefender(headerDist, headerFromLeft, () => 0.3, 'any', headerLanding);
+const headerLandX = ballWorldXFromRatio(headerLanding);
+if (Math.abs(headerDef.worldX - headerLandX) > 1.2) {
+  console.error('FAIL: the header defender must stand toward where the ball will land');
   process.exitCode = 1;
 }
-const headerBallX = ballWorldXFromRatio(headerFromLeft);
-if (Math.sign(headerDef.worldX) !== Math.sign(headerBallX) && headerBallX !== 0) {
-  console.error('FAIL: the header defender must stand on the side the ball comes from');
-  process.exitCode = 1;
-}
-if (defenderOffsetFromShootingLineM(headerDef, headerDist, headerFromLeft) < 1.4) {
+if (defenderOffsetFromShootingLineM(headerDef, headerDist, headerFromLeft) < 0.35) {
   console.error('FAIL: the header defender must stay off the shooting line');
   process.exitCode = 1;
 }
@@ -1199,14 +1192,57 @@ if (headerTravelDir(0.28) !== 1 || headerTravelDir(0.72) !== -1) {
   console.error('FAIL: a header must travel toward the far side of the box');
   process.exitCode = 1;
 }
-const drifted = advanceBallTravel(HEADER_TRAVEL_MAX_X - 0.01, 1, 0.2, {
+const headerBounds = headerTravelBoundsForView(headerView);
+const rightPost = 0.5 + headerView.goal.halfW / headerView.w;
+if (headerBounds.maxX <= rightPost + HEADER_PAST_POST - 1e-6) {
+  console.error('FAIL: a header must travel past the post before it is out of play');
+  process.exitCode = 1;
+}
+if (headerRanOutOfPlay(rightPost, 1, headerBounds)) {
+  console.error('FAIL: a header still at the post must stay in play');
+  process.exitCode = 1;
+}
+const drifted = advanceBallTravel(headerBounds.maxX - 0.01, 1, 0.2, {
   bounce: false,
   speed: 0.8,
-  minX: HEADER_TRAVEL_MIN_X,
-  maxX: HEADER_TRAVEL_MAX_X,
+  minX: headerBounds.minX,
+  maxX: headerBounds.maxX,
 });
-if (!headerRanOutOfPlay(drifted.xRatio, drifted.direction) || drifted.xRatio < HEADER_TRAVEL_MAX_X - 1e-6) {
-  console.error('FAIL: a header that runs off the far side must be lost');
+if (!headerRanOutOfPlay(drifted.xRatio, drifted.direction, headerBounds) || drifted.xRatio < headerBounds.maxX - 1e-6) {
+  console.error('FAIL: a header that runs past the far post must be lost');
+  process.exitCode = 1;
+}
+const dropLook = rollChanceSetup({
+  forceFlight: 'header',
+  forceDistanceM: headerDist,
+  rng: () => 0.3,
+});
+if (
+  !dropLook.headerPeakLift
+  || !dropLook.headerFloorLift
+  || dropLook.headerPeakLift <= dropLook.headerFloorLift
+  || dropLook.headerLandingXRatio == null
+  || Math.sign(dropLook.headerLandingXRatio - dropLook.ballStartXRatio) !== headerTravelDir(dropLook.ballStartXRatio)
+) {
+  console.error('FAIL: headers must drop from a higher peak toward a far-side landing');
+  process.exitCode = 1;
+}
+const startLift = headerLiftAtProgress(
+  dropLook.ballStartXRatio,
+  dropLook.ballStartXRatio,
+  dropLook.headerLandingXRatio,
+  dropLook.headerPeakLift,
+  dropLook.headerFloorLift,
+);
+const landLift = headerLiftAtProgress(
+  dropLook.headerLandingXRatio,
+  dropLook.ballStartXRatio,
+  dropLook.headerLandingXRatio,
+  dropLook.headerPeakLift,
+  dropLook.headerFloorLift,
+);
+if (Math.abs(startLift - dropLook.headerPeakLift) > 0.01 || Math.abs(landLift - dropLook.headerFloorLift) > 0.01 || startLift <= landLift) {
+  console.error('FAIL: a header must start high and fall toward the landing spot');
   process.exitCode = 1;
 }
 const headerLooks = Array.from({ length: 40 }, (_, i) => rollChanceSetup({

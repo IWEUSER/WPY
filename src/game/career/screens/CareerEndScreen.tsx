@@ -6,6 +6,7 @@ import { aggregateContinental, aggregateDomesticSplit, careerTransferFeesPaid, s
 import { useCareerStore } from '../store';
 import type { SeasonRecord } from '../types';
 import { DATA_CARD, DATA_TILE } from './dataUi';
+import { SeasonHonoursLines } from './HonoursPills';
 import { ClubCompetitionTable, InternationalSeasonBlock } from './StatsTable';
 
 export default function CareerEndScreen() {
@@ -116,6 +117,7 @@ function SeasonCard({ season }: { season: SeasonRecord }) {
         split={seasonDomesticSplit(season)}
         continental={season.continentalStats ?? []}
       />
+      <SeasonHonoursLines season={season} />
       {season.international && formatInternationalSeason(season.international) && (
         <div className="mt-2">
           <InternationalSeasonBlock

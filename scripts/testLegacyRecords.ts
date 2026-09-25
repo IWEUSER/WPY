@@ -12,6 +12,7 @@ import {
   participatedLegacyBoards,
   playerGoalsForBoard,
   rankForGoals,
+  recordColorKind,
   revealForRank,
   seasonLegacyHighlights,
   seasonOutrightRecordHighlights,
@@ -21,6 +22,8 @@ import {
 import type { SeasonRecord } from '../src/game/career/types';
 import { emptyCompetitionRecord, type NationalTeamState } from '../src/game/career/international';
 import { createAvailability } from '../src/game/career/availabilityEngine';
+import { recordBeat } from '../src/game/career/careerBeat';
+import { seasonTrophyList } from '../src/game/career/honoursDisplay';
 
 const BANNED = [
   'messi',
@@ -264,10 +267,48 @@ const withUcl: LegacyCareerInput = {
 };
 assert(
   participatedLegacyBoards(withUcl).some(
-    (def) => def.id === 'continental:season:ucl' && def.subtitle === 'Single-season Champions League goals',
+    (def) => def.id === 'club-tournament:season:arsenal' && def.subtitle === 'Single-season Champions League goals',
   ),
-  'continental season records must name the tournament',
+  'club UCL season records live on the club-tournament board',
 );
+assert(
+  !participatedLegacyBoards(withUcl).some((def) => def.id === 'continental:season:ucl'),
+  'generic single-season UCL must not duplicate the club board',
+);
+assert(
+  participatedLegacyBoards(withUcl).some((def) => def.id === 'continental:career:ucl'),
+  'all-time Champions League career board still exists',
+);
+
+const madridSeason = season({
+  clubId: 'real-madrid',
+  league: 'La Liga',
+  leagueGoals: 20,
+  leagueGames: 30,
+  cupGames: 8,
+  cupGoals: 10,
+  continentalStats: [{ cup: 'ucl', games: 13, goals: 24 }],
+});
+const madridInput: LegacyCareerInput = { seasons: [madridSeason], nationalTeam: null };
+const madridClubUcl = {
+  id: 'club-tournament:season:real-madrid',
+  domain: 'club' as const,
+  span: 'season' as const,
+  title: 'Real Madrid',
+  subtitle: 'Single-season Champions League goals',
+  group: 'continental' as const,
+  tone: 'season-club' as const,
+};
+assert(
+  playerGoalsForBoard(madridClubUcl, madridInput) === 24,
+  `Madrid club-tournament must ignore Copa del Rey goals, got ${playerGoalsForBoard(madridClubUcl, madridInput)}`,
+);
+assert(
+  !participatedLegacyBoards(madridInput).some((def) => def.id === 'continental:season:ucl'),
+  'Real Madrid must not show a second generic single-season Champions League board',
+);
+assert(recordColorKind(madridClubUcl) === 'tournament', 'club UCL boards are tournament-coloured');
+assert(recordColorKind(plSeason) === 'internal', 'league boards are domestic-coloured');
 assert(!participated.some((def) => def.id.includes('la-liga')), 'unplayed leagues must stay hidden');
 assert(!participated.some((def) => def.id.includes('world-cup')), 'unplayed tournaments must stay hidden');
 assert(!participated.some((def) => def.group === 'nation'), 'zero caps must hide nation boards');
@@ -374,6 +415,27 @@ assert(
   '11 World Cup goals must also sit on the all-country single-edition board',
 );
 assert(franceWc.length >= 4, `11 France WC goals should unlock 4 boards, got ${franceWc.length}`);
+assert(
+  seasonTrophyList(franceSeason).includes('World Cup'),
+  'winning an international tournament must count as a trophy',
+);
+const franceSeasonHighlight = seasonLegacyHighlights(
+  { seasons: [], nationalTeam: emptyTeam('france'), nationality: 'france' },
+  franceInput,
+  franceSeason,
+).find((item) => item.kind === 'season' && item.title.includes('World Cup'));
+assert(franceSeasonHighlight?.domain === 'nation', 'international season records must be nation-domain');
+assert(recordBeat(franceSeasonHighlight!, 'Alex').portrait === 'nation', 'season international records show only the nation kit');
+assert(recordBeat({
+  title: 'La Liga',
+  subtitle: 'Single-season league goals',
+  rankLabel: '1st',
+  rank: 1,
+  playerGoals: 38,
+  kind: 'season',
+  domain: 'club',
+  group: 'league',
+}, 'Alex').portrait === 'club', 'season club records show only the club kit');
 
 const outright = seasonOutrightRecordHighlights({ seasons: [], nationalTeam: null }, allTimeAfter, allTimeSeason);
 assert(outright.every((item) => item.rank === 1), 'outright record beats are rank 1 only');

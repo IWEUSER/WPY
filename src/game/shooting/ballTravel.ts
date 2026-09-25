@@ -4,9 +4,15 @@ import { BALL_SPAWN_X_MARGIN } from './render';
 /** How far the rolling ball stays in from each canvas edge. */
 export const BALL_TRAVEL_MIN_X = BALL_SPAWN_X_MARGIN + 0.04;
 export const BALL_TRAVEL_MAX_X = 1 - BALL_TRAVEL_MIN_X;
-/** Header sweep stays inside the box — running to the touchline loses the chance. */
+/** Fallback header sweep when no pitch view is available. */
 export const HEADER_TRAVEL_MIN_X = 0.22;
 export const HEADER_TRAVEL_MAX_X = 1 - HEADER_TRAVEL_MIN_X;
+/** How far past the post a header must travel before it is out of play. */
+export const HEADER_PAST_POST = 0.018;
+export const HEADER_PEAK_LIFT_MIN = 0.2;
+export const HEADER_PEAK_LIFT_MAX = 0.38;
+export const HEADER_FLOOR_LIFT_MIN = 0.07;
+export const HEADER_FLOOR_LIFT_MAX = 0.12;
 
 /** Screen-width fraction the ball covers per second on a typical roll. */
 export const BALL_TRAVEL_SPEED = 0.22;
@@ -110,10 +116,36 @@ export function headerTravelBounds(): { minX: number; maxX: number } {
   return { minX: HEADER_TRAVEL_MIN_X, maxX: HEADER_TRAVEL_MAX_X };
 }
 
-/** True once a header has drifted off the far side of the box. */
-export function headerRanOutOfPlay(xRatio: number, direction: BallTravelDir): boolean {
-  if (direction > 0) return xRatio >= HEADER_TRAVEL_MAX_X - 1e-6;
-  return xRatio <= HEADER_TRAVEL_MIN_X + 1e-6;
+/** Lose the header only after the ball has rolled past the goalpost. */
+export function headerTravelBoundsForView(view: { w: number; goal: { halfW: number } }): { minX: number; maxX: number } {
+  const post = view.goal.halfW / Math.max(1, view.w);
+  return {
+    minX: clamp(0.5 - post - HEADER_PAST_POST, 0.02, 0.45),
+    maxX: clamp(0.5 + post + HEADER_PAST_POST, 0.55, 0.98),
+  };
+}
+
+/** True once a header has drifted past the far post. */
+export function headerRanOutOfPlay(
+  xRatio: number,
+  direction: BallTravelDir,
+  bounds: { minX: number; maxX: number } = headerTravelBounds(),
+): boolean {
+  if (direction > 0) return xRatio >= bounds.maxX - 1e-6;
+  return xRatio <= bounds.minX + 1e-6;
+}
+
+/** Height of a 90° header as it drops from peak toward the landing spot. */
+export function headerLiftAtProgress(
+  xRatio: number,
+  startX: number,
+  landingX: number,
+  peak: number,
+  floor: number,
+): number {
+  const span = Math.max(1e-4, Math.abs(landingX - startX));
+  const t = clamp(Math.abs(xRatio - startX) / span, 0, 1);
+  return peak + (floor - peak) * t * t;
 }
 
 export function pickBallTravelDir(

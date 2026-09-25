@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { formatCountedHonour, type CountedHonour } from '../honoursDisplay';
+import { formatCountedHonour, seasonAwardList, seasonTrophyList, type CountedHonour } from '../honoursDisplay';
+import type { SeasonRecord } from '../types';
 import { DATA_CARD } from './dataUi';
 
 export function HonoursPills({
@@ -37,6 +38,41 @@ export function HonoursPills({
               {formatCountedHonour(item)}
             </span>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Per-season trophies and awards on the career / retirement record cards. */
+export function SeasonHonoursLines({ season }: { season: SeasonRecord }) {
+  const trophies = seasonTrophyList(season);
+  const awards = seasonAwardList(season);
+  if (trophies.length === 0 && awards.length === 0) return null;
+  return (
+    <div className="mt-2 space-y-1.5">
+      {trophies.length > 0 && (
+        <div>
+          <p className="text-[10px] uppercase tracking-wide text-white/40">Trophies</p>
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            {trophies.map((name) => (
+              <span key={name} className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                {name}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      {awards.length > 0 && (
+        <div>
+          <p className="text-[10px] uppercase tracking-wide text-white/40">Awards</p>
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            {awards.map((name) => (
+              <span key={name} className="rounded-full bg-sky-400/15 px-2 py-0.5 text-[10px] font-semibold text-sky-200">
+                {name}
+              </span>
+            ))}
+          </div>
         </div>
       )}
     </div>

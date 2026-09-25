@@ -42,6 +42,15 @@ export type LegacySpan = 'career' | 'season';
 export type LegacyDomain = 'club' | 'nation';
 export type LegacyReveal = 'outside' | 'top10';
 export type LegacyTone = 'season-overall' | 'season-club' | 'season-intl' | 'all-time';
+/** Profile / season-end colour: club, domestic, club tournament, international. */
+export type RecordColorKind = 'club' | 'internal' | 'tournament' | 'international';
+
+export function recordColorKind(def: Pick<LegacyBoardDef, 'group' | 'id' | 'domain'>): RecordColorKind {
+  if (def.domain === 'nation' || def.group === 'nation') return 'international';
+  if (def.group === 'continental' || def.id.startsWith('club-tournament:')) return 'tournament';
+  if (def.group === 'league' || def.group === 'cup') return 'internal';
+  return 'club';
+}
 
 export interface LegacyBoardDef {
   id: string;
@@ -149,6 +158,36 @@ function continentalGoals(season: SeasonRecord, cup: string): number {
   return season.continentalStats?.find((row) => row.cup === cup)?.goals ?? 0;
 }
 
+function clubTournamentCupId(clubId: string): ContinentalCupId | null {
+  const club = getClub(clubId);
+  return club ? clubContinentalCup(club) : null;
+}
+
+/** Club-tournament boards count that club's continental cup only — never domestic cups. */
+function clubTournamentGoals(season: SeasonRecord, clubId: string): number {
+  if (season.clubId !== clubId) return 0;
+  const cup = clubTournamentCupId(clubId);
+  if (!cup) {
+    return (season.continentalStats ?? [])
+      .filter((row) => row.cup !== SUPER_CUP.id)
+      .reduce((sum, row) => sum + row.goals, 0);
+  }
+  return continentalGoals(season, cup);
+}
+
+function bestSeasonClubForContinental(seasons: SeasonRecord[], cup: string): string | null {
+  let best = 0;
+  let clubId: string | null = null;
+  for (const season of seasons) {
+    const goals = continentalGoals(season, cup);
+    if (goals > best) {
+      best = goals;
+      clubId = season.clubId;
+    }
+  }
+  return clubId;
+}
+
 function playedLeague(seasons: SeasonRecord[], league: string): boolean {
   return seasons.some((season) => seasonLeagueName(season) === league && appearance(season.leagueGames, season.leagueGoals ?? 0));
 }
@@ -198,11 +237,7 @@ export function playerGoalsForBoard(def: LegacyBoardDef, input: LegacyCareerInpu
   }
   if (def.id.startsWith('club-tournament:')) {
     const [, span, clubId] = def.id.split(':') as [string, LegacySpan, string];
-    const values = seasons.filter((season) => season.clubId === clubId).map((season) => {
-      const cup = season.cupGoals ?? 0;
-      const continental = (season.continentalStats ?? []).reduce((sum, row) => sum + row.goals, 0);
-      return cup + continental;
-    });
+    const values = seasons.filter((season) => season.clubId === clubId).map((season) => clubTournamentGoals(season, clubId));
     return span === 'season' ? values.reduce((best, goals) => Math.max(best, goals), 0) : values.reduce((sum, goals) => sum + goals, 0);
   }
   if (def.id.startsWith('league:')) {
@@ -263,10 +298,7 @@ function thisSeasonGoalsForBoard(def: LegacyBoardDef, season: SeasonRecord): num
   }
   if (def.id.startsWith('club-tournament:')) {
     const clubId = def.id.split(':')[2];
-    if (season.clubId !== clubId) return 0;
-    const cup = season.cupGoals ?? 0;
-    const continental = (season.continentalStats ?? []).reduce((sum, row) => sum + row.goals, 0);
-    return cup + continental;
+    return clubTournamentGoals(season, clubId);
   }
   if (def.id.startsWith('league:')) {
     const rest = def.id.slice('league:'.length);
@@ -509,15 +541,23 @@ export function participatedLegacyBoards(input: LegacyCareerInput): LegacyBoardD
       group: 'continental',
       tone: 'all-time',
     });
-    defs.push({
-      id: `continental:season:${cup}`,
-      domain: 'club',
-      span: 'season',
-      title,
-      subtitle: `Single-season ${title} goals`,
-      group: 'continental',
-      tone: 'season-overall',
-    });
+    const bestClub = cup === SUPER_CUP.id ? null : bestSeasonClubForContinental(seasons, cup);
+    const clubBoardCoversSeason = Boolean(
+      bestClub
+      && CLUB_TOURNAMENT_SEASON[bestClub]
+      && clubTournamentCupId(bestClub) === cup,
+    );
+    if (!clubBoardCoversSeason) {
+      defs.push({
+        id: `continental:season:${cup}`,
+        domain: 'club',
+        span: 'season',
+        title,
+        subtitle: `Single-season ${title} goals`,
+        group: 'continental',
+        tone: 'season-overall',
+      });
+    }
   }
 
   if (nationId && playedNation(input.nationalTeam)) {
@@ -606,6 +646,8 @@ export interface SeasonLegacyHighlight {
   rank: number;
   playerGoals: number;
   kind: 'season' | 'all-time';
+  domain: LegacyDomain;
+  group: LegacyBoardDef['group'];
 }
 
 export function inputWithoutSeason(input: LegacyCareerInput, season: SeasonRecord): LegacyCareerInput {
@@ -659,6 +701,8 @@ export function seasonLegacyHighlights(
         rank: seasonRank,
         playerGoals: seasonGoals,
         kind: 'season',
+        domain: board.def.domain,
+        group: board.def.group,
       });
       continue;
     }
@@ -671,6 +715,8 @@ export function seasonLegacyHighlights(
       rank: board.rank,
       playerGoals: board.playerGoals,
       kind: 'all-time',
+      domain: board.def.domain,
+      group: board.def.group,
     });
   }
   return highlights;

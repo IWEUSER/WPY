@@ -29,6 +29,24 @@ export function trophyLabels(
   return labels;
 }
 
+/** Trophies stored on the season, plus an international title if the finals were won. */
+export function seasonTrophyList(season: SeasonRecord): string[] {
+  const names = [...(season.trophies ?? [])];
+  const intl = season.international;
+  if (intl?.tournamentOutcome === 'champion' && intl.tournament) {
+    const title = INTERNATIONAL_TOURNAMENTS[intl.tournament]?.name ?? intl.tournament;
+    if (!names.includes(title)) names.push(title);
+  }
+  return names;
+}
+
+export function seasonAwardList(season: SeasonRecord): string[] {
+  return [
+    ...awardLabels(season),
+    ...(season.wonWpy ? ['World Player of the Year'] : []),
+  ];
+}
+
 export function awardLabels(season: SeasonRecord): string[] {
   const labels: string[] = [];
   if (season.topGoalscorer) labels.push('League top goalscorer');
@@ -74,7 +92,7 @@ function countNames(names: string[]): CountedHonour[] {
 }
 
 export function careerTrophyCounts(seasons: SeasonRecord[]): CountedHonour[] {
-  return countNames(seasons.flatMap((season) => season.trophies ?? []));
+  return countNames(seasons.flatMap((season) => seasonTrophyList(season)));
 }
 
 export function careerAwardCounts(seasons: SeasonRecord[]): CountedHonour[] {

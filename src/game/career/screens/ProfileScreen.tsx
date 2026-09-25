@@ -12,6 +12,7 @@ import { DATA_CARD } from './dataUi';
 import { AwardIcon, EarningsIcon, RecordsIcon, TrophyIcon, WageIcon } from './careerIcons';
 import { HonoursPills } from './HonoursPills';
 import { PlayerKitPortrait } from './PlayerKitPortrait';
+import { RECORD_KIND_BADGE, RECORD_KIND_LABEL, RECORD_KIND_TEXT, RECORD_KIND_VALUE, colorKindForDef } from './recordColors';
 
 function IdentityBox({
   title,
@@ -166,20 +167,26 @@ export default function ProfileScreen() {
           <p className="mt-2 text-sm text-white/50">No records yet</p>
         ) : (
           <ul className="mt-2 space-y-2">
-            {legacy.map((board) => (
-              <li key={board.def.id} className="flex items-baseline justify-between gap-3 text-sm">
-                <span className="font-semibold text-amber-100">
-                  {board.def.title}
-                  <span className="mt-0.5 block text-[10px] font-medium uppercase tracking-wide text-white/45">
-                    {board.def.subtitle}
+            {legacy.map((board) => {
+              const kind = colorKindForDef(board.def);
+              return (
+                <li key={board.def.id} className="flex items-baseline justify-between gap-3 text-sm">
+                  <span className={`font-semibold ${RECORD_KIND_TEXT[kind]}`}>
+                    {board.def.title}
+                    <span className="mt-0.5 block text-[10px] font-medium uppercase tracking-wide text-white/45">
+                      {board.def.subtitle}
+                    </span>
+                    <span className={`mt-1 inline-block rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${RECORD_KIND_BADGE[kind]}`}>
+                      {RECORD_KIND_LABEL[kind]}
+                    </span>
                   </span>
-                </span>
-                <span className="shrink-0 text-right text-amber-200">
-                  {board.rankLabel}
-                  <span className="block text-[10px] text-white/50">{goalsLabel(board.playerGoals)}</span>
-                </span>
-              </li>
-            ))}
+                  <span className={`shrink-0 text-right ${RECORD_KIND_VALUE[kind]}`}>
+                    {board.rankLabel}
+                    <span className="block text-[10px] text-white/50">{goalsLabel(board.playerGoals)}</span>
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         )}
         <p className="mt-2 text-xs text-white/45">All-time boards for competitions you have appeared in.</p>

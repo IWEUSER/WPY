@@ -10,6 +10,7 @@ import { countLoanSpells, requiredGoalRatio, resolveSeasonTransition } from '../
 import { goalsLabel, inputWithoutSeason, seasonLegacyHighlights } from '../legacyRecords';
 import { useCareerStore } from '../store';
 import { DATA_CARD, DATA_INSET, DATA_TILE } from './dataUi';
+import { RECORD_KIND_CARD, RECORD_KIND_LABEL, RECORD_KIND_MUTED, colorKindForDef } from './recordColors';
 
 export default function SeasonSummaryScreen() {
   const clubId = useCareerStore((s) => s.clubId);
@@ -307,22 +308,26 @@ export default function SeasonSummaryScreen() {
 
       {legacyHighlights.length > 0 && (
         <div className="flex w-full max-w-sm flex-col gap-2">
-          {legacyHighlights.map((item) => (
-            <div
-              key={`${item.kind}-${item.title}-${item.subtitle}`}
-              className="rounded-2xl border border-amber-200/25 bg-amber-400/10 px-4 py-3 text-left text-sm text-amber-100"
-            >
-              <p className="text-xs uppercase tracking-wide text-amber-200/70">
-                {item.kind === 'season' ? 'Season record' : 'All-time top 10'}
-              </p>
-              <p className="mt-1 font-semibold">
-                {name} · {item.rankLabel} · {item.title}
-              </p>
-              <p className="mt-1 text-xs text-white/55">
-                {item.subtitle} · {goalsLabel(item.playerGoals)}
-              </p>
-            </div>
-          ))}
+          {legacyHighlights.map((item) => {
+            const kind = colorKindForDef(item);
+            return (
+              <div
+                key={`${item.kind}-${item.title}-${item.subtitle}`}
+                className={`rounded-2xl border px-4 py-3 text-left text-sm ${RECORD_KIND_CARD[kind]}`}
+              >
+                <p className={`text-xs uppercase tracking-wide ${RECORD_KIND_MUTED[kind]}`}>
+                  {item.kind === 'season' ? 'Season record' : 'All-time top 10'}
+                  {` · ${RECORD_KIND_LABEL[kind]}`}
+                </p>
+                <p className="mt-1 font-semibold">
+                  {name} · {item.rankLabel} · {item.title}
+                </p>
+                <p className="mt-1 text-xs text-white/55">
+                  {item.subtitle} · {goalsLabel(item.playerGoals)}
+                </p>
+              </div>
+            );
+          })}
         </div>
       )}
 

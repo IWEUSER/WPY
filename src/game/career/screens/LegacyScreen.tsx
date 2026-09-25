@@ -1,29 +1,16 @@
 import { useMemo, useState } from 'react';
 import { GAME_TITLE } from '../../branding';
-import { careerLegacyBoards, goalsLabel, type LegacyBoardView, type LegacyReveal } from '../legacyRecords';
+import { careerLegacyBoards, goalsLabel, recordColorKind, type LegacyBoardView, type LegacyReveal } from '../legacyRecords';
 import { countsTowardCareerRecord } from '../seasonDisplay';
 import { useCareerStore } from '../store';
 import { DATA_CARD, DATA_TILE } from './dataUi';
-
-const TONE_CLASS: Record<LegacyBoardView['def']['tone'], string> = {
-  'all-time': 'border-amber-400/40 bg-amber-950/30',
-  'season-overall': 'border-sky-400/40 bg-sky-950/30',
-  'season-club': 'border-violet-400/40 bg-violet-950/30',
-  'season-intl': 'border-emerald-400/40 bg-emerald-950/30',
-};
+import { RECORD_KIND_BADGE, RECORD_KIND_CARD, RECORD_KIND_LABEL } from './recordColors';
 
 const TONE_LABEL: Record<LegacyBoardView['def']['tone'], string> = {
   'all-time': 'All-time',
   'season-overall': 'Single season',
   'season-club': 'Club season',
   'season-intl': 'International tournament',
-};
-
-const TONE_BADGE: Record<LegacyBoardView['def']['tone'], string> = {
-  'all-time': 'bg-amber-400/20 text-amber-200',
-  'season-overall': 'bg-sky-400/20 text-sky-200',
-  'season-club': 'bg-violet-400/20 text-violet-200',
-  'season-intl': 'bg-emerald-400/20 text-emerald-200',
 };
 
 const GROUPS: Array<{ id: LegacyBoardView['def']['group'] | 'all'; label: string }> = [
@@ -79,10 +66,10 @@ export default function LegacyScreen() {
       </div>
 
       <div className="mt-3 flex flex-wrap gap-1.5 text-[10px] font-semibold uppercase tracking-wide">
-        <span className={`rounded-full px-2 py-1 ${TONE_BADGE['season-overall']}`}>Single season</span>
-        <span className={`rounded-full px-2 py-1 ${TONE_BADGE['season-club']}`}>Club season</span>
-        <span className={`rounded-full px-2 py-1 ${TONE_BADGE['season-intl']}`}>Intl tournament</span>
-        <span className={`rounded-full px-2 py-1 ${TONE_BADGE['all-time']}`}>All-time</span>
+        <span className={`rounded-full px-2 py-1 ${RECORD_KIND_BADGE.club}`}>Club</span>
+        <span className={`rounded-full px-2 py-1 ${RECORD_KIND_BADGE.internal}`}>Domestic</span>
+        <span className={`rounded-full px-2 py-1 ${RECORD_KIND_BADGE.tournament}`}>Club tournament</span>
+        <span className={`rounded-full px-2 py-1 ${RECORD_KIND_BADGE.international}`}>International</span>
       </div>
 
       <div className="mt-4 grid grid-cols-3 gap-2">
@@ -150,12 +137,13 @@ function BoardCard({
   onToggle: () => void;
   playerName: string;
 }) {
+  const kind = recordColorKind(board.def);
   return (
-    <article className={`${DATA_CARD} ${TONE_CLASS[board.def.tone]}`}>
+    <article className={`${DATA_CARD} ${RECORD_KIND_CARD[kind]}`}>
       <button type="button" onClick={onToggle} className="flex w-full items-start justify-between gap-3 text-left">
         <div>
-          <p className={`text-[10px] uppercase tracking-wide ${TONE_BADGE[board.def.tone]} inline-block rounded-full px-2 py-0.5`}>
-            {TONE_LABEL[board.def.tone]}
+          <p className={`text-[10px] uppercase tracking-wide ${RECORD_KIND_BADGE[kind]} inline-block rounded-full px-2 py-0.5`}>
+            {RECORD_KIND_LABEL[kind]} · {TONE_LABEL[board.def.tone]}
           </p>
           <p className="mt-1 text-[10px] uppercase tracking-wide text-white/40">{board.def.subtitle}</p>
           <h2 className="mt-0.5 text-lg font-extrabold">{board.def.title}</h2>
