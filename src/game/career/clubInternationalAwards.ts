@@ -3,6 +3,10 @@ import type { ContinentalSeasonStat, SeasonRecord } from './types';
 
 /** Goals per continental game required, on top of winning the tournament. */
 export const CLUB_POT_MIN_RATIO = 0.7;
+/** Champions League Player of the Tournament without needing the title. */
+export const CL_POT_GOALS_WITHOUT_TITLE = 16;
+/** Champions League golden boot threshold when NPC scorers are not simulated. */
+export const CL_TOP_SCORER_MIN_GOALS = 10;
 
 export interface ClubInternationalAwardResult {
   won: boolean;
@@ -19,13 +23,20 @@ function statsForCup(
 }
 
 /**
- * Club Player of the Tournament is a hard rule: win that continental cup
- * this season and score at least 0.7 goals per game in it. No roll.
+ * Club Player of the Tournament: win that cup at ≥ 0.7 goals per game, or
+ * score 16+ Champions League goals regardless of who lifts the trophy.
  */
 export function evaluateClubPlayerOfTheTournament(params: {
   continentalChampion: ContinentalCupId | null | undefined;
   continentalStats?: ContinentalSeasonStat[];
 }): ClubInternationalAwardResult {
+  const ucl = statsForCup(params.continentalStats, 'ucl');
+  if (ucl.goals >= CL_POT_GOALS_WITHOUT_TITLE) {
+    return {
+      won: true,
+      reason: `Scored ${ucl.goals} Champions League goals.`,
+    };
+  }
   const cup = params.continentalChampion ?? null;
   if (!cup) {
     return { won: false, reason: '' };
@@ -45,6 +56,12 @@ export function evaluateClubPlayerOfTheTournament(params: {
     won: true,
     reason: `Won the tournament and scored ${ratio.toFixed(2)} goals per game.`,
   };
+}
+
+export function evaluateContinentalTopGoalscorer(params: {
+  continentalStats?: ContinentalSeasonStat[];
+}): boolean {
+  return statsForCup(params.continentalStats, 'ucl').goals >= CL_TOP_SCORER_MIN_GOALS;
 }
 
 export function clubPlayerOfTheTournamentFromSeason(

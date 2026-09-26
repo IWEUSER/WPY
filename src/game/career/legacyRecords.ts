@@ -1,7 +1,6 @@
 import { getClub } from './data/clubs';
 import {
   CONTINENTAL_CUPS,
-  DOMESTIC_CUPS,
   INTERNATIONAL_TOURNAMENTS,
   SUPER_CUP,
   clubContinentalCup,
@@ -192,13 +191,6 @@ function playedLeague(seasons: SeasonRecord[], league: string): boolean {
   return seasons.some((season) => seasonLeagueName(season) === league && appearance(season.leagueGames, season.leagueGoals ?? 0));
 }
 
-function playedCup(seasons: SeasonRecord[], cupId: DomesticCupId): boolean {
-  return seasons.some((season) => {
-    const club = getClub(season.clubId);
-    if (!club || domesticCupForCountry(club.country) !== cupId) return false;
-    return appearance(season.cupGames, season.cupGoals ?? 0);
-  });
-}
 
 function playedContinental(seasons: SeasonRecord[], cup: string): boolean {
   return seasons.some((season) => appearance(continentalGames(season, cup), continentalGoals(season, cup)));
@@ -456,6 +448,7 @@ export function participatedLegacyBoards(input: LegacyCareerInput): LegacyBoardD
         });
       }
       const clubCupId = clubContinentalCup(club);
+      if (clubCupId === 'uel' || clubCupId === 'uecl') continue;
       const clubCupName = clubCupId ? CONTINENTAL_CUPS[clubCupId].name : 'tournament';
       if (CLUB_TOURNAMENT_CAREER[clubId]) {
         defs.push({
@@ -505,30 +498,8 @@ export function participatedLegacyBoards(input: LegacyCareerInput): LegacyBoardD
     });
   }
 
-  for (const cupId of Object.keys(CUP_CAREER) as DomesticCupId[]) {
-    if (!playedCup(seasons, cupId)) continue;
-    const title = DOMESTIC_CUPS[cupId].name;
-    defs.push({
-      id: `cup:career:${cupId}`,
-      domain: 'club',
-      span: 'career',
-      title,
-      subtitle: `All-time ${title} goals`,
-      group: 'cup',
-      tone: 'all-time',
-    });
-    defs.push({
-      id: `cup:season:${cupId}`,
-      domain: 'club',
-      span: 'season',
-      title,
-      subtitle: `Single-season ${title} goals`,
-      group: 'cup',
-      tone: 'season-overall',
-    });
-  }
-
-  const continentalKeys = [...Object.keys(CONTINENTAL_CUPS), SUPER_CUP.id];
+  const hiddenContinental = new Set(['uel', 'uecl', SUPER_CUP.id]);
+  const continentalKeys = Object.keys(CONTINENTAL_CUPS).filter((cup) => !hiddenContinental.has(cup));
   for (const cup of continentalKeys) {
     if (!playedContinental(seasons, cup)) continue;
     const title = cup === 'super-cup' ? SUPER_CUP.name : CONTINENTAL_CUPS[cup as ContinentalCupId].name;
@@ -636,7 +607,11 @@ export function careerLegacyBoards(input: LegacyCareerInput): LegacyBoardView[] 
 }
 
 export function identityLegacyBoards(input: LegacyCareerInput): LegacyBoardView[] {
-  return careerLegacyBoards(input).filter((board) => board.reveal === 'top10');
+  return careerLegacyBoards(input).filter((board) => {
+    if (board.reveal !== 'top10') return false;
+    if (board.def.span === 'season') return board.rank === 1;
+    return true;
+  });
 }
 
 export interface SeasonLegacyHighlight {
@@ -692,7 +667,7 @@ export function seasonLegacyHighlights(
       const seasonGoals = thisSeasonGoalsForBoard(board.def, thisSeason);
       if (seasonGoals <= 0) continue;
       const seasonRank = rankForGoals(seasonGoals, board.historical);
-      if (revealForRank(seasonRank, board.historical) !== 'top10') continue;
+      if (seasonRank !== 1) continue;
       if (seasonGoals !== board.playerGoals) continue;
       highlights.push({
         title: board.def.title,

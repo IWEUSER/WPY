@@ -191,9 +191,15 @@ export function groupPosition(state: IntlGroupState | null | undefined, nationId
   return sorted.findIndex((r) => r.nationId === nationId) + 1;
 }
 
-/** World Cup qualifying groups send the top two after the full home-and-away slate. */
+/** CONMEBOL World Cup qualifying is a 10-nation league — top six go through. */
+export function isConmebolQualifyingLeague(state: IntlGroupState | null | undefined): boolean {
+  return Boolean(state && state.kind === 'qualifying' && state.teamIds.length >= 10);
+}
+
+/** World Cup qualifying groups send the top two; the CONMEBOL league sends six. */
 export function qualifyingPlacesFromGroup(state: IntlGroupState | null | undefined): number {
   if (!state || state.teamIds.length < 2) return 1;
+  if (isConmebolQualifyingLeague(state)) return 6;
   return 2;
 }
 
@@ -205,9 +211,11 @@ export function doesNationQualifyFromTable(
 ): boolean {
   if (!state) return false;
   const row = state.rows.find((item) => item.nationId === nationId);
-  if (!row || row.played < minPlayed) return false;
+  const needed = isConmebolQualifyingLeague(state) ? 18 : minPlayed;
+  if (!row || row.played < needed) return false;
   const pos = groupPosition(state, nationId);
   if (pos > 0 && pos <= qualifyingPlacesFromGroup(state)) return true;
+  if (isConmebolQualifyingLeague(state)) return false;
   // 3rd (or lower) can still go through on FIFA ranking + form so Spain do
   // not miss a World Cup from a group of death after a full 10-game slate.
   return doesNationQualify(nationId, tournament, row.points, row.played);

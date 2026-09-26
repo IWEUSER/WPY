@@ -314,6 +314,7 @@ export interface LeagueStanding {
 
 export type EuropeanStage =
   | 'group'
+  | 'play-off'
   | 'round-of-16'
   | 'quarter-final'
   | 'semi-final'

@@ -1,9 +1,9 @@
 import type { CalendarFixture } from './calendar';
 import type { ContinentalCupId } from './data/competitions';
-import { CONTINENTAL_CUPS, SUPER_CUP } from './data/competitions';
+import { CONTINENTAL_CUPS } from './data/competitions';
 import type { ContinentalSeasonStat, SeasonRecord } from './types';
 
-export type ContinentalStatKey = ContinentalCupId | 'super-cup';
+export type ContinentalStatKey = ContinentalCupId | 'super-cup' | 'domestic-super-cup';
 
 export function emptyContinentalStats(): ContinentalSeasonStat[] {
   return [];
@@ -68,7 +68,11 @@ export function recordClubAppearanceStats(
     };
   }
   if (fixture.kind === 'super-cup' || fixture.kind === 'leagues-cup') {
-    const cup = fixture.kind === 'leagues-cup' ? 'leagues-cup' : 'super-cup';
+    const cup = fixture.kind === 'leagues-cup'
+      ? 'leagues-cup'
+      : fixture.domesticSuperCup
+        ? 'domestic-super-cup'
+        : 'super-cup';
     return { ...season, continentalStats: bumpContinentalStats(season.continentalStats, cup, goals) };
   }
   if (fixture.kind.startsWith('continental') && fixture.continentalCup) {
@@ -81,7 +85,8 @@ export function recordClubAppearanceStats(
 }
 
 export function continentalLabel(cup: ContinentalStatKey): string {
-  if (cup === 'super-cup') return SUPER_CUP.name;
+  if (cup === 'super-cup') return 'European Super Cup';
+  if (cup === 'domestic-super-cup') return 'Club Super Cup';
   return CONTINENTAL_CUPS[cup].name;
 }
 

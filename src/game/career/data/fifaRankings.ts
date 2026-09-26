@@ -364,6 +364,9 @@ export function qualifierOpponents(
 ) {
   const nation = getNation(nationId);
   if (!nation) return [];
+  if (tournament === 'world-cup' && nation.confederation === 'CONMEBOL') {
+    return nationsInConfederation('CONMEBOL').filter((x) => x.id !== nationId);
+  }
   const n = count ?? qualifierCountFor(tournament);
   const pool = nationsInConfederation(nation.confederation).filter((x) => x.id !== nationId);
   let exclude = [...(options?.extraExcludeIds ?? [])];

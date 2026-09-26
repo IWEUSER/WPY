@@ -47,8 +47,8 @@ export interface CalendarFixture {
   isDecisive: boolean;
   /** Leg number for two-legged continental knockout ties. */
   leg?: 1 | 2;
-  /** Distinguishes R16 from quarter-final so the second leg is not skipped. */
-  europeanRound?: 'round-of-16' | 'quarter-final';
+  /** Distinguishes play-off / R16 / quarter-final so the second leg is not skipped. */
+  europeanRound?: 'play-off' | 'round-of-16' | 'quarter-final';
   /** Pre-assigned opponent for this fixture (club id, or a nation id for
    * international matches). */
   opponentId?: string;
@@ -259,8 +259,6 @@ export interface BuildCalendarParams {
 }
 
 const GROUP_STAGE_MATCHDAYS = 8;
-const KNOCKOUT_ROUNDS_BEFORE_SEMI = 2; // round of 16 and quarter-final, both two-legged.
-const KNOCKOUT_LEGS_BEFORE_FINAL = KNOCKOUT_ROUNDS_BEFORE_SEMI * 2 + 2; // R16×2, QF×2, SF×2
 
 const DOMESTIC_CUP_EARLY: { fraction: number; stage: Exclude<DomesticCupStage, 'final'> }[] = [
   { fraction: 0.12, stage: 'round-of-16' },
@@ -399,10 +397,12 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
       fixtures.push({ week: groupWeek, kind: 'continental-group', continentalCup: cup, isDecisive: false });
     }
 
-    const knockoutStart = Math.max(1, leagueMatchWeeks - KNOCKOUT_LEGS_BEFORE_FINAL + 1);
+    const knockoutRounds: NonNullable<CalendarFixture['europeanRound']>[] =
+      cup === 'ucl' ? ['play-off', 'round-of-16', 'quarter-final'] : ['round-of-16', 'quarter-final'];
+    const knockoutLegs = knockoutRounds.length * 2 + 2;
+    const knockoutStart = Math.max(1, leagueMatchWeeks - knockoutLegs + 1);
     let knockoutWeek = knockoutStart;
-    for (let round = 0; round < KNOCKOUT_ROUNDS_BEFORE_SEMI; round++) {
-      const europeanRound = round === 0 ? 'round-of-16' : 'quarter-final';
+    for (const europeanRound of knockoutRounds) {
       fixtures.push({
         week: Math.min(leagueMatchWeeks, knockoutWeek++),
         kind: 'continental-knockout',

@@ -232,7 +232,7 @@ const cupGoals = playerGoalsForBoard(cup, {
   ],
   nationalTeam: null,
 });
-assert(cupGoals === 6, `FA Cup should ignore Copa del Rey goals, got ${cupGoals}`);
+assert(cupGoals === 6, `FA Cup board math still isolates England cup goals, got ${cupGoals}`);
 
 assert(ordinal(1) === '1st' && ordinal(2) === '2nd' && ordinal(3) === '3rd' && ordinal(11) === '11th', 'ordinals');
 assert(revealForRank(1, LEAGUE_CAREER['Premier League']!) === 'top10', 'top 10 band');
@@ -248,8 +248,8 @@ const plOnly: LegacyCareerInput = {
 const participated = participatedLegacyBoards(plOnly);
 assert(participated.some((def) => def.id === 'league:career:premier-league'), 'PL appearance should unlock the PL board');
 assert(
-  participated.some((def) => def.id === 'cup:season:fa-cup' && def.subtitle === 'Single-season FA Cup goals'),
-  'cup season records must name the tournament',
+  !participated.some((def) => def.id.startsWith('cup:')),
+  'domestic cup records are no longer listed',
 );
 const withUcl: LegacyCareerInput = {
   ...plOnly,
@@ -332,6 +332,31 @@ const identity = identityLegacyBoards({
 });
 assert(identity.some((board) => board.def.id === 'league:career:premier-league'), 'identity shows sourced top-10 ranks');
 assert(identity.every((board) => board.reveal === 'top10'), 'identity legacy box is top 10 only');
+assert(
+  identity.every((board) => board.def.span !== 'season' || board.rank === 1),
+  'single-season and single-tournament records only list 1st',
+);
+
+const hiddenCups = participatedLegacyBoards({
+  seasons: [
+    season({
+      clubId: 'arsenal',
+      league: 'Premier League',
+      leagueGoals: 20,
+      leagueGames: 30,
+      continentalStats: [
+        { cup: 'uel', games: 10, goals: 8 },
+        { cup: 'uecl', games: 8, goals: 5 },
+        { cup: 'super-cup', games: 1, goals: 1 },
+      ],
+    }),
+  ],
+  nationalTeam: null,
+});
+assert(
+  !hiddenCups.some((def) => def.id.includes('uel') || def.id.includes('uecl') || def.id.includes('super-cup') || def.id.startsWith('cup:')),
+  'Europa League, Conference League, Super Cup, and domestic cup records must be hidden',
+);
 
 const currentSeason = season({
   clubId: 'arsenal',

@@ -22,7 +22,7 @@ import {
   YOUTH_LOAN_YEARS,
 } from './playerValue';
 import { evaluatePlayerOfTheYear, evaluateTopGoalscorer } from './domesticAwards';
-import { evaluateClubPlayerOfTheTournament } from './clubInternationalAwards';
+import { evaluateClubPlayerOfTheTournament, evaluateContinentalTopGoalscorer } from './clubInternationalAwards';
 import { evaluateInternationalTournamentAwards } from './internationalAwards';
 import { countsTowardCareerRecord, displaySeasonNumber } from './seasonDisplay';
 import { trophyLabels } from './honoursDisplay';
@@ -63,6 +63,7 @@ import {
   resolveFixture,
   shouldSkipFixture,
   shouldSimulateNationQualifier,
+  syncContinentalKnockoutCalendar,
   syncInternationalCalendar,
   trophyNameForFixture,
   internationalRoundLabel,
@@ -110,7 +111,7 @@ import {
   squadStatusOnArrival,
   youthRolesAllowed,
 } from './squadStatus';
-import { evaluateWpy } from './wpy';
+import { evaluateWpy, majorYearForTournament } from './wpy';
 import { composeMatchSummary, nextFixtureLine, playerGoalsLine } from './matchBriefing';
 import type { ShotResult } from '../shooting/types';
 import type { CareerStart, CareerState, LastMatchResult, MatchRecord, PlayerRole, SeasonRecord, SquadStatus } from './types';
@@ -453,24 +454,32 @@ function finalizeSimHonours(state: CareerState): CareerState['seasonSim'] {
   return { ...sim, honours: { ...sim.honours, leagueChampion: canWinLeague(sim, state.clubId) } };
 }
 
-function evaluateSeasonWpy(state: CareerState) {
+function evaluateSeasonWpy(
+  state: CareerState,
+  international: SeasonRecord['international'],
+) {
   const club = state.clubId ? getClub(state.clubId) : undefined;
   const season = state.currentSeason;
   const sim = state.seasonSim;
   if (!club || !season || !sim || !countsTowardCareerRecord(state.seasonNumber, state.role)) return null;
   const ratio = season.gamesPlayed > 0 ? season.goals / season.gamesPlayed : 0;
   const formGoals = state.formWindow.reduce((a, b) => a + b, 0);
+  const clubGoals = clubSeasonTotals(season).goals;
+  const finalsSeason = isInternationalFinalsSeason(
+    internationalCalendarSeason(state.seasonNumber, {
+      careerStart: state.careerStart,
+      role: state.role,
+    }),
+  );
   return evaluateWpy({
     seasonGoalRatio: ratio,
     eliteRatioBar: club.firstTeamGoalRatio,
+    clubGoals,
     wonChampionsLeague: sim.honours.continentalChampion === 'ucl',
-    isInternationalTournamentYear: isInternationalFinalsSeason(
-      internationalCalendarSeason(state.seasonNumber, {
-        careerStart: state.careerStart,
-        role: state.role,
-      }),
-    ),
-    wonInternationalTournament: sim.honours.internationalChampion !== null,
+    majorYear: majorYearForTournament(international?.tournament, finalsSeason),
+    majorOutcome: international?.tournamentOutcome ?? 'none',
+    majorFinalsGoals: international?.finalsGoals ?? 0,
+    majorTopGoalscorer: international?.topGoalscorer ?? false,
     recentFormGoals: formGoals,
     recentFormGames: state.formWindow.length,
   });
@@ -494,13 +503,13 @@ function attachSeasonAwards(state: CareerState): { season: SeasonRecord; wpyResu
         playerOfTheYearReason: 'Reserve seasons do not contest domestic awards.',
         clubPlayerOfTheTournament: false,
         clubPlayerOfTheTournamentReason: 'Reserve seasons do not contest club continental awards.',
+        continentalTopGoalscorer: false,
       },
       wpyResult: null,
     };
   }
   const club = getClub(state.clubId);
   const sim = state.seasonSim;
-  const wpyResult = evaluateSeasonWpy(state);
   const league = state.clubLeague ?? club?.league ?? '';
   const boot = evaluateTopGoalscorer(season.leagueGoals, league);
   const poty = evaluatePlayerOfTheYear({
@@ -521,6 +530,15 @@ function attachSeasonAwards(state: CareerState): { season: SeasonRecord; wpyResu
         tournamentOutcome: international.tournamentOutcome,
       })
     : { playerOfTheTournament: false, topGoalscorer: false, chance: 0 };
+  const internationalWithAwards = {
+    ...international,
+    playerOfTheTournament: intlAwards.playerOfTheTournament,
+    topGoalscorer: intlAwards.topGoalscorer,
+  };
+  const wpyResult = evaluateSeasonWpy(
+    { ...state, currentSeason: { ...season, international: internationalWithAwards } },
+    internationalWithAwards,
+  );
   const clubPot = evaluateClubPlayerOfTheTournament({
     continentalChampion: sim?.honours.continentalChampion ?? null,
     continentalStats: season.continentalStats,
@@ -538,13 +556,12 @@ function attachSeasonAwards(state: CareerState): { season: SeasonRecord; wpyResu
       playerOfTheYearReason: poty.reason,
       clubPlayerOfTheTournament: clubPot.won,
       clubPlayerOfTheTournamentReason: clubPot.reason,
+      continentalTopGoalscorer: evaluateContinentalTopGoalscorer({
+        continentalStats: season.continentalStats,
+      }),
       continentalChampion: sim?.honours.continentalChampion ?? null,
       wpyReason: wpyResult?.reason ?? null,
-      international: {
-        ...international,
-        playerOfTheTournament: intlAwards.playerOfTheTournament,
-        topGoalscorer: intlAwards.topGoalscorer,
-      },
+      international: internationalWithAwards,
     },
   };
 }
@@ -950,7 +967,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
   };
 
   const sitOutFinalResult = (): Partial<CareerState> => {
-    calendar = syncInternationalCalendar(calendar!, sim!);
+    calendar = syncContinentalKnockoutCalendar(syncInternationalCalendar(calendar!, sim!), sim!, state.clubId);
     const complete = sim!.fixtureIndex >= calendar.fixtures.length;
     const withHonours = complete
       ? { ...sim!, honours: { ...sim!.honours, leagueChampion: canWinLeague(sim!, state.clubId!) } }
@@ -999,7 +1016,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
   };
 
   const sitOutHub = (): Partial<CareerState> => {
-    calendar = syncInternationalCalendar(calendar!, sim!);
+    calendar = syncContinentalKnockoutCalendar(syncInternationalCalendar(calendar!, sim!), sim!, state.clubId);
     const complete = sim!.fixtureIndex >= calendar.fixtures.length;
     if (complete) {
       const withHonours = {
@@ -1321,7 +1338,11 @@ function finishResolvedLiveMatch(
   if (!club || !fixture) return state;
 
   const nextSim = { ...resolution.sim, fixtureIndex: live.fixtureIndex + 1 };
-  const nextCalendar = syncInternationalCalendar(calendar, nextSim);
+  const nextCalendar = syncContinentalKnockoutCalendar(
+    syncInternationalCalendar(calendar, nextSim),
+    nextSim,
+    state.clubId,
+  );
   const scored = live.goals > 0;
   const openPlayScored = (live.openPlayGoals ?? 0) > 0;
   const isInternational = fixture.kind === 'international';
@@ -2456,6 +2477,7 @@ function migrateCareerPersist(persisted: unknown): CareerState {
           wonWpy: season.wonWpy ?? false,
           clubPlayerOfTheTournament: season.clubPlayerOfTheTournament ?? false,
           clubPlayerOfTheTournamentReason: season.clubPlayerOfTheTournamentReason ?? null,
+          continentalTopGoalscorer: season.continentalTopGoalscorer ?? false,
           sponsorship: season.sponsorship ?? 0,
           league: season.league,
           international: season.international
@@ -2486,6 +2508,7 @@ function migrateCareerPersist(persisted: unknown): CareerState {
                   qualifierTarget: sim.qualifierTarget ?? 0,
                   qualifierCarryPoints: sim.qualifierCarryPoints ?? 0,
                   qualifierCarryPlayed: sim.qualifierCarryPlayed ?? 0,
+                  europeanKnockoutField: sim.europeanKnockoutField ?? null,
                   groupPoints: sim.groupPoints ?? 0,
                   groupPlayed: sim.groupPlayed ?? 0,
                   nationQualified: sim.nationQualified ?? false,

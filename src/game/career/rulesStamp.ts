@@ -135,6 +135,7 @@ export function rebuildCurrentSeason(state: CareerState): Partial<CareerState> {
       })(),
       europeanGroupPoints: old.europeanGroupPoints,
       europeanGroupPlayed: old.europeanGroupPlayed,
+      europeanKnockoutField: old.europeanKnockoutField ?? sim.europeanKnockoutField ?? null,
       knockoutAggFor: old.knockoutAggFor,
       knockoutAggAgainst: old.knockoutAggAgainst,
       internationalStage: nextIntlStage,

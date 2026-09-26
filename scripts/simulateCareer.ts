@@ -50,7 +50,7 @@ import { blowoutScorePossible, emptyStanding, expandChampionsLeagueTable, format
 import { chanceImportanceLine, chanceMinute, chanceMinutesForMatch, chancesLeftLine, formatChanceMinute } from '../src/game/shooting/chanceAtmosphere';
 import { awardBeat, enqueueLeagueTitleBeat, firstCapBeat, firstTitleBeat, portraitForTrophyName, pushCareerBeat, retirementBeat, seasonAwardBeats, soldBeat, titleBeat, tournamentCallUpBeat } from '../src/game/career/careerBeat';
 import { aggregateContinental, aggregateDomesticSplit, careerTransferFeesPaid, clubSeasonTotals, recordClubAppearanceStats, seasonDomesticSplit } from '../src/game/career/seasonStats';
-import { evaluateClubPlayerOfTheTournament } from '../src/game/career/clubInternationalAwards';
+import { evaluateClubPlayerOfTheTournament, evaluateContinentalTopGoalscorer } from '../src/game/career/clubInternationalAwards';
 import { championsLeagueField, leaguePhaseOpponents, pickSuperCupOpponent, seedChampionsLeaguePots } from '../src/game/career/continentalDraw';
 import { settleDrawOnPenalties } from '../src/game/career/penalties';
 import { planDomesticSuperCup } from '../src/game/career/domesticSuperCup';
@@ -85,6 +85,9 @@ import { nextYouthKnockoutRound, pickYouthGroupOpponents, pickYouthKnockoutOppon
 import { chancesForSquadStatus, consecutiveScoringAsImpact, consecutiveScoringGames, describeSquadStatus, IMPACT_CHANCES, IMPACT_STREAK, isLowerDivisionLoan, isSquadRotationSitOut, isToughMinutesFixture, nextSquadStatusAfterSeason, openingSquadStatus, promoteSquadStatusDuringSeason, reservePrioritisesContinental, reserveSitsChampionsLeague, RISING_STAR_MIN_RATIO, ROLE_REVIEW_WEEK, seasonOverridesRatioBar, shouldSitLeagueFixture, shouldSitToughFixture, squadStatusOnArrival, STARTER_STREAK, youthRolesAllowed } from '../src/game/career/squadStatus';
 import { consecutiveLoanSpells, LOAN_OFFER_COUNT, SAUDI_OFFER_MIN_AGE, TRANSFER_MARKET_CAP, TRANSFER_OFFER_COUNT, offerFormRatio, offerTierFromStanding, pickLoanClubsForMiss, pickLoanClubsFromOrigin, pickPermanentClubs, requiredGoalRatio, resolveSeasonTransition, sellingClubAcceptsOffer, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, trialFailTransferPending, tierForRatio } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
+import { internationalCampaignForSeason } from '../src/game/career/data/competitions';
+import { continentalLabel } from '../src/game/career/seasonStats';
+import { championsLeagueBand } from '../src/game/career/championsLeagueKnockout';
 import {
   evaluatePlayerOfTheYear,
   evaluateTopGoalscorer,
@@ -96,7 +99,7 @@ import {
   evaluateInternationalTournamentAwards,
   internationalAwardWinChance,
 } from '../src/game/career/internationalAwards';
-import { formatInternationalSeason, awardLabels, careerAwardCounts, careerTrophyCounts, formatGamesGoals, seasonLeagueLabel } from '../src/game/career/honoursDisplay';
+import { formatInternationalSeason, awardLabels, careerAwardCounts, careerTrophyCounts, formatGamesGoals, seasonLeagueLabel, trophyLabels } from '../src/game/career/honoursDisplay';
 import { formatLiveBuildStamp, LIVE_SHIP_LABEL, liveMenuStamp } from '../src/game/branding';
 import type { CareerState, SeasonRecord } from '../src/game/career/types';
 
@@ -308,40 +311,42 @@ if ((noEuropeKinds.league ?? 0) !== leagueMatchWeeks('2. Bundesliga') || (noEuro
   process.exitCode = 1;
 }
 
-console.log('\n--- WPY: elite ratio + trophy always wins ---');
+console.log('\n--- WPY: Champions League plus 25 club goals wins ---');
 console.log(
   evaluateWpy({
     seasonGoalRatio: 0.6,
     eliteRatioBar: 0.5,
+    clubGoals: 28,
     wonChampionsLeague: true,
-    isInternationalTournamentYear: false,
-    wonInternationalTournament: false,
+    majorYear: 'none',
     recentFormGoals: 20,
     recentFormGames: 40,
   }),
 );
 
-console.log('\n--- WPY: club trophy without ratio never wins (per locked design) ---');
+console.log('\n--- WPY: club trophy without 25 club goals never wins ---');
 console.log(
   evaluateWpy({
     seasonGoalRatio: 0.3,
     eliteRatioBar: 0.5,
+    clubGoals: 18,
     wonChampionsLeague: true,
-    isInternationalTournamentYear: false,
-    wonInternationalTournament: false,
+    majorYear: 'none',
     recentFormGoals: 20,
     recentFormGames: 40,
   }),
 );
 
-console.log('\n--- WPY: international tournament year - winning it trumps the Champions League ---');
+console.log('\n--- WPY: Copa América / Nations League wins do not replace the Champions League ---');
 console.log(
   evaluateWpy({
     seasonGoalRatio: 0.55,
     eliteRatioBar: 0.5,
+    clubGoals: 30,
     wonChampionsLeague: false,
-    isInternationalTournamentYear: true,
-    wonInternationalTournament: true,
+    majorYear: 'none',
+    majorOutcome: 'champion',
+    majorFinalsGoals: 6,
     recentFormGoals: 20,
     recentFormGames: 40,
   }),
@@ -351,9 +356,9 @@ console.log('\n--- WPY: extreme form lottery (~1 goal/game over ~50 games) fires
 const lotteryContext = {
   seasonGoalRatio: 0.3,
   eliteRatioBar: 0.5,
+  clubGoals: 12,
   wonChampionsLeague: false,
-  isInternationalTournamentYear: false,
-  wonInternationalTournament: false,
+  majorYear: 'none' as const,
   recentFormGoals: 55,
   recentFormGames: 52,
 };
@@ -7512,10 +7517,11 @@ console.log('\n--- Club cups, paced tables, transfers, injuries, and elite score
     country: 'England',
     nationConfederation: 'UEFA',
   });
+  const playOff = calendar.fixtures.filter((f) => f.kind === 'continental-knockout' && f.europeanRound === 'play-off');
   const r16 = calendar.fixtures.filter((f) => f.kind === 'continental-knockout' && f.europeanRound === 'round-of-16');
   const qf = calendar.fixtures.filter((f) => f.kind === 'continental-knockout' && f.europeanRound === 'quarter-final');
-  if (r16.length !== 2 || qf.length !== 2 || !qf.some((f) => f.leg === 2)) {
-    console.error('Champions League quarter-finals must be two-legged and tagged separately from the last 16');
+  if (playOff.length !== 2 || r16.length !== 2 || qf.length !== 2 || !qf.some((f) => f.leg === 2)) {
+    console.error('Champions League must have two-legged play-offs, last 16, and quarter-finals');
     process.exitCode = 1;
   }
   const qfTitle = fixtureTitle({
@@ -7810,8 +7816,12 @@ console.log('\n--- Club cups, paced tables, transfers, injuries, and elite score
     continentalChampion: null,
     continentalStats: [{ cup: 'ucl', games: 13, goals: 12 }],
   });
-  if (!wonPot.won || lostPot.won || noTitle.won) {
-    console.error('club Player of the Tournament requires winning the cup and a 0.7 goal ratio');
+  const sixteenGoals = evaluateClubPlayerOfTheTournament({
+    continentalChampion: null,
+    continentalStats: [{ cup: 'ucl', games: 17, goals: 16 }],
+  });
+  if (!wonPot.won || lostPot.won || noTitle.won || !sixteenGoals.won) {
+    console.error('club Player of the Tournament requires a title at 0.7 GPG, or 16 Champions League goals');
     process.exitCode = 1;
   }
   if (noTitle.reason) {
@@ -7822,9 +7832,9 @@ console.log('\n--- Club cups, paced tables, transfers, injuries, and elite score
   const wpyMiss = evaluateWpy({
     seasonGoalRatio: 0.3,
     eliteRatioBar: 0.5,
+    clubGoals: 10,
     wonChampionsLeague: false,
-    isInternationalTournamentYear: false,
-    wonInternationalTournament: false,
+    majorYear: 'none',
     recentFormGoals: 10,
     recentFormGames: 20,
   });
@@ -7905,8 +7915,13 @@ console.log('\n--- Club cups, paced tables, transfers, injuries, and elite score
   }
 
   const r16Stage = { ...s2.sim, europeanStanding: { cup: 'ucl' as const, stage: 'round-of-16' as const } };
-  if (qf.some((f) => !shouldSkipFixture(f, r16Stage))) {
-    console.error('quarter-final fixtures must wait until the last 16 is finished');
+  if (qf.some((f) => !shouldSkipFixture(f, r16Stage)) || playOff.some((f) => !shouldSkipFixture(f, r16Stage))) {
+    console.error('play-off and quarter-final fixtures must wait until the last 16 is the live stage');
+    process.exitCode = 1;
+  }
+  const byeStage = { ...s2.sim, europeanStanding: { cup: 'ucl' as const, stage: 'round-of-16' as const } };
+  if (playOff.some((f) => !shouldSkipFixture(f, byeStage))) {
+    console.error('top-eight sides must skip the knockout play-off');
     process.exitCode = 1;
   }
 }
@@ -8117,6 +8132,154 @@ console.log('\n--- Call-up beats, transfer fees, 5-season wage discount ---');
   }
   if (year2at06 !== Math.round((listed * 0.6 * 0.6) / 500) * 500) {
     console.error('transfer offers must use career ratio, then the season discount');
+    process.exitCode = 1;
+  }
+}
+
+console.log('\n--- CONMEBOL WCQ, UCL play-offs, cups, WPY, super cups ---');
+{
+  const brazilS1 = internationalCampaignForSeason(1, 'CONMEBOL');
+  const brazilS2 = internationalCampaignForSeason(2, 'CONMEBOL');
+  const spainS1 = internationalCampaignForSeason(1, 'UEFA');
+  if (brazilS1.qualifierGames !== 9 || brazilS2.qualifierGames !== 9 || spainS1.qualifierGames !== 5) {
+    console.error('CONMEBOL World Cup qualifying must be 9 games a season; UEFA stays at 5');
+    process.exitCode = 1;
+  }
+  const brazil = hydrateSeason({
+    seasonNumber: 1,
+    club: getClub('real-madrid')!,
+    careerGoalRatio: 0.8,
+    nationId: 'brazil',
+    careerStart: 'favourite-first-team',
+    rng: () => 0.2,
+  });
+  const brazilQuals = brazil.calendar.fixtures.filter((f) => f.kind === 'international' && f.internationalRound === 'qualifier');
+  const brazilIds = brazilQuals.map((f) => f.opponentId).filter(Boolean);
+  if (brazilQuals.length !== 9 || brazil.sim.internationalGroup?.teamIds.length !== 10) {
+    console.error('Brazil World Cup qualifying must be a 10-nation home-and-away league');
+    process.exitCode = 1;
+  }
+  if (new Set(brazilIds).size !== 9) {
+    console.error('Brazil must face every other CONMEBOL nation once in season 1');
+    process.exitCode = 1;
+  }
+
+  if (championsLeagueBand(1) !== 'bye' || championsLeagueBand(8) !== 'bye' || championsLeagueBand(9) !== 'play-off' || championsLeagueBand(24) !== 'play-off' || championsLeagueBand(25) !== 'eliminated') {
+    console.error('Champions League must bye 1–8, play-off 9–24, and eliminate 25–36');
+    process.exitCode = 1;
+  }
+
+  const barca = getClub('barcelona')!;
+  const copaUsed = new Set<string>();
+  const lateCopa = [
+    pickDomesticCupOpponent(barca, 'quarter-final', copaUsed),
+    pickDomesticCupOpponent(barca, 'semi-final', copaUsed),
+    pickDomesticCupOpponent(barca, 'final', copaUsed),
+  ];
+  if (lateCopa.some((club) => !club || club.league !== 'La Liga')) {
+    console.error('Copa del Rey quarter-finals onward must be La Liga clubs');
+    process.exitCode = 1;
+  }
+
+  const wcWin = evaluateWpy({
+    seasonGoalRatio: 0.7,
+    eliteRatioBar: 0.5,
+    clubGoals: 26,
+    wonChampionsLeague: false,
+    majorYear: 'world-cup',
+    majorOutcome: 'champion',
+    majorFinalsGoals: 4,
+    recentFormGoals: 10,
+    recentFormGames: 20,
+  });
+  const wcShort = evaluateWpy({
+    seasonGoalRatio: 0.7,
+    eliteRatioBar: 0.5,
+    clubGoals: 26,
+    wonChampionsLeague: false,
+    majorYear: 'world-cup',
+    majorOutcome: 'champion',
+    majorFinalsGoals: 3,
+    recentFormGoals: 10,
+    recentFormGames: 20,
+  });
+  const wcRunner = evaluateWpy({
+    seasonGoalRatio: 0.7,
+    eliteRatioBar: 0.5,
+    clubGoals: 26,
+    wonChampionsLeague: true,
+    majorYear: 'world-cup',
+    majorOutcome: 'final',
+    majorTopGoalscorer: true,
+    majorFinalsGoals: 6,
+    recentFormGoals: 10,
+    recentFormGames: 20,
+  });
+  const copaOnly = evaluateWpy({
+    seasonGoalRatio: 0.7,
+    eliteRatioBar: 0.5,
+    clubGoals: 30,
+    wonChampionsLeague: false,
+    majorYear: 'none',
+    majorOutcome: 'champion',
+    majorFinalsGoals: 8,
+    recentFormGoals: 10,
+    recentFormGames: 20,
+  });
+  if (!wcWin.won || wcShort.won || !wcRunner.won || copaOnly.won) {
+    console.error('WPY must follow World Cup / Euro paths and never award Copa América or Nations League over the Champions League');
+    process.exitCode = 1;
+  }
+
+  const awards = awardLabels({
+    seasonNumber: 2,
+    clubId: 'real-madrid',
+    role: 'first-team',
+    matches: [],
+    goals: 40,
+    gamesPlayed: 50,
+    ratioMet: true,
+    age: 22,
+    leagueGoals: 20,
+    trophies: [],
+    topGoalscorer: false,
+    playerOfTheYear: false,
+    wonWpy: false,
+    continentalTopGoalscorer: true,
+    clubPlayerOfTheTournament: true,
+    continentalStats: [{ cup: 'ucl', games: 17, goals: 16 }],
+    international: {
+      tournament: 'afcon',
+      qualifyingGames: 0,
+      qualifyingGoals: 0,
+      qualifyingOutcome: 'none',
+      finalsGames: 6,
+      finalsGoals: 5,
+      tournamentOutcome: 'champion',
+      playerOfTheTournament: false,
+      topGoalscorer: false,
+    },
+  });
+  if (!awards.includes('Champions League top goalscorer') || !awards.includes('African Player of the Year')) {
+    console.error('career awards must list Champions League top goalscorer and African Player of the Year');
+    process.exitCode = 1;
+  }
+  if (!evaluateContinentalTopGoalscorer({ continentalStats: [{ cup: 'ucl', games: 13, goals: 10 }] })) {
+    console.error('10 Champions League goals must award the golden boot');
+    process.exitCode = 1;
+  }
+
+  const bothSuper = trophyLabels(
+    { leagueChampion: false, continentalChampion: null, superCup: true, domesticSuperCup: 'Supercopa de España', internationalChampion: null, domesticCup: null },
+    getClub('real-madrid'),
+    'La Liga',
+  );
+  if (!bothSuper.includes('Supercopa de España') || !bothSuper.includes('European Super Cup')) {
+    console.error('club and European Super Cups must both appear when won');
+    process.exitCode = 1;
+  }
+  if (continentalLabel('super-cup') !== 'European Super Cup' || continentalLabel('domestic-super-cup') !== 'Club Super Cup') {
+    console.error('career record must label the two Super Cups separately');
     process.exitCode = 1;
   }
 }

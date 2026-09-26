@@ -1,6 +1,16 @@
 import type { CalendarFixture, DomesticCupStage, LeaguesCupStage, PlayoffRound, SeasonCalendar, SuperCupStage } from './calendar';
 import type { SquadStatus } from './types';
 import { buildSeasonCalendar, fixtureIsHome, internationalVenueFlags, isFinalFixture, scoreboardPlayerOnLeft } from './calendar';
+import {
+  championsLeagueBand,
+  clubsThatWouldAdvanceFromLeague,
+  pickWeightedOpponent,
+  simulateKnockoutSurvivors,
+  tablePosition,
+  uclPlayOffOpponentId,
+  uclRoundOf16Field,
+  uclRoundOf16OpponentId,
+} from './championsLeagueKnockout';
 import { CHAMPIONS_LEAGUE_FIELD_SIZE, leaguePhaseOpponents } from './continentalDraw';
 import {
   chancesForKnockoutTie,
@@ -39,6 +49,7 @@ import {
 import {
   doesNationQualify,
   nationStrength,
+  nationsInConfederation,
   pickMixedRankOpponents,
   qualifierOpponents,
   tournamentGroupAdvancePoints,
@@ -126,6 +137,8 @@ export interface SeasonSimState {
   europeanTable: LeagueStanding[];
   europeanGroupPoints: number;
   europeanGroupPlayed: number;
+  /** Clubs still alive in the continental knockout, including the player. */
+  europeanKnockoutField: string[] | null;
   knockoutAggFor: number;
   knockoutAggAgainst: number;
   internationalStage: InternationalStage;
@@ -430,6 +443,7 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
       europeanTable,
       europeanGroupPoints: 0,
       europeanGroupPlayed: 0,
+      europeanKnockoutField: null,
       knockoutAggFor: 0,
       knockoutAggAgainst: 0,
       internationalStage: qualifyingStage
@@ -484,7 +498,11 @@ function seedMissingFirstHalfQualifying(
   seasonNumber: number,
 ): SeasonSimState {
   if (sim.internationalPhase !== 'qualifiers-and-tournament') return sim;
-  if ((sim.qualifierCarryPlayed ?? 0) >= 5) return sim;
+  const firstHalfTarget = sim.internationalGroup?.teamIds.length >= 10
+    || getNation(nationId)?.confederation === 'CONMEBOL'
+    ? 9
+    : 5;
+  if ((sim.qualifierCarryPlayed ?? 0) >= firstHalfTarget) return sim;
   const quals = calendar.fixtures.filter(
     (f) => f.kind === 'international' && f.internationalRound === 'qualifier' && f.opponentId,
   );
@@ -496,7 +514,7 @@ function seedMissingFirstHalfQualifying(
   let points = sim.qualifierCarryPoints ?? 0;
   let played = sim.qualifierCarryPlayed ?? 0;
   for (const fixture of quals) {
-    if (played >= 5) break;
+    if (played >= firstHalfTarget) break;
     const opponentId = fixture.opponentId!;
     const isHome = fixture.isHome === false;
     group = applyNpcNationMatch(
@@ -593,6 +611,12 @@ export function buildInternationalGroup(
   const useQualifying =
     prefer === 'qualifying' || (prefer === 'auto' && groupOpp.length === 0 && qualOpp.length > 0);
   if (useQualifying && qualOpp.length > 0) {
+    const nation = getNation(nationId);
+    if (tournament === 'world-cup' && nation?.confederation === 'CONMEBOL') {
+      const teams = nationsInConfederation('CONMEBOL').map((n) => n.id);
+      if (!teams.includes(nationId)) teams.unshift(nationId);
+      return createGroupState('Q', teams, 'qualifying');
+    }
     const teams = [nationId, ...qualOpp];
     return createGroupState('Q', teams, 'qualifying');
   }
@@ -704,6 +728,63 @@ export function ensureInternationalGroup(
   return { ...sim, internationalStage, internationalGroup };
 }
 
+function setKnockoutOpponent(
+  calendar: SeasonCalendar,
+  kind: CalendarFixture['kind'],
+  europeanRound: CalendarFixture['europeanRound'] | undefined,
+  opponentId: string | null,
+): SeasonCalendar {
+  if (!opponentId) return calendar;
+  const opp = getClub(opponentId);
+  if (!opp) return calendar;
+  return {
+    ...calendar,
+    fixtures: calendar.fixtures.map((f) => {
+      const sameRound = kind === 'continental-knockout'
+        ? f.kind === kind && f.europeanRound === europeanRound
+        : f.kind === kind;
+      if (!sameRound) return f;
+      if (f.opponentId) return f;
+      return { ...f, opponentId: opp.id, opponentLabel: opp.name };
+    }),
+  };
+}
+
+export function syncContinentalKnockoutCalendar(
+  calendar: SeasonCalendar,
+  sim: SeasonSimState,
+  playerClubId?: string | null,
+): SeasonCalendar {
+  const standing = sim.europeanStanding;
+  if (!standing || !playerClubId) return calendar;
+  const stage = standing.stage;
+  if (stage === 'group' || stage === 'eliminated' || stage === 'champion') return calendar;
+  const field = sim.europeanKnockoutField ?? [];
+  const used = calendar.fixtures
+    .filter((f) => f.kind.startsWith('continental') && f.kind !== 'continental-group' && f.opponentId)
+    .map((f) => f.opponentId!)
+    .filter((id, i, arr) => arr.indexOf(id) === i);
+  const seed = `${calendar.seasonNumber}-${standing.cup}-${playerClubId}-${stage}`;
+  let opponentId: string | null = null;
+  if (stage === 'play-off') {
+    opponentId = uclPlayOffOpponentId(sim.europeanTable, playerClubId);
+  } else if (stage === 'round-of-16' && standing.cup === 'ucl') {
+    opponentId = uclRoundOf16OpponentId(sim.europeanTable, playerClubId, field, seed);
+  } else {
+    opponentId = pickWeightedOpponent(playerClubId, field, seed, used);
+  }
+  if (stage === 'play-off' || stage === 'round-of-16' || stage === 'quarter-final') {
+    return setKnockoutOpponent(calendar, 'continental-knockout', stage, opponentId);
+  }
+  if (stage === 'semi-final') {
+    return setKnockoutOpponent(calendar, 'continental-semi-final', undefined, opponentId);
+  }
+  if (stage === 'final') {
+    return setKnockoutOpponent(calendar, 'continental-final', undefined, opponentId);
+  }
+  return calendar;
+}
+
 export function syncInternationalCalendar(calendar: SeasonCalendar, sim: SeasonSimState): SeasonCalendar {
   if (
     sim.internationalTournament !== 'nations-league'
@@ -793,7 +874,6 @@ function assignOpponentsAndChances(
 
   let leagueI = 0;
   let groupI = 0;
-  let euroI = 0;
   let leaguesI = 0;
   let playoffI = 0;
   let superI = 0;
@@ -866,53 +946,20 @@ function assignOpponentsAndChances(
       f.playerChances = chancesForLeagueMatch({ strength: club.strength }).count;
       f.isHome = (groupI - 1) % 2 === 0;
     } else if (f.kind === 'continental-knockout' && f.leg === 1) {
-      const oppId = euroRivals[euroI % Math.max(1, euroRivals.length)];
-      euroI += 1;
-      const opp = oppId ? getClub(oppId) : undefined;
       const [leg1, leg2] = chancesForKnockoutTie({ strength: club.strength });
       f.playerChances = leg1.count;
-      if (opp) {
-        f.opponentId = opp.id;
-        f.opponentLabel = opp.name;
-      }
       const ret = findReturnLeg(fixtures, i);
-      if (ret) {
-        ret.playerChances = leg2.count;
-        if (opp) {
-          ret.opponentId = opp.id;
-          ret.opponentLabel = opp.name;
-        }
-      }
+      if (ret) ret.playerChances = leg2.count;
     } else if (f.kind === 'continental-knockout' && f.leg === 2 && f.playerChances === undefined) {
       f.playerChances = chancesForLeagueMatch({ strength: club.strength }).count;
     } else if (f.kind === 'continental-semi-final' && f.leg === 1) {
-      const oppId = euroRivals[euroI % Math.max(1, euroRivals.length)];
-      euroI += 1;
-      const opp = oppId ? getClub(oppId) : undefined;
       const [leg1, leg2] = chancesForKnockoutTie({ strength: club.strength });
       f.playerChances = leg1.count;
-      if (opp) {
-        f.opponentId = opp.id;
-        f.opponentLabel = opp.name;
-      }
       const ret = findReturnLeg(fixtures, i);
-      if (ret) {
-        ret.playerChances = leg2.count;
-        if (opp) {
-          ret.opponentId = opp.id;
-          ret.opponentLabel = opp.name;
-        }
-      }
+      if (ret) ret.playerChances = leg2.count;
     } else if (f.kind === 'continental-semi-final' && f.leg === 2 && f.playerChances === undefined) {
       f.playerChances = chancesForLeagueMatch({ strength: club.strength }).count;
     } else if (f.kind === 'continental-final') {
-      const oppId = euroRivals[euroI % Math.max(1, euroRivals.length)];
-      euroI += 1;
-      const opp = oppId ? getClub(oppId) : undefined;
-      if (opp) {
-        f.opponentId = opp.id;
-        f.opponentLabel = opp.name;
-      }
       f.playerChances = chancesForLeagueMatch({ strength: club.strength }).count;
     } else if (f.kind === 'international') {
       let opp: { id: string; name: string } | undefined;
@@ -983,14 +1030,16 @@ export function pickDomesticCupOpponent(
   const last16 = stage === 'round-of-16';
   const fromSecondDivision = SECOND_DIVISIONS.has(club.league);
   const higherDivision = country.filter((c) => !SECOND_DIVISIONS.has(c.league));
+  const topFlight = sameLeague.length > 0 && !fromSecondDivision ? sameLeague : higherDivision;
   let pool: Club[];
-  if (late && fromSecondDivision && higherDivision.length > 0) {
-    pool = higherDivision;
-  } else if (late) {
-    pool = country.length > 0 ? country : sameLeague;
-  } else if (last16 && sameLeague.length > 0) {
-    const lower = country.filter((c) => c.league !== club.league);
-    pool = [...sameLeague, ...shuffle(lower).slice(0, Math.max(3, Math.ceil(sameLeague.length / 2)))];
+  if (late) {
+    pool = topFlight.length > 0 ? topFlight : (higherDivision.length > 0 ? higherDivision : sameLeague);
+  } else if (last16) {
+    const lower = country.filter((c) => SECOND_DIVISIONS.has(c.league) && c.league !== club.league);
+    const first = fromSecondDivision ? sameLeague : (sameLeague.length > 0 ? sameLeague : higherDivision);
+    pool = first.length > 0
+      ? [...first, ...shuffle(lower).slice(0, Math.max(2, Math.ceil(first.length / 3)))]
+      : country;
   } else {
     pool = country.length > 0 ? country : sameLeague;
   }
@@ -1109,7 +1158,7 @@ export function shouldSkipFixture(fixture: CalendarFixture, sim: SeasonSimState)
     if (!stage || stage === 'eliminated') return true;
     if (fixture.kind === 'continental-group') return stage !== 'group';
     if (fixture.kind === 'continental-knockout') {
-      if (stage !== 'round-of-16' && stage !== 'quarter-final') return true;
+      if (stage !== 'play-off' && stage !== 'round-of-16' && stage !== 'quarter-final') return true;
       if (fixture.europeanRound) return fixture.europeanRound !== stage;
       return false;
     }
@@ -1300,7 +1349,31 @@ export function applyEuropeanResult(
       next.europeanTable = table;
     }
     if (next.europeanGroupPlayed >= GROUP_GAMES) {
-      if (next.europeanGroupPoints >= GROUP_ADVANCE_POINTS) {
+      const table = next.europeanTable;
+      const cup = next.europeanStanding.cup;
+      if (cup === 'ucl' && playerClubId && table.length > 0) {
+        const pos = tablePosition(table, playerClubId);
+        const band = championsLeagueBand(pos);
+        if (band === 'eliminated') {
+          next.europeanStanding.stage = 'eliminated';
+          next.europeanKnockoutField = [];
+        } else if (band === 'play-off') {
+          next.europeanStanding.stage = 'play-off';
+          next.europeanKnockoutField = table.map((row) => row.clubId);
+        } else {
+          next.europeanStanding.stage = 'round-of-16';
+          next.europeanKnockoutField = uclRoundOf16Field(table, playerClubId, false, `ucl-r16-${playerClubId}`);
+        }
+      } else if (playerClubId && table.length > 0) {
+        const advancers = clubsThatWouldAdvanceFromLeague(table, GROUP_ADVANCE_POINTS, 16);
+        if (advancers.includes(playerClubId)) {
+          next.europeanStanding.stage = 'round-of-16';
+          next.europeanKnockoutField = advancers;
+        } else {
+          next.europeanStanding.stage = 'eliminated';
+          next.europeanKnockoutField = [];
+        }
+      } else if (next.europeanGroupPoints >= GROUP_ADVANCE_POINTS) {
         next.europeanStanding.stage = 'round-of-16';
       } else {
         next.europeanStanding.stage = 'eliminated';
@@ -1318,10 +1391,36 @@ export function applyEuropeanResult(
       next.knockoutAggAgainst = 0;
       if (!progressed) {
         next.europeanStanding.stage = 'eliminated';
+      } else if (next.europeanStanding.stage === 'play-off') {
+        next.europeanStanding.stage = 'round-of-16';
+        if (playerClubId && next.europeanTable.length > 0) {
+          next.europeanKnockoutField = uclRoundOf16Field(
+            next.europeanTable,
+            playerClubId,
+            true,
+            `ucl-r16-${playerClubId}`,
+          );
+        }
       } else if (next.europeanStanding.stage === 'round-of-16') {
         next.europeanStanding.stage = 'quarter-final';
+        if (playerClubId) {
+          next.europeanKnockoutField = simulateKnockoutSurvivors(
+            next.europeanKnockoutField ?? [],
+            playerClubId,
+            fixture.opponentId ?? null,
+            `ucl-qf-${playerClubId}`,
+          );
+        }
       } else {
         next.europeanStanding.stage = 'semi-final';
+        if (playerClubId) {
+          next.europeanKnockoutField = simulateKnockoutSurvivors(
+            next.europeanKnockoutField ?? [],
+            playerClubId,
+            fixture.opponentId ?? null,
+            `ucl-sf-${playerClubId}`,
+          );
+        }
       }
     }
     return next;
@@ -1335,6 +1434,14 @@ export function applyEuropeanResult(
       next.knockoutAggFor = 0;
       next.knockoutAggAgainst = 0;
       next.europeanStanding.stage = progressed ? 'final' : 'eliminated';
+      if (progressed && playerClubId) {
+        next.europeanKnockoutField = simulateKnockoutSurvivors(
+          next.europeanKnockoutField ?? [],
+          playerClubId,
+          fixture.opponentId ?? null,
+          `ucl-final-${playerClubId}`,
+        );
+      }
     }
     return next;
   }
@@ -1412,7 +1519,10 @@ export function applyInternationalResult(
     if (next.internationalPhase === 'qualifiers') {
       return next;
     }
-    if (totalPlayed >= 10 && next.nationId && next.internationalTournament) {
+    const needed = next.internationalGroup?.kind === 'qualifying' && next.internationalGroup.teamIds.length >= 10
+      ? 18
+      : 10;
+    if (totalPlayed >= needed && next.nationId && next.internationalTournament) {
       const qualified = next.internationalGroup?.kind === 'qualifying'
         ? doesNationQualifyFromTable(
             next.internationalGroup,
@@ -1616,7 +1726,8 @@ export function fixtureTitle(
     return `${cupName} ${cupRoundLabel(fixture.domesticCupStage)}${vs}`;
   }
   if (fixture.kind === 'super-cup') {
-    const name = fixture.domesticSuperCupName ?? (fixture.domesticSuperCup ? 'Super Cup' : 'Super Cup');
+    const name = fixture.domesticSuperCupName
+      ?? (fixture.domesticSuperCup ? 'Club Super Cup' : 'European Super Cup');
     if (fixture.superCupStage === 'semi-final') return `${name} semi-final${vs}`;
     return `${name}${vs}`;
   }
@@ -1626,7 +1737,11 @@ export function fixtureTitle(
   }
   if (fixture.kind === 'continental-knockout') {
     const cup = fixture.continentalCup ? CONTINENTAL_CUPS[fixture.continentalCup].name : 'Europe';
-    const round = fixture.europeanRound === 'quarter-final' ? 'quarter-final' : 'round of 16';
+    const round = fixture.europeanRound === 'play-off'
+      ? 'play-off'
+      : fixture.europeanRound === 'quarter-final'
+        ? 'quarter-final'
+        : 'round of 16';
     const leg = fixture.leg === 2 ? ' 2nd leg' : ' 1st leg';
     return `${cup} ${round}${leg}${vs}`;
   }
@@ -1706,6 +1821,7 @@ function continentalThroughNote(fixture: CalendarFixture, through: boolean): str
   if (!through) return 'out on aggregate';
   if (fixture.kind === 'continental-semi-final') return 'through to the final';
   if (fixture.europeanRound === 'quarter-final') return 'through to the semi-final';
+  if (fixture.europeanRound === 'play-off') return 'through to the round of 16';
   return 'through to the quarter-final';
 }
 

@@ -39,7 +39,7 @@ export interface MatchRecord {
   scored: boolean | null;
 }
 
-export type ContinentalStatKey = ContinentalCupId | 'super-cup';
+export type ContinentalStatKey = ContinentalCupId | 'super-cup' | 'domestic-super-cup';
 
 export interface ContinentalSeasonStat {
   cup: ContinentalStatKey;
@@ -114,9 +114,11 @@ export interface SeasonRecord {
   topGoalscorerReason?: string | null;
   playerOfTheYearReason?: string | null;
   wpyReason?: string | null;
-  /** Club continental Player of the Tournament (must win the cup at ≥ 0.7). */
+  /** Club continental Player of the Tournament (title + 0.7 GPG, or 16+ UCL goals). */
   clubPlayerOfTheTournament?: boolean;
   clubPlayerOfTheTournamentReason?: string | null;
+  /** Champions League golden boot for this season. */
+  continentalTopGoalscorer?: boolean;
   /** Continental cup won this season, when the club lifted it. */
   continentalChampion?: ContinentalCupId | null;
   /** Weekly wage × 52 for this season. */
