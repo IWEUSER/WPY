@@ -1,9 +1,9 @@
 import type { CalendarFixture } from './calendar';
 import type { ContinentalCupId } from './data/competitions';
-import { CONTINENTAL_CUPS, SUPER_CUP } from './data/competitions';
+import { CONTINENTAL_CUPS } from './data/competitions';
 import type { ContinentalSeasonStat, SeasonRecord } from './types';
 
-export type ContinentalStatKey = ContinentalCupId | 'super-cup';
+export type ContinentalStatKey = ContinentalCupId | 'super-cup' | 'domestic-super-cup';
 
 export function emptyContinentalStats(): ContinentalSeasonStat[] {
   return [];
@@ -22,6 +22,24 @@ export function bumpContinentalStats(
   }
   next[i] = { ...next[i], games: next[i].games + 1, goals: next[i].goals + goals };
   return next;
+}
+
+/** Club goals/games only — national-team appearances never count here. */
+export function clubSeasonTotals(season: SeasonRecord): { goals: number; games: number } {
+  const intlGoals = (season.international?.qualifyingGoals ?? 0) + (season.international?.finalsGoals ?? 0);
+  const intlGames = (season.international?.qualifyingGames ?? 0) + (season.international?.finalsGames ?? 0);
+  const leagueGoals = season.leagueGoals ?? 0;
+  const cupGoals = season.cupGoals ?? 0;
+  const continentalGoals = (season.continentalStats ?? []).reduce((sum, row) => sum + row.goals, 0);
+  const splitGoals = leagueGoals + cupGoals + continentalGoals;
+  const leagueGames = season.leagueGames ?? 0;
+  const cupGames = season.cupGames ?? 0;
+  const continentalGames = (season.continentalStats ?? []).reduce((sum, row) => sum + row.games, 0);
+  const splitGames = leagueGames + cupGames + continentalGames;
+  return {
+    goals: splitGoals > 0 ? splitGoals : Math.max(0, season.goals - intlGoals),
+    games: splitGames > 0 ? splitGames : Math.max(0, season.gamesPlayed - intlGames),
+  };
 }
 
 export function recordClubAppearanceStats(
@@ -50,7 +68,11 @@ export function recordClubAppearanceStats(
     };
   }
   if (fixture.kind === 'super-cup' || fixture.kind === 'leagues-cup') {
-    const cup = fixture.kind === 'leagues-cup' ? 'leagues-cup' : 'super-cup';
+    const cup = fixture.kind === 'leagues-cup'
+      ? 'leagues-cup'
+      : fixture.domesticSuperCup
+        ? 'domestic-super-cup'
+        : 'super-cup';
     return { ...season, continentalStats: bumpContinentalStats(season.continentalStats, cup, goals) };
   }
   if (fixture.kind.startsWith('continental') && fixture.continentalCup) {
@@ -63,7 +85,8 @@ export function recordClubAppearanceStats(
 }
 
 export function continentalLabel(cup: ContinentalStatKey): string {
-  if (cup === 'super-cup') return SUPER_CUP.name;
+  if (cup === 'super-cup') return 'European Super Cup';
+  if (cup === 'domestic-super-cup') return 'Club Super Cup';
   return CONTINENTAL_CUPS[cup].name;
 }
 
@@ -115,6 +138,11 @@ export function aggregateDomesticSplit(seasons: SeasonRecord[]): DomesticSplit {
     next.total.goals += row.total.goals;
   }
   return next;
+}
+
+/** Sum of transfer fees paid to acquire the player across counted seasons. */
+export function careerTransferFeesPaid(seasons: SeasonRecord[]): number {
+  return seasons.reduce((sum, season) => sum + (season.transferFeePaid ?? 0), 0);
 }
 
 export function aggregateContinental(seasons: SeasonRecord[]): ContinentalSeasonStat[] {

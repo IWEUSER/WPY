@@ -4,6 +4,12 @@ import { leagueDisplayName } from './data/leagueFormat';
 import type { SeasonHonours } from './seasonSim';
 import type { InternationalSeasonRecord, SeasonRecord, TournamentSeasonOutcome } from './types';
 
+/** League title as shown on trophies and celebration screens. */
+export function leagueTrophyLabel(club: Club | undefined, league?: string | null): string {
+  if (league === 'MLS' || club?.league === 'MLS') return 'MLS Cup';
+  return league ?? club?.league ?? 'league';
+}
+
 /** Competition titles won this season, in display order. */
 export function trophyLabels(
   honours: SeasonHonours | null | undefined,
@@ -13,14 +19,32 @@ export function trophyLabels(
   if (!honours || !club) return [];
   const labels: string[] = [];
   if (honours.leagueChampion) {
-    labels.push(league === 'MLS' || club.league === 'MLS' ? 'MLS Cup' : (league ?? club.league));
+    labels.push(leagueTrophyLabel(club, league));
   }
   if (honours.domesticCup) labels.push(DOMESTIC_CUPS[honours.domesticCup].name);
   if (honours.domesticSuperCup) labels.push(honours.domesticSuperCup);
-  if (honours.superCup) labels.push('Super Cup');
+  if (honours.superCup) labels.push('European Super Cup');
   if (honours.continentalChampion) labels.push(CONTINENTAL_CUPS[honours.continentalChampion].name);
   if (honours.internationalChampion) labels.push(INTERNATIONAL_TOURNAMENTS[honours.internationalChampion].name);
   return labels;
+}
+
+/** Trophies stored on the season, plus an international title if the finals were won. */
+export function seasonTrophyList(season: SeasonRecord): string[] {
+  const names = [...(season.trophies ?? [])];
+  const intl = season.international;
+  if (intl?.tournamentOutcome === 'champion' && intl.tournament) {
+    const title = INTERNATIONAL_TOURNAMENTS[intl.tournament]?.name ?? intl.tournament;
+    if (!names.includes(title)) names.push(title);
+  }
+  return names;
+}
+
+export function seasonAwardList(season: SeasonRecord): string[] {
+  return [
+    ...awardLabels(season),
+    ...(season.wonWpy ? ['World Player of the Year'] : []),
+  ];
 }
 
 export function awardLabels(season: SeasonRecord): string[] {
@@ -29,6 +53,9 @@ export function awardLabels(season: SeasonRecord): string[] {
   if (season.playerOfTheYear) labels.push('League player of the year');
   if (season.clubPlayerOfTheTournament) {
     labels.push(`${clubTournamentAwardName(season)} Player of the Tournament`);
+  }
+  if (season.continentalTopGoalscorer) {
+    labels.push('Champions League top goalscorer');
   }
   const intl = season.international;
   if (intl?.playerOfTheTournament && intl.tournament) {
@@ -39,10 +66,18 @@ export function awardLabels(season: SeasonRecord): string[] {
     const name = INTERNATIONAL_TOURNAMENTS[intl.tournament]?.name ?? intl.tournament;
     labels.push(`${name} top goalscorer`);
   }
+  if (intl?.tournamentOutcome === 'champion' && intl.tournament === 'afcon') {
+    labels.push('African Player of the Year');
+  }
+  if (intl?.tournamentOutcome === 'champion' && intl.tournament === 'asian-cup') {
+    labels.push('Asian Player of the Year');
+  }
   return labels;
 }
 
 function clubTournamentAwardName(season: SeasonRecord): string {
+  const ucl = (season.continentalStats ?? []).find((row) => row.cup === 'ucl');
+  if (!season.continentalChampion && ucl && ucl.goals >= 16) return CONTINENTAL_CUPS.ucl.name;
   const id = season.continentalChampion;
   if (id && CONTINENTAL_CUPS[id]) return CONTINENTAL_CUPS[id].name;
   for (const cup of Object.values(CONTINENTAL_CUPS)) {
@@ -68,7 +103,7 @@ function countNames(names: string[]): CountedHonour[] {
 }
 
 export function careerTrophyCounts(seasons: SeasonRecord[]): CountedHonour[] {
-  return countNames(seasons.flatMap((season) => season.trophies ?? []));
+  return countNames(seasons.flatMap((season) => seasonTrophyList(season)));
 }
 
 export function careerAwardCounts(seasons: SeasonRecord[]): CountedHonour[] {
@@ -100,11 +135,16 @@ export function seasonRatio(season: Pick<SeasonRecord, 'goals' | 'gamesPlayed'>)
   return season.gamesPlayed > 0 ? season.goals / season.gamesPlayed : 0;
 }
 
-export function competitionStageLabel(stage: string | null | undefined): string {
+export function competitionStageLabel(
+  stage: string | null | undefined,
+  opts?: { leaguePhase?: boolean },
+): string {
   if (!stage || stage === 'not-entered' || stage === 'pending' || stage === 'none') return '—';
+  if (stage === 'group' && opts?.leaguePhase) return 'League phase';
   const labels: Record<string, string> = {
     group: 'Group stage',
     'round-of-32': 'Round of 32',
+    'play-off': 'Knockout play-off',
     'round-of-16': 'Round of 16',
     'quarter-final': 'Quarter-final',
     'semi-final': 'Semi-final',

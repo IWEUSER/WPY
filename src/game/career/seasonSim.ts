@@ -1,7 +1,19 @@
 import type { CalendarFixture, DomesticCupStage, LeaguesCupStage, PlayoffRound, SeasonCalendar, SuperCupStage } from './calendar';
 import type { SquadStatus } from './types';
-import { buildSeasonCalendar, fixtureIsHome } from './calendar';
-import { leaguePhaseOpponents } from './continentalDraw';
+import { buildSeasonCalendar, fixtureIsHome, internationalVenueFlags, isFinalFixture, scoreboardPlayerOnLeft } from './calendar';
+import {
+  championsLeagueBand,
+  clubsThatWouldAdvanceFromLeague,
+  isUclFinalistClub,
+  pickUclFinalOpponent,
+  pickWeightedOpponent,
+  simulateKnockoutSurvivors,
+  tablePosition,
+  uclPlayOffOpponentId,
+  uclRoundOf16Field,
+  uclRoundOf16OpponentId,
+} from './championsLeagueKnockout';
+import { CHAMPIONS_LEAGUE_FIELD_SIZE, leaguePhaseOpponents } from './continentalDraw';
 import {
   chancesForKnockoutTie,
   chancesForLeagueMatch,
@@ -12,6 +24,7 @@ import {
   clubsInLeague,
   getClub,
   ligaMxClubs,
+  promotionTarget,
   leagueMatchWeeks,
   qualifiesForSaudiSuperCup,
   SECOND_DIVISIONS,
@@ -39,6 +52,7 @@ import {
 import {
   doesNationQualify,
   nationStrength,
+  nationsInConfederation,
   pickMixedRankOpponents,
   qualifierOpponents,
   tournamentGroupAdvancePoints,
@@ -56,8 +70,10 @@ import {
   nationsLeagueGroupTeams,
 } from './data/nationsLeague';
 import {
+  applyNpcNationMatch,
   applyPlayerGroupResult,
   createGroupState,
+  doesNationQualifyFromTable,
   groupPosition,
   nationsLeagueQuarterFinalOpponent,
   nationCanProgressKnockout,
@@ -68,9 +84,17 @@ import {
 import { clubEligibleForNationalTeam, getNation, isSelectedForNationalTeam, NATIONS } from './international';
 import {
   applyMatchToTable,
+  championsLeagueTableNeedsRepair,
   clubsForContinentalCup,
+  emptyEuropeanTable,
   emptyStanding,
+  expandChampionsLeagueTable,
+  fillMissingEuropeanRounds,
+  formatHomeAwayScore,
+  liveScoreFromTimeline,
   simulateClubMatch,
+  simulateMatchTimeline,
+  simulateRestOfEuropeanRound,
   simulateRestOfLeagueRound,
   applyPlayerGoalsFloor,
   expectedScore,
@@ -80,6 +104,7 @@ import {
 } from './matchEngine';
 import { shuffle } from './util';
 import { describeDrawSettledOnPenalties, settleDrawOnPenalties } from './penalties';
+import { chanceMinute, type ChanceStake } from '../shooting/chanceAtmosphere';
 
 export type InternationalStage =
   | 'not-selected'
@@ -111,8 +136,12 @@ export interface SeasonSimState {
   fixtureIndex: number;
   leagueTable: LeagueStanding[];
   europeanStanding: EuropeanStanding | null;
+  /** League-phase table for the player's continental cup. */
+  europeanTable: LeagueStanding[];
   europeanGroupPoints: number;
   europeanGroupPlayed: number;
+  /** Clubs still alive in the continental knockout, including the player. */
+  europeanKnockoutField: string[] | null;
   knockoutAggFor: number;
   knockoutAggAgainst: number;
   internationalStage: InternationalStage;
@@ -162,6 +191,95 @@ export interface LiveMatch {
   goalsAtNinety?: number;
   ninetyScoreFor?: number;
   ninetyScoreAgainst?: number;
+}
+
+/** Stable per-match seed so the board shown between chances matches full time. */
+export function liveMatchScoreSeed(seasonNumber: number, fixtureIndex: number, clubId: string): number {
+  let h = 2166136261 ^ (seasonNumber >>> 0) ^ Math.imul(fixtureIndex + 1, 2654435761);
+  for (let i = 0; i < clubId.length; i++) {
+    h ^= clubId.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+export function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export function fixtureChanceStake(fixture: CalendarFixture): ChanceStake {
+  if (isFinalFixture(fixture)) return 'final';
+  if (fixture.kind !== 'league' && fixture.kind !== 'rest') return 'cup';
+  return 'league';
+}
+
+export function liveMatchBoardLine(args: {
+  sim: SeasonSimState;
+  fixture: CalendarFixture;
+  club: Club;
+  live: LiveMatch;
+  seasonNumber: number;
+}): string {
+  const { sim, fixture, club, live, seasonNumber } = args;
+  if (live.penaltyKick && live.ninetyScoreFor != null && live.ninetyScoreAgainst != null) {
+    return formatHomeAwayScore(live.ninetyScoreFor, live.ninetyScoreAgainst, scoreboardPlayerOnLeft(fixture));
+  }
+  const rng = mulberry32(liveMatchScoreSeed(seasonNumber, live.fixtureIndex, club.id));
+  const isHome = fixtureIsHome(fixture);
+  const isInternational = fixture.kind === 'international';
+  const clubOpp = !isInternational && fixture.opponentId ? getClub(fixture.opponentId) : undefined;
+  const us = isInternational
+    ? (sim.nationId ? nationStrength(sim.nationId) : 70)
+    : club.strength;
+  const them = isInternational
+    ? (fixture.opponentId ? nationStrength(fixture.opponentId) : 70)
+    : (clubOpp?.strength ?? 70);
+  const context = isInternational
+    ? { clubStrength: us, opponentStrength: them, isHome, knockout: isOneOffKnockout(fixture) }
+    : {
+      clubTier: club.tier,
+      opponentTier: clubOpp?.tier ?? 3,
+      clubStrength: club.strength,
+      opponentStrength: clubOpp?.strength,
+      isHome,
+    };
+  const timeline = simulateMatchTimeline(context, rng, fixture.playerChances);
+  const minute = chanceMinute(
+    live.chancesTaken,
+    Math.max(1, live.chancesTotal || fixture.playerChances || 1),
+    fixtureChanceStake(fixture),
+  );
+  const sliced = liveScoreFromTimeline(timeline, minute, live.goals);
+  const result = applyPlayerGoalsFloor(
+    { scoreFor: sliced.scoreFor, scoreAgainst: sliced.scoreAgainst, outcome: 'draw' },
+    live.goals,
+  );
+  return formatHomeAwayScore(result.scoreFor, result.scoreAgainst, scoreboardPlayerOnLeft(fixture));
+}
+
+export function liveMatchBoardScores(args: {
+  sim: SeasonSimState;
+  fixture: CalendarFixture;
+  club: Club;
+  live: LiveMatch;
+  seasonNumber: number;
+}): { scoreFor: number; scoreAgainst: number; line: string } {
+  const line = liveMatchBoardLine(args);
+  const [left, right] = line.split('\u2013').map((part) => Number(part));
+  const playerOnLeft = scoreboardPlayerOnLeft(args.fixture);
+  const scoreFor = playerOnLeft ? left : right;
+  const scoreAgainst = playerOnLeft ? right : left;
+  return {
+    scoreFor: Number.isFinite(scoreFor) ? scoreFor : 0,
+    scoreAgainst: Number.isFinite(scoreAgainst) ? scoreAgainst : 0,
+    line,
+  };
 }
 
 export interface HydrateSeasonParams {
@@ -239,8 +357,7 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
       intlSeason >= 1 &&
       nationId &&
       campaign.tournament &&
-      campaignSchedulesInternational(campaign.phase) &&
-      clubOk,
+      campaignSchedulesInternational(campaign.phase),
   );
   const inEuro = tournament !== 'euro' || Boolean(nationId && isEuroDefaultQualifier(nationId));
   const inNationsLeague =
@@ -251,25 +368,20 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
   const carryMatches = Boolean(
     qualifierCarry && tournament && qualifierCarry.tournament === tournament,
   );
-  const continueQualifying = Boolean(
-    carryMatches &&
-      qualifierCarry &&
-      ((qualifierCarry.played ?? 0) > 0 || qualifierCarry.group),
-  );
   const internationalSelected = Boolean(
-    continueQualifying ||
-      (campaignActive &&
-        inEuro &&
-        inNationsLeague &&
-        isSelectedForNationalTeam({
-          clubTier: club.tier,
-          careerGoalRatio,
-          nationId,
-          publicSeason,
-          calendarWeek: 1,
-          squadStatus: params.squadStatus ?? 'starter',
-          league,
-        })),
+    campaignActive &&
+      inEuro &&
+      inNationsLeague &&
+      clubOk &&
+      isSelectedForNationalTeam({
+        clubTier: club.tier,
+        careerGoalRatio,
+        nationId,
+        publicSeason,
+        calendarWeek: 1,
+        squadStatus: params.squadStatus ?? 'starter',
+        league,
+      }),
   );
 
   let calendar = buildSeasonCalendar({
@@ -313,30 +425,38 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
   const leagueClubs = clubsForSeason(club, league);
   const leagueTable = leagueClubs.map((c) => emptyStanding(c.id));
   const europeanStanding: EuropeanStanding | null = cup ? { cup, stage: 'group' } : null;
+  const europeanTable = cup ? emptyEuropeanTable(clubsForContinentalCup(cup, club.id)) : [];
   const domesticCup = calendar.domesticCup ?? null;
   const hasFriendlies = calendar.fixtures.some((f) => f.internationalRound === 'friendly');
   const titleRival = pickTitleRival(club, league);
   const carryGroup = carryMatches ? qualifierCarry?.group ?? null : null;
-  const internationalGroup = nationId && tournament && (internationalSelected || carryGroup)
+  const nationCampaign = Boolean(campaignActive && inEuro && inNationsLeague);
+  const internationalGroup = nationId && tournament && (nationCampaign || carryGroup)
     ? (carryGroup ?? buildInternationalGroup(nationId, tournament, calendar, seasonNumber, startsAtTournament ? 'finals' : 'qualifying'))
     : null;
 
-  return {
-    calendar,
-    sim: {
+  const qualifyingStage = Boolean(
+    nationCampaign && (campaign.phase === 'qualifiers' || campaign.phase === 'qualifiers-and-tournament'),
+  );
+
+  let sim: SeasonSimState = {
       fixtureIndex: 0,
       leagueTable,
       europeanStanding,
+      europeanTable,
       europeanGroupPoints: 0,
       europeanGroupPlayed: 0,
+      europeanKnockoutField: null,
       knockoutAggFor: 0,
       knockoutAggAgainst: 0,
-      internationalStage: internationalSelected
-        ? (startsAtTournament ? (hasFriendlies ? 'friendly' : 'group') : 'qualifying')
-        : 'not-selected',
+      internationalStage: qualifyingStage
+        ? 'qualifying'
+        : internationalSelected
+          ? (startsAtTournament ? (hasFriendlies ? 'friendly' : 'group') : 'qualifying')
+          : 'not-selected',
       internationalSelected,
-      internationalTournament: campaignActive && inEuro && inNationsLeague ? tournament : null,
-      internationalPhase: campaignActive && inEuro && inNationsLeague ? campaign.phase : 'none',
+      internationalTournament: nationCampaign ? tournament : null,
+      internationalPhase: nationCampaign ? campaign.phase : 'none',
       nationId: nationId ?? null,
       qualifierPoints: 0,
       qualifierPlayed: 0,
@@ -345,7 +465,7 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
       qualifierCarryPlayed: carryMatches && qualifierCarry ? qualifierCarry.played : 0,
       groupPoints: 0,
       groupPlayed: 0,
-      nationQualified: Boolean(internationalSelected && startsAtTournament),
+      nationQualified: Boolean(startsAtTournament && nationCampaign),
       domesticCup,
       domesticCupStage: domesticCup ? 'round-of-16' : 'not-entered',
       honours: emptyHonours(),
@@ -362,7 +482,60 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
       internationalGroup,
       friendlyPlayed: 0,
       knockoutGamesScored: 0,
-    },
+  };
+  if (qualifyingStage && nationId) {
+    sim = seedMissingFirstHalfQualifying(sim, calendar, nationId, seasonNumber);
+  }
+
+  return {
+    calendar,
+    sim,
+  };
+}
+
+/** When Season 2 starts without a carried table, NPC the missing first five qualifying matches. */
+function seedMissingFirstHalfQualifying(
+  sim: SeasonSimState,
+  calendar: SeasonCalendar,
+  nationId: string,
+  seasonNumber: number,
+): SeasonSimState {
+  if (sim.internationalPhase !== 'qualifiers-and-tournament') return sim;
+  const firstHalfTarget = (sim.internationalGroup?.teamIds.length ?? 0) >= 10
+    || getNation(nationId)?.confederation === 'CONMEBOL'
+    ? 9
+    : 5;
+  if ((sim.qualifierCarryPlayed ?? 0) >= firstHalfTarget) return sim;
+  const quals = calendar.fixtures.filter(
+    (f) => f.kind === 'international' && f.internationalRound === 'qualifier' && f.opponentId,
+  );
+  if (quals.length === 0) return sim;
+  let group = sim.internationalGroup?.kind === 'qualifying'
+    ? sim.internationalGroup
+    : buildInternationalGroup(nationId, sim.internationalTournament ?? 'world-cup', calendar, seasonNumber, 'qualifying');
+  if (!group) return sim;
+  let points = sim.qualifierCarryPoints ?? 0;
+  let played = sim.qualifierCarryPlayed ?? 0;
+  for (const fixture of quals) {
+    if (played >= firstHalfTarget) break;
+    const opponentId = fixture.opponentId!;
+    const isHome = fixture.isHome === false;
+    group = applyNpcNationMatch(
+      group,
+      nationId,
+      opponentId,
+      isHome,
+      `${nationId}-wc-s1-${opponentId}-${played}`,
+    );
+    const row = group.rows.find((item) => item.nationId === nationId);
+    played += 1;
+    points = row?.points ?? points;
+  }
+  return {
+    ...sim,
+    internationalGroup: group,
+    qualifierCarryPoints: points,
+    qualifierCarryPlayed: played,
   };
 }
 
@@ -441,6 +614,12 @@ export function buildInternationalGroup(
   const useQualifying =
     prefer === 'qualifying' || (prefer === 'auto' && groupOpp.length === 0 && qualOpp.length > 0);
   if (useQualifying && qualOpp.length > 0) {
+    const nation = getNation(nationId);
+    if (tournament === 'world-cup' && nation?.confederation === 'CONMEBOL') {
+      const teams = nationsInConfederation('CONMEBOL').map((n) => n.id);
+      if (!teams.includes(nationId)) teams.unshift(nationId);
+      return createGroupState('Q', teams, 'qualifying');
+    }
     const teams = [nationId, ...qualOpp];
     return createGroupState('Q', teams, 'qualifying');
   }
@@ -505,6 +684,7 @@ function leftoverQualifyingInFinalsYear(
 export function internationalStageWhenSelected(
   sim: Pick<SeasonSimState, 'internationalStage' | 'internationalPhase'>,
 ): InternationalStage {
+  if (sim.internationalStage === 'qualified') return 'friendly';
   if (sim.internationalStage && sim.internationalStage !== 'not-selected') {
     return sim.internationalStage;
   }
@@ -551,6 +731,64 @@ export function ensureInternationalGroup(
   return { ...sim, internationalStage, internationalGroup };
 }
 
+function setKnockoutOpponent(
+  calendar: SeasonCalendar,
+  kind: CalendarFixture['kind'],
+  europeanRound: CalendarFixture['europeanRound'] | undefined,
+  opponentId: string | null,
+): SeasonCalendar {
+  if (!opponentId) return calendar;
+  const opp = getClub(opponentId);
+  if (!opp) return calendar;
+  return {
+    ...calendar,
+    fixtures: calendar.fixtures.map((f) => {
+      const sameRound = kind === 'continental-knockout'
+        ? f.kind === kind && f.europeanRound === europeanRound
+        : f.kind === kind;
+      if (!sameRound) return f;
+      return { ...f, opponentId: opp.id, opponentLabel: opp.name };
+    }),
+  };
+}
+
+export function syncContinentalKnockoutCalendar(
+  calendar: SeasonCalendar,
+  sim: SeasonSimState,
+  playerClubId?: string | null,
+): SeasonCalendar {
+  const standing = sim.europeanStanding;
+  if (!standing || !playerClubId) return calendar;
+  const stage = standing.stage;
+  if (stage === 'group' || stage === 'eliminated' || stage === 'champion') return calendar;
+  const field = sim.europeanKnockoutField ?? [];
+  const used = calendar.fixtures
+    .filter((f) => f.kind.startsWith('continental') && f.kind !== 'continental-group' && f.opponentId)
+    .map((f) => f.opponentId!)
+    .filter((id, i, arr) => arr.indexOf(id) === i);
+  const seed = `${calendar.seasonNumber}-${standing.cup}-${playerClubId}-${stage}`;
+  let opponentId: string | null = null;
+  if (stage === 'play-off') {
+    opponentId = uclPlayOffOpponentId(sim.europeanTable, playerClubId);
+  } else if (stage === 'round-of-16' && standing.cup === 'ucl') {
+    opponentId = uclRoundOf16OpponentId(sim.europeanTable, playerClubId, field, seed);
+  } else if (stage === 'final' && standing.cup === 'ucl') {
+    opponentId = pickUclFinalOpponent(playerClubId, field, seed, used);
+  } else {
+    opponentId = pickWeightedOpponent(playerClubId, field, seed, used);
+  }
+  if (stage === 'play-off' || stage === 'round-of-16' || stage === 'quarter-final') {
+    return setKnockoutOpponent(calendar, 'continental-knockout', stage, opponentId);
+  }
+  if (stage === 'semi-final') {
+    return setKnockoutOpponent(calendar, 'continental-semi-final', undefined, opponentId);
+  }
+  if (stage === 'final') {
+    return setKnockoutOpponent(calendar, 'continental-final', undefined, opponentId);
+  }
+  return calendar;
+}
+
 export function syncInternationalCalendar(calendar: SeasonCalendar, sim: SeasonSimState): SeasonCalendar {
   if (
     sim.internationalTournament !== 'nations-league'
@@ -593,7 +831,7 @@ function assignOpponentsAndChances(
   const leagueRivals = leagueOpponentQueue(club, league);
   const leaguePhase = cup ? leaguePhaseOpponents(club, cup, 8) : [];
   const euroRivals = cup
-    ? shuffle(clubsForContinentalCup(cup).filter((id) => id !== club.id))
+    ? shuffle(clubsForContinentalCup(cup, club.id).filter((id) => id !== club.id))
     : [];
   const usedCupIds = new Set<string>();
   const leaguesCupRivals = [
@@ -628,17 +866,26 @@ function assignOpponentsAndChances(
   const groupRivals = groupSideIds.map(nationAsOpponent).filter((n): n is NonNullable<typeof n> => Boolean(n));
   const friendlyPool = NATIONS.filter((n) => {
     if (n.id === nationId) return false;
-    if (tournament === 'euro') return n.confederation === 'UEFA';
+    if (tournament === 'world-cup') return true;
+    const confed = nationId ? getNation(nationId)?.confederation : null;
+    if (confed) return n.confederation === confed;
     return true;
   });
   const friendlyRivals = nationId
     ? pickMixedRankOpponents(nationId, 2, friendlyPool, { extraExcludeIds: groupSideIds, rng })
     : [];
   const knockoutRivals = tournamentRivals.slice(groupCount);
+  const usedEuro = new Set(leaguePhase.map((c) => c.id));
+  const nextEuroOpponent = (label: string): ReturnType<typeof getClub> => {
+    const field = euroRivals.filter((id) => id !== club.id && !usedEuro.has(id));
+    const id = pickWeightedOpponent(club.id, field.length > 0 ? field : euroRivals.filter((x) => x !== club.id), `${seasonNumber}-${club.id}-${label}`);
+    if (!id) return undefined;
+    usedEuro.add(id);
+    return getClub(id);
+  };
 
   let leagueI = 0;
   let groupI = 0;
-  let euroI = 0;
   let leaguesI = 0;
   let playoffI = 0;
   let superI = 0;
@@ -662,7 +909,7 @@ function assignOpponentsAndChances(
       }
       f.playerChances = chancesForLeagueMatch({ strength: club.strength }).count;
     } else if (f.kind === 'domestic-cup') {
-      const opp = pickDomesticCupOpponent(club, f.domesticCupStage, usedCupIds);
+      const opp = pickDomesticCupOpponent(club, f.domesticCupStage, usedCupIds, league);
       if (opp) usedCupIds.add(opp.id);
       if (opp) {
         f.opponentId = opp.id;
@@ -675,7 +922,7 @@ function assignOpponentsAndChances(
       const assignedId = f.domesticSuperCup ? domesticSuperCupOpponentId : superCupOpponentId;
       const opp = (assignedId ? getClub(assignedId) : undefined)
         ?? (saudiSuperRivals.length > 0 && f.superCupStage ? saudiOpp : undefined)
-        ?? (euroRivals[0] ? getClub(euroRivals[0]) : undefined);
+        ?? nextEuroOpponent('super-cup');
       if (opp) {
         f.opponentId = opp.id;
         f.opponentLabel = opp.name;
@@ -711,9 +958,7 @@ function assignOpponentsAndChances(
       f.playerChances = chancesForLeagueMatch({ strength: club.strength }).count;
       f.isHome = (groupI - 1) % 2 === 0;
     } else if (f.kind === 'continental-knockout' && f.leg === 1) {
-      const oppId = euroRivals[euroI % Math.max(1, euroRivals.length)];
-      euroI += 1;
-      const opp = oppId ? getClub(oppId) : undefined;
+      const opp = nextEuroOpponent(f.europeanRound ?? 'knockout');
       const [leg1, leg2] = chancesForKnockoutTie({ strength: club.strength });
       f.playerChances = leg1.count;
       if (opp) {
@@ -731,9 +976,7 @@ function assignOpponentsAndChances(
     } else if (f.kind === 'continental-knockout' && f.leg === 2 && f.playerChances === undefined) {
       f.playerChances = chancesForLeagueMatch({ strength: club.strength }).count;
     } else if (f.kind === 'continental-semi-final' && f.leg === 1) {
-      const oppId = euroRivals[euroI % Math.max(1, euroRivals.length)];
-      euroI += 1;
-      const opp = oppId ? getClub(oppId) : undefined;
+      const opp = nextEuroOpponent('semi-final');
       const [leg1, leg2] = chancesForKnockoutTie({ strength: club.strength });
       f.playerChances = leg1.count;
       if (opp) {
@@ -751,9 +994,18 @@ function assignOpponentsAndChances(
     } else if (f.kind === 'continental-semi-final' && f.leg === 2 && f.playerChances === undefined) {
       f.playerChances = chancesForLeagueMatch({ strength: club.strength }).count;
     } else if (f.kind === 'continental-final') {
-      const oppId = euroRivals[euroI % Math.max(1, euroRivals.length)];
-      euroI += 1;
-      const opp = oppId ? getClub(oppId) : undefined;
+      const opp = cup === 'ucl'
+        ? (() => {
+            const field = euroRivals.filter((id) => id !== club.id && !usedEuro.has(id));
+            const id = pickUclFinalOpponent(
+              club.id,
+              field.length > 0 ? field : euroRivals.filter((x) => x !== club.id),
+              `${seasonNumber}-${club.id}-final`,
+            );
+            if (id) usedEuro.add(id);
+            return id ? getClub(id) : undefined;
+          })()
+        : nextEuroOpponent('final');
       if (opp) {
         f.opponentId = opp.id;
         f.opponentLabel = opp.name;
@@ -761,16 +1013,21 @@ function assignOpponentsAndChances(
       f.playerChances = chancesForLeagueMatch({ strength: club.strength }).count;
     } else if (f.kind === 'international') {
       let opp: { id: string; name: string } | undefined;
+      let venueIndex = 0;
       if (f.internationalRound === 'qualifier') {
+        venueIndex = qualifierI;
         opp = qualifierRivals[qualifierI];
         qualifierI += 1;
       } else if (f.internationalRound === 'friendly') {
+        venueIndex = friendlyI;
         opp = friendlyRivals[friendlyI % Math.max(1, friendlyRivals.length)];
         friendlyI += 1;
       } else if (f.internationalRound === 'group') {
+        venueIndex = groupOppI;
         opp = groupRivals[groupOppI];
         groupOppI += 1;
       } else {
+        venueIndex = knockoutI;
         opp = knockoutRivals[knockoutI];
         knockoutI += 1;
       }
@@ -780,12 +1037,10 @@ function assignOpponentsAndChances(
       }
       const nationStr = nationId ? nationStrength(nationId) : club.strength;
       f.playerChances = chancesForLeagueMatch({ strength: nationStr }).count;
-      f.isHome = f.internationalRound === 'qualifier' || f.internationalRound === 'friendly'
-        ? (f.internationalRound === 'friendly' ? friendlyI : qualifierI) % 2 === 0
-        : false;
-      if (f.internationalRound === 'qualifier' && flipQualifierVenues) {
-        f.isHome = !f.isHome;
-      }
+      const venue = internationalVenueFlags(f.internationalRound, tournament, venueIndex);
+      f.isHome = venue.isHome;
+      f.neutral = venue.neutral;
+      if (f.internationalRound === 'qualifier' && flipQualifierVenues) f.isHome = !f.isHome;
     }
   }
 
@@ -813,31 +1068,134 @@ function findReturnLeg(fixtures: CalendarFixture[], firstIndex: number): Calenda
   return undefined;
 }
 
-/** Later cup rounds prefer higher divisions so second-tier sides do not keep meeting each other in finals. */
+function topFlightLeagueName(club: Club, seasonLeague?: string | null): string {
+  const league = seasonLeague ?? club.league;
+  if (SECOND_DIVISIONS.has(league)) return promotionTarget(league) ?? league;
+  return league;
+}
+
+export function domesticCupOpponentAllowed(
+  opponent: Club,
+  stage: DomesticCupStage | undefined,
+  club: Club,
+  seasonLeague?: string | null,
+): boolean {
+  if (opponent.id === club.id) return false;
+  const topLeague = topFlightLeagueName(club, seasonLeague);
+  const secondDiv = SECOND_DIVISIONS.has(opponent.league);
+  if (stage === 'quarter-final') {
+    return !secondDiv && opponent.league === topLeague && (opponent.tier <= 3 || opponent.strength >= 72);
+  }
+  if (stage === 'semi-final' || stage === 'final') {
+    return !secondDiv && opponent.league === topLeague && (opponent.tier <= 2 || opponent.strength >= 80);
+  }
+  return true;
+}
+
+/**
+ * First cup round can draw second-division sides. Quarter-finals are top-flight
+ * only. Semi-finals and the final use the strongest clubs in the country.
+ */
 export function pickDomesticCupOpponent(
   club: Club,
   stage: DomesticCupStage | undefined,
   usedIds: Set<string>,
+  seasonLeague?: string | null,
 ): Club | undefined {
   const country = clubsInCountry(club.country).filter((c) => c.id !== club.id && !usedIds.has(c.id));
-  const sameLeague = clubsInLeague(club.league).filter((c) => c.id !== club.id && !usedIds.has(c.id));
-  const late = stage === 'quarter-final' || stage === 'semi-final' || stage === 'final';
-  const last16 = stage === 'round-of-16';
-  const fromSecondDivision = SECOND_DIVISIONS.has(club.league);
-  const higherDivision = country.filter((c) => !SECOND_DIVISIONS.has(c.league));
+  const topLeague = topFlightLeagueName(club, seasonLeague);
+  const topFlight = clubsInLeague(topLeague).filter((c) => c.id !== club.id && !usedIds.has(c.id));
+  const secondDiv = country.filter((c) => SECOND_DIVISIONS.has(c.league));
+  const strongest = [...topFlight]
+    .filter((c) => c.tier <= 2 || c.strength >= 80)
+    .sort((a, b) => b.strength - a.strength || a.id.localeCompare(b.id));
   let pool: Club[];
-  if (late && fromSecondDivision && higherDivision.length > 0) {
-    pool = higherDivision;
-  } else if (late) {
-    pool = country.length > 0 ? country : sameLeague;
-  } else if (last16 && sameLeague.length > 0) {
-    const lower = country.filter((c) => c.league !== club.league);
-    pool = [...sameLeague, ...shuffle(lower).slice(0, Math.max(3, Math.ceil(sameLeague.length / 2)))];
+  if (stage === 'semi-final' || stage === 'final') {
+    pool = strongest.length > 0 ? strongest : [...topFlight].sort((a, b) => b.strength - a.strength).slice(0, 8);
+  } else if (stage === 'quarter-final') {
+    const qfPool = topFlight.filter((c) => c.tier <= 3 || c.strength >= 72);
+    pool = qfPool.length > 0
+      ? qfPool
+      : [...topFlight].sort((a, b) => b.strength - a.strength || a.id.localeCompare(b.id))
+        .slice(0, Math.max(8, Math.ceil(topFlight.length * 0.65)));
+  } else if (stage === 'round-of-16') {
+    const weakerTop = [...topFlight].sort((a, b) => a.strength - b.strength).slice(0, Math.max(2, Math.ceil(topFlight.length / 3)));
+    pool = secondDiv.length > 0 ? [...secondDiv, ...weakerTop.slice(0, 2)] : country.length > 0 ? country : topFlight;
   } else {
-    pool = country.length > 0 ? country : sameLeague;
+    pool = secondDiv.length > 0 ? secondDiv : country;
   }
+  if (pool.length === 0) pool = topFlight.length > 0 ? topFlight : country;
   if (pool.length === 0) return undefined;
   return shuffle(pool)[0];
+}
+
+/** Rewrite unplayed cup ties whose opponent does not belong in that round. */
+export function repairDomesticCupDraw(
+  calendar: SeasonCalendar,
+  club: Club,
+  sim: SeasonSimState,
+  seasonLeague?: string | null,
+): SeasonCalendar {
+  const used = new Set<string>();
+  calendar.fixtures.forEach((f, i) => {
+    if (f.kind === 'domestic-cup' && i < sim.fixtureIndex && f.opponentId) used.add(f.opponentId);
+  });
+  let changed = false;
+  const fixtures = calendar.fixtures.map((f, i) => {
+    if (f.kind !== 'domestic-cup' || i < sim.fixtureIndex) return f;
+    const current = f.opponentId ? getClub(f.opponentId) : undefined;
+    if (current && domesticCupOpponentAllowed(current, f.domesticCupStage, club, seasonLeague)) {
+      used.add(current.id);
+      return f;
+    }
+    const next = pickDomesticCupOpponent(club, f.domesticCupStage, used, seasonLeague);
+    if (!next) return f;
+    used.add(next.id);
+    changed = true;
+    return { ...f, opponentId: next.id, opponentLabel: next.name };
+  });
+  return changed ? { ...calendar, fixtures } : calendar;
+}
+
+/** Replace an unplayed UCL final if the opponent is not an elite/strong finalist. */
+export function repairUclFinalOpponent(
+  calendar: SeasonCalendar,
+  club: Club,
+  sim: SeasonSimState,
+): SeasonCalendar {
+  if (sim.europeanStanding?.cup !== 'ucl') return calendar;
+  let changed = false;
+  const fixtures = calendar.fixtures.map((f, i) => {
+    if (f.kind !== 'continental-final' || i < sim.fixtureIndex) return f;
+    const current = f.opponentId ? getClub(f.opponentId) : undefined;
+    if (current && current.id !== club.id && isUclFinalistClub(current)) return f;
+    const id = pickUclFinalOpponent(
+      club.id,
+      sim.europeanKnockoutField ?? [],
+      `${calendar.seasonNumber}-${club.id}-ucl-final-repair`,
+    );
+    const opp = id ? getClub(id) : undefined;
+    if (!opp || opp.id === current?.id) return f;
+    changed = true;
+    return { ...f, opponentId: opp.id, opponentLabel: opp.name };
+  });
+  return changed ? { ...calendar, fixtures } : calendar;
+}
+
+export function syncSeasonCalendars(
+  calendar: SeasonCalendar,
+  sim: SeasonSimState,
+  playerClubId?: string | null,
+  seasonLeague?: string | null,
+): SeasonCalendar {
+  let next = syncInternationalCalendar(calendar, sim);
+  next = syncContinentalKnockoutCalendar(next, sim, playerClubId);
+  const club = playerClubId ? getClub(playerClubId) : undefined;
+  if (club) {
+    next = repairDomesticCupDraw(next, club, sim, seasonLeague ?? club.league);
+    next = repairUclFinalOpponent(next, club, sim);
+  }
+  return next;
 }
 
 /** Each league rival once, then the return fixture — never a third meeting. */
@@ -951,7 +1309,7 @@ export function shouldSkipFixture(fixture: CalendarFixture, sim: SeasonSimState)
     if (!stage || stage === 'eliminated') return true;
     if (fixture.kind === 'continental-group') return stage !== 'group';
     if (fixture.kind === 'continental-knockout') {
-      if (stage !== 'round-of-16' && stage !== 'quarter-final') return true;
+      if (stage !== 'play-off' && stage !== 'round-of-16' && stage !== 'quarter-final') return true;
       if (fixture.europeanRound) return fixture.europeanRound !== stage;
       return false;
     }
@@ -982,6 +1340,21 @@ export function shouldSkipFixture(fixture: CalendarFixture, sim: SeasonSimState)
     if (fixture.internationalRound === 'final') return stage !== 'final';
   }
   return false;
+}
+
+/** Unselected players still have their country play World Cup qualifying in the background. */
+export function shouldSimulateNationQualifier(fixture: CalendarFixture, sim: SeasonSimState): boolean {
+  if (fixture.kind !== 'international' || fixture.internationalRound !== 'qualifier') return false;
+  if (sim.internationalSelected) return false;
+  if (!sim.nationId || !sim.internationalTournament) return false;
+  if (sim.internationalStage === 'failed-qualifying' || sim.internationalStage === 'champion' || sim.internationalStage === 'eliminated') {
+    return false;
+  }
+  return (
+    sim.internationalStage === 'qualifying'
+    || sim.internationalPhase === 'qualifiers'
+    || sim.internationalPhase === 'qualifiers-and-tournament'
+  );
 }
 
 function nextCupStage(stage: DomesticCupStage): DomesticCupProgress {
@@ -1081,9 +1454,11 @@ export function applyEuropeanResult(
   sim: SeasonSimState,
   fixture: CalendarFixture,
   result: { outcome: 'win' | 'draw' | 'loss'; scoreFor: number; scoreAgainst: number; penalties?: { won: boolean } },
+  playerClubId?: string,
+  rng: () => number = Math.random,
 ): SeasonSimState {
   if (!sim.europeanStanding || !fixture.continentalCup) return sim;
-  const next = { ...sim, europeanStanding: { ...sim.europeanStanding } };
+  const next = { ...sim, europeanStanding: { ...sim.europeanStanding }, europeanTable: (sim.europeanTable ?? []).map((row) => ({ ...row })) };
 
   if (fixture.kind === 'super-cup') {
     if (fixture.domesticSuperCup) {
@@ -1112,8 +1487,44 @@ export function applyEuropeanResult(
     next.europeanGroupPlayed += 1;
     if (result.outcome === 'win') next.europeanGroupPoints += 3;
     else if (result.outcome === 'draw') next.europeanGroupPoints += 1;
+    if (playerClubId && fixture.opponentId) {
+      let table = next.europeanTable.length ? next.europeanTable : emptyEuropeanTable(clubsForContinentalCup(fixture.continentalCup, playerClubId));
+      if (!table.some((row) => row.clubId === playerClubId)) table = [...table, emptyStanding(playerClubId)];
+      if (!table.some((row) => row.clubId === fixture.opponentId)) table = [...table, emptyStanding(fixture.opponentId)];
+      table = applyMatchToTable(table, playerClubId, fixture.opponentId, {
+        outcome: result.outcome,
+        scoreFor: result.scoreFor,
+        scoreAgainst: result.scoreAgainst,
+      });
+      table = simulateRestOfEuropeanRound(table, playerClubId, fixture.opponentId, rng, `eu${fixture.week}`);
+      next.europeanTable = table;
+    }
     if (next.europeanGroupPlayed >= GROUP_GAMES) {
-      if (next.europeanGroupPoints >= GROUP_ADVANCE_POINTS) {
+      const table = next.europeanTable;
+      const cup = next.europeanStanding.cup;
+      if (cup === 'ucl' && playerClubId && table.length > 0) {
+        const pos = tablePosition(table, playerClubId);
+        const band = championsLeagueBand(pos);
+        if (band === 'eliminated') {
+          next.europeanStanding.stage = 'eliminated';
+          next.europeanKnockoutField = [];
+        } else if (band === 'play-off') {
+          next.europeanStanding.stage = 'play-off';
+          next.europeanKnockoutField = table.map((row) => row.clubId);
+        } else {
+          next.europeanStanding.stage = 'round-of-16';
+          next.europeanKnockoutField = uclRoundOf16Field(table, playerClubId, false, `ucl-r16-${playerClubId}`);
+        }
+      } else if (playerClubId && table.length > 0) {
+        const advancers = clubsThatWouldAdvanceFromLeague(table, GROUP_ADVANCE_POINTS, 16);
+        if (advancers.includes(playerClubId)) {
+          next.europeanStanding.stage = 'round-of-16';
+          next.europeanKnockoutField = advancers;
+        } else {
+          next.europeanStanding.stage = 'eliminated';
+          next.europeanKnockoutField = [];
+        }
+      } else if (next.europeanGroupPoints >= GROUP_ADVANCE_POINTS) {
         next.europeanStanding.stage = 'round-of-16';
       } else {
         next.europeanStanding.stage = 'eliminated';
@@ -1131,10 +1542,36 @@ export function applyEuropeanResult(
       next.knockoutAggAgainst = 0;
       if (!progressed) {
         next.europeanStanding.stage = 'eliminated';
+      } else if (next.europeanStanding.stage === 'play-off') {
+        next.europeanStanding.stage = 'round-of-16';
+        if (playerClubId && next.europeanTable.length > 0) {
+          next.europeanKnockoutField = uclRoundOf16Field(
+            next.europeanTable,
+            playerClubId,
+            true,
+            `ucl-r16-${playerClubId}`,
+          );
+        }
       } else if (next.europeanStanding.stage === 'round-of-16') {
         next.europeanStanding.stage = 'quarter-final';
+        if (playerClubId) {
+          next.europeanKnockoutField = simulateKnockoutSurvivors(
+            next.europeanKnockoutField ?? [],
+            playerClubId,
+            fixture.opponentId ?? null,
+            `ucl-qf-${playerClubId}`,
+          );
+        }
       } else {
         next.europeanStanding.stage = 'semi-final';
+        if (playerClubId) {
+          next.europeanKnockoutField = simulateKnockoutSurvivors(
+            next.europeanKnockoutField ?? [],
+            playerClubId,
+            fixture.opponentId ?? null,
+            `ucl-sf-${playerClubId}`,
+          );
+        }
       }
     }
     return next;
@@ -1148,6 +1585,14 @@ export function applyEuropeanResult(
       next.knockoutAggFor = 0;
       next.knockoutAggAgainst = 0;
       next.europeanStanding.stage = progressed ? 'final' : 'eliminated';
+      if (progressed && playerClubId) {
+        next.europeanKnockoutField = simulateKnockoutSurvivors(
+          next.europeanKnockoutField ?? [],
+          playerClubId,
+          fixture.opponentId ?? null,
+          `ucl-final-${playerClubId}`,
+        );
+      }
     }
     return next;
   }
@@ -1190,7 +1635,7 @@ export function applyInternationalResult(
   scoreFor = 0,
   scoreAgainst = 0,
 ): SeasonSimState {
-  if (!sim.internationalSelected) return sim;
+  if (!sim.internationalSelected && fixture.internationalRound !== 'qualifier') return sim;
   const next = {
     ...sim,
     friendlyPlayed: sim.friendlyPlayed ?? 0,
@@ -1221,18 +1666,31 @@ export function applyInternationalResult(
         `${next.nationId}-${next.internationalTournament}-q${next.qualifierPlayed}-${fixture.opponentId}`,
       );
     }
-    if (next.qualifierPlayed >= next.qualifierTarget && next.nationId && next.internationalTournament) {
-      if (next.internationalPhase === 'qualifiers') {
-        return next;
-      }
-      const qualified = doesNationQualify(
-        next.nationId,
-        next.internationalTournament,
-        next.qualifierPoints + next.qualifierCarryPoints,
-        next.qualifierPlayed + next.qualifierCarryPlayed,
-      );
+    const totalPlayed = next.qualifierPlayed + next.qualifierCarryPlayed;
+    if (next.internationalPhase === 'qualifiers') {
+      return next;
+    }
+    const needed = next.internationalGroup?.kind === 'qualifying' && next.internationalGroup.teamIds.length >= 10
+      ? 18
+      : 10;
+    if (totalPlayed >= needed && next.nationId && next.internationalTournament) {
+      const qualified = next.internationalGroup?.kind === 'qualifying'
+        ? doesNationQualifyFromTable(
+            next.internationalGroup,
+            next.nationId,
+            10,
+            next.internationalTournament,
+          )
+        : doesNationQualify(
+            next.nationId,
+            next.internationalTournament,
+            next.qualifierPoints + next.qualifierCarryPoints,
+            totalPlayed,
+          );
       next.nationQualified = qualified;
-      next.internationalStage = qualified ? 'friendly' : 'failed-qualifying';
+      next.internationalStage = qualified
+        ? (sim.internationalSelected ? 'friendly' : 'qualified')
+        : 'failed-qualifying';
       if (qualified && next.internationalGroup?.kind === 'qualifying') {
         next.internationalGroup = null;
       }
@@ -1310,8 +1768,67 @@ export function applyInternationalResult(
   return next;
 }
 
+/**
+ * Existing careers still hold the old 8-club Champions League group.
+ * Expand the table to the 36-club Swiss field and redraw unplayed
+ * league-phase ties from that field. Eight matches stay — that is the
+ * Swiss format — but the opponents come from all 36 clubs.
+ */
+export function repairChampionsLeagueSeason(params: {
+  clubId?: string | null;
+  calendar?: SeasonCalendar | null;
+  sim?: SeasonSimState | null;
+}): { calendar?: SeasonCalendar | null; sim?: SeasonSimState | null } {
+  const { clubId, calendar, sim } = params;
+  if (!sim?.europeanStanding || sim.europeanStanding.cup !== 'ucl') {
+    return { calendar, sim };
+  }
+  const wasShort = championsLeagueTableNeedsRepair(sim.europeanTable, 'ucl');
+  let table = expandChampionsLeagueTable(sim.europeanTable, clubId);
+  if (clubId) {
+    table = fillMissingEuropeanRounds(table, clubId, sim.europeanGroupPlayed ?? 0);
+  }
+  const nextSim: SeasonSimState = { ...sim, europeanTable: table };
+
+  if (!wasShort || !calendar || !clubId) {
+    return { calendar, sim: nextSim };
+  }
+  const club = getClub(clubId);
+  if (!club) return { calendar, sim: nextSim };
+
+  const fixtures = calendar.fixtures.map((f) => ({ ...f }));
+  const slots = fixtures
+    .map((f, i) => ({ f, i }))
+    .filter(({ f }) => f.kind === 'continental-group');
+  const playedIds = new Set(
+    slots
+      .filter(({ i }) => i < sim.fixtureIndex)
+      .map(({ f }) => f.opponentId)
+      .filter((id): id is string => Boolean(id)),
+  );
+  const remaining = slots.filter(({ i }) => i >= sim.fixtureIndex);
+  if (remaining.length === 0) {
+    return { calendar: { ...calendar, fixtures }, sim: nextSim };
+  }
+  const drawn = leaguePhaseOpponents(club, 'ucl', 8);
+  const unused = drawn.filter((c) => !playedIds.has(c.id));
+  const extra = leaguePhaseOpponents(club, 'ucl', 8).filter(
+    (c) => !playedIds.has(c.id) && !unused.some((u) => u.id === c.id),
+  );
+  const pool = [...unused, ...extra];
+  remaining.forEach(({ f }, n) => {
+    const opp = pool[n];
+    if (!opp) return;
+    f.opponentId = opp.id;
+    f.opponentLabel = opp.name;
+  });
+  return { calendar: { ...calendar, fixtures }, sim: nextSim };
+}
+
 export const GROUP_STAGE_MATCHDAYS = GROUP_GAMES;
 export const GROUP_POINTS_TO_ADVANCE = GROUP_ADVANCE_POINTS;
+export const CHAMPIONS_LEAGUE_LEAGUE_PHASE_MATCHES = GROUP_GAMES;
+export const CHAMPIONS_LEAGUE_TABLE_SIZE = CHAMPIONS_LEAGUE_FIELD_SIZE;
 
 export function internationalRoundLabel(
   round: CalendarFixture['internationalRound'],
@@ -1360,7 +1877,8 @@ export function fixtureTitle(
     return `${cupName} ${cupRoundLabel(fixture.domesticCupStage)}${vs}`;
   }
   if (fixture.kind === 'super-cup') {
-    const name = fixture.domesticSuperCupName ?? (fixture.domesticSuperCup ? 'Super Cup' : 'Super Cup');
+    const name = fixture.domesticSuperCupName
+      ?? (fixture.domesticSuperCup ? 'Club Super Cup' : 'European Super Cup');
     if (fixture.superCupStage === 'semi-final') return `${name} semi-final${vs}`;
     return `${name}${vs}`;
   }
@@ -1370,7 +1888,11 @@ export function fixtureTitle(
   }
   if (fixture.kind === 'continental-knockout') {
     const cup = fixture.continentalCup ? CONTINENTAL_CUPS[fixture.continentalCup].name : 'Europe';
-    const round = fixture.europeanRound === 'quarter-final' ? 'quarter-final' : 'round of 16';
+    const round = fixture.europeanRound === 'play-off'
+      ? 'play-off'
+      : fixture.europeanRound === 'quarter-final'
+        ? 'quarter-final'
+        : 'round of 16';
     const leg = fixture.leg === 2 ? ' 2nd leg' : ' 1st leg';
     return `${cup} ${round}${leg}${vs}`;
   }
@@ -1450,6 +1972,7 @@ function continentalThroughNote(fixture: CalendarFixture, through: boolean): str
   if (!through) return 'out on aggregate';
   if (fixture.kind === 'continental-semi-final') return 'through to the final';
   if (fixture.europeanRound === 'quarter-final') return 'through to the semi-final';
+  if (fixture.europeanRound === 'play-off') return 'through to the round of 16';
   return 'through to the quarter-final';
 }
 
@@ -1626,7 +2149,7 @@ export function resolveFixture(
   } else if (fixture.kind === 'playoff') {
     next = applyPlayoffResult(next, fixture, result, playerClub.id);
   } else if (fixture.kind.startsWith('continental') || fixture.kind === 'super-cup') {
-    next = applyEuropeanResult(next, fixture, result);
+    next = applyEuropeanResult(next, fixture, result, playerClub.id, rng);
   } else if (isInternational) {
     next = applyInternationalResult(next, fixture, scored, result.outcome, result.scoreFor, result.scoreAgainst);
   }

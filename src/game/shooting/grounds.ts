@@ -127,6 +127,15 @@ export const CLUB_GROUNDS: Record<string, ClubGround> = {
   besiktas: { name: 'Tüpraş Stadium', capacity: 42_590, tiers: 2 },
   konyaspor: { name: 'Konya Metropolitan Stadium', capacity: 42_000, tiers: 2 },
   trabzonspor: { name: 'Şenol Güneş Stadium', capacity: 40_782, tiers: 2 },
+  'club-brugge': { name: 'Jan Breydel Stadium', capacity: 29_062, tiers: 2 },
+  shakhtar: { name: 'Arena Lviv', capacity: 34_915, tiers: 2 },
+  'slavia-prague': { name: 'Fortuna Arena', capacity: 19_370, tiers: 2 },
+  'aek-athens': { name: 'OPAP Arena', capacity: 32_500, tiers: 2 },
+  'slovan-bratislava': { name: 'Tehelné pole', capacity: 22_500, tiers: 2 },
+  'bodo-glimt': { name: 'Aspmyra Stadion', capacity: 8_270, tiers: 1 },
+  viking: { name: 'Viking Stadion', capacity: 15_900, tiers: 1 },
+  lask: { name: 'Raiffeisen Arena', capacity: 19_080, tiers: 2 },
+  sabah: { name: 'Bank Respublika Arena', capacity: 13_000, tiers: 1 },
 };
 
 function hashKey(key: string): number {

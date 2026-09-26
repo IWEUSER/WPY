@@ -7,15 +7,24 @@
  * simulation that will eventually feed it.
  */
 
+import type { InternationalTournamentId } from './data/competitions';
+import type { TournamentSeasonOutcome } from './types';
+
+export type WpyMajorYear = 'none' | 'world-cup' | 'euro';
+
 export interface WpySeasonContext {
   /** This season's club goal ratio (goals / games played). */
   seasonGoalRatio: number;
-  /** The ratio bar that counts as "elite" for award purposes - typically the
-   * player's own first-team club threshold, but callers can tune this. */
+  /** The ratio bar that counts as "elite" for award purposes. */
   eliteRatioBar: number;
+  /** Club goals this season (league + cups + continentals). */
+  clubGoals: number;
   wonChampionsLeague: boolean;
-  isInternationalTournamentYear: boolean;
-  wonInternationalTournament: boolean;
+  /** World Cup or European Championship finals year. Other tournaments are ignored. */
+  majorYear: WpyMajorYear;
+  majorOutcome?: TournamentSeasonOutcome | null;
+  majorFinalsGoals?: number;
+  majorTopGoalscorer?: boolean;
   /** Rolling form across the last N club+country games, for the "extreme
    * form" lottery clause. */
   recentFormGoals: number;
@@ -27,37 +36,85 @@ export interface WpyResult {
   reason: string;
 }
 
+export const WPY_CLUB_GOALS_BAR = 25;
+export const WPY_MAJOR_FINALS_GOALS = 4;
+
 const EXTREME_FORM_MIN_GAMES = 50;
 const EXTREME_FORM_MIN_RATIO = 1.0;
 const EXTREME_FORM_LOTTERY_CHANCE = 0.25;
 
+export function majorYearForTournament(
+  tournament: InternationalTournamentId | null | undefined,
+  isFinalsSeason: boolean,
+): WpyMajorYear {
+  if (!isFinalsSeason || !tournament) return 'none';
+  if (tournament === 'world-cup') return 'world-cup';
+  if (tournament === 'euro') return 'euro';
+  return 'none';
+}
+
+function clubPath(context: WpySeasonContext): boolean {
+  return context.wonChampionsLeague && context.clubGoals >= WPY_CLUB_GOALS_BAR;
+}
+
+function majorChampionPath(context: WpySeasonContext): boolean {
+  return (
+    (context.majorYear === 'world-cup' || context.majorYear === 'euro')
+    && context.majorOutcome === 'champion'
+    && context.clubGoals >= WPY_CLUB_GOALS_BAR
+    && (context.majorFinalsGoals ?? 0) >= WPY_MAJOR_FINALS_GOALS
+  );
+}
+
+function majorRunnerUpPath(context: WpySeasonContext): boolean {
+  return (
+    (context.majorYear === 'world-cup' || context.majorYear === 'euro')
+    && context.majorOutcome === 'final'
+    && Boolean(context.majorTopGoalscorer)
+    && context.wonChampionsLeague
+    && context.clubGoals >= WPY_CLUB_GOALS_BAR
+  );
+}
+
 /**
  * Locked rules:
- * - Non-international years: need the elite goal ratio *and* a Champions
- *   League win. Club trophies without the ratio never win it.
- * - International finals years (World Cup or a continental championship):
- *   winning that tournament trumps the Champions League as the trophy
- *   requirement. Qualifier-only seasons still use the club trophy rule.
- * - Extreme form (~1 goal/game over ~50 club+country games) buys a 1-in-4
- *   lottery shot at the award regardless of trophies.
+ * - Club path: win the Champions League and score 25+ club goals.
+ * - World Cup year: win the World Cup with 25+ club goals and 4+ finals
+ *   goals, or lose the final as top scorer while also winning the Champions
+ *   League with 25+ club goals.
+ * - European Championship year: the same two paths.
+ * - Copa América, Nations League, Asian, African, and other tournaments
+ *   never replace the Champions League requirement.
  */
 export function evaluateWpy(context: WpySeasonContext, rng: () => number = Math.random): WpyResult {
   const {
     seasonGoalRatio,
-    eliteRatioBar,
-    wonChampionsLeague,
-    isInternationalTournamentYear,
-    wonInternationalTournament,
     recentFormGoals,
     recentFormGames,
+    majorYear,
   } = context;
 
-  const ratioMet = seasonGoalRatio >= eliteRatioBar;
-  const trophyMet = isInternationalTournamentYear ? wonInternationalTournament : wonChampionsLeague;
+  if (majorChampionPath(context)) {
+    const name = majorYear === 'world-cup' ? 'the World Cup' : 'the European Championship';
+    return {
+      won: true,
+      reason: `Won ${name} with ${context.clubGoals} club goals and ${context.majorFinalsGoals} finals goals.`,
+    };
+  }
 
-  if (ratioMet && trophyMet) {
-    const trophyName = isInternationalTournamentYear ? 'the international tournament' : 'the Champions League';
-    return { won: true, reason: `Elite goal ratio (${seasonGoalRatio.toFixed(2)}) plus winning ${trophyName}.` };
+  if (majorRunnerUpPath(context)) {
+    const name = majorYear === 'world-cup' ? 'World Cup' : 'European Championship';
+    return {
+      won: true,
+      reason: `${name} runner-up, tournament top goalscorer, and Champions League winner with ${context.clubGoals} club goals.`,
+    };
+  }
+
+  if (clubPath(context)) {
+    return {
+      won: true,
+      reason: `Won the Champions League and scored ${context.clubGoals} club goals.`,
+    };
   }
 
   const formRatio = recentFormGames > 0 ? recentFormGoals / recentFormGames : 0;
@@ -71,6 +128,7 @@ export function evaluateWpy(context: WpySeasonContext, rng: () => number = Math.
     };
   }
 
+  void seasonGoalRatio;
   return {
     won: false,
     reason: '',

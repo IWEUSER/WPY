@@ -1,5 +1,6 @@
 import type { ShotResult } from '../shooting/types';
 import type { SeasonCalendar } from './calendar';
+import type { CareerBeat, CareerBeatKind } from './careerBeat';
 import type { ClubTier } from './data/clubs';
 import type { ContinentalCupId, InternationalTournamentId } from './data/competitions';
 import type { NationalTeamState } from './international';
@@ -38,7 +39,7 @@ export interface MatchRecord {
   scored: boolean | null;
 }
 
-export type ContinentalStatKey = ContinentalCupId | 'super-cup';
+export type ContinentalStatKey = ContinentalCupId | 'super-cup' | 'domestic-super-cup';
 
 export interface ContinentalSeasonStat {
   cup: ContinentalStatKey;
@@ -81,6 +82,8 @@ export interface SeasonRecord {
   role: PlayerRole;
   /** Playing-time status used for this season's league minutes. */
   squadStatus?: SquadStatus;
+  /** Status when the season started — Impact streaks reset after a mid-season promotion. */
+  openedSquadStatus?: SquadStatus;
   /** Week-20 form review already ran — do not cascade roles later in the season. */
   squadRoleReviewed?: boolean;
   /** Status locked in at season end for the following campaign. */
@@ -111,9 +114,11 @@ export interface SeasonRecord {
   topGoalscorerReason?: string | null;
   playerOfTheYearReason?: string | null;
   wpyReason?: string | null;
-  /** Club continental Player of the Tournament (must win the cup at ≥ 0.7). */
+  /** Club continental Player of the Tournament (title + 0.7 GPG, or 16+ UCL goals). */
   clubPlayerOfTheTournament?: boolean;
   clubPlayerOfTheTournamentReason?: string | null;
+  /** Champions League golden boot for this season. */
+  continentalTopGoalscorer?: boolean;
   /** Continental cup won this season, when the club lifted it. */
   continentalChampion?: ContinentalCupId | null;
   /** Weekly wage × 52 for this season. */
@@ -124,6 +129,10 @@ export interface SeasonRecord {
   league?: string;
   /** Qualifying + tournament outcome for this season’s international campaign. */
   international?: InternationalSeasonRecord;
+  /** Fee the buying club paid to bring you in for this season. Loans and stays are 0. */
+  transferFeePaid?: number;
+  /** Club you left when that fee was paid. */
+  transferFromClubId?: string | null;
 }
 
 export interface TrialState {
@@ -227,6 +236,10 @@ export interface CareerState {
   nationality: string | null;
   /** Display name chosen after nationality. Older saves default to Player. */
   playerName?: string | null;
+  /** Portrait skin hex. Null on older saves uses a seeded look. */
+  playerSkin?: string | null;
+  /** Portrait hair hex. Null on older saves uses a seeded look. */
+  playerHair?: string | null;
   /** Caps, goals, and the same miss-streak drop rule as club football, scoped
    * to the national team. Null until a nationality is chosen. */
   nationalTeam: NationalTeamState | null;
@@ -280,10 +293,18 @@ export interface CareerState {
    * remaining fixtures without wiping career history.
    */
   rulesStamp?: string | null;
+  /** Library slot this active career last saved into. */
+  careerSlotId?: string | null;
   /** Screen to restore after closing the all-time records list. */
   legacyReturnPhase?: CareerPhase | null;
   /** Screen to restore after closing the career identity page. */
   profileReturnPhase?: CareerPhase | null;
+  /** Headline beats waiting to be shown (first cap, first title, sold, record, retirement). */
+  pendingBeats?: CareerBeat[];
+  /** Beat kinds already shown so first-cap / first-title / retirement fire once. */
+  seenBeatKinds?: CareerBeatKind[];
+  /** One guided first chance, then leave the player alone. */
+  guidedChanceSeen?: boolean;
 }
 
 export interface LastMatchResult {

@@ -70,7 +70,7 @@ const PRIMARY: Record<string, string> = {
   colombia: '#FFCD00',
   ecuador: '#FFD100',
   paraguay: '#D52B1E',
-  peru: '#D91023',
+  peru: '#FFFFFF',
   uruguay: '#7BADE3',
   venezuela: '#8B1A4A',
   canada: '#C8102E',
@@ -135,6 +135,7 @@ const SECONDARY: Record<string, string> = {
   'new-zealand': '#FFFFFF',
   uruguay: '#000000',
   ecuador: '#0033A0',
+  paraguay: '#FFFFFF',
 };
 
 const FALLBACK = [
@@ -163,6 +164,7 @@ const PATTERN: Record<string, ShirtPattern> = {
   argentina: 'vertical',
   uruguay: 'hoops',
   croatia: 'vertical',
+  paraguay: 'vertical',
 };
 
 const SHORTS: Record<string, string> = {
@@ -176,6 +178,13 @@ const SHORTS: Record<string, string> = {
   portugal: '#006600',
   'northern-ireland': '#FFFFFF',
   'republic-of-ireland': '#FFFFFF',
+  colombia: '#003893',
+  peru: '#FFFFFF',
+  paraguay: '#0038A8',
+};
+
+const SLEEVES: Record<string, string> = {
+  peru: '#D91023',
 };
 
 const SOCKS: Record<string, string> = {
@@ -194,6 +203,9 @@ const SOCKS: Record<string, string> = {
   wales: '#C8102E',
   mexico: '#006847',
   uruguay: '#7BADE3',
+  colombia: '#C8102E',
+  peru: '#FFFFFF',
+  paraguay: '#0038A8',
 };
 
 export function nationKit(id: string): KitScheme {
@@ -202,12 +214,14 @@ export function nationKit(id: string): KitScheme {
   const pattern = PATTERN[id];
   const shorts = SHORTS[id];
   const socks = SOCKS[id];
+  const sleeves = SLEEVES[id];
   return {
     primary,
     ...(secondary ? { secondary } : {}),
     ...(pattern ? { pattern } : {}),
     ...(shorts ? { shorts } : {}),
     ...(socks ? { socks } : {}),
+    ...(sleeves ? { sleeves } : {}),
   };
 }
 

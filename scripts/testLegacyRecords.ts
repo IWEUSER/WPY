@@ -12,14 +12,18 @@ import {
   participatedLegacyBoards,
   playerGoalsForBoard,
   rankForGoals,
+  recordColorKind,
   revealForRank,
   seasonLegacyHighlights,
+  seasonOutrightRecordHighlights,
   viewForBoard,
   type LegacyCareerInput,
 } from '../src/game/career/legacyRecords';
 import type { SeasonRecord } from '../src/game/career/types';
 import { emptyCompetitionRecord, type NationalTeamState } from '../src/game/career/international';
 import { createAvailability } from '../src/game/career/availabilityEngine';
+import { recordBeat } from '../src/game/career/careerBeat';
+import { seasonTrophyList } from '../src/game/career/honoursDisplay';
 
 const BANNED = [
   'messi',
@@ -95,12 +99,14 @@ const plCareer = {
   title: 'Premier League',
   subtitle: 'All-time league goals',
   group: 'league' as const,
+  tone: 'all-time' as const,
 };
 const plSeason = {
   ...plCareer,
   id: 'league:season:premier-league',
   span: 'season' as const,
   subtitle: 'Single-season league goals',
+  tone: 'season-overall' as const,
 };
 
 const outside = viewForBoard(plCareer, { seasons: [], nationalTeam: null });
@@ -155,6 +161,7 @@ const cl = {
   title: 'Champions League',
   subtitle: 'All-time tournament goals',
   group: 'continental' as const,
+  tone: 'all-time' as const,
 };
 const clGoals = playerGoalsForBoard(cl, {
   seasons: [
@@ -190,6 +197,7 @@ const wc = {
   title: 'England · World Cup',
   subtitle: 'All-time tournament goals',
   group: 'nation' as const,
+  tone: 'all-time' as const,
 };
 const wcView = viewForBoard(wc, { seasons: [], nationalTeam: team, nationality: 'england' });
 assert(wcView.playerGoals === 8, `World Cup board should use finals only, got ${wcView.playerGoals}`);
@@ -202,6 +210,7 @@ const intl = {
   title: 'England',
   subtitle: 'All-time international goals',
   group: 'nation' as const,
+  tone: 'all-time' as const,
 };
 const intlView = viewForBoard(intl, { seasons: [], nationalTeam: team, nationality: 'england' });
 assert(intlView.playerGoals === 40, `all-time international should use cap goals, got ${intlView.playerGoals}`);
@@ -214,6 +223,7 @@ const cup = {
   title: 'FA Cup',
   subtitle: 'All-time cup goals',
   group: 'cup' as const,
+  tone: 'all-time' as const,
 };
 const cupGoals = playerGoalsForBoard(cup, {
   seasons: [
@@ -222,7 +232,7 @@ const cupGoals = playerGoalsForBoard(cup, {
   ],
   nationalTeam: null,
 });
-assert(cupGoals === 6, `FA Cup should ignore Copa del Rey goals, got ${cupGoals}`);
+assert(cupGoals === 6, `FA Cup board math still isolates England cup goals, got ${cupGoals}`);
 
 assert(ordinal(1) === '1st' && ordinal(2) === '2nd' && ordinal(3) === '3rd' && ordinal(11) === '11th', 'ordinals');
 assert(revealForRank(1, LEAGUE_CAREER['Premier League']!) === 'top10', 'top 10 band');
@@ -237,6 +247,68 @@ const plOnly: LegacyCareerInput = {
 };
 const participated = participatedLegacyBoards(plOnly);
 assert(participated.some((def) => def.id === 'league:career:premier-league'), 'PL appearance should unlock the PL board');
+assert(
+  !participated.some((def) => def.id.startsWith('cup:')),
+  'domestic cup records are no longer listed',
+);
+const withUcl: LegacyCareerInput = {
+  ...plOnly,
+  seasons: [
+    season({
+      clubId: 'arsenal',
+      league: 'Premier League',
+      leagueGoals: 20,
+      leagueGames: 30,
+      cupGames: 4,
+      cupGoals: 2,
+      continentalStats: [{ cup: 'ucl', games: 12, goals: 8 }],
+    }),
+  ],
+};
+assert(
+  participatedLegacyBoards(withUcl).some(
+    (def) => def.id === 'club-tournament:season:arsenal' && def.subtitle === 'Single-season Champions League goals',
+  ),
+  'club UCL season records live on the club-tournament board',
+);
+assert(
+  !participatedLegacyBoards(withUcl).some((def) => def.id === 'continental:season:ucl'),
+  'generic single-season UCL must not duplicate the club board',
+);
+assert(
+  participatedLegacyBoards(withUcl).some((def) => def.id === 'continental:career:ucl'),
+  'all-time Champions League career board still exists',
+);
+
+const madridSeason = season({
+  clubId: 'real-madrid',
+  league: 'La Liga',
+  leagueGoals: 20,
+  leagueGames: 30,
+  cupGames: 8,
+  cupGoals: 10,
+  continentalStats: [{ cup: 'ucl', games: 13, goals: 24 }],
+});
+const madridInput: LegacyCareerInput = { seasons: [madridSeason], nationalTeam: null };
+const madridClubUcl = {
+  id: 'club-tournament:season:real-madrid',
+  domain: 'club' as const,
+  span: 'season' as const,
+  title: 'Real Madrid',
+  subtitle: 'Single-season Champions League goals',
+  group: 'continental' as const,
+  tone: 'season-club' as const,
+};
+assert(
+  playerGoalsForBoard(madridClubUcl, madridInput) === 24,
+  `Madrid club-tournament must ignore Copa del Rey goals, got ${playerGoalsForBoard(madridClubUcl, madridInput)}`,
+);
+assert(
+  !participatedLegacyBoards(madridInput).some((def) => def.id === 'continental:season:ucl'),
+  'Real Madrid must not show a second generic single-season Champions League board',
+);
+assert(recordColorKind(madridClubUcl) === 'tournament', 'club UCL boards are tournament-coloured');
+assert(recordColorKind(plSeason) === 'internal', 'league boards are domestic-coloured');
 assert(!participated.some((def) => def.id.includes('la-liga')), 'unplayed leagues must stay hidden');
 assert(!participated.some((def) => def.id.includes('world-cup')), 'unplayed tournaments must stay hidden');
 assert(!participated.some((def) => def.group === 'nation'), 'zero caps must hide nation boards');
@@ -248,6 +320,10 @@ const withCaps: LegacyCareerInput = {
 const nationBoards = participatedLegacyBoards(withCaps);
 assert(nationBoards.some((def) => def.id === 'nation-overall:england'), 'caps should unlock England overall');
 assert(nationBoards.some((def) => def.id.includes('world-cup')), 'World Cup finals should unlock that board');
+assert(
+  nationBoards.some((def) => def.id.includes('world-cup') && def.span === 'season' && def.subtitle === 'Single World Cup goals'),
+  'nation season records must name the tournament',
+);
 assert(!nationBoards.some((def) => def.id.includes('copa-america')), 'England must not show Copa América');
 
 const identity = identityLegacyBoards({
@@ -256,6 +332,31 @@ const identity = identityLegacyBoards({
 });
 assert(identity.some((board) => board.def.id === 'league:career:premier-league'), 'identity shows sourced top-10 ranks');
 assert(identity.every((board) => board.reveal === 'top10'), 'identity legacy box is top 10 only');
+assert(
+  identity.every((board) => board.def.span !== 'season' || board.rank === 1),
+  'single-season and single-tournament records only list 1st',
+);
+
+const hiddenCups = participatedLegacyBoards({
+  seasons: [
+    season({
+      clubId: 'arsenal',
+      league: 'Premier League',
+      leagueGoals: 20,
+      leagueGames: 30,
+      continentalStats: [
+        { cup: 'uel', games: 10, goals: 8 },
+        { cup: 'uecl', games: 8, goals: 5 },
+        { cup: 'super-cup', games: 1, goals: 1 },
+      ],
+    }),
+  ],
+  nationalTeam: null,
+});
+assert(
+  !hiddenCups.some((def) => def.id.includes('uel') || def.id.includes('uecl') || def.id.includes('super-cup') || def.id.startsWith('cup:')),
+  'Europa League, Conference League, Super Cup, and domestic cup records must be hidden',
+);
 
 const currentSeason = season({
   clubId: 'arsenal',
@@ -288,6 +389,89 @@ const allTimeHighlights = seasonLegacyHighlights({ seasons: [], nationalTeam: nu
 assert(
   allTimeHighlights.some((item) => item.kind === 'all-time'),
   'breaking into the all-time top 10 should show on the season review',
+);
+
+const franceSeason = season({
+  clubId: 'psg',
+  league: 'Ligue 1',
+  leagueGoals: 20,
+  leagueGames: 30,
+  international: {
+    tournament: 'world-cup',
+    qualifyingGames: 0,
+    qualifyingGoals: 0,
+    qualifyingOutcome: 'qualified',
+    finalsGames: 7,
+    finalsGoals: 11,
+    tournamentOutcome: 'champion',
+    playerOfTheTournament: false,
+    topGoalscorer: false,
+  },
+});
+const franceTeam: NationalTeamState = {
+  ...emptyTeam('france'),
+  caps: 7,
+  goals: 11,
+  byCompetition: [
+    { ...emptyCompetitionRecord('world-cup'), finalsGoals: 11, finalsGames: 7 },
+  ],
+};
+const franceInput: LegacyCareerInput = {
+  seasons: [franceSeason],
+  nationalTeam: franceTeam,
+  nationality: 'france',
+};
+const franceBoards = careerLegacyBoards(franceInput);
+const franceWc = franceBoards.filter((board) => board.def.id.includes('world-cup') && board.reveal === 'top10');
+assert(
+  franceWc.some((board) => board.def.id === 'nation-tournament:career:france:world-cup' && board.rank === 4),
+  `11 France WC career goals should be 4th on the France board, got ${franceWc.map((b) => `${b.def.id}:${b.rank}`).join(', ')}`,
+);
+assert(
+  franceWc.some((board) => board.def.id === 'nation-tournament:season:france:world-cup' && board.rank === 2),
+  '11 France WC finals goals should be 2nd on the France single-edition board',
+);
+assert(
+  franceWc.some((board) => board.def.id === 'intl-tournament:career:world-cup'),
+  '11 World Cup goals must also sit on the all-country all-time board',
+);
+assert(
+  franceWc.some((board) => board.def.id === 'intl-tournament:season:world-cup'),
+  '11 World Cup goals must also sit on the all-country single-edition board',
+);
+assert(franceWc.length >= 4, `11 France WC goals should unlock 4 boards, got ${franceWc.length}`);
+assert(
+  seasonTrophyList(franceSeason).includes('World Cup'),
+  'winning an international tournament must count as a trophy',
+);
+const franceSeasonHighlight = seasonLegacyHighlights(
+  { seasons: [], nationalTeam: emptyTeam('france'), nationality: 'france' },
+  franceInput,
+  franceSeason,
+).find((item) => item.kind === 'season' && item.title.includes('World Cup'));
+assert(franceSeasonHighlight?.domain === 'nation', 'international season records must be nation-domain');
+assert(recordBeat(franceSeasonHighlight!, 'Alex').portrait === 'nation', 'season international records show only the nation kit');
+assert(recordBeat({
+  title: 'La Liga',
+  subtitle: 'Single-season league goals',
+  rankLabel: '1st',
+  rank: 1,
+  playerGoals: 38,
+  kind: 'season',
+  domain: 'club',
+  group: 'league',
+}, 'Alex').portrait === 'club', 'season club records show only the club kit');
+
+const outright = seasonOutrightRecordHighlights({ seasons: [], nationalTeam: null }, allTimeAfter, allTimeSeason);
+assert(outright.every((item) => item.rank === 1), 'outright record beats are rank 1 only');
+assert(
+  seasonOutrightRecordHighlights(previous, after, currentSeason).some((item) => item.playerGoals === 36 && item.rank === 1),
+  '36 PL goals is the single-season record and may get a beat',
+);
+assert(
+  !seasonOutrightRecordHighlights({ seasons: [], nationalTeam: emptyTeam('france') }, franceInput, franceSeason)
+    .some((item) => item.title.includes('World Cup') && item.rank !== 1),
+  '11 World Cup goals is a top-10 inclusion, not an outright record beat',
 );
 
 const stripped = inputWithoutSeason(allTimeAfter, allTimeSeason);

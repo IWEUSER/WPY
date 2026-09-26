@@ -1,10 +1,15 @@
 import {
   AIM_X_OVERSHOOT,
   AIM_Y_OVERSHOOT,
+  CHIP_LOFT,
   CURL_BOW_SENSITIVITY,
   DEFAULT_DIFFICULTY,
+  FLOATER_LOFT,
+  FLOATER_MIN_LENGTH,
+  FLOATER_SPEED_RATIO,
   GOAL_HALF_WIDTH,
   GOAL_HEIGHT,
+  JAB_MAX_LENGTH,
   KEEPER_DIVE_MAX_X,
   KEEPER_STAND_Y,
   PLANTED_SAVE_COL_MAX,
@@ -30,6 +35,7 @@ import type {
   ShotDifficulty,
   ShotOutcomeKind,
   ShotResult,
+  ShotStyle,
   ShotZoneX,
   ShotZoneY,
   SwipeGesture,
@@ -109,6 +115,79 @@ export interface IntendedShot {
   aim: AimPoint;
   power: number;
   curl: number;
+  style: ShotStyle;
+  groundBounce?: boolean;
+}
+
+export function aerialLiftBias(flight: SwipeGesture['ballFlight']): number {
+  if (flight === 'header') return 0.38;
+  if (flight === 'volley') return 0.22;
+  if (flight === 'bounce') return 0.06;
+  return 0;
+}
+
+/** High balls rise unless curled or smashed down; a turf skip can still bounce in. */
+export function applyContactHeightToAim(aim: AimPoint, gesture: SwipeGesture): { aim: AimPoint; groundBounce: boolean } {
+  const flight = gesture.ballFlight ?? 'roll';
+  const curlKeep = 1 - Math.min(1, Math.abs(gesture.curl ?? 0) * 1.2);
+  const height = gesture.contactHeight ?? (flight === 'header' ? 0.92 : flight === 'volley' ? 0.62 : 0);
+  let y = aim.y + aerialLiftBias(flight) * curlKeep * (0.55 + height * 0.45);
+  const down = gesture.dy < 0 ? clamp(-gesture.dy / MAX_SWIPE_DISTANCE, 0, 1) : 0;
+  if (down > 0.08 && (flight === 'volley' || flight === 'header' || flight === 'bounce')) {
+    y -= down * (flight === 'header' ? 0.86 : 0.72) + down * height * 0.22;
+    if (y < 0 || (down > 0.55 && y < 0.16 + height * 0.08)) {
+      const skip = Math.min(0.55, Math.max(0.05, Math.abs(Math.min(y, 0)) * 0.62 + down * 0.12));
+      return { aim: { x: aim.x, y: skip }, groundBounce: true };
+    }
+  }
+  return { aim: { x: aim.x, y: clamp(y, 0, 1.55) }, groundBounce: false };
+}
+
+/**
+ * Same upward swipe, four strikes: a short jab near the ball is a poke or
+ * chip, a long fast swipe is a drive, and a long lofted swipe hangs as a
+ * floater. Sideways knocks never reach this — they are filtered first.
+ */
+export function classifyShotStyle(gesture: SwipeGesture): ShotStyle {
+  const length = Math.hypot(gesture.dx, gesture.dy);
+  const speed = gesture.durationMs > 0 ? length / gesture.durationMs : length / 16;
+  const aim = screenRayAim(gesture) ?? displacementAim(gesture);
+  if (length < JAB_MAX_LENGTH) {
+    return aim.y >= CHIP_LOFT ? 'chip' : 'poke';
+  }
+  if (length >= FLOATER_MIN_LENGTH && speed < REFERENCE_SPEED * FLOATER_SPEED_RATIO && aim.y >= FLOATER_LOFT) {
+    return 'floater';
+  }
+  return 'drive';
+}
+
+function applyShotStyle(aim: AimPoint, power: number, curl: number, style: ShotStyle): {
+  aim: AimPoint;
+  power: number;
+  curl: number;
+} {
+  if (style === 'poke') {
+    return {
+      aim: { x: aim.x, y: aim.y * 0.42 },
+      power: clamp(power * 0.62, 0.25, 0.72),
+      curl: curl * 0.55,
+    };
+  }
+  if (style === 'chip') {
+    return {
+      aim: { x: aim.x * 0.92, y: clamp(Math.max(aim.y, 0.38) + 0.08, 0, 1.18) },
+      power: clamp(power * 0.58, 0.28, 0.8),
+      curl: curl * 0.4,
+    };
+  }
+  if (style === 'floater') {
+    return {
+      aim: { x: aim.x, y: clamp(aim.y + 0.08, 0, 1.28) },
+      power: clamp(power * 0.82, 0.4, 1.15),
+      curl: curl * 0.85,
+    };
+  }
+  return { aim, power, curl };
 }
 
 /** Maps a raw swipe into an intended (noise-free) aim point, a power scalar
@@ -121,15 +200,21 @@ export function computeIntendedShot(gesture: SwipeGesture): IntendedShot {
   const distance = Math.hypot(gesture.dx, gesture.dy);
   const speed = gesture.durationMs > 0 ? distance / gesture.durationMs : distance / 16;
 
-  const power = clamp(speed / REFERENCE_SPEED, 0.25, 1.8);
+  const rawPower = clamp(speed / REFERENCE_SPEED, 0.25, 1.8);
 
-  const aim = screenRayAim(gesture) ?? displacementAim(gesture);
+  const rawAim = screenRayAim(gesture) ?? displacementAim(gesture);
+  const style = classifyShotStyle(gesture);
+  const shaped = applyShotStyle(rawAim, rawPower, clamp(gesture.curl ?? 0, -1, 1), style);
+  const loft = gesture.contactLift ?? 0;
+  const lifted = loft > 0.08
+    ? { x: shaped.aim.x, y: clamp(shaped.aim.y + loft * 0.42, 0, 1.48) }
+    : shaped.aim;
+  const aerial = applyContactHeightToAim(lifted, gesture);
 
-  const rawCurl = clamp(gesture.curl ?? 0, -1, 1);
-  const powerDamping = 1 - clamp(power - 1, 0, 0.8) * 0.25;
-  const curl = rawCurl * powerDamping * 0.55;
+  const powerDamping = 1 - clamp(shaped.power - 1, 0, 0.8) * 0.25;
+  const curl = shaped.curl * powerDamping * 0.55;
 
-  return { aim, power, curl };
+  return { aim: aerial.aim, power: shaped.power, curl, style, groundBounce: aerial.groundBounce };
 }
 
 function displacementAim(gesture: SwipeGesture): AimPoint {
@@ -191,10 +276,14 @@ export function computeNoise(power: number, curl: number, difficulty: ShotDiffic
   return difficulty.baseNoise + overPenalty + underPenalty + curlPenalty;
 }
 
-export function computeTravelTimeMs(power: number, distanceM = 16.5): number {
+export function computeTravelTimeMs(power: number, distanceM = 16.5, style?: ShotStyle): number {
   const powerT = clamp(power / 1.3, 0, 1);
   const base = lerp(MAX_TRAVEL_MS, MIN_TRAVEL_MS, powerT);
-  return Math.max(MIN_TRAVEL_MS * 0.7, base * clamp(distanceM / 16.5, 0.45, 1.55));
+  const travel = Math.max(MIN_TRAVEL_MS * 0.7, base * clamp(distanceM / 16.5, 0.45, 1.55));
+  if (style === 'floater') return travel * 1.28;
+  if (style === 'chip') return travel * 1.12;
+  if (style === 'poke') return travel * 0.88;
+  return travel;
 }
 
 /** True when a piledriver is struck from inside ~16 yards: too fast to dive. */
@@ -421,17 +510,19 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
   const difficulty = options.difficulty ?? DEFAULT_DIFFICULTY;
   const rng = options.rng ?? defaultRandom;
 
-  const { aim: intendedAim, power, curl } = computeIntendedShot(gesture);
+  const { aim: intendedAim, power, curl, style, groundBounce } = computeIntendedShot(gesture);
   const takeQuality = gesture.takeQuality ?? 1;
-  const noise = computeNoise(power, curl, difficulty) + (1 - takeQuality) * difficulty.baseNoise * 1.6;
+  const distanceM = gesture.distanceM ?? 16.5;
+  let noise = computeNoise(power, curl, difficulty) + (1 - takeQuality) * difficulty.baseNoise * 1.6;
+  if ((style === 'poke' || style === 'chip') && distanceM <= 14) noise *= 0.82;
+  if (style === 'floater') noise *= 1.12;
 
   const actualAim: AimPoint = {
     x: intendedAim.x + gaussianRandom(0, noise, rng),
     y: Math.max(0, intendedAim.y + gaussianRandom(0, noise * 0.75, rng)),
   };
 
-  const distanceM = gesture.distanceM ?? 16.5;
-  const travelTimeMs = computeTravelTimeMs(power, distanceM);
+  const travelTimeMs = computeTravelTimeMs(power, distanceM, style);
   const penaltyCommit = options.penalty ? samplePenaltyKeeperCommit(rng) : undefined;
   const shotCtx = { power, distanceM, commitDirection: penaltyCommit };
 
@@ -448,6 +539,8 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
       penaltyCommit,
       penalty: Boolean(options.penalty),
       takeQuality,
+      shotStyle: style,
+      groundBounce: Boolean(groundBounce),
     };
   }
 
@@ -464,6 +557,8 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
       penaltyCommit,
       penalty: Boolean(options.penalty),
       takeQuality,
+      shotStyle: style,
+      groundBounce: Boolean(groundBounce),
     };
   }
 
@@ -488,5 +583,32 @@ export function resolveShot(gesture: SwipeGesture, options: ResolveShotOptions =
     penaltyCommit,
     penalty: Boolean(options.penalty),
     takeQuality,
+    shotStyle: style,
+    groundBounce: Boolean(groundBounce),
+  };
+}
+
+/** Header that drifted off the far side of the box — the chance is gone. */
+export function outOfPlayResult(): ShotResult {
+  return {
+    outcome: 'wide',
+    aim: { x: 1.35, y: 0.32 },
+    intendedAim: { x: 1.35, y: 0.32 },
+    power: 0,
+    curl: 0,
+    travelTimeMs: 280,
+    keeperDive: {
+      target: { x: 0, y: 0.2 },
+      hand: { x: 0, y: 0.2 },
+      reactionMs: 0,
+      diveDurationMs: 200,
+      reach: 0,
+      direction: 0,
+      stretch: 0,
+      layout: 0,
+      elevation: 0,
+    },
+    saveMargin: 0,
+    outOfPlay: true,
   };
 }

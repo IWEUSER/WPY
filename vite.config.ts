@@ -4,6 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // Stamp the first menu with this deploy's clock so live can be verified.
 process.env.VITE_LIVE_BUILT_AT = new Date().toISOString()
+process.env.VITE_VERCEL_ENV = process.env.VERCEL_ENV ?? ''
 
 // https://vite.dev/config/
 export default defineConfig({

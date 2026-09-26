@@ -222,6 +222,27 @@ export type InternationalCampaignPhase =
   | 'qualifiers';
 
 export const QUALIFIER_GAMES_PER_SEASON = 5;
+/** CONMEBOL World Cup qualifying is a 10-nation home-and-away league (9+9). */
+export const CONMEBOL_WCQ_GAMES_PER_SEASON = 9;
+export const CONMEBOL_WCQ_TOTAL_GAMES = CONMEBOL_WCQ_GAMES_PER_SEASON * 2;
+export const CONMEBOL_WCQ_QUALIFYING_PLACES = 6;
+
+export function qualifierGamesForConfederation(
+  confederation?: Confederation | null,
+  tournament?: InternationalTournamentId | null,
+): number {
+  if (tournament === 'world-cup' && confederation === 'CONMEBOL') {
+    return CONMEBOL_WCQ_GAMES_PER_SEASON;
+  }
+  return QUALIFIER_GAMES_PER_SEASON;
+}
+
+export function isConmebolWorldCupQualifying(
+  tournament?: InternationalTournamentId | null,
+  confederation?: Confederation | null,
+): boolean {
+  return tournament === 'world-cup' && confederation === 'CONMEBOL';
+}
 
 export interface InternationalCampaign {
   tournament: InternationalTournamentId | null;
@@ -242,13 +263,17 @@ export function internationalCampaignForSeason(
     : 'continental-championship';
   const cycle = (seasonNumber - 1) % 4;
   if (cycle === 0) {
-    return { tournament: 'world-cup', phase: 'qualifiers', qualifierGames: QUALIFIER_GAMES_PER_SEASON };
+    return {
+      tournament: 'world-cup',
+      phase: 'qualifiers',
+      qualifierGames: qualifierGamesForConfederation(confederation, 'world-cup'),
+    };
   }
   if (cycle === 1) {
     return {
       tournament: 'world-cup',
       phase: 'qualifiers-and-tournament',
-      qualifierGames: QUALIFIER_GAMES_PER_SEASON,
+      qualifierGames: qualifierGamesForConfederation(confederation, 'world-cup'),
     };
   }
   if (cycle === 2) {
