@@ -498,7 +498,7 @@ function seedMissingFirstHalfQualifying(
   seasonNumber: number,
 ): SeasonSimState {
   if (sim.internationalPhase !== 'qualifiers-and-tournament') return sim;
-  const firstHalfTarget = sim.internationalGroup?.teamIds.length >= 10
+  const firstHalfTarget = (sim.internationalGroup?.teamIds.length ?? 0) >= 10
     || getNation(nationId)?.confederation === 'CONMEBOL'
     ? 9
     : 5;
@@ -744,7 +744,6 @@ function setKnockoutOpponent(
         ? f.kind === kind && f.europeanRound === europeanRound
         : f.kind === kind;
       if (!sameRound) return f;
-      if (f.opponentId) return f;
       return { ...f, opponentId: opp.id, opponentLabel: opp.name };
     }),
   };
@@ -871,6 +870,14 @@ function assignOpponentsAndChances(
     ? pickMixedRankOpponents(nationId, 2, friendlyPool, { extraExcludeIds: groupSideIds, rng })
     : [];
   const knockoutRivals = tournamentRivals.slice(groupCount);
+  const usedEuro = new Set(leaguePhase.map((c) => c.id));
+  const nextEuroOpponent = (label: string): ReturnType<typeof getClub> => {
+    const field = euroRivals.filter((id) => id !== club.id && !usedEuro.has(id));
+    const id = pickWeightedOpponent(club.id, field.length > 0 ? field : euroRivals.filter((x) => x !== club.id), `${seasonNumber}-${club.id}-${label}`);
+    if (!id) return undefined;
+    usedEuro.add(id);
+    return getClub(id);
+  };
 
   let leagueI = 0;
   let groupI = 0;
@@ -910,7 +917,7 @@ function assignOpponentsAndChances(
       const assignedId = f.domesticSuperCup ? domesticSuperCupOpponentId : superCupOpponentId;
       const opp = (assignedId ? getClub(assignedId) : undefined)
         ?? (saudiSuperRivals.length > 0 && f.superCupStage ? saudiOpp : undefined)
-        ?? (euroRivals[0] ? getClub(euroRivals[0]) : undefined);
+        ?? nextEuroOpponent('super-cup');
       if (opp) {
         f.opponentId = opp.id;
         f.opponentLabel = opp.name;
@@ -946,20 +953,47 @@ function assignOpponentsAndChances(
       f.playerChances = chancesForLeagueMatch({ strength: club.strength }).count;
       f.isHome = (groupI - 1) % 2 === 0;
     } else if (f.kind === 'continental-knockout' && f.leg === 1) {
+      const opp = nextEuroOpponent(f.europeanRound ?? 'knockout');
       const [leg1, leg2] = chancesForKnockoutTie({ strength: club.strength });
       f.playerChances = leg1.count;
+      if (opp) {
+        f.opponentId = opp.id;
+        f.opponentLabel = opp.name;
+      }
       const ret = findReturnLeg(fixtures, i);
-      if (ret) ret.playerChances = leg2.count;
+      if (ret) {
+        ret.playerChances = leg2.count;
+        if (opp) {
+          ret.opponentId = opp.id;
+          ret.opponentLabel = opp.name;
+        }
+      }
     } else if (f.kind === 'continental-knockout' && f.leg === 2 && f.playerChances === undefined) {
       f.playerChances = chancesForLeagueMatch({ strength: club.strength }).count;
     } else if (f.kind === 'continental-semi-final' && f.leg === 1) {
+      const opp = nextEuroOpponent('semi-final');
       const [leg1, leg2] = chancesForKnockoutTie({ strength: club.strength });
       f.playerChances = leg1.count;
+      if (opp) {
+        f.opponentId = opp.id;
+        f.opponentLabel = opp.name;
+      }
       const ret = findReturnLeg(fixtures, i);
-      if (ret) ret.playerChances = leg2.count;
+      if (ret) {
+        ret.playerChances = leg2.count;
+        if (opp) {
+          ret.opponentId = opp.id;
+          ret.opponentLabel = opp.name;
+        }
+      }
     } else if (f.kind === 'continental-semi-final' && f.leg === 2 && f.playerChances === undefined) {
       f.playerChances = chancesForLeagueMatch({ strength: club.strength }).count;
     } else if (f.kind === 'continental-final') {
+      const opp = nextEuroOpponent('final');
+      if (opp) {
+        f.opponentId = opp.id;
+        f.opponentLabel = opp.name;
+      }
       f.playerChances = chancesForLeagueMatch({ strength: club.strength }).count;
     } else if (f.kind === 'international') {
       let opp: { id: string; name: string } | undefined;

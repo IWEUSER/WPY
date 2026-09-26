@@ -667,7 +667,7 @@ export function seasonLegacyHighlights(
       const seasonGoals = thisSeasonGoalsForBoard(board.def, thisSeason);
       if (seasonGoals <= 0) continue;
       const seasonRank = rankForGoals(seasonGoals, board.historical);
-      if (seasonRank !== 1) continue;
+      if (revealForRank(seasonRank, board.historical) !== 'top10') continue;
       if (seasonGoals !== board.playerGoals) continue;
       highlights.push({
         title: board.def.title,
