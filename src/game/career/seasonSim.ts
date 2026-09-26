@@ -4,6 +4,8 @@ import { buildSeasonCalendar, fixtureIsHome, internationalVenueFlags, isFinalFix
 import {
   championsLeagueBand,
   clubsThatWouldAdvanceFromLeague,
+  isUclFinalistClub,
+  pickUclFinalOpponent,
   pickWeightedOpponent,
   simulateKnockoutSurvivors,
   tablePosition,
@@ -22,6 +24,7 @@ import {
   clubsInLeague,
   getClub,
   ligaMxClubs,
+  promotionTarget,
   leagueMatchWeeks,
   qualifiesForSaudiSuperCup,
   SECOND_DIVISIONS,
@@ -769,6 +772,8 @@ export function syncContinentalKnockoutCalendar(
     opponentId = uclPlayOffOpponentId(sim.europeanTable, playerClubId);
   } else if (stage === 'round-of-16' && standing.cup === 'ucl') {
     opponentId = uclRoundOf16OpponentId(sim.europeanTable, playerClubId, field, seed);
+  } else if (stage === 'final' && standing.cup === 'ucl') {
+    opponentId = pickUclFinalOpponent(playerClubId, field, seed, used);
   } else {
     opponentId = pickWeightedOpponent(playerClubId, field, seed, used);
   }
@@ -904,7 +909,7 @@ function assignOpponentsAndChances(
       }
       f.playerChances = chancesForLeagueMatch({ strength: club.strength }).count;
     } else if (f.kind === 'domestic-cup') {
-      const opp = pickDomesticCupOpponent(club, f.domesticCupStage, usedCupIds);
+      const opp = pickDomesticCupOpponent(club, f.domesticCupStage, usedCupIds, league);
       if (opp) usedCupIds.add(opp.id);
       if (opp) {
         f.opponentId = opp.id;
@@ -989,7 +994,18 @@ function assignOpponentsAndChances(
     } else if (f.kind === 'continental-semi-final' && f.leg === 2 && f.playerChances === undefined) {
       f.playerChances = chancesForLeagueMatch({ strength: club.strength }).count;
     } else if (f.kind === 'continental-final') {
-      const opp = nextEuroOpponent('final');
+      const opp = cup === 'ucl'
+        ? (() => {
+            const field = euroRivals.filter((id) => id !== club.id && !usedEuro.has(id));
+            const id = pickUclFinalOpponent(
+              club.id,
+              field.length > 0 ? field : euroRivals.filter((x) => x !== club.id),
+              `${seasonNumber}-${club.id}-final`,
+            );
+            if (id) usedEuro.add(id);
+            return id ? getClub(id) : undefined;
+          })()
+        : nextEuroOpponent('final');
       if (opp) {
         f.opponentId = opp.id;
         f.opponentLabel = opp.name;
@@ -1052,33 +1068,134 @@ function findReturnLeg(fixtures: CalendarFixture[], firstIndex: number): Calenda
   return undefined;
 }
 
-/** Later cup rounds prefer higher divisions so second-tier sides do not keep meeting each other in finals. */
+function topFlightLeagueName(club: Club, seasonLeague?: string | null): string {
+  const league = seasonLeague ?? club.league;
+  if (SECOND_DIVISIONS.has(league)) return promotionTarget(league) ?? league;
+  return league;
+}
+
+export function domesticCupOpponentAllowed(
+  opponent: Club,
+  stage: DomesticCupStage | undefined,
+  club: Club,
+  seasonLeague?: string | null,
+): boolean {
+  if (opponent.id === club.id) return false;
+  const topLeague = topFlightLeagueName(club, seasonLeague);
+  const secondDiv = SECOND_DIVISIONS.has(opponent.league);
+  if (stage === 'quarter-final') {
+    return !secondDiv && opponent.league === topLeague && (opponent.tier <= 3 || opponent.strength >= 72);
+  }
+  if (stage === 'semi-final' || stage === 'final') {
+    return !secondDiv && opponent.league === topLeague && (opponent.tier <= 2 || opponent.strength >= 80);
+  }
+  return true;
+}
+
+/**
+ * First cup round can draw second-division sides. Quarter-finals are top-flight
+ * only. Semi-finals and the final use the strongest clubs in the country.
+ */
 export function pickDomesticCupOpponent(
   club: Club,
   stage: DomesticCupStage | undefined,
   usedIds: Set<string>,
+  seasonLeague?: string | null,
 ): Club | undefined {
   const country = clubsInCountry(club.country).filter((c) => c.id !== club.id && !usedIds.has(c.id));
-  const sameLeague = clubsInLeague(club.league).filter((c) => c.id !== club.id && !usedIds.has(c.id));
-  const late = stage === 'quarter-final' || stage === 'semi-final' || stage === 'final';
-  const last16 = stage === 'round-of-16';
-  const fromSecondDivision = SECOND_DIVISIONS.has(club.league);
-  const higherDivision = country.filter((c) => !SECOND_DIVISIONS.has(c.league));
-  const topFlight = sameLeague.length > 0 && !fromSecondDivision ? sameLeague : higherDivision;
+  const topLeague = topFlightLeagueName(club, seasonLeague);
+  const topFlight = clubsInLeague(topLeague).filter((c) => c.id !== club.id && !usedIds.has(c.id));
+  const secondDiv = country.filter((c) => SECOND_DIVISIONS.has(c.league));
+  const strongest = [...topFlight]
+    .filter((c) => c.tier <= 2 || c.strength >= 80)
+    .sort((a, b) => b.strength - a.strength || a.id.localeCompare(b.id));
   let pool: Club[];
-  if (late) {
-    pool = topFlight.length > 0 ? topFlight : (higherDivision.length > 0 ? higherDivision : sameLeague);
-  } else if (last16) {
-    const lower = country.filter((c) => SECOND_DIVISIONS.has(c.league) && c.league !== club.league);
-    const first = fromSecondDivision ? sameLeague : (sameLeague.length > 0 ? sameLeague : higherDivision);
-    pool = first.length > 0
-      ? [...first, ...shuffle(lower).slice(0, Math.max(2, Math.ceil(first.length / 3)))]
-      : country;
+  if (stage === 'semi-final' || stage === 'final') {
+    pool = strongest.length > 0 ? strongest : [...topFlight].sort((a, b) => b.strength - a.strength).slice(0, 8);
+  } else if (stage === 'quarter-final') {
+    const qfPool = topFlight.filter((c) => c.tier <= 3 || c.strength >= 72);
+    pool = qfPool.length > 0
+      ? qfPool
+      : [...topFlight].sort((a, b) => b.strength - a.strength || a.id.localeCompare(b.id))
+        .slice(0, Math.max(8, Math.ceil(topFlight.length * 0.65)));
+  } else if (stage === 'round-of-16') {
+    const weakerTop = [...topFlight].sort((a, b) => a.strength - b.strength).slice(0, Math.max(2, Math.ceil(topFlight.length / 3)));
+    pool = secondDiv.length > 0 ? [...secondDiv, ...weakerTop.slice(0, 2)] : country.length > 0 ? country : topFlight;
   } else {
-    pool = country.length > 0 ? country : sameLeague;
+    pool = secondDiv.length > 0 ? secondDiv : country;
   }
+  if (pool.length === 0) pool = topFlight.length > 0 ? topFlight : country;
   if (pool.length === 0) return undefined;
   return shuffle(pool)[0];
+}
+
+/** Rewrite unplayed cup ties whose opponent does not belong in that round. */
+export function repairDomesticCupDraw(
+  calendar: SeasonCalendar,
+  club: Club,
+  sim: SeasonSimState,
+  seasonLeague?: string | null,
+): SeasonCalendar {
+  const used = new Set<string>();
+  calendar.fixtures.forEach((f, i) => {
+    if (f.kind === 'domestic-cup' && i < sim.fixtureIndex && f.opponentId) used.add(f.opponentId);
+  });
+  let changed = false;
+  const fixtures = calendar.fixtures.map((f, i) => {
+    if (f.kind !== 'domestic-cup' || i < sim.fixtureIndex) return f;
+    const current = f.opponentId ? getClub(f.opponentId) : undefined;
+    if (current && domesticCupOpponentAllowed(current, f.domesticCupStage, club, seasonLeague)) {
+      used.add(current.id);
+      return f;
+    }
+    const next = pickDomesticCupOpponent(club, f.domesticCupStage, used, seasonLeague);
+    if (!next) return f;
+    used.add(next.id);
+    changed = true;
+    return { ...f, opponentId: next.id, opponentLabel: next.name };
+  });
+  return changed ? { ...calendar, fixtures } : calendar;
+}
+
+/** Replace an unplayed UCL final if the opponent is not an elite/strong finalist. */
+export function repairUclFinalOpponent(
+  calendar: SeasonCalendar,
+  club: Club,
+  sim: SeasonSimState,
+): SeasonCalendar {
+  if (sim.europeanStanding?.cup !== 'ucl') return calendar;
+  let changed = false;
+  const fixtures = calendar.fixtures.map((f, i) => {
+    if (f.kind !== 'continental-final' || i < sim.fixtureIndex) return f;
+    const current = f.opponentId ? getClub(f.opponentId) : undefined;
+    if (current && current.id !== club.id && isUclFinalistClub(current)) return f;
+    const id = pickUclFinalOpponent(
+      club.id,
+      sim.europeanKnockoutField ?? [],
+      `${calendar.seasonNumber}-${club.id}-ucl-final-repair`,
+    );
+    const opp = id ? getClub(id) : undefined;
+    if (!opp || opp.id === current?.id) return f;
+    changed = true;
+    return { ...f, opponentId: opp.id, opponentLabel: opp.name };
+  });
+  return changed ? { ...calendar, fixtures } : calendar;
+}
+
+export function syncSeasonCalendars(
+  calendar: SeasonCalendar,
+  sim: SeasonSimState,
+  playerClubId?: string | null,
+  seasonLeague?: string | null,
+): SeasonCalendar {
+  let next = syncInternationalCalendar(calendar, sim);
+  next = syncContinentalKnockoutCalendar(next, sim, playerClubId);
+  const club = playerClubId ? getClub(playerClubId) : undefined;
+  if (club) {
+    next = repairDomesticCupDraw(next, club, sim, seasonLeague ?? club.league);
+    next = repairUclFinalOpponent(next, club, sim);
+  }
+  return next;
 }
 
 /** Each league rival once, then the return fixture — never a third meeting. */

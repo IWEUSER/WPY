@@ -55,7 +55,7 @@ import { championsLeagueField, leaguePhaseOpponents, pickSuperCupOpponent, seedC
 import { settleDrawOnPenalties } from '../src/game/career/penalties';
 import { planDomesticSuperCup } from '../src/game/career/domesticSuperCup';
 import { firstLegStakeLine, formatNextLine, nextMatchBriefing, sitOutRecapLine } from '../src/game/career/matchBriefing';
-import { applyInternationalResult, canWinLeague, continentalAggregateLine, ensureInternationalGroup, fixtureTitle, hydrateSeason, internationalStageWhenSelected, leagueFixtureIsHome, liveMatchBoardLine, liveMatchScoreSeed, mulberry32, nextActionableFixture, nextPlayableFixture, pickDomesticCupOpponent, pickTitleRival, remainingPlayableCount, repairChampionsLeagueSeason, resolveFixture, shouldSimulateNationQualifier, shouldSkipFixture } from '../src/game/career/seasonSim';
+import { applyInternationalResult, canWinLeague, continentalAggregateLine, ensureInternationalGroup, fixtureTitle, hydrateSeason, internationalStageWhenSelected, leagueFixtureIsHome, liveMatchBoardLine, liveMatchScoreSeed, mulberry32, nextActionableFixture, nextPlayableFixture, pickDomesticCupOpponent, pickTitleRival, remainingPlayableCount, repairChampionsLeagueSeason, repairDomesticCupDraw, repairUclFinalOpponent, resolveFixture, shouldSimulateNationQualifier, shouldSkipFixture, syncContinentalKnockoutCalendar, type SeasonSimState } from '../src/game/career/seasonSim';
 import { applyPlayerGroupResult, createGroupState, nationCanProgressKnockout, nationCanWinMajor, simulateNpcRoundAfterPlayerMatch } from '../src/game/career/internationalTable';
 import {
   applyTrialMatch,
@@ -87,7 +87,16 @@ import { consecutiveLoanSpells, LOAN_OFFER_COUNT, SAUDI_OFFER_MIN_AGE, TRANSFER_
 import { evaluateWpy } from '../src/game/career/wpy';
 import { internationalCampaignForSeason } from '../src/game/career/data/competitions';
 import { continentalLabel } from '../src/game/career/seasonStats';
-import { championsLeagueBand } from '../src/game/career/championsLeagueKnockout';
+import { championsLeagueBand, isUclFinalistClub, pickUclFinalOpponent } from '../src/game/career/championsLeagueKnockout';
+import {
+  careerHasProgress,
+  careerSlotLabel,
+  listCareerSlots,
+  memorySlotStorage,
+  readCareerSlot,
+  upsertCareerSlot,
+  useCareerSlotStorage,
+} from '../src/game/career/careerSlots';
 import {
   evaluatePlayerOfTheYear,
   evaluateTopGoalscorer,
@@ -8180,6 +8189,81 @@ console.log('\n--- CONMEBOL WCQ, UCL play-offs, cups, WPY, super cups ---');
     console.error('Copa del Rey quarter-finals onward must be La Liga clubs');
     process.exitCode = 1;
   }
+  if (lateCopa.slice(1).some((club) => club && club.tier > 2 && club.strength < 80)) {
+    console.error('Copa del Rey semi-finals and the final must be the strongest La Liga clubs');
+    process.exitCode = 1;
+  }
+  if (lateCopa[0] && lateCopa[0].tier >= 4 && lateCopa[0].strength < 72) {
+    console.error('Copa del Rey quarter-finals must not draw the weakest La Liga sides');
+    process.exitCode = 1;
+  }
+
+  const badCopa = {
+    seasonNumber: 2,
+    totalWeeks: 40,
+    fixtures: [
+      { week: 8, kind: 'domestic-cup' as const, isDecisive: false, domesticCupStage: 'round-of-16' as const, opponentId: 'levante', opponentLabel: 'Levante' },
+      { week: 16, kind: 'domestic-cup' as const, isDecisive: false, domesticCupStage: 'quarter-final' as const, opponentId: 'almeria', opponentLabel: 'Almería' },
+      { week: 24, kind: 'domestic-cup' as const, isDecisive: false, domesticCupStage: 'semi-final' as const, opponentId: 'elche', opponentLabel: 'Elche' },
+      { week: 32, kind: 'domestic-cup' as const, isDecisive: false, domesticCupStage: 'final' as const, opponentId: 'eibar', opponentLabel: 'Eibar' },
+    ],
+  };
+  const cupSim = { fixtureIndex: 1 } as SeasonSimState;
+  const repairedCopa = repairDomesticCupDraw(badCopa, barca, cupSim, 'La Liga');
+  const keptR16 = repairedCopa.fixtures[0]?.opponentId === 'levante';
+  const lateRepaired = repairedCopa.fixtures.slice(1).map((f) => (f.opponentId ? getClub(f.opponentId) : undefined));
+  if (!keptR16 || lateRepaired.some((club) => !club || SECOND_DIVISIONS.has(club.league))) {
+    console.error('unplayed Copa ties must drop second-division sides after the last 16');
+    process.exitCode = 1;
+  }
+  if (lateRepaired[1] && lateRepaired[1].tier > 2 && lateRepaired[1].strength < 80) {
+    console.error('a repaired Copa final/semi must be a strongest-side club');
+    process.exitCode = 1;
+  }
+
+  const portoFinal = pickUclFinalOpponent('real-madrid', ['porto', 'benfica', 'sporting', 'ajax'], 'porto-final-test');
+  if (!portoFinal || portoFinal === 'porto' || !isUclFinalistClub(getClub(portoFinal))) {
+    console.error('Champions League finalists must be elite/strong (86+), not Porto');
+    process.exitCode = 1;
+  }
+  const uclHydrate = hydrateSeason({
+    seasonNumber: 2,
+    club: getClub('real-madrid')!,
+    careerGoalRatio: 0.8,
+    nationId: 'spain',
+    careerStart: 'favourite-first-team',
+    continentalCup: 'ucl',
+    rng: () => 0.11,
+  });
+  const uclFinal = uclHydrate.calendar.fixtures.find((f) => f.kind === 'continental-final');
+  const uclFinalOpp = uclFinal?.opponentId ? getClub(uclFinal.opponentId) : undefined;
+  if (!isUclFinalistClub(uclFinalOpp)) {
+    console.error('hydrated Champions League finals must already be elite/strong clubs');
+    process.exitCode = 1;
+  }
+  const portoCal = {
+    seasonNumber: 2,
+    totalWeeks: 40,
+    fixtures: [
+      { week: 38, kind: 'continental-final' as const, isDecisive: true, continentalCup: 'ucl' as const, opponentId: 'porto', opponentLabel: 'FC Porto' },
+    ],
+  };
+  const portoSim = {
+    fixtureIndex: 0,
+    europeanStanding: { cup: 'ucl', stage: 'final' },
+    europeanKnockoutField: ['porto', 'benfica', 'real-madrid'],
+    europeanTable: [],
+  } as unknown as SeasonSimState;
+  const syncedFinal = syncContinentalKnockoutCalendar(portoCal, portoSim, 'real-madrid');
+  const repairedFinal = repairUclFinalOpponent(portoCal, getClub('real-madrid')!, portoSim);
+  if (syncedFinal.fixtures[0]?.opponentId === 'porto' || repairedFinal.fixtures[0]?.opponentId === 'porto') {
+    console.error('existing Porto Champions League finals must be rewritten');
+    process.exitCode = 1;
+  }
+  if (!isUclFinalistClub(getClub(syncedFinal.fixtures[0]?.opponentId)) || !isUclFinalistClub(getClub(repairedFinal.fixtures[0]?.opponentId))) {
+    console.error('rewritten Champions League finals must still be elite/strong');
+    process.exitCode = 1;
+  }
 
   const wcWin = evaluateWpy({
     seasonGoalRatio: 0.7,
@@ -8304,6 +8388,93 @@ console.log('\n--- Free practice covers every chance type ---');
   }
   if (volley.flight !== 'volley' || header.flight !== 'header' || roll.flight !== 'roll' || bounce.flight !== 'bounce') {
     console.error('practice must lock volleys, headers, ground balls and bouncing balls');
+    process.exitCode = 1;
+  }
+}
+
+console.log('\n--- Concurrent career save slots ---');
+{
+  const storage = memorySlotStorage();
+  useCareerSlotStorage(storage);
+  const barcaSave = {
+    phase: 'hub',
+    clubId: 'barcelona',
+    playerName: 'Ian',
+    seasonNumber: 3,
+    role: 'first-team',
+    careerStart: 'favourite-first-team',
+    nationality: 'spain',
+    careerSlotId: null,
+  } as unknown as import('../src/game/career/types').CareerState;
+  const citySave = {
+    phase: 'hub',
+    clubId: 'man-city',
+    playerName: 'Ian',
+    seasonNumber: 1,
+    role: 'first-team',
+    careerStart: 'favourite-first-team',
+    nationality: 'england',
+    careerSlotId: null,
+  } as unknown as import('../src/game/career/types').CareerState;
+  if (!careerHasProgress(barcaSave) || careerHasProgress({ phase: 'menu', clubId: null })) {
+    console.error('a signed club career must count as progress');
+    process.exitCode = 1;
+  }
+  const first = upsertCareerSlot(barcaSave, storage);
+  const second = upsertCareerSlot(citySave, storage);
+  const listed = listCareerSlots(storage);
+  if (listed.length !== 2 || !listed.some((slot) => slot.clubId === 'barcelona') || !listed.some((slot) => slot.clubId === 'man-city')) {
+    console.error('saving a second career must keep the first season');
+    process.exitCode = 1;
+  }
+  const loadedBarca = readCareerSlot(first.id, storage);
+  if (loadedBarca?.state.clubId !== 'barcelona' || loadedBarca.state.seasonNumber !== 3) {
+    console.error('loading a saved career must restore that season');
+    process.exitCode = 1;
+  }
+  if (!careerSlotLabel(second).includes('Manchester City') || !careerSlotLabel(first).includes('Season 3')) {
+    console.error('saved careers must name the club and season');
+    process.exitCode = 1;
+  }
+
+  const store = useCareerStore;
+  store.setState({
+    ...store.getState(),
+    clubId: 'barcelona',
+    playerName: 'Ian',
+    seasonNumber: 4,
+    role: 'first-team',
+    careerStart: 'favourite-first-team',
+    nationality: 'spain',
+    phase: 'menu',
+    careerSlotId: null,
+  });
+  const savedId = store.getState().saveCurrentCareer();
+  store.getState().startNewCareer();
+  if (store.getState().clubId || !savedId) {
+    console.error('starting a new career must park the current season and clear the active one');
+    process.exitCode = 1;
+  }
+  store.setState({
+    ...store.getState(),
+    clubId: 'man-city',
+    playerName: 'Ian',
+    seasonNumber: 1,
+    role: 'first-team',
+    careerStart: 'favourite-first-team',
+    nationality: 'england',
+    phase: 'menu',
+    careerSlotId: null,
+  });
+  store.getState().saveCurrentCareer();
+  const loaded = store.getState().loadSavedCareer(savedId);
+  if (!loaded || store.getState().clubId !== 'barcelona' || store.getState().seasonNumber !== 4) {
+    console.error('loading a parked career must restore it without wiping the other save');
+    process.exitCode = 1;
+  }
+  const afterSwitch = listCareerSlots(storage);
+  if (!afterSwitch.some((slot) => slot.clubId === 'man-city')) {
+    console.error('switching saves must keep the other season in the library');
     process.exitCode = 1;
   }
 }

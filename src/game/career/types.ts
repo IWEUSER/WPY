@@ -293,6 +293,8 @@ export interface CareerState {
    * remaining fixtures without wiping career history.
    */
   rulesStamp?: string | null;
+  /** Library slot this active career last saved into. */
+  careerSlotId?: string | null;
   /** Screen to restore after closing the all-time records list. */
   legacyReturnPhase?: CareerPhase | null;
   /** Screen to restore after closing the career identity page. */

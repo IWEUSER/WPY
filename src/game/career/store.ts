@@ -56,6 +56,8 @@ import {
   ensureInternationalGroup,
   hydrateSeason,
   repairChampionsLeagueSeason,
+  repairDomesticCupDraw,
+  repairUclFinalOpponent,
   liveMatchScoreSeed,
   mulberry32,
   remainingPlayableCount,
@@ -63,14 +65,19 @@ import {
   resolveFixture,
   shouldSkipFixture,
   shouldSimulateNationQualifier,
-  syncContinentalKnockoutCalendar,
-  syncInternationalCalendar,
+  syncSeasonCalendars,
   trophyNameForFixture,
   internationalRoundLabel,
   internationalStageWhenSelected,
   type LiveMatch,
   type SeasonSimState,
 } from './seasonSim';
+import {
+  careerHasProgress,
+  removeCareerSlot,
+  upsertCareerSlot,
+  readCareerSlot,
+} from './careerSlots';
 import { offerClubsForTrial, trialContractWon, TRIAL_SHOTS, type TrialRatioBar } from './trial';
 import {
   applyTrialMatch,
@@ -767,12 +774,21 @@ function initialState(): CareerState {
     intlQualifying: null,
     lastSuperCupOpponentId: null,
     rulesStamp: CURRENT_RULES_STAMP,
+    careerSlotId: null,
     legacyReturnPhase: null,
     profileReturnPhase: null,
     pendingBeats: [],
     seenBeatKinds: [],
     guidedChanceSeen: false,
   };
+}
+
+function snapshotCareerState(state: CareerStore | CareerState): CareerState {
+  const snap = initialState();
+  for (const key of Object.keys(snap) as (keyof CareerState)[]) {
+    Object.assign(snap, { [key]: state[key] });
+  }
+  return snap;
 }
 
 function qualifierOpponentIdsFromCalendar(calendar: CareerState['seasonCalendar']): string[] {
@@ -919,6 +935,12 @@ interface CareerActions {
   returnToMenu: () => void;
   /** Regenerates the remaining calendar when career rules have changed. */
   rebuildThisSeason: () => void;
+  /** Snapshot the active career so another save can run at the same time. */
+  saveCurrentCareer: () => string | null;
+  loadSavedCareer: (id: string) => boolean;
+  deleteSavedCareer: (id: string) => void;
+  /** Saves the current career (if any) and returns to an empty menu. */
+  startNewCareer: () => void;
 }
 
 export type CareerStore = CareerState & CareerActions;
@@ -967,7 +989,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
   };
 
   const sitOutFinalResult = (): Partial<CareerState> => {
-    calendar = syncContinentalKnockoutCalendar(syncInternationalCalendar(calendar!, sim!), sim!, state.clubId);
+    calendar = syncSeasonCalendars(calendar!, sim!, state.clubId, state.clubLeague);
     const complete = sim!.fixtureIndex >= calendar.fixtures.length;
     const withHonours = complete
       ? { ...sim!, honours: { ...sim!.honours, leagueChampion: canWinLeague(sim!, state.clubId!) } }
@@ -1016,7 +1038,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
   };
 
   const sitOutHub = (): Partial<CareerState> => {
-    calendar = syncContinentalKnockoutCalendar(syncInternationalCalendar(calendar!, sim!), sim!, state.clubId);
+    calendar = syncSeasonCalendars(calendar!, sim!, state.clubId, state.clubLeague);
     const complete = sim!.fixtureIndex >= calendar.fixtures.length;
     if (complete) {
       const withHonours = {
@@ -1338,11 +1360,7 @@ function finishResolvedLiveMatch(
   if (!club || !fixture) return state;
 
   const nextSim = { ...resolution.sim, fixtureIndex: live.fixtureIndex + 1 };
-  const nextCalendar = syncContinentalKnockoutCalendar(
-    syncInternationalCalendar(calendar, nextSim),
-    nextSim,
-    state.clubId,
-  );
+  const nextCalendar = syncSeasonCalendars(calendar, nextSim, state.clubId, state.clubLeague);
   const scored = live.goals > 0;
   const openPlayScored = (live.openPlayGoals ?? 0) > 0;
   const isInternational = fixture.kind === 'international';
@@ -1486,7 +1504,7 @@ function finishResolvedLiveMatch(
 
 export const useCareerStore = create<CareerStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       ...initialState(),
 
       startCareer: () => set({ phase: 'nationality-choice', careerStart: 'youth' }),
@@ -2393,6 +2411,37 @@ export const useCareerStore = create<CareerStore>()(
 
       resetCareer: () => set(initialState()),
 
+      saveCurrentCareer: () => {
+        const current = snapshotCareerState(get());
+        if (!careerHasProgress(current)) return null;
+        const slot = upsertCareerSlot(current);
+        set({ careerSlotId: slot.id });
+        return slot.id;
+      },
+
+      loadSavedCareer: (id) => {
+        const current = snapshotCareerState(get());
+        if (careerHasProgress(current) && current.careerSlotId !== id) {
+          upsertCareerSlot(current);
+        }
+        const loaded = readCareerSlot(id);
+        if (!loaded) return false;
+        const migrated = migrateCareerPersist({ ...loaded.state, careerSlotId: id });
+        set({ ...migrated, careerSlotId: id });
+        return true;
+      },
+
+      deleteSavedCareer: (id) => {
+        removeCareerSlot(id);
+        if (get().careerSlotId === id) set({ careerSlotId: null });
+      },
+
+      startNewCareer: () => {
+        const current = snapshotCareerState(get());
+        if (careerHasProgress(current)) upsertCareerSlot(current);
+        set(initialState());
+      },
+
       openCareerRecord: () => set({ phase: 'career' }),
 
       openProfile: () =>
@@ -2444,7 +2493,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 38,
+      version: 39,
       migrate: (persisted) => {
         try {
           return migrateCareerPersist(persisted);
@@ -2546,6 +2595,18 @@ function migrateCareerPersist(persisted: unknown): CareerState {
             : null,
           sim: paddedSim,
         });
+        const migrateClub = state.clubId ? getClub(state.clubId) : undefined;
+        let migratedCalendar = repaired.calendar ?? null;
+        const migratedSim = repaired.sim ?? paddedSim;
+        if (migratedCalendar && migrateClub && migratedSim) {
+          migratedCalendar = repairDomesticCupDraw(
+            migratedCalendar,
+            migrateClub,
+            migratedSim,
+            state.clubLeague ?? migrateClub.league,
+          );
+          migratedCalendar = repairUclFinalOpponent(migratedCalendar, migrateClub, migratedSim);
+        }
         return {
           ...state,
           openingCampaign: state.openingCampaign
@@ -2573,7 +2634,7 @@ function migrateCareerPersist(persisted: unknown): CareerState {
                 recentQualifierOpponentIds: state.nationalTeam.recentQualifierOpponentIds ?? [],
               }
             : null,
-          seasonCalendar: repaired.calendar ?? null,
+          seasonCalendar: migratedCalendar,
           seasonStandings: state.seasonStandings ?? null,
           seasonHistory,
           currentSeason,
@@ -2614,6 +2675,7 @@ function migrateCareerPersist(persisted: unknown): CareerState {
           previousChampionClubId: state.previousChampionClubId ?? null,
           qualifiedContinentalCup: state.qualifiedContinentalCup ?? null,
           lastSuperCupOpponentId: state.lastSuperCupOpponentId ?? null,
+          careerSlotId: state.careerSlotId ?? null,
           legacyReturnPhase: state.legacyReturnPhase ?? null,
           profileReturnPhase: state.profileReturnPhase ?? null,
           pendingBeats: state.pendingBeats ?? [],

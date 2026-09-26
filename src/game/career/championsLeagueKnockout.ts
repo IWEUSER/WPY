@@ -1,3 +1,4 @@
+import { championsLeagueField } from './continentalDraw';
 import { getClub, type Club } from './data/clubs';
 import type { LeagueStanding } from './matchEngine';
 import { rankLeagueTable } from './matchEngine';
@@ -5,6 +6,36 @@ import { mulberry32 } from './util';
 
 export const UCL_BYE_CUTOFF = 8;
 export const UCL_PLAY_OFF_CUTOFF = 24;
+/** Porto (83) is strong in Portugal but not a Champions League final side. */
+export const UCL_FINALIST_MIN_STRENGTH = 86;
+
+export function isUclFinalistClub(club: Club | undefined | null): boolean {
+  if (!club) return false;
+  return club.tier <= 2 && club.strength >= UCL_FINALIST_MIN_STRENGTH;
+}
+
+export function pickUclFinalOpponent(
+  playerId: string,
+  field: string[],
+  seed: string,
+  excludeIds: string[] = [],
+): string | null {
+  const blocked = new Set([playerId, ...excludeIds]);
+  const pickEligible = (ids: string[], label: string): string | null => {
+    const eligible = ids.filter((id) => !blocked.has(id) && isUclFinalistClub(getClub(id)));
+    return eligible.length > 0 ? pickWeightedOpponent(playerId, eligible, `${seed}-${label}`) : null;
+  };
+  const fromKnockout = pickEligible(field, 'final');
+  if (fromKnockout) return fromKnockout;
+  const fromLeague = pickEligible(championsLeagueField(playerId), 'final-field');
+  if (fromLeague) return fromLeague;
+  const giants = [...field, ...championsLeagueField(playerId)]
+    .filter((id, i, arr) => arr.indexOf(id) === i && !blocked.has(id))
+    .map((id) => getClub(id))
+    .filter((club): club is Club => Boolean(club))
+    .sort((a, b) => b.strength - a.strength || a.id.localeCompare(b.id));
+  return giants[0]?.id ?? pickWeightedOpponent(playerId, field, `${seed}-final-any`, excludeIds);
+}
 
 export type ChampionsLeagueBand = 'bye' | 'play-off' | 'eliminated';
 
