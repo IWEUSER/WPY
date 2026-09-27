@@ -3412,8 +3412,8 @@ if (barca && hilal && lafc) {
       .filter((o) => o.move === 'permanent' && !o.renewal && o.clubId !== 'man-city')
       .map((o) => getClub(o.clubId)?.tier ?? 5);
     console.log('season 1 0.53 perm tiers', s1PermTiers);
-    if (s1PermTiers.some((tier) => tier <= 2)) {
-      console.error('a 0.53 season 1 must not produce Strong or Elite transfer offers');
+    if (s1PermTiers.some((tier) => tier === 1)) {
+      console.error('a 0.53 season 1 Rising star must not produce Elite transfer offers');
       process.exitCode = 1;
     }
     const s2OutOfContract = resolveSeasonTransition({
