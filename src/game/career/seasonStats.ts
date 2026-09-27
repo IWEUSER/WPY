@@ -32,14 +32,35 @@ export function clubSeasonTotals(season: SeasonRecord): { goals: number; games: 
   const cupGoals = season.cupGoals ?? 0;
   const continentalGoals = (season.continentalStats ?? []).reduce((sum, row) => sum + row.goals, 0);
   const splitGoals = leagueGoals + cupGoals + continentalGoals;
-  const leagueGames = season.leagueGames ?? 0;
+  let leagueGames = season.leagueGames ?? 0;
   const cupGames = season.cupGames ?? 0;
   const continentalGames = (season.continentalStats ?? []).reduce((sum, row) => sum + row.games, 0);
+  // Older saves padded leagueGames from gamesPlayed, which also held cups and caps.
+  if (
+    leagueGames > 0
+    && season.gamesPlayed > 0
+    && leagueGames >= season.gamesPlayed
+    && (cupGames > 0 || intlGames > 0)
+  ) {
+    leagueGames = Math.max(0, season.gamesPlayed - cupGames - intlGames);
+  }
   const splitGames = leagueGames + cupGames + continentalGames;
   return {
     goals: splitGoals > 0 ? splitGoals : Math.max(0, season.goals - intlGoals),
     games: splitGames > 0 ? splitGames : Math.max(0, season.gamesPlayed - intlGames),
   };
+}
+
+/** Same club totals the career-record table uses — never internatonal caps. */
+export function careerClubRecord(seasons: SeasonRecord[]): { games: number; goals: number; ratio: number } {
+  let games = 0;
+  let goals = 0;
+  for (const season of seasons) {
+    const row = clubSeasonTotals(season);
+    games += row.games;
+    goals += row.goals;
+  }
+  return { games, goals, ratio: games > 0 ? goals / games : 0 };
 }
 
 export function recordClubAppearanceStats(

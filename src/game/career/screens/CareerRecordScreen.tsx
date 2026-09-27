@@ -2,7 +2,7 @@ import { getClub } from '../data/clubs';
 import { formatInternationalSeason, seasonClubName, seasonLeagueLabel } from '../honoursDisplay';
 import { formatEuros } from '../playerValue';
 import { countsTowardCareerRecord, displaySeasonLabel } from '../seasonDisplay';
-import { aggregateContinental, aggregateDomesticSplit, careerTransferFeesPaid, seasonDomesticSplit } from '../seasonStats';
+import { aggregateContinental, aggregateDomesticSplit, careerClubRecord, careerTransferFeesPaid, seasonDomesticSplit } from '../seasonStats';
 import { useCareerStore } from '../store';
 import type { SeasonRecord } from '../types';
 import { DATA_CARD, DATA_TILE } from './dataUi';
@@ -18,8 +18,6 @@ const ROLE_LABEL: Record<string, string> = {
 export default function CareerRecordScreen() {
   const history = useCareerStore((s) => s.seasonHistory);
   const current = useCareerStore((s) => s.currentSeason);
-  const careerGoals = useCareerStore((s) => s.careerGoals);
-  const careerGames = useCareerStore((s) => s.careerGames);
   const returnToHub = useCareerStore((s) => s.returnToHub);
 
   const seasons: Array<SeasonRecord & { inProgress?: boolean }> = [
@@ -31,7 +29,8 @@ export default function CareerRecordScreen() {
   const domestic = aggregateDomesticSplit(scoredSeasons);
   const continental = aggregateContinental(scoredSeasons);
   const feesPaid = careerTransferFeesPaid(recordSeasons);
-  const ratio = careerGames > 0 ? careerGoals / careerGames : 0;
+  const clubRecord = careerClubRecord(scoredSeasons);
+  const ratio = clubRecord.ratio;
 
   return (
     <div className="flex h-full w-full flex-col overflow-y-auto px-5 py-[max(1.25rem,env(safe-area-inset-top))] pb-10 text-white">
@@ -43,8 +42,8 @@ export default function CareerRecordScreen() {
       </div>
 
       <div className="grid grid-cols-3 gap-2">
-        <StatTile value={String(careerGames)} label="Club games" />
-        <StatTile value={String(careerGoals)} label="Club goals" />
+        <StatTile value={String(clubRecord.games)} label="Club games" />
+        <StatTile value={String(clubRecord.goals)} label="Club goals" />
         <StatTile value={ratio.toFixed(2)} label="Club ratio" />
       </div>
       <div className="mt-2 grid grid-cols-1 gap-2">

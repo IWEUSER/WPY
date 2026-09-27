@@ -259,6 +259,24 @@ export function youngDivisionStarFloor(params: {
   return Math.max(100_000, Math.round((base * ageValueFactor(params.age)) / 100_000) * 100_000);
 }
 
+/** A 17-year-old scoring in a top division is not a €200k youth. */
+export function youngTopFlightSeasonFloor(params: {
+  age: number;
+  seasons: SeasonRecord[];
+}): number {
+  if (params.age > 19) return 0;
+  let best = 0;
+  for (const season of params.seasons) {
+    if (!countsTowardCareerRecord(season.seasonNumber, season.role)) continue;
+    if (!TOP_LEAGUES.has(seasonLeague(season))) continue;
+    if (season.goals < 6) continue;
+    const raw = (6_000_000 + season.goals * 1_400_000) * ageValueFactor(params.age);
+    best = Math.max(best, raw);
+  }
+  if (best <= 0) return 0;
+  return Math.max(100_000, Math.round(best / 100_000) * 100_000);
+}
+
 export function playerMarketValue(params: MarketValueParams): number {
   const { age, ratio, careerGoals, club } = params;
   return valueFromScale(age, leagueAdjustedRatio(ratio, club.league), careerGoals, clubLeagueScale(club));
@@ -357,9 +375,14 @@ export function playerMarketValueFromSeasons(params: {
   const { age, fallbackClub } = params;
   let careerGoals = params.careerGoals;
   let careerGames = params.careerGames;
+  const lastCounted = [...params.seasons]
+    .reverse()
+    .find((season) => countsTowardCareerRecord(season.seasonNumber, season.role) && season.gamesPlayed > 0);
   const seasons = params.seasons.filter((season) => {
     if (!countsTowardCareerRecord(season.seasonNumber, season.role)) return true;
     if (season.gamesPlayed >= VALUE_FORM_MIN_GAMES) return true;
+    // The season just finished still counts, even at 8–14 games.
+    if (season === lastCounted && season.gamesPlayed >= 6) return true;
     careerGoals -= season.goals;
     careerGames -= season.gamesPlayed;
     return false;
@@ -387,7 +410,10 @@ export function playerMarketValueFromSeasons(params: {
   const base = valueFromScale(age, ratio, careerGoals, scale, careerGames, weightedGoals);
   const poor = consecutivePoorFactor(poorSeasons);
   const lastLeague = lastSeasonLeague(seasons) ?? fallbackClub.league;
-  const floor = youngDivisionStarFloor({ age, league: lastLeague, seasons });
+  const floor = Math.max(
+    youngDivisionStarFloor({ age, league: lastLeague, seasons }),
+    youngTopFlightSeasonFloor({ age, seasons }),
+  );
   const raw = Math.max(floor, base * poor);
   const capped = Math.min(raw, firstTopFlightValueCap(seasons) ?? raw);
   return Math.max(100_000, Math.round(capped / 100_000) * 100_000);

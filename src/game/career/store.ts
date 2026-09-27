@@ -1228,18 +1228,13 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
     if (chances <= 0) {
       const resolution = resolveFixture(sim, fixture, club, 0, Math.random, { playerParticipated: false });
       sim = { ...resolution.sim, fixtureIndex: sim.fixtureIndex + 1 };
-      const record: MatchRecord = { matchNumber: season.matches.length + 1, played: true, scored: false };
+      const record: MatchRecord = { matchNumber: season.matches.length + 1, played: false, scored: null };
       const noChancePay = withWeeklyPay(season, careerEarnings, state.weeklyWage);
       season = {
         ...noChancePay.season,
         matches: [...noChancePay.season.matches, record],
-        gamesPlayed: noChancePay.season.gamesPlayed + (isInternational ? 0 : 1),
       };
       careerEarnings = noChancePay.careerEarnings;
-      if (countsTowardCareerRecord(state.seasonNumber, state.role) && !isInternational) {
-        careerGames += 1;
-        formWindow = pushForm(formWindow, 0);
-      }
       applySitOutRecap(
         resolution,
         fixture,
@@ -2493,7 +2488,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 39,
+      version: 40,
       migrate: (persisted) => {
         try {
           return migrateCareerPersist(persisted);
@@ -2513,10 +2508,12 @@ function migrateCareerPersist(persisted: unknown): CareerState {
           ...season,
           age: season.age ?? (state.age ?? 16) - Math.max(0, (state.seasonHistory?.length ?? 0) - index),
           leagueGoals: season.leagueGoals ?? season.goals,
-          leagueGames: season.leagueGames ?? season.domesticGames ?? season.gamesPlayed,
+          leagueGames: season.leagueGames
+            ?? Math.max(0, (season.domesticGames ?? 0) - (season.cupGames ?? 0)),
           cupGames: season.cupGames ?? 0,
           cupGoals: season.cupGoals ?? Math.max(0, (season.domesticGoals ?? 0) - (season.leagueGoals ?? season.goals)),
-          domesticGames: season.domesticGames ?? season.gamesPlayed,
+          domesticGames: season.domesticGames
+            ?? Math.max(0, (season.leagueGames ?? 0) + (season.cupGames ?? 0)),
           domesticGoals: season.domesticGoals ?? season.leagueGoals ?? season.goals,
           continentalStats: season.continentalStats ?? [],
           trophies: season.trophies ?? [],

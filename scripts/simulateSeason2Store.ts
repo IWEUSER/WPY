@@ -777,6 +777,7 @@ pickNation('england');
       },
       seasonsAtCurrentClub: 1,
       contractYearsRemaining: 2,
+      squadStatus: 'rising-star',
     });
     store.getState().continueAfterSeason();
     const pending = store.getState().pendingTransfer;
@@ -784,21 +785,21 @@ pickNation('england');
     console.log(
       'S1 end renewal',
       Boolean(renewal),
-      'years',
-      renewal?.contractYears,
       'stay',
       pending?.stay?.contractYearsRemaining,
+      'status',
+      pending?.stay?.squadStatus,
     );
     const otherWages = (pending?.offers ?? []).filter((o) => !o.renewal).map((o) => o.weeklyWage);
     if (
-      !renewal
-      || renewal.weeklyWage <= 0
+      renewal
       || !pending?.allowDecline
       || pending.stay?.contractYearsRemaining !== 1
+      || pending.stay?.squadStatus !== 'rising-star'
       || otherWages.length === 0
       || otherWages.some((wage) => wage <= 0)
     ) {
-      console.error('after Season 1 there must be a current-club salary offer plus other clubs’ wage offers');
+      console.error('after Season 1 a Rising star must not get a current-club renewal; other wage offers stay');
       process.exitCode = 1;
     }
     store.getState().resolveTransferChoice(null);
@@ -821,6 +822,7 @@ pickNation('england');
         },
         seasonsAtCurrentClub: 2,
         contractYearsRemaining: 1,
+        squadStatus: 'starter',
       });
       store.getState().continueAfterSeason();
       const late = store.getState().pendingTransfer;
