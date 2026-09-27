@@ -1387,7 +1387,10 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
   const effectiveRatio = lastStanding > careerRatio
     ? lastStanding
     : (age < 28 ? careerRatio : lastStanding);
-  const betterTier = tierForRatio(effectiveRatio);
+  let betterTier = tierForRatio(effectiveRatio);
+  if (currentStatus === 'reserve') {
+    betterTier = Math.max(betterTier, club.tier) as ClubTier;
+  }
   const valueTier = tierForMarketValue(value);
   if (betterTier < club.tier && !blockElite && valueTier <= betterTier) {
     const offers = pickPermanentClubs(betterTier, fee, [club.id], nationality, blockElite, currentLeague, value, age);
