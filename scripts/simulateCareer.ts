@@ -3040,20 +3040,9 @@ if (barca && hilal && lafc) {
   }
   useCareerStore.getState().resolveTransferChoice('getafe');
   const afterGetafe = useCareerStore.getState();
-  console.log('store getafe veto', afterGetafe.phase, afterGetafe.clubId, afterGetafe.lastTransferRejection);
-  if (
-    afterGetafe.phase !== 'transfer-choice'
-    || afterGetafe.clubId !== 'real-madrid'
-    || afterGetafe.pendingTransfer?.offers.some((o) => o.clubId === 'getafe')
-  ) {
-    console.error('a short Getafe bid must also be vetoed when the player is too expensive');
-    process.exitCode = 1;
-  }
-  useCareerStore.getState().resolveTransferChoice(null);
-  const afterStay = useCareerStore.getState();
-  console.log('store stay expensive', afterStay.phase, afterStay.clubId);
-  if (afterStay.phase !== 'hub' || afterStay.clubId !== 'real-madrid') {
-    console.error('after cheap bids are vetoed the player must be able to stay');
+  console.log('store getafe accept', afterGetafe.phase, afterGetafe.clubId, afterGetafe.lastTransferRejection);
+  if (afterGetafe.clubId !== 'getafe' || afterGetafe.pendingTransfer) {
+    console.error('a move down from an elite club must go through even on a short fee');
     process.exitCode = 1;
   }
 
@@ -5558,8 +5547,8 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
       console.error('Arsenal 0.0 loan wages must not copy the current 154k salary');
       process.exitCode = 1;
     }
-    if (arsenalTiers.some((tier) => tier <= 2)) {
-      console.error('a season that has not earned the Strong/Elite ratio must not draw those transfer offers');
+    if (arsenalPerms.some((o) => (getClub(o.clubId)?.tier ?? 5) === 1)) {
+      console.error('a season that has not earned the Elite ratio must not draw Elite transfer offers');
       process.exitCode = 1;
     }
     const reserveWages = new Set(
@@ -5595,12 +5584,19 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     });
     const madridRenewal = (madridBlank.pendingTransfer?.offers ?? []).find((o) => o.renewal && o.clubId === 'real-madrid');
     const madridReserve = (madridBlank.pendingTransfer?.offers ?? []).filter((o) => o.move === 'permanent' && o.squadStatus === 'reserve');
-    console.log('Madrid 0.0', madridBlank.headline, 'renewal', Boolean(madridRenewal), 'reserve deals', madridReserve.map((o) => `${o.clubId}:${o.contractYears}:${o.weeklyWage}`));
+    const madridStep = (madridBlank.pendingTransfer?.offers ?? []).filter(
+      (o) => o.move === 'permanent' && !o.renewal && o.squadStatus === 'starter',
+    );
+    console.log('Madrid 0.0', madridBlank.headline, 'renewal', Boolean(madridRenewal), 'reserve deals', madridReserve.map((o) => `${o.clubId}:${o.contractYears}:${o.weeklyWage}`), 'step-down starters', madridStep.length);
     if (madridRenewal) {
       console.error('0.0 at Real Madrid must not table a current-club renewal');
       process.exitCode = 1;
     }
-    if (madridReserve.length === 0 || madridReserve.some((o) => o.contractYears !== RESERVE_CONTRACT_YEARS)) {
+    if (madridStep.length === 0) {
+      console.error('a blank Rising-star season must still see lower-level starter deals');
+      process.exitCode = 1;
+    }
+    if (madridReserve.some((o) => o.contractYears !== RESERVE_CONTRACT_YEARS)) {
       console.error('reserve-role offers must be 3-year deals');
       process.exitCode = 1;
     }

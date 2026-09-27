@@ -578,7 +578,9 @@ export function pickPermanentClubs(
     return into;
   };
   let pool = affordable(qualityTier);
-  if (pool.length < TRANSFER_OFFER_COUNT) {
+  // Non-elite windows still list clubs that cannot fund 80% of the ask —
+  // those bids are accepted when the player is moving up or down a level.
+  if (pool.length < TRANSFER_OFFER_COUNT && qualityTier > 1) {
     pool = fillFrom(pool, allIn(qualityTier), TRANSFER_OFFER_COUNT);
   }
   if (pool.length === 0 && fee > 0) {
@@ -587,7 +589,7 @@ export function pickPermanentClubs(
       if (pool.length > 0) break;
     }
   }
-  if (pool.length === 0 && fee > 0) {
+  if (pool.length === 0 && fee > 0 && qualityTier > 1) {
     for (let tier = (qualityTier + 1) as ClubTier; tier <= 5; tier = (tier + 1) as ClubTier) {
       pool = allIn(tier);
       if (pool.length > 0) break;
@@ -607,20 +609,21 @@ export function pickPermanentClubs(
   if (pool.length === 0) {
     return attachOneSaudiOffer([], qualityTier, excludeIds, age);
   }
-  const extraHome = clubsInConsistentBand(qualityTier, fromLeague, excludeIds);
+  const extraHome = qualityTier === 1 && fee > 0
+    ? affordable(qualityTier)
+    : clubsInConsistentBand(qualityTier, fromLeague, excludeIds);
   const minHome = country && pool.some((c) => c.country === country) ? 1 : 0;
-  return attachOneSaudiOffer(
-    pickClubsBiasedToCountry(
-      pool,
-      Math.min(TRANSFER_OFFER_COUNT, pool.length),
-      country,
-      minHome,
-      extraHome,
-    ),
-    qualityTier,
-    excludeIds,
-    age,
-  );
+  const allowed = new Set([...pool, ...extraHome].map((club) => club.id));
+  const picked = pickClubsBiasedToCountry(
+    pool,
+    Math.min(TRANSFER_OFFER_COUNT, pool.length),
+    country,
+    minHome,
+    extraHome,
+  ).filter((club) => allowed.has(club.id));
+  fillFrom(picked, pool, TRANSFER_OFFER_COUNT);
+  fillFrom(picked, extraHome, TRANSFER_OFFER_COUNT);
+  return attachOneSaudiOffer(picked, qualityTier, excludeIds, age);
 }
 
 export type TransferKind = 'loan' | 'sold' | 'promotion-offer' | 'loan-or-transfer' | 'end-of-season' | 'trial-offers';
@@ -793,7 +796,6 @@ function destinationSquadStatus(
   const last = extras?.lastSeasonRatio;
   const career = extras?.playerRatio;
   const ratio = Math.max(last ?? 0, career ?? 0);
-  if (origin && isStepDownClub(origin, club)) return 'starter';
   if (
     extras?.originStatus
     && extras.originStatus !== 'starter'
@@ -1565,9 +1567,7 @@ export function sellingClubAcceptsOffer(params: {
   const destTier = dest?.tier ?? 5;
   const currentTier = current?.tier ?? 5;
   const eliteToElite = destTier === 1 && currentTier === 1;
-  const levelMove = destTier !== currentTier
-    || Boolean(dest && current && dest.league !== current.league);
-  if (!eliteToElite || levelMove) {
+  if (!eliteToElite) {
     return { accepted: true, detail: '' };
   }
   return {
