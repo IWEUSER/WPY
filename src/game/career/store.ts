@@ -43,6 +43,7 @@ import {
   emptyInternationalSeason,
   isSelectedForNationalTeam,
   markInjuryMissedFinals,
+  playerHasBeenCapped,
   qualifierExcludeIds,
   recordInternationalAppearance,
   rememberQualifierOpponents,
@@ -160,6 +161,22 @@ function freshSeason(
   };
 }
 
+function cappedForCallUp(
+  team: { caps?: number } | null | undefined,
+  season: SeasonRecord | null | undefined,
+  history?: SeasonRecord[] | null,
+): boolean {
+  return playerHasBeenCapped({
+    caps: team?.caps,
+    seasons: [...(history ?? []), ...(season ? [season] : [])],
+  });
+}
+
+function playerHistoryGoals(live: { goals: number; penaltyKick?: boolean; goalsAtNinety?: number }): number {
+  if (live.penaltyKick) return live.goalsAtNinety ?? 0;
+  return live.goals;
+}
+
 function withInternationalForm(
   sim: SeasonSimState,
   season: SeasonRecord | null,
@@ -174,6 +191,7 @@ function withInternationalForm(
     careerStart?: CareerStart | null;
     calendar?: SeasonCalendar | null;
     squadStatus?: SquadStatus | null;
+    hasBeenCapped?: boolean;
   },
 ): SeasonSimState {
   if (!clubId) return sim;
@@ -193,6 +211,7 @@ function withInternationalForm(
     squadStatus: ctx?.squadStatus ?? 'starter',
     league: club.league,
     leagueGames: season?.leagueGames ?? 0,
+    hasBeenCapped: ctx?.hasBeenCapped,
   });
   const keepQualifyingCampaign =
     sim.internationalStage === 'qualifying' ||
@@ -307,6 +326,8 @@ function startSimulatedSeason(
     squadStatus?: SquadStatus;
     transferFeePaid?: number;
     transferFromClubId?: string | null;
+    hasBeenCapped?: boolean;
+    caps?: number;
   },
 ): Pick<
   CareerState,
@@ -386,6 +407,7 @@ function startSimulatedSeason(
     leagueOnly,
     careerStart: extras?.careerStart,
     squadStatus: extras?.squadStatus ?? (role === 'reserve' ? 'reserve' : 'starter'),
+    hasBeenCapped: extras?.hasBeenCapped ?? playerHasBeenCapped({ caps: extras?.caps, seasons: history }),
   });
   season = {
     ...season,
@@ -1091,6 +1113,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
           careerStart: state.careerStart,
           calendar,
           squadStatus: reviewed.squadStatus,
+          hasBeenCapped: cappedForCallUp(nationalTeam ?? state.nationalTeam, reviewed.currentSeason ?? season, state.seasonHistory),
         },
       ),
       seasonCalendar: calendar,
@@ -1125,6 +1148,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
         careerStart: state.careerStart,
         calendar,
         squadStatus: reviewedSquadFields(state, season).squadStatus,
+        hasBeenCapped: cappedForCallUp(nationalTeam ?? state.nationalTeam, season, state.seasonHistory),
       },
     );
     const fixture = calendar.fixtures[sim.fixtureIndex];
@@ -1297,6 +1321,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
           careerStart: state.careerStart,
           calendar,
           squadStatus: state.squadStatus,
+          hasBeenCapped: cappedForCallUp(nationalTeam ?? state.nationalTeam, season, state.seasonHistory),
         },
       ),
       seasonCalendar: calendar,
@@ -1357,7 +1382,8 @@ function finishResolvedLiveMatch(
 
   const nextSim = { ...resolution.sim, fixtureIndex: live.fixtureIndex + 1 };
   const nextCalendar = syncSeasonCalendars(calendar, nextSim, state.clubId, state.clubLeague);
-  const scored = live.goals > 0;
+  const historyGoals = playerHistoryGoals(live);
+  const scored = historyGoals > 0;
   const openPlayScored = (live.openPlayGoals ?? 0) > 0;
   const isInternational = fixture.kind === 'international';
   const clubAppearance = !isInternational;
@@ -1367,12 +1393,12 @@ function finishResolvedLiveMatch(
     {
       ...paid.season,
       matches: [...paid.season.matches, record],
-      goals: paid.season.goals + (clubAppearance ? live.goals : 0),
+      goals: paid.season.goals + (clubAppearance ? historyGoals : 0),
       gamesPlayed: paid.season.gamesPlayed + (clubAppearance ? 1 : 0),
-      leagueGoals: paid.season.leagueGoals + (fixture.kind === 'league' ? live.goals : 0),
+      leagueGoals: paid.season.leagueGoals + (fixture.kind === 'league' ? historyGoals : 0),
     },
     fixture,
-    live.goals,
+    historyGoals,
     true,
   );
   let availability = state.availability;
@@ -1383,7 +1409,7 @@ function finishResolvedLiveMatch(
         nationalTeam,
         sim.internationalTournament,
         fixture.internationalRound === 'qualifier',
-        live.goals,
+        historyGoals,
         isInternationalFinalsRound(fixture.internationalRound),
       ),
       availability: applyMatchResult(nationalTeam.availability, openPlayScored),
@@ -1399,7 +1425,7 @@ function finishResolvedLiveMatch(
           updatedSeason.international,
           sim.internationalTournament,
           fixture.internationalRound === 'qualifier',
-          live.goals,
+          historyGoals,
           isInternationalFinalsRound(fixture.internationalRound),
         ),
       }
@@ -1407,7 +1433,7 @@ function finishResolvedLiveMatch(
 
   const counts = countsTowardCareerRecord(state.seasonNumber, state.role);
   const clubCounts = counts && clubAppearance;
-  const nextCareerGoals = clubCounts ? state.careerGoals + live.goals : state.careerGoals;
+  const nextCareerGoals = clubCounts ? state.careerGoals + historyGoals : state.careerGoals;
   const nextCareerGames = clubCounts ? state.careerGames + 1 : state.careerGames;
   const selectedSim = withInternationalForm(
     nextSim,
@@ -1423,6 +1449,7 @@ function finishResolvedLiveMatch(
       careerStart: state.careerStart,
       calendar: nextCalendar,
       squadStatus: state.squadStatus,
+      hasBeenCapped: cappedForCallUp(nationalTeam, withIntlSeason, state.seasonHistory),
     },
   );
   const complete = nextSim.fixtureIndex >= nextCalendar.fixtures.length;
@@ -1439,7 +1466,7 @@ function finishResolvedLiveMatch(
     ...state,
     seasonSim: withHonours,
     currentSeason: withIntlSeason,
-    formWindow: counts ? pushForm(state.formWindow, live.goals) : state.formWindow,
+    formWindow: counts ? pushForm(state.formWindow, historyGoals) : state.formWindow,
   };
   const awarded = complete ? attachSeasonAwards(merged) : { season: withIntlSeason, wpyResult: state.wpyResult };
   const afterPhase = complete ? 'season-summary' : 'hub';
@@ -1449,7 +1476,7 @@ function finishResolvedLiveMatch(
     aggregateLine: resolution.aggregateLine,
     calendar: nextCalendar,
     sim: withHonours,
-    playerGoals: live.goals,
+    playerGoals: historyGoals,
     chances: live.chancesTotal + (live.penaltyKick ? 1 : 0),
     nationName: state.nationality ? getNation(state.nationality)?.name : undefined,
     isFinal: isFinalFixture(fixture),
@@ -2092,6 +2119,8 @@ export const useCareerStore = create<CareerStore>()(
                   careerStart: state.careerStart,
                   domesticSuperCup,
                   squadStatus: transition.immediate.squadStatus ?? nextStatus,
+                  caps: nationalTeam?.caps ?? state.nationalTeam?.caps,
+                  hasBeenCapped: cappedForCallUp(nationalTeam ?? state.nationalTeam, finishedSeason, seasonHistory),
                 },
               ),
               pendingBeats,
@@ -2219,6 +2248,8 @@ export const useCareerStore = create<CareerStore>()(
                   careerStart: state.careerStart,
                   domesticSuperCup,
                   squadStatus: stayStatus,
+                  caps: state.nationalTeam?.caps,
+                  hasBeenCapped: cappedForCallUp(state.nationalTeam, state.currentSeason, state.seasonHistory),
                 },
               ),
             };
@@ -2398,6 +2429,8 @@ export const useCareerStore = create<CareerStore>()(
                 careerStart: state.careerStart,
                 domesticSuperCup,
                 squadStatus: arrivalStatus,
+                caps: state.nationalTeam?.caps,
+                hasBeenCapped: cappedForCallUp(state.nationalTeam, state.currentSeason, state.seasonHistory),
                 transferFeePaid: incomingFee > 0 ? incomingFee : undefined,
                 transferFromClubId: incomingFee > 0 ? state.clubId : undefined,
               },

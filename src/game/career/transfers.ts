@@ -53,10 +53,23 @@ export function tierForRatio(ratio: number): ClubTier {
 }
 
 /**
- * Last-season or career ratio decides the club band. A high market value
- * alone cannot pull Elite/Strong bids when the player has not hit that
- * ratio this season or on aggregate. Paid elite bids still need the €50m floor.
+ * Last-season or career ratio decides the club band. When last season is
+ * hotter than the career average, last season wins — a 0.69 Espanyol year
+ * is Strong even if the aggregate sits at 0.50. Paid elite bids still
+ * need the €50m floor.
  */
+export function seasonStandingRatio(season: SeasonRecord): number {
+  const overall = season.gamesPlayed > 0 ? season.goals / season.gamesPlayed : 0;
+  const leagueGames = season.leagueGames ?? 0;
+  const leagueGoals = season.leagueGoals ?? 0;
+  const league = leagueGames > 0 ? leagueGoals / leagueGames : 0;
+  return Math.max(overall, league);
+}
+
+export function offerRatioPreferringLastSeason(last: number, career: number): number {
+  return last > career ? last : Math.max(last, career);
+}
+
 /** Best transfer band the player's ratio has actually cleared. */
 export function tierEarnedByRatio(ratio: number): ClubTier {
   let earned: ClubTier = 5;
@@ -94,7 +107,7 @@ export function offerTierFromStanding(params: {
 }): ClubTier {
   const last = params.ratio ?? 0;
   const career = params.careerRatio ?? 0;
-  let best = Math.max(last, career);
+  let best = offerRatioPreferringLastSeason(last, career);
   if ((params.internationalsPlayed ?? 0) > 0 && params.nationId) {
     best = Math.max(best, selectionRatioForNation(params.nationId));
   }
@@ -783,6 +796,12 @@ function isStepDownClub(origin: Club | null | undefined, dest: Club): boolean {
   return dest.tier > origin.tier;
 }
 
+function isLateralClub(origin: Club | null | undefined, dest: Club): boolean {
+  if (!origin) return false;
+  if (isStepDownClub(origin, dest)) return false;
+  return dest.league === origin.league || dest.tier === origin.tier;
+}
+
 function destinationSquadStatus(
   club: Club,
   extras?: OfferTermExtras,
@@ -797,6 +816,9 @@ function destinationSquadStatus(
     && isStepDownClub(origin, club)
   ) {
     return 'starter';
+  }
+  if (extras?.originStatus && isLateralClub(origin, club)) {
+    return extras.originStatus;
   }
   // Same quality band, same role — do not mix Starter and Reserve across
   // Mid-table or Medium clubs that happen to have slightly different bars.
@@ -985,6 +1007,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     return { headline: 'Season complete', detail: '' };
   }
   const ratio = season.gamesPlayed > 0 ? season.goals / season.gamesPlayed : 0;
+  const lastStanding = seasonStandingRatio(season);
   const yearsLeft = params.contractYearsRemaining ?? DEFAULT_CONTRACT_YEARS;
   const seasons = [...(params.seasonHistory ?? []), season];
   const formRatio = offerFormRatio({ lastSeason: season, careerGoals, careerGames });
@@ -1001,6 +1024,10 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     careerStart: params.careerStart,
   });
   const allowRisingStar = publicSeason === 1;
+  const firstPublic = isFirstPublicSeason(season.seasonNumber, {
+    role,
+    careerStart: params.careerStart,
+  });
   const stayBar = requiredGoalRatio(role, club, getClub(parentClubId));
   const nextIfStay = nextSquadStatusAfterSeason({
     role: role === 'reserve' ? 'first-team' : role,
@@ -1045,7 +1072,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
   );
   const transferTier = transferOfferTier({
     marketValue: value,
-    lastRatio: ratio,
+    lastRatio: lastStanding,
     careerRatio,
     blockElite,
     fee,
@@ -1056,16 +1083,17 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     fromLeague: currentLeague,
   });
   const parentYears = params.homeContractYearsRemaining;
-  const canOfferLoans = (
+  const feeAllowsLoans = (
     role === 'loan' && parentYears != null
       ? transferFeeFromValue(value, parentYears)
       : fee
   ) > 0;
+  const canOfferLoans = firstPublic || feeAllowsLoans;
   const offerExtras: OfferTermExtras = {
     currentWeeklyWage: params.weeklyWage,
     originClub: club,
-    playerRatio: Math.max(ratio, formRatio, careerRatio),
-    lastSeasonRatio: ratio,
+    playerRatio: Math.max(ratio, formRatio, careerRatio, lastStanding),
+    lastSeasonRatio: lastStanding,
     countedSeasons: seasonsDone,
     allowRisingStar,
     originStatus: currentStatus,
@@ -1215,10 +1243,6 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     season,
   });
   const graceActive = seasonsAtCurrentClub === 0 && params.careerStart !== 'favourite-first-team';
-  const firstPublic = isFirstPublicSeason(season.seasonNumber, {
-    role,
-    careerStart: params.careerStart,
-  });
   const firstSeasonStayStatus: SquadStatus = nextSquadStatusAfterSeason({
     role: 'first-team',
     current: currentStatus,
@@ -1360,12 +1384,14 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     };
   }
 
-  const effectiveRatio = age < 28 ? (careerGames > 0 ? careerGoals / careerGames : 0) : ratio;
+  const effectiveRatio = lastStanding > careerRatio
+    ? lastStanding
+    : (age < 28 ? careerRatio : lastStanding);
   const betterTier = tierForRatio(effectiveRatio);
   const valueTier = tierForMarketValue(value);
   if (betterTier < club.tier && !blockElite && valueTier <= betterTier) {
     const offers = pickPermanentClubs(betterTier, fee, [club.id], nationality, blockElite, currentLeague, value, age);
-    const basis = age < 28 ? 'career' : "last season's";
+    const basis = lastStanding > careerRatio ? "last season's" : (age < 28 ? 'career' : "last season's");
     return attachCurrentClubRenewal(
       {
         headline: 'A bigger club has come calling',
@@ -1429,7 +1455,7 @@ function attachCurrentClubRenewal(
   if (status === 'rising-star' || status === 'impact') return result;
   const yearsLeft = params.contractYearsRemaining ?? 0;
   if (yearsLeft < 1 || yearsLeft > 3) return result;
-  const years = newContractYears(params.age);
+  const years = status === 'reserve' ? RESERVE_CONTRACT_YEARS : newContractYears(params.age);
   const seasonRatio = params.season.gamesPlayed > 0
     ? params.season.goals / params.season.gamesPlayed
     : undefined;

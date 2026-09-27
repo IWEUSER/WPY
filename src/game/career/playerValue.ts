@@ -60,7 +60,7 @@ export const DEFAULT_CONTRACT_YEARS = 5;
 /** Opening Rising-star deal. European under-18s cannot sign longer than this. */
 export const FIRST_CONTRACT_YEARS = 3;
 /** Reserve-role offers are shorter than a full first-team deal. */
-export const RESERVE_CONTRACT_YEARS = 3;
+export const RESERVE_CONTRACT_YEARS = 2;
 /** Floor used when a club's starter band is tiny. */
 export const RESERVE_WEEKLY_WAGE = 500;
 /** Reserve deals pay this fraction of the destination's listed average wage. */

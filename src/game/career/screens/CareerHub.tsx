@@ -721,8 +721,9 @@ function InternationalCard({
     squadStatus,
     league,
     leagueGames,
+    hasBeenCapped: caps > 0,
   });
-  const waitingForLeagueGames = leagueGames < CALL_UP_MIN_LEAGUE_GAMES;
+  const waitingForLeagueGames = caps <= 0 && leagueGames < CALL_UP_MIN_LEAGUE_GAMES;
   const waitingSeason1 = publicSeason === 1 && calendarWeek <= SEASON_1_CALL_UP_MIN_WEEK;
   const tournamentName = sim?.internationalTournament
     ? INTERNATIONAL_TOURNAMENTS[sim.internationalTournament]?.name
@@ -731,7 +732,7 @@ function InternationalCard({
   const pos = group ? groupPosition(group, nationId) : 0;
   const campaignLine = (() => {
     if (!clubOk) return `Call-ups are from ${callUpLeagueRequirement(nationId)}.`;
-    if (waitingForLeagueGames) return `Call-ups open after ${CALL_UP_MIN_LEAGUE_GAMES} league games this season (${leagueGames} so far).`;
+    if (waitingForLeagueGames) return `First call-up needs ${CALL_UP_MIN_LEAGUE_GAMES} league games (${leagueGames} so far).`;
     if (waitingSeason1) return `Season 1 call-ups open after week ${SEASON_1_CALL_UP_MIN_WEEK}.`;
     if (!sim || !selected || !tournamentName) return `Not selected for ${nationName} this window.`;
     if (dropped) return `Dropped for this ${tournamentName} match.`;
@@ -765,7 +766,7 @@ function InternationalCard({
       return `Call-ups are for starters — currently ${SQUAD_STATUS_LABEL[squadStatus]}.`;
     }
     if (waitingForLeagueGames) {
-      return `Need ${CALL_UP_MIN_LEAGUE_GAMES} league games this season before a call-up — currently ${leagueGames}.`;
+      return `Need ${CALL_UP_MIN_LEAGUE_GAMES} league games before a first call-up — currently ${leagueGames}.`;
     }
     if (waitingSeason1) {
       return `International call-ups start after week ${SEASON_1_CALL_UP_MIN_WEEK} in Season 1.`;
@@ -774,7 +775,7 @@ function InternationalCard({
     return `Need a ${bar.toFixed(2)} goals/game ratio for a call-up — currently ${careerRatio.toFixed(2)}.`;
   })();
   const ratioBreakdown = (() => {
-    if (leagueGames >= CALL_UP_MIN_LEAGUE_GAMES) return null;
+    if (caps > 0 || leagueGames >= CALL_UP_MIN_LEAGUE_GAMES) return null;
     const careerLine = `Career ${(careerToDateRatio ?? careerRatio).toFixed(2)}`;
     if (lastSeasonRatio == null) return careerLine;
     return `${careerLine} · Last season ${lastSeasonRatio.toFixed(2)}`;

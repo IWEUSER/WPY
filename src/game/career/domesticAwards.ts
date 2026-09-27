@@ -1,12 +1,12 @@
 /**
  * Domestic individual awards: the league's top goalscorer (golden boot) and
  * Player of the Year. Neither is a lock from a single rule — both roll a
- * chance table. Golden boot starts at 20 league goals in every league.
+ * chance table. Golden boot starts at 25 league goals in every league.
  * Player of the Year requires the league title. A golden boot from mid-table
  * is never enough.
  */
 
-export const GOLDEN_BOOT_MIN_GOALS = 20;
+export const GOLDEN_BOOT_MIN_GOALS = 25;
 
 /** League goals that put you in the golden-boot conversation. Same in every league. */
 export function goldenBootTarget(_league?: string): number {
@@ -26,25 +26,11 @@ export interface AwardResult {
 }
 
 /**
- * 20 → 20%, 21 → 25%, 22 → 30%, 23 → 40%, 24 → 50%, 25 → 60%,
- * 26 → 70%, 27 → 80%, 28 → 90%, 29 → 95%, 30+ → 99%.
+ * 25 → 20%, then +8% for every extra league goal, capped at 99%.
  */
 export function goldenBootWinChance(leagueGoals: number, _target?: number, _league?: string): number {
   if (leagueGoals < GOLDEN_BOOT_MIN_GOALS) return 0;
-  if (leagueGoals >= 30) return 0.99;
-  const table: Record<number, number> = {
-    20: 0.2,
-    21: 0.25,
-    22: 0.3,
-    23: 0.4,
-    24: 0.5,
-    25: 0.6,
-    26: 0.7,
-    27: 0.8,
-    28: 0.9,
-    29: 0.95,
-  };
-  return table[leagueGoals] ?? 0;
+  return Math.min(0.99, 0.2 + (leagueGoals - GOLDEN_BOOT_MIN_GOALS) * 0.08);
 }
 
 export function evaluateTopGoalscorer(
@@ -71,7 +57,7 @@ export function evaluateTopGoalscorer(
 /**
  * Chance of Player of the Year. The title is required — a golden boot from
  * 15th is never enough. Title plus top scorer is the usual path; a champion
- * who was not top scorer still has a small chance once they hit 20 goals.
+ * who was not top scorer still has a small chance once they hit 25 goals.
  */
 export function playerOfTheYearWinChance(params: {
   leagueChampion: boolean;

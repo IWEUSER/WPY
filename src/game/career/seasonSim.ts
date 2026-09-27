@@ -313,8 +313,10 @@ export interface HydrateSeasonParams {
   careerStart?: string | null;
   /** Starters only are called up. Omitted treats the player as a starter. */
   squadStatus?: SquadStatus | null;
-  /** League appearances this season. Call-ups wait until 20. */
+  /** League appearances this season. First-ever call-ups wait until 20. */
   leagueGames?: number;
+  /** After the first cap, the 20-game wait is not repeated. */
+  hasBeenCapped?: boolean;
 }
 
 const GROUP_GAMES = 8;
@@ -384,6 +386,7 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
         squadStatus: params.squadStatus ?? 'starter',
         league,
         leagueGames: params.leagueGames ?? 0,
+        hasBeenCapped: params.hasBeenCapped,
       }),
   );
 
