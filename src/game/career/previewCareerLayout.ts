@@ -1324,7 +1324,7 @@ export function applyCareerLayoutPreview(): void {
       : sim,
     seasonStandings: buildSeasonStandings(promoteSummary ? leicesterTable : sim.leagueTable, promoteSummary ? null : sim.europeanStanding),
     currentSeason:
-      isYouthPreview || isYouthNextPreview || isTrialPreview || isClubTrialPreview
+      isYouthPreview || isYouthNextPreview || isTrialPreview || isClubTrialPreview || preview === 'record-club'
         ? null
       : preview === 'end'
         ? history[history.length - 1]
