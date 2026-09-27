@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { getClub, TIER_LABEL } from '../data/clubs';
+import { clubQualityLabel, getClub } from '../data/clubs';
 import { formatEuros, formatWeeklyWage } from '../playerValue';
 import { defaultSquadStatus, squadStatusOnArrival, SQUAD_STATUS_LABEL } from '../squadStatus';
 import { useCareerStore } from '../store';
@@ -73,7 +73,7 @@ function OfferCard({
         <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/70">
           {offer.move === 'loan' ? 'Loan' : isCurrentClubRenewal ? 'New contract' : 'Transfer'}
         </span>
-        <span className="text-[10px] uppercase tracking-wide text-white/40">{TIER_LABEL[club.tier]}</span>
+        <span className="text-[10px] uppercase tracking-wide text-white/40">{clubQualityLabel(club)}</span>
       </div>
     </button>
   );

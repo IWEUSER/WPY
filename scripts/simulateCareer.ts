@@ -11,7 +11,7 @@ import {
   chancesForLeagueMatch,
   meanChancesFromStrength,
 } from '../src/game/career/chanceEngine';
-import { assignClubTier, CLUBS, clubsForSeason, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, leagueMatchWeeks, playableClubsGroupedByLeague, SECOND_DIVISIONS, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
+import { assignClubTier, clubQualityLabel, CLUBS, clubsForSeason, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, leagueMatchWeeks, playableClubsGroupedByLeague, SECOND_DIVISIONS, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
 import { playoffGamesFromOpening, playoffOpeningForPosition } from '../src/game/career/data/leagueFormat';
 import { clubTransferBudget, consecutivePoorFactor, contractValueFactor, DEFAULT_CONTRACT_YEARS, ELITE_TRANSFER_VALUE_FLOOR, FIRST_CONTRACT_YEARS, firstTopFlightValueCap, formAdjustedRatio, isSeason1ValueLocked, leagueValueWeight, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, MIN_ACCEPTED_FEE_RATIO, newContractYears, playerMarketValue, playerMarketValueFromSeasons, RESERVE_CONTRACT_YEARS, RESERVE_WAGE_FACTOR, RESERVE_WEEKLY_WAGE, seasonalSponsorship, tierForMarketValue, TOP_LEAGUES, transferFeeFromValue, wageCareerMaturityScale, weeklyWageForClub, weeklyWageForRatio, weeklyWageForSquadStatus, weeklyWageForTransferOffer, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
@@ -8727,6 +8727,13 @@ console.log('\n--- Concurrent career save slots ---');
   console.log('career club record', paddedRecord, 'depadded season', depadded);
   if (paddedRecord.games !== 360 || paddedRecord.goals !== 237 || paddedRecord.ratio < 0.65) {
     console.error('career-record tiles must match the club table (360/237), not an inflated 447 store total');
+    process.exitCode = 1;
+  }
+  const palaceBand = clubQualityLabel(getClub('crystal-palace')!);
+  const leicesterBand = clubQualityLabel(getClub('leicester')!);
+  console.log('quality labels', palaceBand, leicesterBand);
+  if (palaceBand === leicesterBand || !/championship/i.test(leicesterBand) || /championship/i.test(palaceBand)) {
+    console.error('Championship clubs must not share the Premier League Medium/Strong transfer label');
     process.exitCode = 1;
   }
   if (depadded.games !== 36 || depadded.goals !== 11) {

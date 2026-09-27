@@ -26,6 +26,18 @@ export const TIER_LABEL: Record<ClubTier, string> = {
   5: 'Lower level',
 };
 
+/**
+ * Transfer-card band. Second-division clubs never share a Premier League
+ * Medium/Strong label — Leicester is Championship top, Palace is Medium.
+ */
+export function clubQualityLabel(club: { tier: ClubTier; league: string }): string {
+  if (SECOND_DIVISIONS.has(club.league)) {
+    const short = club.league === '2. Bundesliga' ? '2. Liga' : club.league;
+    return club.tier <= 4 ? `${short} top` : short;
+  }
+  return TIER_LABEL[club.tier];
+}
+
 export const SECOND_DIVISIONS = new Set([
   'Championship',
   'La Liga 2',
