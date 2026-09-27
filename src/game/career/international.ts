@@ -3,7 +3,7 @@ import type { Confederation, InternationalTournamentId } from './data/competitio
 import { clubsInCountry, SECOND_DIVISIONS, type ClubTier } from './data/clubs';
 import { fifaRank } from './data/fifaRankings';
 import { NATIONS, getNation, type Nation } from './data/nations';
-import { TOP_LEAGUES, VALUE_FORM_MIN_GAMES } from './playerValue';
+import { TOP_LEAGUES } from './playerValue';
 import type { AvailabilityState, InternationalSeasonRecord, SeasonRecord, SquadStatus } from './types';
 
 export type { Nation };
@@ -148,11 +148,15 @@ export function clubEligibleForNationalTeam(
 /** Public Season 1 has no international call-ups until after this week. */
 export const SEASON_1_CALL_UP_MIN_WEEK = 20;
 
+/** League appearances this season before a nation will call. */
+export const CALL_UP_MIN_LEAGUE_GAMES = 20;
+
 /**
  * Call-up uses the ratio passed in (career until this season has a real
  * sample, then this season). Only first-team starters are called.
  * League decides eligibility, not the club: second divisions are out,
- * and top nations need a big-five league. Season 1 waits until after week 20.
+ * and top nations need a big-five league. Every season waits until the
+ * player has 20 league games. Re-check the ratio before every cap.
  */
 export function isSelectedForNationalTeam(params: {
   clubTier: ClubTier;
@@ -162,9 +166,11 @@ export function isSelectedForNationalTeam(params: {
   calendarWeek?: number;
   squadStatus?: SquadStatus | null;
   league?: string | null;
+  leagueGames?: number;
 }): boolean {
   if (!params.nationId) return false;
   if ((params.squadStatus ?? 'starter') !== 'starter') return false;
+  if ((params.leagueGames ?? 0) < CALL_UP_MIN_LEAGUE_GAMES) return false;
   if (params.publicSeason === 1 && (params.calendarWeek ?? 0) <= SEASON_1_CALL_UP_MIN_WEEK) {
     return false;
   }
@@ -179,22 +185,23 @@ export function seasonRatioForSelection(season: { goals: number; gamesPlayed: nu
 }
 
 /**
- * Until this season has VALUE_FORM_MIN_GAMES, take the better of this
- * season and prior career so a new campaign with a 1.13 career ratio is
- * selected once Season 1 call-ups open (after week 20), a hot start can
- * still earn a call-up, and a 13-game blank cannot wipe the career figure.
- * After 15 games, this season decides.
+ * Until this season has CALL_UP_MIN_LEAGUE_GAMES, take the better of this
+ * season and prior career. After 20 league games, this season decides so a
+ * later slump drops the player even if they were already called up.
  */
 export function callUpRatio(params: {
-  season?: { goals: number; gamesPlayed: number } | null;
+  season?: { goals: number; gamesPlayed: number; leagueGames?: number } | null;
   careerGoals: number;
   careerGames: number;
 }): number {
-  const gp = params.season?.gamesPlayed ?? 0;
+  const gp = params.season?.leagueGames ?? params.season?.gamesPlayed ?? 0;
   const goals = params.season?.goals ?? 0;
-  const seasonRatio = gp > 0 ? goals / gp : 0;
-  if (gp >= VALUE_FORM_MIN_GAMES) return seasonRatio;
-  const priorGames = Math.max(0, params.careerGames - gp);
+  const seasonRatio = (params.season?.gamesPlayed ?? 0) > 0
+    ? goals / (params.season?.gamesPlayed ?? 1)
+    : 0;
+  if (gp >= CALL_UP_MIN_LEAGUE_GAMES) return seasonRatio;
+  const played = params.season?.gamesPlayed ?? 0;
+  const priorGames = Math.max(0, params.careerGames - played);
   const priorGoals = Math.max(0, params.careerGoals - goals);
   const priorRatio = priorGames > 0 ? priorGoals / priorGames : 0;
   return Math.max(seasonRatio, priorRatio);

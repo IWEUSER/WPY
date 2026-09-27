@@ -192,6 +192,7 @@ function withInternationalForm(
     calendarWeek: ctx?.week ?? 1,
     squadStatus: ctx?.squadStatus ?? 'starter',
     league: club.league,
+    leagueGames: season?.leagueGames ?? 0,
   });
   const keepQualifyingCampaign =
     sim.internationalStage === 'qualifying' ||

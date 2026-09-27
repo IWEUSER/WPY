@@ -280,9 +280,10 @@ export function consecutiveScoringAsImpact(
  * End-of-season playing-time change. The player sees this before the transfer
  * window so they know their status going into the next campaign.
  *
- * Season 1 (`allowRisingStar`): below 0.33 → Reserve; otherwise keep the
- * current Rising star / Impact / Starter role. Hitting the club bar does
- * not skip the 3-game scoring streak.
+ * Season 1 (`allowRisingStar`): keep the current Rising star / Impact /
+ * Starter role. Missing 0.33 never becomes Reserve — the transfer window
+ * forces a Season 2 loan instead. Hitting the club bar does not skip the
+ * 3-game scoring streak.
  * Season 2 onward: a Starter who hits the bar stays Starter. Youth roles
  * and Reserve do not become Starter at the window — that happens in-season.
  * Impact and Rising star never continue into Season 3.
@@ -304,7 +305,8 @@ export function nextSquadStatusAfterSeason(params: {
   const hitBar = honours || (gamesPlayed > 0 && ratio + 1e-9 >= bar);
 
   if (allowRisingStar) {
-    if (!honours && ratio + 1e-9 < RISING_STAR_MIN_RATIO) return 'reserve';
+    // Missing the 0.33 line never becomes Reserve — that role plays more
+    // often than Impact. The transfer window forces a Season 2 loan instead.
     if (current === 'starter') return 'starter';
     return current === 'impact' || current === 'rising-star' ? current : 'rising-star';
   }
@@ -365,7 +367,7 @@ export function squadRoleRatioGuide(status: SquadStatus, clubBar: number): {
     return {
       keepLabel: 'Rising star',
       keepRatio: RISING_STAR_MIN_RATIO,
-      keepHint: `${RISING_STAR_MIN_RATIO.toFixed(2)} at season end or you become a Reserve`,
+      keepHint: `${RISING_STAR_MIN_RATIO.toFixed(2)} at season end or Season 2 is a loan`,
       nextLabel: 'Impact',
       nextRatio: null,
       nextHint: 'Score in 3 consecutive games for Impact, then 3 more for Starter',

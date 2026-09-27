@@ -2,7 +2,8 @@
  * Domestic individual awards: the league's top goalscorer (golden boot) and
  * Player of the Year. Neither is a lock from a single rule — both roll a
  * chance table. Golden boot starts at 20 league goals in every league.
- * Player of the Year can still go to a top scorer who did not win the title.
+ * Player of the Year requires the league title. A golden boot from mid-table
+ * is never enough.
  */
 
 export const GOLDEN_BOOT_MIN_GOALS = 20;
@@ -68,9 +69,9 @@ export function evaluateTopGoalscorer(
 }
 
 /**
- * Chance of Player of the Year. Title winners are favoured, but a golden-boot
- * winner who did not take the league still has a real shot. Never a hard rule
- * like "must win the league".
+ * Chance of Player of the Year. The title is required — a golden boot from
+ * 15th is never enough. Title plus top scorer is the usual path; a champion
+ * who was not top scorer still has a small chance once they hit 20 goals.
  */
 export function playerOfTheYearWinChance(params: {
   leagueChampion: boolean;
@@ -78,19 +79,12 @@ export function playerOfTheYearWinChance(params: {
   leagueGoals: number;
 }): number {
   const { leagueChampion, topGoalscorer, leagueGoals } = params;
-  if (leagueGoals >= 40) return 1;
+  if (!leagueChampion) return 0;
+  if (leagueGoals >= 40 && topGoalscorer) return 1;
   const boot = goldenBootWinChance(leagueGoals);
-  let chance = 0;
-  if (topGoalscorer) {
-    chance = Math.max(chance, leagueChampion ? Math.min(0.92, 0.55 + boot * 0.4) : Math.min(0.72, 0.28 + boot * 0.45));
-  }
-  if (leagueChampion && boot > 0) {
-    chance = Math.max(chance, 0.32 + boot * 0.5);
-  }
-  if (!leagueChampion && !topGoalscorer && boot > 0) {
-    chance = Math.max(chance, boot * 0.35);
-  }
-  return Math.min(0.95, chance);
+  if (topGoalscorer) return Math.min(0.92, 0.55 + boot * 0.4);
+  if (boot > 0) return Math.min(0.28, 0.08 + boot * 0.2);
+  return 0;
 }
 
 export function evaluatePlayerOfTheYear(params: {
