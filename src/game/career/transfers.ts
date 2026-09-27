@@ -803,12 +803,19 @@ function destinationSquadStatus(
   ) {
     return 'starter';
   }
+  // Same quality band, same role — do not mix Starter and Reserve across
+  // Mid-table or Medium clubs that happen to have slightly different bars.
+  if (ratio > 0) {
+    if (tierForRatio(ratio) <= club.tier) return 'starter';
+    if (extras?.allowRisingStar !== false && ratio >= RISING_STAR_MIN_RATIO) return 'rising-star';
+    return 'reserve';
+  }
   return squadStatusOnArrival({
     fromClub: origin ?? null,
     toClub: club,
     move: 'permanent',
     nextIfStay: 'starter',
-    playerRatio: ratio > 0 ? ratio : extras?.playerRatio,
+    playerRatio: extras?.playerRatio,
     allowRisingStar: extras?.allowRisingStar !== false,
   });
 }

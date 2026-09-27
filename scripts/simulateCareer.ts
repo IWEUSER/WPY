@@ -1800,11 +1800,12 @@ if (salePerms.some((o) => {
     seasonNumber: 3,
     calendarWeek: 99,
   });
-  if (!salePerms.some((o) => {
+  const saleReserves = salePerms.filter((o) => o.squadStatus === 'reserve');
+  if (saleReserves.some((o) => {
     const dest = getClub(o.clubId);
-    return o.squadStatus === 'reserve' && dest != null && o.weeklyWage === weeklyWageForSquadStatus(dest, saleValue, 'reserve');
+    return !dest || o.weeklyWage !== weeklyWageForSquadStatus(dest, saleValue, 'reserve');
   })) {
-    console.error('a low-ratio sale window must include reserve roles at 20% of that club’s starter wage');
+    console.error('reserve sale offers must pay 20% of that club’s starter wage');
     process.exitCode = 1;
   }
 }
@@ -3767,11 +3768,12 @@ if (loanMiss.immediate?.role === 'reserve' || loanOffers !== LOAN_OFFER_COUNT ||
     console.error('loan offers must pay the destination starter wage');
     process.exitCode = 1;
   }
-  if (!perms.some((o) => {
+  const reservePerms = perms.filter((o) => o.squadStatus === 'reserve');
+  if (reservePerms.some((o) => {
     const dest = getClub(o.clubId);
-    return o.squadStatus === 'reserve' && dest != null && o.weeklyWage === weeklyWageForSquadStatus(dest, missValue, 'reserve');
+    return !dest || o.weeklyWage !== weeklyWageForSquadStatus(dest, missValue, 'reserve');
   })) {
-    console.error('permanent offers must include a reserve role at 20% of that club’s starter wage');
+    console.error('reserve permanent offers must pay 20% of that club’s starter wage');
     process.exitCode = 1;
   }
   if (perms.some((o) => {
@@ -8598,6 +8600,17 @@ console.log('\n--- Concurrent career save slots ---');
   }
   if (palaceStrong.length === 0 || palaceStrong.some((o) => o.squadStatus !== 'starter')) {
     console.error('26 Premier League goals at 0.81 must arrive as a starter at Strong clubs, not a reserve');
+    process.exitCode = 1;
+  }
+  const oxfordByTier = new Map<number, Set<string>>();
+  for (const offer of oxfordPerms) {
+    const tier = getClub(offer.clubId)?.tier ?? 5;
+    const set = oxfordByTier.get(tier) ?? new Set<string>();
+    set.add(offer.squadStatus ?? '');
+    oxfordByTier.set(tier, set);
+  }
+  if ([...oxfordByTier.values()].some((set) => set.size > 1)) {
+    console.error('transfer roles must be consistent inside a quality band, not mixed Starter/Reserve on Mid-table');
     process.exitCode = 1;
   }
 
