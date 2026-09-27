@@ -69,6 +69,17 @@ export function tierEarnedByRatio(ratio: number): ClubTier {
   return earned;
 }
 
+/**
+ * A second-division season cannot unlock Strong or Elite first-division
+ * clubs. 0.66 at Racing Ferrol is a Medium La Liga window, not Atlético.
+ */
+export const SECOND_DIVISION_BEST_OFFER_TIER: ClubTier = 4;
+
+export function capTierForSecondDivision(tier: ClubTier, fromLeague?: string | null): ClubTier {
+  if (!fromLeague || !SECOND_DIVISIONS.has(fromLeague)) return tier;
+  return Math.max(tier, SECOND_DIVISION_BEST_OFFER_TIER) as ClubTier;
+}
+
 export function offerTierFromStanding(params: {
   ratio?: number;
   careerRatio: number;
@@ -79,6 +90,7 @@ export function offerTierFromStanding(params: {
   internationalsPlayed?: number;
   nationId?: string | null;
   originStatus?: SquadStatus;
+  fromLeague?: string | null;
 }): ClubTier {
   const last = params.ratio ?? 0;
   const career = params.careerRatio ?? 0;
@@ -86,7 +98,7 @@ export function offerTierFromStanding(params: {
   if ((params.internationalsPlayed ?? 0) > 0 && params.nationId) {
     best = Math.max(best, selectionRatioForNation(params.nationId));
   }
-  let tier = tierEarnedByRatio(best);
+  let tier = capTierForSecondDivision(tierEarnedByRatio(best), params.fromLeague);
   if (params.originStatus === 'reserve' && params.currentTier) {
     tier = Math.max(tier, params.currentTier) as ClubTier;
   }
@@ -383,6 +395,7 @@ export function transferOfferTier(params: {
   nationId?: string | null;
   originStatus?: SquadStatus;
   currentTier?: ClubTier;
+  fromLeague?: string | null;
 }): ClubTier {
   return offerTierFromStanding({
     ratio: params.lastRatio,
@@ -394,6 +407,7 @@ export function transferOfferTier(params: {
     nationId: params.nationId,
     originStatus: params.originStatus,
     currentTier: params.currentTier,
+    fromLeague: params.fromLeague,
   });
 }
 
@@ -489,9 +503,9 @@ function clubsInConsistentBand(tier: ClubTier, fromLeague?: string | null, exclu
 }
 
 /**
- * Second-division windows stay in that league. A high market value
- * (mid-table band and above) also opens the promotion-target top flight.
- * Clubs one band better can bid only when the ratio has earned that band.
+ * Second-division windows stay in that pyramid: the same second division
+ * and its promotion-target top flight, at Medium or below. Never fill
+ * Strong/Elite sides from other countries.
  */
 function pickSecondDivisionClubs(
   fromLeague: string,
@@ -501,14 +515,15 @@ function pickSecondDivisionClubs(
   _blockElite: boolean,
   qualityTier: ClubTier,
 ): Club[] {
+  const band = capTierForSecondDivision(qualityTier, fromLeague);
   const seen = new Set<string>(excludeIds);
   const sameExact = withoutSaudi(clubsInLeague(fromLeague).filter(
-    (c) => !seen.has(c.id) && c.playable !== false && c.tier === qualityTier,
+    (c) => !seen.has(c.id) && c.playable !== false && c.tier === band,
   ));
   const higherLeague = promotionTarget(fromLeague);
   const higherAtBand = higherLeague
     ? withoutSaudi(clubsInLeague(higherLeague).filter(
-        (c) => !seen.has(c.id) && c.playable !== false && c.tier === qualityTier,
+        (c) => !seen.has(c.id) && c.playable !== false && c.tier === band,
       ))
     : [];
   const picked: Club[] = [];
@@ -535,6 +550,7 @@ export function pickPermanentClubs(
     qualityTier = 2;
   }
   if (fromLeague && SECOND_DIVISIONS.has(fromLeague)) {
+    qualityTier = capTierForSecondDivision(qualityTier, fromLeague);
     const local = pickSecondDivisionClubs(
       fromLeague,
       fee,
@@ -544,12 +560,7 @@ export function pickPermanentClubs(
       qualityTier,
     );
     if (local.length > 0) {
-      const fill = clubsInConsistentBand(
-        qualityTier,
-        promotionTarget(fromLeague),
-        [...excludeIds, ...local.map((c) => c.id)],
-      );
-      return attachOneSaudiOffer([...local, ...fill].slice(0, TRANSFER_OFFER_COUNT), qualityTier, excludeIds, age);
+      return attachOneSaudiOffer(local.slice(0, TRANSFER_OFFER_COUNT), qualityTier, excludeIds, age);
     }
   }
   const country = countryForNationality(nationality);
@@ -1042,6 +1053,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     nationId: nationality,
     originStatus: currentStatus,
     currentTier: club.tier,
+    fromLeague: currentLeague,
   });
   const parentYears = params.homeContractYearsRemaining;
   const canOfferLoans = (

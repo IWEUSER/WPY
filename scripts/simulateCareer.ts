@@ -83,7 +83,7 @@ import {
 import { trialDestinationCountries, youthTierForNation, youthTrialsAreMlsOnly } from '../src/game/career/trialGeography';
 import { nextYouthKnockoutRound, pickYouthGroupOpponents, pickYouthKnockoutOpponent, youthMaxGames } from '../src/game/career/youthTournament';
 import { chancesForSquadStatus, consecutiveScoringAsImpact, consecutiveScoringGames, describeSquadStatus, IMPACT_CHANCES, IMPACT_STREAK, isLowerDivisionLoan, isSquadRotationSitOut, isToughMinutesFixture, nextSquadStatusAfterSeason, openingSquadStatus, promoteSquadStatusDuringSeason, reservePrioritisesContinental, reserveSitsChampionsLeague, RISING_STAR_MIN_RATIO, ROLE_REVIEW_WEEK, seasonOverridesRatioBar, shouldSitLeagueFixture, shouldSitToughFixture, squadStatusOnArrival, STARTER_STREAK, youthRolesAllowed } from '../src/game/career/squadStatus';
-import { consecutiveLoanSpells, LOAN_OFFER_COUNT, SAUDI_OFFER_MIN_AGE, TRANSFER_MARKET_CAP, TRANSFER_OFFER_COUNT, offerFormRatio, offerTierFromStanding, pickLoanClubsForMiss, pickLoanClubsFromOrigin, pickPermanentClubs, requiredGoalRatio, resolveSeasonTransition, sellingClubAcceptsOffer, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, trialFailTransferPending, tierEarnedByRatio, tierForRatio } from '../src/game/career/transfers';
+import { consecutiveLoanSpells, LOAN_OFFER_COUNT, SAUDI_OFFER_MIN_AGE, SECOND_DIVISION_BEST_OFFER_TIER, TRANSFER_MARKET_CAP, TRANSFER_OFFER_COUNT, offerFormRatio, offerTierFromStanding, pickLoanClubsForMiss, pickLoanClubsFromOrigin, pickPermanentClubs, requiredGoalRatio, resolveSeasonTransition, sellingClubAcceptsOffer, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, trialFailTransferPending, tierEarnedByRatio, tierForRatio } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
 import { internationalCampaignForSeason } from '../src/game/career/data/competitions';
 import { continentalLabel } from '../src/game/career/seasonStats';
@@ -8892,7 +8892,18 @@ console.log('\n--- Concurrent career save slots ---');
     internationalsPlayed: 8,
     nationId: 'england',
   });
-  console.log('England 0.61 free offer tier', englandFormTier, 'earned', tierEarnedByRatio(0.61));
+  const ferrolTier = offerTierFromStanding({
+    ratio: 0.66,
+    careerRatio: 0.66,
+    marketValue: 8_000_000,
+    fee: 0,
+    fromLeague: 'La Liga 2',
+  });
+  console.log('England 0.61 free offer tier', englandFormTier, 'earned', tierEarnedByRatio(0.61), 'Ferrol 0.66', ferrolTier);
+  if (ferrolTier !== SECOND_DIVISION_BEST_OFFER_TIER) {
+    console.error('0.66 in a second division must cap at Medium, not Strong');
+    process.exitCode = 1;
+  }
   if (englandFormTier > 2) {
     console.error('0.61 plus an England cap must draw Strong or Elite free transfers, not mid-table only');
     process.exitCode = 1;
@@ -8925,9 +8936,56 @@ console.log('\n--- Concurrent career save slots ---');
   });
   const ferrolPerms = (ferrolWindow.pendingTransfer?.offers ?? []).filter((o) => o.move === 'permanent' && !o.renewal);
   const ferrolTiers = [...new Set(ferrolPerms.map((o) => getClub(o.clubId)?.tier ?? 5))];
-  console.log('Ferrol 0.66 window', ferrolPerms.map((o) => `${o.clubId}:${getClub(o.clubId)?.tier}:${o.squadStatus}`), 'tiers', ferrolTiers);
-  if (ferrolTiers.length !== 1) {
-    console.error('a transfer window must stay inside one quality band — no Atletico mixed with Medium La Liga');
+  const ferrolLeagues = [...new Set(ferrolPerms.map((o) => getClub(o.clubId)?.league ?? ''))];
+  console.log('Ferrol 0.66 window', ferrolPerms.map((o) => `${o.clubId}:${getClub(o.clubId)?.tier}:${o.squadStatus}`), 'tiers', ferrolTiers, 'leagues', ferrolLeagues);
+  if (ferrolPerms.some((o) => (getClub(o.clubId)?.tier ?? 5) <= 2) || ferrolPerms.some((o) => o.clubId === 'atletico-madrid')) {
+    console.error('0.66 in La Liga 2 must not draw Atlético or any Strong/Elite club');
+    process.exitCode = 1;
+  }
+  if (ferrolLeagues.some((league) => league !== 'La Liga' && league !== 'La Liga 2')) {
+    console.error('a La Liga 2 window must stay in La Liga or La Liga 2, not Chelsea or Napoli');
+    process.exitCode = 1;
+  }
+  if (ferrolTiers.length !== 1 || ferrolTiers[0] !== 4) {
+    console.error('second-division form must land on Medium first-division clubs, one band only');
+    process.exitCode = 1;
+  }
+
+  const leicesterHot = resolveSeasonTransition({
+    season: {
+      ...dummySeason,
+      seasonNumber: 2,
+      clubId: 'leicester',
+      goals: 30,
+      gamesPlayed: 46,
+      leagueGoals: 28,
+      league: 'Championship',
+      squadStatus: 'starter',
+    },
+    role: 'first-team',
+    clubId: 'leicester',
+    parentClubId: 'leicester',
+    seasonsAtCurrentClub: 1,
+    age: 19,
+    careerGoals: 30,
+    careerGames: 46,
+    nationality: 'england',
+    loansUsed: 0,
+    contractYearsRemaining: 3,
+    careerStart: 'favourite-first-team',
+    squadStatus: 'starter',
+    clubLeague: 'Championship',
+  });
+  const leicesterHotPerms = (leicesterHot.pendingTransfer?.offers ?? []).filter((o) => o.move === 'permanent' && !o.renewal);
+  const leicesterHotTiers = [...new Set(leicesterHotPerms.map((o) => getClub(o.clubId)?.tier ?? 5))];
+  const leicesterHotLeagues = [...new Set(leicesterHotPerms.map((o) => getClub(o.clubId)?.league ?? ''))];
+  console.log('Leicester 0.65 window', leicesterHotPerms.map((o) => `${o.clubId}:${getClub(o.clubId)?.tier}`), 'tiers', leicesterHotTiers, 'leagues', leicesterHotLeagues);
+  if (leicesterHotPerms.some((o) => (getClub(o.clubId)?.tier ?? 5) <= 2)) {
+    console.error('0.65 in the Championship must not draw Strong or Elite Premier League clubs');
+    process.exitCode = 1;
+  }
+  if (leicesterHotLeagues.some((league) => league !== 'Championship' && league !== 'Premier League')) {
+    console.error('a Championship window must stay in the Championship or Premier League');
     process.exitCode = 1;
   }
 
