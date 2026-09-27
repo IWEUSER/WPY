@@ -356,7 +356,6 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
                 ? seasonHistory[seasonHistory.length - 1]!.goals / seasonHistory[seasonHistory.length - 1]!.gamesPlayed
                 : null
             }
-            seasonGames={season.gamesPlayed}
             sim={seasonSimWithGroup}
             caps={nationalTeam?.caps ?? 0}
             intlGoals={nationalTeam?.goals ?? 0}
@@ -420,7 +419,6 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
                     ? seasonHistory[seasonHistory.length - 1]!.goals / seasonHistory[seasonHistory.length - 1]!.gamesPlayed
                     : null
                 }
-                seasonGames={season.gamesPlayed}
                 leagueGames={season.leagueGames ?? 0}
                 sim={seasonSimWithGroup}
                 caps={nationalTeam?.caps ?? 0}
@@ -681,7 +679,6 @@ function InternationalCard({
   careerRatio,
   careerToDateRatio,
   lastSeasonRatio,
-  seasonGames = 0,
   leagueGames = 0,
   sim,
   caps,
@@ -701,7 +698,6 @@ function InternationalCard({
   careerRatio: number;
   careerToDateRatio?: number;
   lastSeasonRatio?: number | null;
-  seasonGames?: number;
   leagueGames?: number;
   sim: SeasonSimState | null;
   caps: number;

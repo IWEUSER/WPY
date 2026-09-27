@@ -958,6 +958,7 @@ if (madridClub) {
     club: madridClub,
     careerGoalRatio: 0.8,
     nationId: 'spain',
+    leagueGames: CALL_UP_MIN_LEAGUE_GAMES,
   });
   const s3Intl = s3.calendar.fixtures.filter((f) => f.kind === 'international');
   const s3Groups = s3Intl.filter((f) => f.internationalRound === 'group');
@@ -993,6 +994,7 @@ if (madridClub) {
     club: madridClub,
     careerGoalRatio: 0.8,
     nationId: 'spain',
+    leagueGames: CALL_UP_MIN_LEAGUE_GAMES,
   });
   const s4Intl = s4.calendar.fixtures.filter((f) => f.kind === 'international');
   const s4Quals = s4Intl.filter((f) => f.internationalRound === 'qualifier');
@@ -3253,12 +3255,13 @@ if (barca && hilal && lafc) {
   const favFirstRenewal = favFirstMissOffers.find((o) => o.renewal && o.clubId === 'real-madrid');
   if (
     favFirstMiss.pendingTransfer?.kind !== 'loan-or-transfer'
-    || !favFirstMiss.pendingTransfer.allowDecline
-    || favFirstMiss.pendingTransfer.stay?.squadStatus !== 'reserve'
+    || favFirstMiss.pendingTransfer.allowDecline
+    || favFirstMiss.pendingTransfer.stay
+    || !/loan move required/i.test(favFirstMiss.headline)
     || favFirstMissLoans.length === 0
     || favFirstMissPerms.length === 0
   ) {
-    console.error('Season 1 below 0.33 must offer a Reserve stay plus loans and transfers');
+    console.error('Season 1 below 0.33 must force a loan or transfer, not a Reserve stay');
     process.exitCode = 1;
   }
   if (

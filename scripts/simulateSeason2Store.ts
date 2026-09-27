@@ -507,13 +507,14 @@ console.log(
   const loans = (pending?.offers ?? []).filter((o) => o.move === 'loan');
   if (
     store.getState().phase !== 'transfer-choice'
-    || !pending?.allowDecline
+    || pending?.allowDecline
+    || pending?.stay
     || renewal
     || loans.length === 0
     || otherWages.length === 0
     || otherWages.some((wage) => wage <= 0)
   ) {
-    console.error('Missing Season 1 must not table a current-club renewal; loans and other salary offers stay');
+    console.error('Missing Season 1 must force a loan or transfer, not a Reserve stay; wage offers remain');
     process.exitCode = 1;
   }
 }

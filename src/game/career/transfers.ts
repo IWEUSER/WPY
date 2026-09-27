@@ -219,7 +219,9 @@ function attachOneSaudiOffer(
       club.tier === qualityTier &&
       !excludeIds.includes(club.id),
   );
-  const saudi = (shuffle(sameTier)[0] ?? (giants.find((club) => club.tier === qualityTier))) ?? undefined;
+  const saudi = shuffle(sameTier)[0]
+    ?? (qualityTier === 1 ? giants[0] : undefined)
+    ?? giants.find((club) => club.tier === qualityTier);
   if (!saudi) {
     return without;
   }
@@ -903,7 +905,7 @@ function parallelTransfers(
     originClub,
     extras?.originStatus,
     [...excludeIds, ...transfers.map((c) => c.id)],
-  ).filter((c) => c.tier === preferredTier);
+  );
   const loans = includeLoans
     ? pickSeasonLoanClubs(
         lastRatio,
@@ -1155,7 +1157,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       club,
       currentStatus,
       [...exclude, ...transfers.map((c) => c.id)],
-    ).filter((c) => c.tier === transferTier);
+    );
     const offers = withTwilight([
       ...offerTerms(loans, 'loan', value, 0, age, loanYears, offerExtras),
       ...offerTerms([...stepDown, ...transfers], 'permanent', value, fee, age, permYears, offerExtras),
@@ -1247,7 +1249,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       club,
       currentStatus,
       [club.id, ...transfers.map((c) => c.id)],
-    ).filter((c) => c.tier === transferTier);
+    );
     const loans = canOfferLoans
       ? loanPick([club.id], club)
       : [];
@@ -1315,7 +1317,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       club,
       currentStatus,
       [club.id, ...transfers.map((c) => c.id)],
-    ).filter((c) => c.tier === transferTier);
+    );
     const offers = withTwilight([
       ...offerTerms(loans, 'loan', value, 0, age, loanYears, offerExtras),
       ...offerTerms([...stepDown, ...transfers], 'permanent', value, fee, age, permYears, offerExtras),
@@ -1496,7 +1498,12 @@ function withTwilightMlsOffers(
           !excludeIds.includes(club.id) &&
           !next.some((offer) => offer.clubId === club.id),
       );
-      const saudi = shuffle(sameTierSaudi)[0] ?? undefined;
+      const giantFallback = bestPermTier === 1
+        ? TWILIGHT_SAUDI_CLUB_IDS
+            .map((id) => getClub(id))
+            .find((club) => club && !excludeIds.includes(club.id) && !next.some((offer) => offer.clubId === club.id))
+        : undefined;
+      const saudi = shuffle(sameTierSaudi)[0] ?? giantFallback;
       if (saudi) {
         const permIndexes = next
           .map((offer, index) => (offer.move === 'permanent' && !offer.renewal ? index : -1))
