@@ -2261,7 +2261,7 @@ if (barca && hilal && lafc) {
       }],
       contractYearsRemaining: 2,
       careerStart: 'favourite-first-team',
-      squadStatus: 'rising-star',
+      squadStatus: 'starter',
       weeklyWage: 500,
       clubLeague: 'MLS',
     });
