@@ -70,7 +70,7 @@ export function earnedPromotion(league: string, position: number | null | undefi
   return Boolean(promotionTarget(league) && position != null && position <= 2);
 }
 
-/** MLS is a 28-club pool; a season uses 20 so the calendar stays ≤ 48 weeks. */
+/** Full 28-club MLS pool. Regular season is 34 weeks (26 conference + 8 inter). */
 export const MLS_SEASON_CLUBS = 28;
 
 /** Floor on the numeric tier (1 is best). MLS never 1–2; Saudi never 1. */
@@ -553,8 +553,7 @@ export function clubsInLeague(league: string): Club[] {
 /**
  * Clubs that share a table with the player this season. A promoted
  * Championship side is inserted into the Premier League (the weakest
- * top-flight club drops out). MLS is capped at 20 so the year cannot
- * run past 48 weeks.
+ * top-flight club drops out). MLS uses the full 28-club pool.
  */
 export function clubsForSeason(playerClub: Club, league: string): Club[] {
   if (league === 'MLS') return mlsSeasonClubs(playerClub);
@@ -566,7 +565,7 @@ export function clubsForSeason(playerClub: Club, league: string): Club[] {
   return pool;
 }
 
-/** 10 Eastern + 10 Western, always including the player. */
+/** 14 Eastern + 14 Western, always including the player. */
 export function mlsSeasonClubs(playerClub: Club): Club[] {
   const playerConf = mlsConferenceOf(playerClub.id) ?? 'west';
   const otherConf = playerConf === 'east' ? 'west' : 'east';

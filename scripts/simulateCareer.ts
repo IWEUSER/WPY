@@ -56,7 +56,7 @@ import { championsLeagueField, leaguePhaseOpponents, pickSuperCupOpponent, seedC
 import { settleDrawOnPenalties } from '../src/game/career/penalties';
 import { planDomesticSuperCup } from '../src/game/career/domesticSuperCup';
 import { firstLegStakeLine, formatNextLine, nextMatchBriefing, sitOutRecapLine } from '../src/game/career/matchBriefing';
-import { applyInternationalResult, canWinLeague, continentalAggregateLine, ensureInternationalGroup, fixtureTitle, hydrateSeason, internationalStageWhenSelected, leagueFixtureIsHome, liveMatchBoardLine, liveMatchScoreSeed, mulberry32, nextActionableFixture, nextPlayableFixture, pickDomesticCupOpponent, pickTitleRival, remainingPlayableCount, repairChampionsLeagueSeason, repairDomesticCupDraw, repairUclFinalOpponent, resolveFixture, shouldSimulateNationQualifier, shouldSkipFixture, syncContinentalKnockoutCalendar, type SeasonSimState } from '../src/game/career/seasonSim';
+import { applyInternationalResult, canWinLeague, continentalAggregateLine, ensureInternationalGroup, fixtureTitle, hydrateSeason, internationalStageWhenSelected, leagueFixtureIsHome, leagueOpponentQueue, liveMatchBoardLine, liveMatchScoreSeed, mulberry32, nextActionableFixture, nextPlayableFixture, pickDomesticCupOpponent, pickTitleRival, remainingPlayableCount, repairChampionsLeagueSeason, repairDomesticCupDraw, repairUclFinalOpponent, resolveFixture, shouldSimulateNationQualifier, shouldSkipFixture, syncContinentalKnockoutCalendar, type SeasonSimState } from '../src/game/career/seasonSim';
 import { applyPlayerGroupResult, createGroupState, nationCanProgressKnockout, nationCanWinMajor, simulateNpcRoundAfterPlayerMatch } from '../src/game/career/internationalTable';
 import {
   applyTrialMatch,
@@ -82,7 +82,7 @@ import {
   trialContractWon,
   TRIALS_AT_LEVEL,
 } from '../src/game/career/trial';
-import { trialDestinationCountries, youthTierForNation, youthTrialsAreMlsOnly } from '../src/game/career/trialGeography';
+import { isHomeLeagueNation, trialDestinationCountries, youthTierForNation, youthTrialsAreMlsOnly } from '../src/game/career/trialGeography';
 import { nextYouthKnockoutRound, pickYouthGroupOpponents, pickYouthKnockoutOpponent, youthMaxGames } from '../src/game/career/youthTournament';
 import { chancesForSquadStatus, consecutiveScoringAsImpact, consecutiveScoringGames, describeSquadStatus, IMPACT_CHANCES, IMPACT_STREAK, isLowerDivisionLoan, isSquadRotationSitOut, isToughMinutesFixture, nextSquadStatusAfterSeason, openingSquadStatus, promoteSquadStatusDuringSeason, reservePrioritisesContinental, reserveSitsChampionsLeague, RISING_STAR_MIN_RATIO, ROLE_REVIEW_WEEK, seasonOverridesRatioBar, shouldSitLeagueFixture, shouldSitToughFixture, squadStatusOnArrival, STARTER_STREAK, youthRolesAllowed } from '../src/game/career/squadStatus';
 import { clubAllowedByLeagueSample, consecutiveLoanSpells, ELITE_OFFER_MIN_LEAGUE_GAMES, LOAN_OFFER_COUNT, SAUDI_OFFER_MIN_AGE, SECOND_DIVISION_BEST_OFFER_TIER, STRONG_OFFER_MIN_LEAGUE_GAMES, TRANSFER_MARKET_CAP, TRANSFER_OFFER_COUNT, offerFormRatio, offerRatioPreferringLastSeason, offerTierFromStanding, pickLoanClubsForMiss, pickLoanClubsFromOrigin, pickPermanentClubs, requiredGoalRatio, resolveSeasonTransition, seasonStandingRatio, sellingClubAcceptsOffer, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, trialFailTransferPending, tierEarnedByRatio, tierForRatio } from '../src/game/career/transfers';
@@ -1343,6 +1343,10 @@ if (youthTierForNation(0.57, 'cameroon') !== 4 || trialDestinationCountries('cam
     console.error('Asia and Oceania must not use a Brazil-to-Iberia geographic trial path');
     process.exitCode = 1;
   }
+  if (isHomeLeagueNation('germany') !== true || isHomeLeagueNation('japan') !== false || isHomeLeagueNation('cameroon') !== false) {
+    console.error('only nations with an in-game league count as home-league trial countries');
+    process.exitCode = 1;
+  }
 }
 if (SKIN_SWATCHES.length < 6 || HAIR_SWATCHES.length < 5) {
   console.error('players must be able to pick several skin and hair colours');
@@ -2223,6 +2227,57 @@ if (barca && hilal && lafc) {
   if (atlanta28 <= 3_000_000) {
     console.error('28 MLS goals must be worth more than €3m');
     process.exitCode = 1;
+  }
+  if (atlanta) {
+    const atlantaStay = resolveSeasonTransition({
+      season: {
+        ...dummySeason,
+        seasonNumber: 2,
+        clubId: 'atlanta',
+        league: 'MLS',
+        goals: 28,
+        gamesPlayed: 34,
+        leagueGoals: 28,
+        leagueGames: 34,
+        role: 'first-team',
+      },
+      role: 'first-team',
+      clubId: 'atlanta',
+      parentClubId: 'atlanta',
+      seasonsAtCurrentClub: 1,
+      age: 19,
+      careerGoals: 28,
+      careerGames: 34,
+      nationality: 'united-states',
+      loansUsed: 0,
+      seasonHistory: [{
+        ...dummySeason,
+        seasonNumber: 1,
+        clubId: 'atlanta',
+        league: 'MLS',
+        goals: 8,
+        gamesPlayed: 20,
+        role: 'first-team',
+      }],
+      contractYearsRemaining: 2,
+      careerStart: 'favourite-first-team',
+      squadStatus: 'rising-star',
+      weeklyWage: 500,
+      clubLeague: 'MLS',
+    });
+    const atlantaStayWage = atlantaStay.immediate?.weeklyWage
+      ?? atlantaStay.pendingTransfer?.stay?.weeklyWage
+      ?? 0;
+    const atlantaRenewal = (atlantaStay.pendingTransfer?.offers ?? []).find((o) => o.clubId === 'atlanta' && o.renewal);
+    console.log('Atlanta S2 stay/renewal', atlantaStayWage, atlantaRenewal?.weeklyWage, atlantaStay.immediate?.squadStatus ?? atlantaStay.pendingTransfer?.stay?.squadStatus);
+    if (atlantaStayWage < 8_000) {
+      console.error('an Atlanta starter stay-on must recompute listed pay, not keep €500');
+      process.exitCode = 1;
+    }
+    if (atlantaRenewal && (atlantaRenewal.weeklyWage ?? 0) < 4_000) {
+      console.error('an Atlanta starter renewal must use listed MLS pay, not the €500 reserve floor');
+      process.exitCode = 1;
+    }
   }
   if (lowWage > 5_000) {
     console.error('lowest-level weekly wages must sit well below €5k');
@@ -5396,8 +5451,12 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     'Liga MX in Leagues Cup',
     leaguesMx.length,
   );
-  if (mlsClubs.length !== 28 || leagueMatchWeeks('MLS', lafc) !== 34) {
-    console.error('MLS must play a 28-club, 34-game regular season');
+  const mlsQueue = leagueOpponentQueue(lafc, 'MLS');
+  const mlsConferenceGames = mlsQueue.filter((c) => c.conference === lafc.conference).length;
+  const mlsInterGames = mlsQueue.length - mlsConferenceGames;
+  console.log('MLS opponent queue', mlsQueue.length, 'conference', mlsConferenceGames, 'inter', mlsInterGames);
+  if (mlsClubs.length !== 28 || leagueMatchWeeks('MLS', lafc) !== 34 || mlsQueue.length !== 34 || mlsConferenceGames !== 26 || mlsInterGames !== 8) {
+    console.error('MLS must play a 28-club, 34-game regular season (26 conference + 8 inter)');
     process.exitCode = 1;
   }
   if (mlsCal.totalWeeks > 64) {

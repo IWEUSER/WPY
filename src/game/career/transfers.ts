@@ -1123,9 +1123,12 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     };
     if (stay.weeklyWage == null) {
       const nextStatus = stay.squadStatus ?? currentStatus;
-      stay.weeklyWage = nextStatus === 'starter' && currentStatus !== 'starter'
-        ? weeklyWageForRatio(club, value, ratio, 'starter', nextLeague)
-        : params.weeklyWage;
+      if (nextStatus === 'starter') {
+        const starterWage = weeklyWageForRatio(club, value, ratio, 'starter', nextLeague);
+        stay.weeklyWage = Math.max(params.weeklyWage ?? 0, starterWage);
+      } else {
+        stay.weeklyWage = params.weeklyWage;
+      }
     }
     return stay;
   };

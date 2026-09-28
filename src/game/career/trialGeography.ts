@@ -94,10 +94,17 @@ export function isTopTwentyNation(nationId: string | null | undefined): boolean 
   return rank > 0 && rank <= YOUTH_ELITE_RANK_CAP;
 }
 
+/** Player is from a country that already has a playable league in-game. */
+export function isHomeLeagueNation(nationId: string | null | undefined): boolean {
+  if (!nationId) return false;
+  const nation = getNation(nationId);
+  return Boolean(nation && HOME_LEAGUE_COUNTRIES.has(nation.name));
+}
+
 /**
  * Youth-championship band. Top-20 nations keep the existing elite→lower
- * scale. Everyone else cannot reach Elite/Strong: 1.00 mid-table, 0.66
- * medium, 0.33/0.00 lower level.
+ * scale (Elite only at 0.75+). Everyone else cannot reach Elite/Strong:
+ * 1.00 mid-table, 0.50 medium, else lower level.
  */
 export function youthTierForNation(ratio: number, nationId?: string | null): ClubTier {
   if (isTopTwentyNation(nationId)) {
@@ -152,33 +159,32 @@ export function pickGeographicTrialClubs(
 
   const destinations = trialDestinationCountries(nationId);
   const picks: Club[] = [];
+  const takeFrom = (pool: Club[]) => {
+    for (const club of pool) {
+      if (picks.length >= count) break;
+      picks.push(club);
+      exclude.push(club.id);
+    }
+  };
   if (destinations.length > 0) {
-    const takeFrom = (pool: Club[]) => {
-      for (const club of pool) {
-        if (picks.length >= count) break;
-        picks.push(club);
-        exclude.push(club.id);
-      }
-    };
     takeFrom(shuffle(clubsInCountries(destinations, tier, exclude)).slice(0, Math.min(homeLooks, count)));
     if (picks.length < count) {
       takeFrom(shuffle(clubsInCountries(destinations, tier, exclude)));
     }
-    if (picks.length < count) {
+    // Pathway nations (Africa→France, Brazil→Iberia) stay in dest countries.
+    // Home-league nations (Germany, Spain, …) keep the earned band and
+    // world-fill the remaining Elite/Strong slots rather than dropping a tier.
+    if (picks.length < count && !isHomeLeagueNation(nationId)) {
       for (const nearby of [tier + 1, tier - 1, tier + 2, tier - 2]) {
         if (nearby < 1 || nearby > 5) continue;
         takeFrom(shuffle(clubsInCountries(destinations, nearby as ClubTier, exclude)));
       }
+      return picks.slice(0, count);
     }
-    return picks.slice(0, count);
   }
   if (picks.length < count) {
     const rest = shuffle(clubsByTier(tier).filter((c) => !exclude.includes(c.id)));
-    for (const club of rest) {
-      picks.push(club);
-      exclude.push(club.id);
-      if (picks.length >= count) break;
-    }
+    takeFrom(rest);
   }
-  return picks;
+  return picks.slice(0, count);
 }
