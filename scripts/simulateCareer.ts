@@ -13,6 +13,7 @@ import {
 } from '../src/game/career/chanceEngine';
 import { assignClubTier, clubQualityLabel, CLUBS, clubsForSeason, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, leagueMatchWeeks, playableClubsGroupedByLeague, SECOND_DIVISIONS, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
 import { leagueDisplayName, playoffGamesFromOpening, playoffOpeningForPosition } from '../src/game/career/data/leagueFormat';
+import { confederationDisplayName } from '../src/game/career/data/displayNames';
 import { clubTransferBudget, consecutivePoorFactor, contractValueFactor, DEFAULT_CONTRACT_YEARS, ELITE_TRANSFER_VALUE_FLOOR, FIRST_CONTRACT_YEARS, firstTopFlightValueCap, formAdjustedRatio, isSeason1ValueLocked, leagueValueWeight, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, MIN_ACCEPTED_FEE_RATIO, newContractYears, playerMarketValue, playerMarketValueFromSeasons, RESERVE_CONTRACT_YEARS, RESERVE_WAGE_FACTOR, RESERVE_WEEKLY_WAGE, seasonalSponsorship, tierForMarketValue, TOP_LEAGUES, transferFeeFromValue, wageCareerMaturityScale, weeklyWageForClub, weeklyWageForRatio, weeklyWageForSquadStatus, weeklyWageForTransferOffer, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { nationKit } from '../src/game/career/data/nationColours';
@@ -40,7 +41,7 @@ import {
   isListedGround,
 } from '../src/game/shooting/grounds';
 import { clubKit } from '../src/game/career/data/clubKits';
-import { clubContinentalCup, domesticCupForCountry, internationalCalendarSeason, internationalCampaignForSeason, internationalTournamentForSeason } from '../src/game/career/data/competitions';
+import { clubContinentalCup, CONTINENTAL_CUPS, domesticCupForCountry, internationalCalendarSeason, internationalCampaignForSeason, INTERNATIONAL_TOURNAMENTS, internationalTournamentForSeason } from '../src/game/career/data/competitions';
 import { CURRENT_RULES_STAMP, migratedRulesStamp, rebuildCurrentSeason, saveNeedsRebuild } from '../src/game/career/rulesStamp';
 import { cupFromLeaguePosition, continentalQualificationForNextSeason } from '../src/game/career/europeanQualification';
 import { fifaRank, knockoutRankCap, nationStrength, nationsInConfederation, tournamentOpponents, worldCupKnockoutRankCap } from '../src/game/career/data/fifaRankings';
@@ -585,6 +586,10 @@ if (
   || getClub('man-city')?.name !== 'Manchester Civic'
   || getClub('real-madrid')?.name !== 'Madrid'
   || getClub('barcelona')?.name !== 'Barcino'
+  || getClub('ny-red-bulls')?.name !== 'Harrison'
+  || confederationDisplayName('UEFA') !== 'Europe'
+  || CONTINENTAL_CUPS.ucl.name !== 'European Cup'
+  || INTERNATIONAL_TOURNAMENTS['world-cup'].name !== 'World Championship'
 ) {
   console.error('club and league labels must use store-safe display names');
   process.exitCode = 1;

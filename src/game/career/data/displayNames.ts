@@ -177,7 +177,7 @@ export const CLUB_DISPLAY_NAMES: Record<string, string> = {
   freiburg: 'Freiburg',
   darmstadt: 'Darmstadt',
   wolfsburg: 'Wolfsburg',
-  'union-berlin': 'Berlin Union',
+  'union-berlin': 'Berlin East',
   hoffenheim: 'Hoffenheim',
   werder: 'Bremen',
   augsburg: 'Augsburg',
@@ -196,7 +196,7 @@ export const CLUB_DISPLAY_NAMES: Record<string, string> = {
   gladbach: 'Monchengladbach',
   heidenheim: 'Heidenheim',
   bochum: 'Bochum',
-  'st-pauli': 'Hamburg Pauli',
+  'st-pauli': 'Hamburg Harbour',
   dusseldorf: 'Dusseldorf',
   karlsruhe: 'Karlsruhe',
   elversberg: 'Elversberg',
@@ -284,7 +284,7 @@ export const CLUB_DISPLAY_NAMES: Record<string, string> = {
   colorado: 'Colorado',
   'salt-lake': 'Salt Lake',
   'new-england': 'New England',
-  'ny-red-bulls': 'New York Red',
+  'ny-red-bulls': 'Harrison',
   charlotte: 'Charlotte',
   'st-louis': 'St. Louis',
   'dc-united': 'Washington',
@@ -314,7 +314,7 @@ export const CLUB_DISPLAY_NAMES: Record<string, string> = {
   az: 'Alkmaar',
   twente: 'Enschede',
   utrecht: 'Utrecht',
-  'sparta-rotterdam': 'Rotterdam Sparta',
+  'sparta-rotterdam': 'Rotterdam North',
   heerenveen: 'Heerenveen',
   groningen: 'Groningen',
   'go-ahead-eagles': 'Deventer',
@@ -494,7 +494,8 @@ export const LICENSED_DISPLAY_ALIASES: Record<string, string> = {
   'AC Milan': 'Milan Red',
   'Inter Miami': 'Miami',
   'New York City FC': 'New York',
-  'New York Red Bulls': 'New York Red',
+  'New York Red Bulls': 'Harrison',
+  'New York Red': 'Harrison',
   'Los Angeles FC': 'Los Angeles',
   LAFC: 'Los Angeles',
   'LA Galaxy': 'Los Angeles Gold',
@@ -571,7 +572,8 @@ export const LICENSED_DISPLAY_ALIASES: Record<string, string> = {
   'Mainz 05': 'Mainz',
   'SC Freiburg': 'Freiburg',
   'Darmstadt 98': 'Darmstadt',
-  'Union Berlin': 'Berlin Union',
+  'Union Berlin': 'Berlin East',
+  'Berlin Union': 'Berlin East',
   'Werder Bremen': 'Bremen',
   'Hamburger SV': 'Hamburg',
   Köln: 'Cologne',
@@ -584,7 +586,8 @@ export const LICENSED_DISPLAY_ALIASES: Record<string, string> = {
   'Fortuna Düsseldorf': 'Dusseldorf',
   'Preußen Münster': 'Munster',
   'Jahn Regensburg': 'Regensburg',
-  'St. Pauli': 'Hamburg Pauli',
+  'St. Pauli': 'Hamburg Harbour',
+  'Hamburg Pauli': 'Hamburg Harbour',
   'Paris Saint Germain': 'Paris',
   'Paris FC': 'Paris East',
   'Saint-Étienne': 'Saint-Etienne',
@@ -624,7 +627,8 @@ export const LICENSED_DISPLAY_ALIASES: Record<string, string> = {
   Feyenoord: 'Rotterdam',
   'FC Twente': 'Enschede',
   'FC Utrecht': 'Utrecht',
-  'Sparta Rotterdam': 'Rotterdam Sparta',
+  'Sparta Rotterdam': 'Rotterdam North',
+  'Rotterdam Sparta': 'Rotterdam North',
   'FC Groningen': 'Groningen',
   'Go Ahead Eagles': 'Deventer',
   'NAC Breda': 'Breda',
@@ -806,6 +810,21 @@ export const LICENSED_DISPLAY_ALIASES: Record<string, string> = {
   Sabah: 'Baku',
   MLS: 'American League',
 };
+
+/** Confederation keys stay internal; the picker shows geography only. */
+export const CONFEDERATION_DISPLAY_NAMES: Record<string, string> = {
+  UEFA: 'Europe',
+  CONMEBOL: 'South America',
+  CONCACAF: 'North America',
+  CAF: 'Africa',
+  AFC: 'Asia',
+  OFC: 'Oceania',
+};
+
+export function confederationDisplayName(id: string | null | undefined): string {
+  if (!id) return '';
+  return CONFEDERATION_DISPLAY_NAMES[id] ?? id;
+}
 
 let aliasPairs: [string, string][] | null = null;
 
