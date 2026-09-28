@@ -1122,7 +1122,10 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       ...extra,
     };
     if (stay.weeklyWage == null) {
-      stay.weeklyWage = params.weeklyWage;
+      const nextStatus = stay.squadStatus ?? currentStatus;
+      stay.weeklyWage = nextStatus === 'starter' && currentStatus !== 'starter'
+        ? weeklyWageForRatio(club, value, ratio, 'starter', nextLeague)
+        : params.weeklyWage;
     }
     return stay;
   };

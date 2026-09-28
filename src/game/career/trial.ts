@@ -3,7 +3,6 @@ import { countryForNationality, pickClubsBiasedToCountry } from './clubOffers';
 import type { CalendarFixture, SeasonCalendar } from './calendar';
 import { tierForRatio } from './transfers';
 import {
-  isTopTwentyNation,
   pickGeographicTrialClubs,
   youthTierForNation,
   youthTrialsAreMlsOnly,
@@ -17,8 +16,8 @@ export const CLUB_TRIAL_CHANCE_SPLIT = [4, 3, 3] as const;
 /** U16 goals-per-game → the tier that invites the player for a club trial. */
 export function tierForYouthGoals(goals: number, games = 1, nationId?: string | null): ClubTier {
   const ratio = goals / Math.max(1, games);
-  if (nationId && !isTopTwentyNation(nationId)) return youthTierForNation(ratio, nationId);
-  return tierForRatio(ratio);
+  if (!nationId) return tierForRatio(ratio);
+  return youthTierForNation(ratio, nationId);
 }
 
 /** @deprecated Use tierForYouthGoals. Kept so older tests still compile. */

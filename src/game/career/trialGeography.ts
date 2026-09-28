@@ -108,7 +108,7 @@ export function youthTierForNation(ratio: number, nationId?: string | null): Clu
     return 5;
   }
   if (ratio >= 1) return 3;
-  if (ratio >= 0.66) return 4;
+  if (ratio >= 0.5) return 4;
   return 5;
 }
 
@@ -153,12 +153,24 @@ export function pickGeographicTrialClubs(
   const destinations = trialDestinationCountries(nationId);
   const picks: Club[] = [];
   if (destinations.length > 0) {
-    const destPool = shuffle(clubsInCountries(destinations, tier, exclude));
-    const wanted = Math.min(homeLooks, count, destPool.length);
-    for (let i = 0; i < wanted; i++) {
-      picks.push(destPool[i]);
-      exclude.push(destPool[i].id);
+    const takeFrom = (pool: Club[]) => {
+      for (const club of pool) {
+        if (picks.length >= count) break;
+        picks.push(club);
+        exclude.push(club.id);
+      }
+    };
+    takeFrom(shuffle(clubsInCountries(destinations, tier, exclude)).slice(0, Math.min(homeLooks, count)));
+    if (picks.length < count) {
+      takeFrom(shuffle(clubsInCountries(destinations, tier, exclude)));
     }
+    if (picks.length < count) {
+      for (const nearby of [tier + 1, tier - 1, tier + 2, tier - 2]) {
+        if (nearby < 1 || nearby > 5) continue;
+        takeFrom(shuffle(clubsInCountries(destinations, nearby as ClubTier, exclude)));
+      }
+    }
+    return picks.slice(0, count);
   }
   if (picks.length < count) {
     const rest = shuffle(clubsByTier(tier).filter((c) => !exclude.includes(c.id)));

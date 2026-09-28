@@ -1,7 +1,7 @@
 /**
  * Weekly wages in euros. Top earner = starter band. Squad average = the
  * Rising-star first-contract base (10%). MLS and Saudi stay on the old
- * formula and are omitted here.
+ * formula. MLS Designated-player bands are listed below.
  */
 
 export const CLUB_TOP_WEEKLY_WAGE: Record<string, number> = {
@@ -70,6 +70,34 @@ export const CLUB_TOP_WEEKLY_WAGE: Record<string, number> = {
   ajax: 75_000,
   psv: 45_000,
   feyenoord: 40_000,
+  'inter-miami': 18_000,
+  lafc: 16_000,
+  seattle: 13_000,
+  columbus: 12_500,
+  atlanta: 12_000,
+  philadelphia: 11_500,
+  cincinnati: 11_000,
+  nycfc: 11_000,
+  'la-galaxy': 11_500,
+  orlando: 10_000,
+  'ny-red-bulls': 10_000,
+  portland: 9_000,
+  vancouver: 9_000,
+  austin: 8_500,
+  minnesota: 8_500,
+  dallas: 8_000,
+  houston: 8_000,
+  nashville: 8_500,
+  'kansas-city': 8_000,
+  chicago: 7_500,
+  montreal: 7_500,
+  toronto: 8_000,
+  colorado: 7_500,
+  'salt-lake': 8_000,
+  'new-england': 7_500,
+  charlotte: 7_000,
+  'st-louis': 7_000,
+  'dc-united': 6_500,
 };
 
 export const CLUB_AVERAGE_WEEKLY_WAGE: Record<string, number> = {
@@ -138,6 +166,34 @@ export const CLUB_AVERAGE_WEEKLY_WAGE: Record<string, number> = {
   porto: 18_846,
   psv: 15_577,
   feyenoord: 13_269,
+  'inter-miami': 16_000,
+  lafc: 12_000,
+  seattle: 8_500,
+  columbus: 8_000,
+  atlanta: 8_000,
+  philadelphia: 7_000,
+  cincinnati: 6_500,
+  nycfc: 6_500,
+  'la-galaxy': 7_000,
+  orlando: 5_500,
+  'ny-red-bulls': 5_500,
+  portland: 5_000,
+  vancouver: 5_000,
+  austin: 4_500,
+  minnesota: 4_500,
+  dallas: 4_200,
+  houston: 4_200,
+  nashville: 4_500,
+  'kansas-city': 4_200,
+  chicago: 4_000,
+  montreal: 4_000,
+  toronto: 4_200,
+  colorado: 3_800,
+  'salt-lake': 4_200,
+  'new-england': 3_800,
+  charlotte: 3_500,
+  'st-louis': 3_500,
+  'dc-united': 3_200,
 };
 
 export function isListedWageClub(clubId: string): boolean {
@@ -166,6 +222,7 @@ const LISTED_LEAGUES = new Set([
   'Super Lig',
   'Primeira Liga',
   'Eredivisie',
+  'MLS',
 ]);
 
 export function leagueHasListedWages(league: string | null | undefined): boolean {
@@ -174,7 +231,7 @@ export function leagueHasListedWages(league: string | null | undefined): boolean
 
 export function usesPublishedWages(league: string | null | undefined): boolean {
   if (!league) return false;
-  if (league === 'MLS' || league === 'Saudi Pro League') return false;
+  if (league === 'Saudi Pro League') return false;
   return leagueHasListedWages(league);
 }
 

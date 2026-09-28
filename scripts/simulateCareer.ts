@@ -75,6 +75,7 @@ import {
 import {
   CLUB_TRIAL_CHANCE_SPLIT,
   CLUB_TRIAL_GAMES,
+  offerClubsForTrial,
   pickTrialClub,
   pickTrialClubs,
   tierForYouthGoals,
@@ -1317,6 +1318,32 @@ if (tierForYouthGoals(3, 4, 'spain') !== 1) {
   console.error('top-20 nations keep the existing elite youth band');
   process.exitCode = 1;
 }
+if (youthTierForNation(0.57, 'cameroon') !== 4 || trialDestinationCountries('cameroon').join() !== 'France') {
+  console.error('African youth 0.57 must trial at Medium French clubs, not Lower level');
+  process.exitCode = 1;
+}
+{
+  const cameroonLooks = pickTrialClubs(4, 'cameroon', [], 3, { geographyNationId: 'cameroon', sameTierOnly: true });
+  const japanLooks = offerClubsForTrial(5, 3, 'japan', 7);
+  console.log(
+    'Cameroon 0.57 France',
+    cameroonLooks.map((c) => `${c.id}:${c.country}:${c.tier}`),
+    'Japan 0.71',
+    japanLooks.map((c) => `${c.id}:${c.tier}`),
+  );
+  if (cameroonLooks.length === 0 || cameroonLooks.some((club) => club.country !== 'France')) {
+    console.error('African youth trials must stay in France');
+    process.exitCode = 1;
+  }
+  if (tierForYouthGoals(5, 7, 'japan') < 2 || japanLooks.some((club) => club.tier === 1)) {
+    console.error('Japan 0.71 is ranking-capped Strong, not Elite');
+    process.exitCode = 1;
+  }
+  if (trialDestinationCountries('japan').length > 0 || trialDestinationCountries('australia').length > 0) {
+    console.error('Asia and Oceania must not use a Brazil-to-Iberia geographic trial path');
+    process.exitCode = 1;
+  }
+}
 if (SKIN_SWATCHES.length < 6 || HAIR_SWATCHES.length < 5) {
   console.error('players must be able to pick several skin and hair colours');
   process.exitCode = 1;
@@ -2154,7 +2181,7 @@ if (barca && hilal && lafc) {
   console.log('wages Barca', euroWage, 'Hilal', saudiWage, 'LAFC', mlsWage, 'low', lowWage, 'high-tier', highWage);
   // Listed European tops (Atlético €400k) now sit in the elite band. Saudi stays
   // on the previous formula: above MLS, well below published European salaries.
-  if (saudiWage <= mlsWage * 3 || saudiWage < 20_000) {
+  if (saudiWage <= mlsWage || saudiWage < 20_000) {
     console.error('Saudi formula wages must stay well above MLS');
     process.exitCode = 1;
   }
@@ -2164,6 +2191,37 @@ if (barca && hilal && lafc) {
   }
   if (mlsWage >= saudiWage) {
     console.error('MLS wages must sit below Saudi');
+    process.exitCode = 1;
+  }
+  const atlanta = getClub('atlanta');
+  const atlantaStarter = atlanta ? weeklyWageForSquadStatus(atlanta, 8_000_000, 'starter', 'MLS') : 0;
+  const atlantaRising = atlanta ? weeklyWageForSquadStatus(atlanta, 8_000_000, 'rising-star', 'MLS') : 0;
+  const atlanta28 = atlanta
+    ? playerMarketValueFromSeasons({
+      age: 19,
+      careerGoals: 28,
+      careerGames: 34,
+      seasons: [{
+        ...dummySeason,
+        seasonNumber: 2,
+        clubId: 'atlanta',
+        league: 'MLS',
+        goals: 28,
+        gamesPlayed: 34,
+        leagueGoals: 28,
+        leagueGames: 34,
+        role: 'first-team',
+      }],
+      fallbackClub: atlanta,
+    })
+    : 0;
+  console.log('Atlanta starter/rising', atlantaStarter, atlantaRising, '28-goal MLS value', atlanta28);
+  if (atlantaStarter < 8_000) {
+    console.error('an Atlanta starter contract must not sit on the €500 reserve floor');
+    process.exitCode = 1;
+  }
+  if (atlanta28 <= 3_000_000) {
+    console.error('28 MLS goals must be worth more than €3m');
     process.exitCode = 1;
   }
   if (lowWage > 5_000) {
@@ -5338,8 +5396,12 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     'Liga MX in Leagues Cup',
     leaguesMx.length,
   );
-  if (mlsCal.totalWeeks > 56 || leagueMatchWeeks('MLS', lafc) > 26) {
-    console.error('an MLS season must not run past 56 weeks or 26 league weeks');
+  if (mlsClubs.length !== 28 || leagueMatchWeeks('MLS', lafc) !== 34) {
+    console.error('MLS must play a 28-club, 34-game regular season');
+    process.exitCode = 1;
+  }
+  if (mlsCal.totalWeeks > 64) {
+    console.error('an MLS season must not run past 64 weeks');
     process.exitCode = 1;
   }
   if ((mlsKinds.playoff ?? 0) < 5 || (mlsKinds['leagues-cup'] ?? 0) < 4) {

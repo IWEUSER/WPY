@@ -25,7 +25,7 @@ export function leagueValueWeight(league: string): number {
   if (league === 'Saudi Pro League') return 0.2;
   if (SECOND_DIVISIONS.has(league)) return 0.4;
   if (league === 'Liga MX') return 0.32;
-  if (league === 'MLS') return 0.22;
+  if (league === 'MLS') return 0.38;
   return 0.3;
 }
 
@@ -271,12 +271,14 @@ export function youngDivisionStarFloor(params: {
     divisionGoals += season.goals;
     if (season.topGoalscorer) starred = true;
   }
-  if (!starred && divisionGoals < 40) return 0;
+  const mlsFloor = params.league === 'MLS' && divisionGoals >= 20;
+  if (!starred && !mlsFloor && divisionGoals < 40) return 0;
   let base = 8_000_000;
   if (TOP_LEAGUES.has(params.league)) base = 80_000_000;
   else if (SECOND_DIVISIONS.has(params.league)) base = 36_000_000;
   else if (params.league === 'Saudi Pro League') base = 10_000_000;
-  else if (params.league === 'Liga MX' || params.league === 'MLS') base = 14_000_000;
+  else if (params.league === 'Liga MX') base = 14_000_000;
+  else if (params.league === 'MLS') base = 8_000_000 + Math.max(0, divisionGoals - 20) * 250_000;
   return Math.max(100_000, Math.round((base * ageValueFactor(params.age)) / 100_000) * 100_000);
 }
 
@@ -651,10 +653,21 @@ export function weeklyWageForClub(club: Club, marketValue: number, playingLeague
   };
   let wage = tierBase[club.tier] * (0.7 + 0.6 * t);
   if (club.country === 'Saudi Arabia' || league === 'Saudi Pro League') wage *= 1.2;
-  if (league === 'MLS') wage *= 0.5;
+  if (league === 'MLS') {
+    const mlsBase: Record<ClubTier, number> = {
+      1: 28_000,
+      2: 22_000,
+      3: 16_000,
+      4: 10_000,
+      5: 6_000,
+    };
+    wage = mlsBase[club.tier] * (0.85 + 0.35 * t);
+  }
   const prestigeRate = club.tier === 1 ? 0.00016 : club.tier === 2 ? 0.00004 : 0.000012;
   wage += marketValue * prestigeRate;
-  const floor = club.tier >= 5 ? 500 : club.tier >= 4 ? 800 : 1_200;
+  const floor = league === 'MLS'
+    ? (club.tier >= 4 ? 4_000 : 8_000)
+    : club.tier >= 5 ? 500 : club.tier >= 4 ? 800 : 1_200;
   return Math.max(floor, Math.round(wage / 500) * 500);
 }
 

@@ -71,7 +71,7 @@ export function earnedPromotion(league: string, position: number | null | undefi
 }
 
 /** MLS is a 28-club pool; a season uses 20 so the calendar stays ≤ 48 weeks. */
-export const MLS_SEASON_CLUBS = 20;
+export const MLS_SEASON_CLUBS = 28;
 
 /** Floor on the numeric tier (1 is best). MLS never 1–2; Saudi never 1. */
 export function leagueTierFloor(country: string, league: string): ClubTier {

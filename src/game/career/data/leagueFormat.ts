@@ -36,10 +36,10 @@ export const MLS_WEST = new Set([
   'st-louis',
 ]);
 
-/** 10 per conference so the regular season stays compact. */
-export const MLS_CONFERENCE_SIZE = 10;
-/** Home-and-away in conference (18) plus 8 interconference games. */
-export const MLS_REGULAR_SEASON_WEEKS = 26;
+/** Full 14-club conferences so the regular season uses every MLS side. */
+export const MLS_CONFERENCE_SIZE = 14;
+/** Home-and-away in conference (26) plus 8 interconference games. */
+export const MLS_REGULAR_SEASON_WEEKS = 34;
 /** Top six in each conference reach the playoffs. */
 export const MLS_PLAYOFF_SPOTS = 6;
 /** Seeds 5–6 play a single wild-card; 1–4 go straight to the first round. */
