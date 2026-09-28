@@ -212,12 +212,10 @@ function trialPickOptsForNation(
   options?: TrialPickOptions,
 ): TrialPickOptions {
   const youthGoals = campaign.youthGoals || campaign.goals;
-  const youthGames = Math.max(campaign.kind === 'youth-tournament' ? campaign.gamesPlayed : 1, 1);
-  const ratio = youthGoals / youthGames;
   return {
     ...trialPickOpts(campaign, options),
     geographyNationId: options?.geographyNationId ?? nationality,
-    mlsOnly: options?.mlsOnly ?? youthTrialsAreMlsOnly(ratio, nationality),
+    mlsOnly: options?.mlsOnly ?? youthTrialsAreMlsOnly(youthGoals, nationality),
   };
 }
 

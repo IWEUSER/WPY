@@ -1,7 +1,6 @@
 import { CLUBS, clubsByTier, clubsForSeason, type Club, type ClubTier } from './data/clubs';
 import { countryForNationality, pickClubsBiasedToCountry } from './clubOffers';
 import type { CalendarFixture, SeasonCalendar } from './calendar';
-import { tierForRatio } from './transfers';
 import {
   pickGeographicTrialClubs,
   youthTierForNation,
@@ -13,11 +12,9 @@ export const TRIAL_SHOTS = 10;
 export const CLUB_TRIAL_GAMES = 3;
 export const CLUB_TRIAL_CHANCE_SPLIT = [4, 3, 3] as const;
 
-/** U16 goals-per-game → the tier that invites the player for a club trial. */
-export function tierForYouthGoals(goals: number, games = 1, nationId?: string | null): ClubTier {
-  const ratio = goals / Math.max(1, games);
-  if (!nationId) return tierForRatio(ratio);
-  return youthTierForNation(ratio, nationId);
+/** U16 goals → the tier that invites the player for a club trial. */
+export function tierForYouthGoals(goals: number, _games = 1, nationId?: string | null): ClubTier {
+  return youthTierForNation(goals, nationId);
 }
 
 /** @deprecated Use tierForYouthGoals. Kept so older tests still compile. */
@@ -121,12 +118,11 @@ export function offerClubsForTrial(
   nationality?: string | null,
   games = 1,
 ): Club[] {
-  const ratio = goals / Math.max(1, games);
   const tier = tierForYouthGoals(goals, games, nationality);
   return pickTrialClubs(tier, nationality, [], count, {
     sameTierOnly: true,
     geographyNationId: nationality,
-    mlsOnly: youthTrialsAreMlsOnly(ratio, nationality),
+    mlsOnly: youthTrialsAreMlsOnly(goals, nationality),
   });
 }
 

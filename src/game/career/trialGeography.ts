@@ -3,8 +3,8 @@ import { fifaRank } from './data/fifaRankings';
 import { getNation } from './data/nations';
 import { shuffle } from './util';
 
-/** Nations outside the FIFA top 20 cannot earn Elite/Strong youth trials. */
-export const YOUTH_ELITE_RANK_CAP = 20;
+/** Only FIFA top-10 nations can earn Elite youth trials (6+ tournament goals). */
+export const YOUTH_ELITE_RANK_CAP = 10;
 
 const IRELAND_ENGLAND = new Set(['republic-of-ireland', 'northern-ireland']);
 
@@ -88,10 +88,15 @@ export function trialDestinationCountries(nationId: string | null | undefined): 
   return [];
 }
 
-export function isTopTwentyNation(nationId: string | null | undefined): boolean {
+export function isTopTenNation(nationId: string | null | undefined): boolean {
   if (!nationId) return false;
   const rank = fifaRank(nationId);
   return rank > 0 && rank <= YOUTH_ELITE_RANK_CAP;
+}
+
+/** @deprecated Use isTopTenNation. Youth Elite is now FIFA top 10 only. */
+export function isTopTwentyNation(nationId: string | null | undefined): boolean {
+  return isTopTenNation(nationId);
 }
 
 /** Player is from a country that already has a playable league in-game. */
@@ -102,26 +107,28 @@ export function isHomeLeagueNation(nationId: string | null | undefined): boolean
 }
 
 /**
- * Youth-championship band. Top-20 nations keep the existing elite→lower
- * scale (Elite only at 0.75+). Everyone else cannot reach Elite/Strong:
- * 1.00 mid-table, 0.50 medium, else lower level.
+ * Youth-championship band from raw goals, not goals/game.
+ * FIFA top 10: 6+ Elite, 5 Strong, 4 Mid-table, 3 Medium, 2- Lower.
+ * Rank 11+: 6+ Strong, 4–5 Mid-table, 3 Medium, 2- Lower. No Elite path.
  */
-export function youthTierForNation(ratio: number, nationId?: string | null): ClubTier {
-  if (isTopTwentyNation(nationId)) {
-    if (ratio >= 0.75) return 1;
-    if (ratio >= 0.55) return 2;
-    if (ratio >= 0.45) return 3;
-    if (ratio >= 0.33) return 4;
+export function youthTierForNation(goals: number, nationId?: string | null): ClubTier {
+  const scored = Math.max(0, Math.floor(goals));
+  if (isTopTenNation(nationId)) {
+    if (scored >= 6) return 1;
+    if (scored >= 5) return 2;
+    if (scored >= 4) return 3;
+    if (scored >= 3) return 4;
     return 5;
   }
-  if (ratio >= 1) return 3;
-  if (ratio >= 0.5) return 4;
+  if (scored >= 6) return 2;
+  if (scored >= 4) return 3;
+  if (scored >= 3) return 4;
   return 5;
 }
 
-/** A blank youth campaign from a nation outside the top 20 is MLS only. */
-export function youthTrialsAreMlsOnly(ratio: number, nationId?: string | null): boolean {
-  return !isTopTwentyNation(nationId) && ratio <= 0;
+/** A blank youth campaign from a nation outside the top 10 is MLS only. */
+export function youthTrialsAreMlsOnly(goals: number, nationId?: string | null): boolean {
+  return !isTopTenNation(nationId) && goals <= 0;
 }
 
 export function clubsInCountries(countries: string[], tier?: ClubTier, excludeIds: string[] = []): Club[] {
