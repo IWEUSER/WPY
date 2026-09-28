@@ -530,8 +530,23 @@ export function wageRatioScale(ratio: number | null | undefined): number {
 }
 
 /**
- * Full 1.0 starter money only after five counted seasons.
- * 1 season → 50%, 2 → 60%, 3 → 70%, 4 → 80%, 5+ → 100%.
+ * Combined goals/game across the last `take` counted seasons.
+ * Used as the second wage discount after last-season ratio.
+ */
+export function recentAggregateRatio(seasons: SeasonRecord[], take = 5): number | null {
+  const counted = seasons.filter(
+    (season) => countsTowardCareerRecord(season.seasonNumber, season.role) && season.gamesPlayed > 0,
+  );
+  const slice = counted.slice(-Math.max(1, take));
+  const games = slice.reduce((n, season) => n + season.gamesPlayed, 0);
+  const goals = slice.reduce((n, season) => n + season.goals, 0);
+  if (games <= 0) return null;
+  return goals / games;
+}
+
+/**
+ * @deprecated Season-count maturity is no longer used for offers.
+ * Full listed pay now needs 1.0 last season and 1.0 last-five aggregate.
  */
 export function wageCareerMaturityScale(countedSeasonsCompleted: number): number {
   const n = Math.max(0, Math.floor(countedSeasonsCompleted));
@@ -544,21 +559,21 @@ export function wageCareerMaturityScale(countedSeasonsCompleted: number): number
 }
 
 /**
- * Listed max wage is the 1.0 rate. Offers pay last-season ratio of that
- * band, then the 5-season discount. 100% of the listed maximum needs a
- * 1.0 previous season and five counted seasons. A last-season spike with
- * no career sample is not a proven 1.0 wage.
+ * Listed max wage is the 1.0 / 1.0 rate. Offers pay last-season ratio of
+ * that band, then the last-five-seasons aggregate. 0.91 last and 0.56
+ * aggregate is 91% × 56% of the listed top — not 91% after five seasons.
+ * A last-season spike with no aggregate sample is half the last-season band.
  */
 export function wageOfferScale(
   lastSeasonRatio: number | null | undefined,
-  countedSeasonsCompleted: number,
-  careerRatio?: number | null,
+  _countedSeasonsCompleted?: number,
+  aggregateRatio?: number | null,
 ): number {
   const last = wageRatioScale(lastSeasonRatio);
-  const maturity = wageCareerMaturityScale(countedSeasonsCompleted);
-  const career = careerRatio == null ? last : wageRatioScale(careerRatio);
-  const proven = career > 0 ? 1 : 0.5;
-  return last * maturity * proven;
+  if (aggregateRatio == null) return last * last;
+  const aggregate = wageRatioScale(aggregateRatio);
+  if (aggregate <= 0) return last * 0.5;
+  return last * aggregate;
 }
 
 export function countedSeasonsCompleted(seasons: SeasonRecord[]): number {
@@ -578,7 +593,7 @@ export function weeklyWageForRatio(
   return roundWeeklyWage(top * wageRatioScale(ratio));
 }
 
-/** Incoming transfer / loan offer: last-season ratio of the listed 1.0 wage, then the 5-season discount. */
+/** Incoming transfer / loan offer: last-season × last-five aggregate of the listed 1.0 wage. */
 export function weeklyWageForTransferOffer(
   club: Club,
   marketValue: number,
@@ -586,12 +601,12 @@ export function weeklyWageForTransferOffer(
   countedSeasonsCompleted: number,
   status: SquadStatus,
   playingLeague?: string | null,
-  careerRatio?: number | null,
+  aggregateRatio?: number | null,
 ): number {
   const top = weeklyWageForSquadStatus(club, marketValue, status, playingLeague);
   if (status !== 'starter') return top;
   return roundWeeklyWage(
-    top * wageOfferScale(lastSeasonRatio, countedSeasonsCompleted, careerRatio),
+    top * wageOfferScale(lastSeasonRatio, countedSeasonsCompleted, aggregateRatio),
   );
 }
 

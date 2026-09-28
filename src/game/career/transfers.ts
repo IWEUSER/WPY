@@ -22,6 +22,7 @@ import {
   transferFeeFromValue,
   countedSeasonsCompleted,
   leagueAdjustedOfferRatio,
+  recentAggregateRatio,
   weeklyWageForClub,
   weeklyWageForRatio,
   weeklyWageForSquadStatus,
@@ -853,6 +854,8 @@ interface OfferTermExtras {
   playerRatio?: number;
   lastSeasonRatio?: number;
   countedSeasons?: number;
+  /** Goals/game across the last five counted seasons. */
+  aggregateRatio?: number;
   allowRisingStar?: boolean;
   originStatus?: SquadStatus;
   leagueGames?: number;
@@ -927,7 +930,7 @@ function offerTerms(
           extras?.countedSeasons ?? 0,
           'starter',
           club.league,
-          extras?.playerRatio,
+          extras?.aggregateRatio ?? extras?.playerRatio,
         ),
         contractYears: 1,
         squadStatus: 'starter' as const,
@@ -946,7 +949,7 @@ function offerTerms(
         extras?.countedSeasons ?? 0,
         status,
         club.league,
-        extras?.playerRatio,
+        extras?.aggregateRatio ?? extras?.playerRatio,
       ),
       contractYears: years,
       squadStatus: status,
@@ -1110,6 +1113,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     honoursClear,
     allowRisingStar,
   });
+  const seasonsDone = countedSeasonsCompleted(seasons);
   const stayOn = (extra: Partial<SeasonTransitionImmediate> = {}): SeasonTransitionImmediate => {
     const stay: SeasonTransitionImmediate = {
       clubId,
@@ -1124,7 +1128,15 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     if (stay.weeklyWage == null) {
       const nextStatus = stay.squadStatus ?? currentStatus;
       if (nextStatus === 'starter') {
-        const starterWage = weeklyWageForRatio(club, value, ratio, 'starter', nextLeague);
+        const starterWage = weeklyWageForTransferOffer(
+          club,
+          value,
+          ratio,
+          seasonsDone,
+          'starter',
+          nextLeague,
+          recentAggregateRatio(seasons),
+        );
         stay.weeklyWage = Math.max(params.weeklyWage ?? 0, starterWage);
       } else {
         stay.weeklyWage = params.weeklyWage;
@@ -1143,7 +1155,6 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
   const permYears = newContractYears(age);
   const loanYears = 1;
   const careerRatio = careerGames > 0 ? careerGoals / careerGames : ratio;
-  const seasonsDone = countedSeasonsCompleted(seasons);
   const internationalsPlayed = seasons.reduce(
     (n, s) => n + (s.international?.qualifyingGames ?? 0) + (s.international?.finalsGames ?? 0),
     0,
@@ -1175,6 +1186,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     playerRatio: careerGames > 0 ? careerGoals / careerGames : undefined,
     lastSeasonRatio: lastStanding,
     countedSeasons: seasonsDone,
+    aggregateRatio: recentAggregateRatio(seasons) ?? undefined,
     allowRisingStar,
     originStatus: currentStatus,
     leagueGames: leagueSample,
@@ -1208,7 +1220,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
           clubId: c.id,
           move: 'loan' as const,
           fee: 0,
-          weeklyWage: weeklyWageForTransferOffer(c, value, careerRatio, seasonsDone, 'starter', c.league),
+          weeklyWage: weeklyWageForTransferOffer(c, value, ratio, seasonsDone, 'starter', c.league, recentAggregateRatio(seasons)),
           contractYears: 1,
           squadStatus: 'starter' as const,
         })),
@@ -1543,8 +1555,8 @@ function attachCurrentClubRenewal(
   const seasonRatio = params.season.gamesPlayed > 0
     ? params.season.goals / params.season.gamesPlayed
     : undefined;
-  const seasonsDone = countedSeasonsCompleted([...(params.seasonHistory ?? []), params.season]);
-  const careerRatio = params.careerGames > 0 ? params.careerGoals / params.careerGames : 0;
+  const renewalSeasons = [...(params.seasonHistory ?? []), params.season];
+  const seasonsDone = countedSeasonsCompleted(renewalSeasons);
   const wage = weeklyWageForTransferOffer(
     club,
     value,
@@ -1552,7 +1564,7 @@ function attachCurrentClubRenewal(
     seasonsDone,
     stayStatus ?? params.squadStatus ?? 'starter',
     params.clubLeague,
-    careerRatio,
+    recentAggregateRatio(renewalSeasons),
   );
   const renewal = {
     clubId: club.id,
