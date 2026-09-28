@@ -14,7 +14,7 @@ import {
 import { assignClubTier, clubQualityLabel, CLUBS, clubsForSeason, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, leagueMatchWeeks, playableClubsGroupedByLeague, SECOND_DIVISIONS, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
 import { leagueDisplayName, playoffGamesFromOpening, playoffOpeningForPosition } from '../src/game/career/data/leagueFormat';
 import { confederationDisplayName } from '../src/game/career/data/displayNames';
-import { clubTransferBudget, consecutivePoorFactor, contractValueFactor, DEFAULT_CONTRACT_YEARS, ELITE_TRANSFER_VALUE_FLOOR, FIRST_CONTRACT_YEARS, firstTopFlightValueCap, formAdjustedRatio, isSeason1ValueLocked, leagueAdjustedOfferRatio, leagueValueWeight, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, MIN_ACCEPTED_FEE_RATIO, newContractYears, playerMarketValue, playerMarketValueFromSeasons, RESERVE_CONTRACT_YEARS, RESERVE_WAGE_FACTOR, RESERVE_WEEKLY_WAGE, seasonalSponsorship, tierForMarketValue, TOP_LEAGUES, transferFeeFromValue, wageCareerMaturityScale, wageOfferScale, weeklyWageForClub, weeklyWageForRatio, weeklyWageForSquadStatus, weeklyWageForTransferOffer, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
+import { clubTransferBudget, consecutivePoorFactor, contractValueFactor, DEFAULT_CONTRACT_YEARS, ELITE_TRANSFER_VALUE_FLOOR, FIRST_CONTRACT_YEARS, firstTopFlightValueCap, formAdjustedRatio, isSeason1ValueLocked, leagueAdjustedOfferRatio, leagueValueWeight, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, MIN_ACCEPTED_FEE_RATIO, newContractYears, playerMarketValue, playerMarketValueFromSeasons, recentAggregateRatio, RESERVE_CONTRACT_YEARS, RESERVE_WAGE_FACTOR, RESERVE_WEEKLY_WAGE, seasonalSponsorship, tierForMarketValue, TOP_LEAGUES, transferFeeFromValue, wageOfferScale, weeklyWageForClub, weeklyWageForRatio, weeklyWageForSquadStatus, weeklyWageForTransferOffer, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { nationKit } from '../src/game/career/data/nationColours';
 import { reserveStadium, resolveCareerStadium, resolveMatchStadium, trialStadium } from '../src/game/career/matchVenue';
@@ -1306,37 +1306,37 @@ if (irelandEngland < 32) {
   console.error('Ireland players should usually see two England trial options');
   process.exitCode = 1;
 }
-if (youthTierForNation(1, 'ghana') !== 3 || youthTierForNation(0.66, 'ghana') !== 4 || youthTierForNation(0.33, 'ghana') !== 5 || youthTierForNation(0, 'ghana') !== 5) {
-  console.error('nations outside the FIFA top 20 cannot earn Elite/Strong youth trials');
+if (youthTierForNation(6, 'ghana') !== 2 || youthTierForNation(4, 'ghana') !== 3 || youthTierForNation(3, 'ghana') !== 4 || youthTierForNation(2, 'ghana') !== 5 || youthTierForNation(0, 'ghana') !== 5) {
+  console.error('nations outside the FIFA top 10 cannot earn Elite youth trials');
   process.exitCode = 1;
 }
-if (tierForYouthGoals(7, 7, 'ghana') !== 3 || tierForYouthGoals(0, 7, 'ghana') !== 5 || !youthTrialsAreMlsOnly(0, 'ghana')) {
-  console.error('a blank youth campaign from outside the top 20 must stay lower-level and MLS-only');
+if (tierForYouthGoals(7, 7, 'ghana') !== 2 || tierForYouthGoals(0, 7, 'ghana') !== 5 || !youthTrialsAreMlsOnly(0, 'ghana')) {
+  console.error('a blank youth campaign from outside the top 10 must stay lower-level and MLS-only');
   process.exitCode = 1;
 }
-if (tierForYouthGoals(3, 4, 'spain') !== 1) {
-  console.error('top-20 nations keep the existing elite youth band');
+if (tierForYouthGoals(6, 7, 'spain') !== 1 || tierForYouthGoals(5, 7, 'spain') !== 2 || tierForYouthGoals(3, 7, 'spain') !== 4) {
+  console.error('top-10 nations need 6+ youth goals for Elite and 5 for Strong');
   process.exitCode = 1;
 }
-if (youthTierForNation(0.57, 'cameroon') !== 4 || trialDestinationCountries('cameroon').join() !== 'France') {
-  console.error('African youth 0.57 must trial at Medium French clubs, not Lower level');
+if (youthTierForNation(4, 'cameroon') !== 3 || trialDestinationCountries('cameroon').join() !== 'France') {
+  console.error('African youth 4 goals must trial at Mid-table French clubs');
   process.exitCode = 1;
 }
 {
-  const cameroonLooks = pickTrialClubs(4, 'cameroon', [], 3, { geographyNationId: 'cameroon', sameTierOnly: true });
+  const cameroonLooks = pickTrialClubs(3, 'cameroon', [], 3, { geographyNationId: 'cameroon', sameTierOnly: true });
   const japanLooks = offerClubsForTrial(5, 3, 'japan', 7);
   console.log(
-    'Cameroon 0.57 France',
+    'Cameroon 4 goals France',
     cameroonLooks.map((c) => `${c.id}:${c.country}:${c.tier}`),
-    'Japan 0.71',
+    'Japan 5 goals',
     japanLooks.map((c) => `${c.id}:${c.tier}`),
   );
   if (cameroonLooks.length === 0 || cameroonLooks.some((club) => club.country !== 'France')) {
     console.error('African youth trials must stay in France');
     process.exitCode = 1;
   }
-  if (tierForYouthGoals(5, 7, 'japan') < 2 || japanLooks.some((club) => club.tier === 1)) {
-    console.error('Japan 0.71 is ranking-capped Strong, not Elite');
+  if (tierForYouthGoals(5, 7, 'japan') !== 3 || japanLooks.some((club) => club.tier === 1)) {
+    console.error('Japan 5 youth goals are ranking-capped Mid-table, not Elite or Strong');
     process.exitCode = 1;
   }
   if (trialDestinationCountries('japan').length > 0 || trialDestinationCountries('australia').length > 0) {
@@ -1355,13 +1355,13 @@ if (SKIN_SWATCHES.length < 6 || HAIR_SWATCHES.length < 5) {
 
 console.log('\n--- U16 opening: youth goals map to club tiers ---');
 if (
-  tierForYouthGoals(3, 4) !== 1
-  || tierForYouthGoals(3, 3) !== 1
-  || tierForYouthGoals(2, 4) !== 3
-  || tierForYouthGoals(1, 4) !== 5
-  || tierForYouthGoals(0, 4) !== 5
+  tierForYouthGoals(6) !== 2
+  || tierForYouthGoals(4) !== 3
+  || tierForYouthGoals(3) !== 4
+  || tierForYouthGoals(2) !== 5
+  || tierForYouthGoals(0) !== 5
 ) {
-  console.error('3/4 (0.75) must be Elite; 2/4 Mid-table; 1/4 and blanks stay lower level');
+  console.error('without a top-10 nationality, 6+ youth goals are Strong, 4 Mid-table, 3 Medium, 2- Lower');
   process.exitCode = 1;
 }
 const chanceSum = CLUB_TRIAL_CHANCE_SPLIT.reduce((sum, n) => sum + n, 0);
@@ -1538,25 +1538,25 @@ if (path.qualified) {
   }
 }
 
-const assigned = assignOpeningTrialClub({ ...path, goals: 7, youthGoals: 7 }, 'germany');
+const assigned = assignOpeningTrialClub({ ...path, goals: 7, youthGoals: 7, gamesPlayed: 7 }, 'spain');
 if ((assigned.trialClubIds ?? []).length !== 3 || assigned.trialTier !== 1 || assigned.trialClubId) {
-  console.error('a 1.00 U16 ratio must offer three Elite clubs to choose from');
+  console.error('6+ U16 goals from a top-10 nation must offer three Elite clubs to choose from');
   process.exitCode = 1;
 }
 if ((assigned.trialClubIds ?? []).some((id) => getClub(id)?.tier !== 1)) {
-  console.error('every youth trial offer at 0.75+ must be Elite');
+  console.error('every youth trial offer at 6+ goals for a top-10 nation must be Elite');
   process.exitCode = 1;
 }
-const threeFromFour = assignOpeningTrialClub({ ...path, goals: 3, youthGoals: 3, gamesPlayed: 4 }, 'germany');
+const threeFromFour = assignOpeningTrialClub({ ...path, goals: 6, youthGoals: 6, gamesPlayed: 7 }, 'spain');
 if (threeFromFour.trialTier !== 1 || (threeFromFour.trialClubIds ?? []).length !== 3) {
-  console.error('3 goals in 4 U16 games (0.75) must offer three Elite trials');
+  console.error('6 goals in a U16 tournament must offer three Elite trials for Spain');
   process.exitCode = 1;
 }
 const staleLower = assignOpeningTrialClub({
   ...path,
-  goals: 3,
-  youthGoals: 3,
-  gamesPlayed: 4,
+  goals: 6,
+  youthGoals: 6,
+  gamesPlayed: 7,
   eliminated: true,
   trialTier: 5,
   trialClubId: 'luton',
@@ -1568,21 +1568,21 @@ if (
   || (staleLower.trialClubIds ?? []).length !== 3
   || (staleLower.trialClubIds ?? []).some((id) => getClub(id)?.tier !== 1)
 ) {
-  console.error('a stuck Lower-level 3/4 save must be repaired to three Elite trial buttons');
+  console.error('a stuck Lower-level 6-goal save must be repaired to three Elite trial buttons');
   process.exitCode = 1;
 }
 const repairedEngland = repairOpeningCampaign({
   ...path,
-  goals: 3,
-  youthGoals: 3,
-  gamesPlayed: 4,
+  goals: 6,
+  youthGoals: 6,
+  gamesPlayed: 7,
   eliminated: true,
   trialTier: 5,
   trialClubId: 'luton',
   trialClubIds: [],
 }, 'england');
 if (repairedEngland.trialTier !== 1 || (repairedEngland.trialClubIds ?? []).length !== 3) {
-  console.error('persist repair must refill Elite clubs for a 0.75 England youth finish');
+  console.error('persist repair must refill Elite clubs for a 6-goal England youth finish');
   process.exitCode = 1;
 }
 {
@@ -1593,9 +1593,9 @@ if (repairedEngland.trialTier !== 1 || (repairedEngland.trialClubIds ?? []).leng
     phase: 'opening-brief',
     openingCampaign: {
       ...path,
-      goals: 3,
-      youthGoals: 3,
-      gamesPlayed: 4,
+      goals: 6,
+      youthGoals: 6,
+      gamesPlayed: 7,
       eliminated: true,
       trialTier: 5,
       trialClubId: 'luton',
@@ -1605,7 +1605,7 @@ if (repairedEngland.trialTier !== 1 || (repairedEngland.trialClubIds ?? []).leng
   useCareerStore.getState().repairOpeningTrialPicker();
   const fixed = useCareerStore.getState().openingCampaign;
   if (fixed?.trialTier !== 1 || (fixed.trialClubIds ?? []).length !== 3) {
-    console.error('repairOpeningTrialPicker must unstick a 3/4 England brief with no buttons');
+    console.error('repairOpeningTrialPicker must unstick a 6-goal England brief with no buttons');
     process.exitCode = 1;
   }
   useCareerStore.getState().resetCareer();
@@ -2270,7 +2270,7 @@ if (barca && hilal && lafc) {
       ?? 0;
     const atlantaRenewal = (atlantaStay.pendingTransfer?.offers ?? []).find((o) => o.clubId === 'atlanta' && o.renewal);
     console.log('Atlanta S2 stay/renewal', atlantaStayWage, atlantaRenewal?.weeklyWage, atlantaStay.immediate?.squadStatus ?? atlantaStay.pendingTransfer?.stay?.squadStatus);
-    if (atlantaStayWage < 8_000) {
+    if (atlantaStayWage < 4_000) {
       console.error('an Atlanta starter stay-on must recompute listed pay, not keep €500');
       process.exitCode = 1;
     }
@@ -8411,37 +8411,51 @@ console.log('\n--- Call-up beats, transfer fees, 5-season wage discount ---');
   const madrid = getClub('real-madrid')!;
   const listed = weeklyWageForClub(madrid, 0);
   const atOne = weeklyWageForRatio(madrid, 0, 1, 'starter');
-  if (wageCareerMaturityScale(1) !== 0.5 || wageCareerMaturityScale(4) !== 0.8 || wageCareerMaturityScale(5) !== 1) {
-    console.error('full 1.0 starter money must wait until five counted seasons');
+  const lastTimesAgg = weeklyWageForTransferOffer(madrid, 0, 0.91, 7, 'starter', undefined, 0.56);
+  const gala = getClub('galatasaray')!;
+  const galaTop = weeklyWageForClub(gala, 0);
+  const galaOffer = weeklyWageForTransferOffer(gala, 0, 0.91, 7, 'starter', 'Super Lig', 0.56);
+  const expectedGala = Math.round((galaTop * 0.91 * 0.56) / 500) * 500;
+  console.log('wage last×agg 0.91×0.56', lastTimesAgg, 'Gala', galaOffer, 'Gala top', galaTop);
+  if (Math.abs(wageOfferScale(0.91, 7, 0.56) - 0.91 * 0.56) > 1e-9) {
+    console.error('offers must pay last-season ratio times the last-five aggregate');
     process.exitCode = 1;
   }
-  const year1 = weeklyWageForTransferOffer(madrid, 0, 1, 1, 'starter');
-  const year4 = weeklyWageForTransferOffer(madrid, 0, 1, 4, 'starter');
-  const year5 = weeklyWageForTransferOffer(madrid, 0, 1, 5, 'starter');
-  const year2at06 = weeklyWageForTransferOffer(madrid, 0, 0.6, 2, 'starter');
-  console.log('transfer wages 1.0 y1/y4/y5', year1, year4, year5, '0.6 y2', year2at06);
-  if (year1 !== Math.round((atOne * 0.5) / 500) * 500 || year4 !== Math.round((atOne * 0.8) / 500) * 500 || year5 !== atOne) {
-    console.error('a 1.0 career ratio must be discounted 50/40/30/20/0% across the first five seasons');
+  if (lastTimesAgg !== Math.round((listed * 0.91 * 0.56) / 500) * 500) {
+    console.error('a 0.91 last season and 0.56 aggregate must not pay 91% of Madrid’s listed top');
     process.exitCode = 1;
   }
-  if (year2at06 !== Math.round((listed * 0.6 * 0.6) / 500) * 500) {
-    console.error('transfer offers must use career ratio, then the season discount');
+  if (galaOffer !== expectedGala || galaOffer >= Math.round((galaTop * 0.91) / 500) * 500) {
+    console.error('Istanbul Gold must apply the 0.56 aggregate discount, not last-season only');
     process.exitCode = 1;
   }
   const unproven094 = weeklyWageForTransferOffer(madrid, 0, 0.94, 5, 'starter', undefined, 0);
   const hot094 = weeklyWageForTransferOffer(madrid, 0, 0.94, 5, 'starter', undefined, 0.94);
   const maxWage = weeklyWageForTransferOffer(madrid, 0, 1, 5, 'starter', undefined, 1);
-  console.log('Madrid wage 0.94/career 0 y5', unproven094, '0.94 proven', hot094, '1.0 y5', maxWage, 'listed', listed);
+  console.log('Madrid wage 0.94/career 0', unproven094, '0.94×0.94', hot094, '1.0×1.0', maxWage, 'listed', listed);
   if (unproven094 >= Math.round((listed * 0.94) / 500) * 500) {
     console.error('0.94 last season with a 0 career sample must not pay ~100% of Madrid’s listed wage');
     process.exitCode = 1;
   }
-  if (hot094 !== Math.round((listed * 0.94) / 500) * 500 || maxWage !== atOne) {
-    console.error('100% of the listed max is only for 1.0 last season and 1.0 after five seasons');
+  if (hot094 !== Math.round((listed * 0.94 * 0.94) / 500) * 500 || maxWage !== atOne) {
+    console.error('100% of the listed max is only for 1.0 last season and 1.0 last-five aggregate');
     process.exitCode = 1;
   }
   if (Math.abs(wageOfferScale(0.94, 5, 0) - 0.47) > 1e-9) {
-    console.error('unproven 0.94 after five seasons must be half of the last-season band');
+    console.error('unproven 0.94 must be half of the last-season band');
+    process.exitCode = 1;
+  }
+  const aggSeasons = [
+    { ...dummySeason, seasonNumber: 3, clubId: 'galatasaray', league: 'Super Lig', goals: 10, gamesPlayed: 30, role: 'first-team' as const },
+    { ...dummySeason, seasonNumber: 4, clubId: 'galatasaray', league: 'Super Lig', goals: 12, gamesPlayed: 32, role: 'first-team' as const },
+    { ...dummySeason, seasonNumber: 5, clubId: 'galatasaray', league: 'Super Lig', goals: 14, gamesPlayed: 34, role: 'first-team' as const },
+    { ...dummySeason, seasonNumber: 6, clubId: 'galatasaray', league: 'Super Lig', goals: 16, gamesPlayed: 34, role: 'first-team' as const },
+    { ...dummySeason, seasonNumber: 7, clubId: 'galatasaray', league: 'Super Lig', goals: 31, gamesPlayed: 34, role: 'first-team' as const },
+  ];
+  const agg = recentAggregateRatio(aggSeasons, 5);
+  console.log('five-season aggregate', agg);
+  if (agg == null || agg < 0.5 || agg > 0.6) {
+    console.error('last-five aggregate must be total goals over total games');
     process.exitCode = 1;
   }
 }
@@ -9257,12 +9271,14 @@ console.log('\n--- Concurrent career save slots ---');
   if (
     !united
     || !cityClub
-    || clubAllowedByLeagueSample(united, 14)
-    || !clubAllowedByLeagueSample(united, STRONG_OFFER_MIN_LEAGUE_GAMES)
+    || united.tier !== 1
+    || getClub('tottenham')?.tier !== 1
+    || clubAllowedByLeagueSample(united, 29)
+    || !clubAllowedByLeagueSample(united, ELITE_OFFER_MIN_LEAGUE_GAMES)
     || clubAllowedByLeagueSample(cityClub, 29)
     || !clubAllowedByLeagueSample(cityClub, ELITE_OFFER_MIN_LEAGUE_GAMES)
   ) {
-    console.error('Man United Strong bids open at 20 league games; Elite bids open at 30');
+    console.error('Man United and North London are Elite; bids open at 30 league games');
     process.exitCode = 1;
   }
 
