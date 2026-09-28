@@ -5522,8 +5522,8 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
   }
   const mlsEastCount = mlsClubs.filter((c) => c.conference === 'east').length;
   const mlsWestCount = mlsClubs.filter((c) => c.conference === 'west').length;
-  if (mlsEastCount !== 10 || mlsWestCount !== 10) {
-    console.error(`MLS season must be 10 East / 10 West, got ${mlsEastCount}/${mlsWestCount}`);
+  if (mlsEastCount !== 14 || mlsWestCount !== 14) {
+    console.error(`MLS season must be 14 East / 14 West, got ${mlsEastCount}/${mlsWestCount}`);
     process.exitCode = 1;
   }
   void east;
