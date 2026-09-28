@@ -62,7 +62,7 @@ export function describeSquadStatus(status: SquadStatus): string {
     return 'Rising star — temporary Season 1–2 role, one chance each time you play. Score in 3 consecutive games for Impact, then another 3 for Starter. Extra goals in one game still count as one.';
   }
   if (status === 'reserve') {
-    return 'Reserve — sits Champions League nights. In Europa League or lower, European ties come first and league games are the ones rotated. Every second other game. Score in 3 consecutive games for Starter, the same way as Rising star and Impact.';
+    return 'Reserve — sits European Cup nights. In the European Trophy or lower, continental ties come first and league games are the ones rotated. Every second other game. Score in 3 consecutive games for Starter, the same way as Rising star and Impact.';
   }
   return 'Impact — same games as Rising star, two chances each time you play. Keeps for the rest of the season; score in 3 consecutive games for Starter.';
 }

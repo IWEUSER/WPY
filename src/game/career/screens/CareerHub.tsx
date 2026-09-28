@@ -507,7 +507,7 @@ function StandingsCard({
     });
   } else if (sim?.leaguesCupStage && sim.leaguesCupStage !== 'not-entered') {
     competitions.push({
-      name: 'Leagues Cup',
+      name: CONTINENTAL_CUPS['leagues-cup'].name,
       stage: competitionStageLabel(sim.leaguesCupStage),
     });
   }
@@ -898,12 +898,12 @@ function SeasonCompetitions({ calendar }: { calendar: SeasonCalendar | null }) {
       )}
       {hasLeaguesCup && (
         <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/70">
-          Leagues Cup
+          {CONTINENTAL_CUPS['leagues-cup'].name}
         </span>
       )}
       {hasPlayoffs && (
         <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/70">
-          MLS Cup Playoffs
+          American League Playoffs
         </span>
       )}
       {superCupLabel && (

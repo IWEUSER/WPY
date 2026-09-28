@@ -267,7 +267,7 @@ const withUcl: LegacyCareerInput = {
 };
 assert(
   participatedLegacyBoards(withUcl).some(
-    (def) => def.id === 'club-tournament:season:arsenal' && def.subtitle === 'Single-season Champions League goals',
+    (def) => def.id === 'club-tournament:season:arsenal' && def.subtitle === 'Single-season European Cup goals',
   ),
   'club UCL season records live on the club-tournament board',
 );
@@ -294,8 +294,8 @@ const madridClubUcl = {
   id: 'club-tournament:season:real-madrid',
   domain: 'club' as const,
   span: 'season' as const,
-  title: 'Real Madrid',
-  subtitle: 'Single-season Champions League goals',
+  title: 'Madrid',
+  subtitle: 'Single-season European Cup goals',
   group: 'continental' as const,
   tone: 'season-club' as const,
 };
@@ -321,7 +321,7 @@ const nationBoards = participatedLegacyBoards(withCaps);
 assert(nationBoards.some((def) => def.id === 'nation-overall:england'), 'caps should unlock England overall');
 assert(nationBoards.some((def) => def.id.includes('world-cup')), 'World Cup finals should unlock that board');
 assert(
-  nationBoards.some((def) => def.id.includes('world-cup') && def.span === 'season' && def.subtitle === 'Single World Cup goals'),
+  nationBoards.some((def) => def.id.includes('world-cup') && def.span === 'season' && def.subtitle === 'Single World Championship goals'),
   'nation season records must name the tournament',
 );
 assert(!nationBoards.some((def) => def.id.includes('copa-america')), 'England must not show Copa América');
@@ -441,14 +441,14 @@ assert(
 );
 assert(franceWc.length >= 4, `11 France WC goals should unlock 4 boards, got ${franceWc.length}`);
 assert(
-  seasonTrophyList(franceSeason).includes('World Cup'),
+  seasonTrophyList(franceSeason).includes('World Championship'),
   'winning an international tournament must count as a trophy',
 );
 const franceSeasonHighlight = seasonLegacyHighlights(
   { seasons: [], nationalTeam: emptyTeam('france'), nationality: 'france' },
   franceInput,
   franceSeason,
-).find((item) => item.kind === 'season' && item.title.includes('World Cup'));
+).find((item) => item.kind === 'season' && item.title.includes('World Championship'));
 assert(franceSeasonHighlight?.domain === 'nation', 'international season records must be nation-domain');
 assert(recordBeat(franceSeasonHighlight!, 'Alex').portrait === 'nation', 'season international records show only the nation kit');
 assert(recordBeat({
@@ -470,7 +470,7 @@ assert(
 );
 assert(
   !seasonOutrightRecordHighlights({ seasons: [], nationalTeam: emptyTeam('france') }, franceInput, franceSeason)
-    .some((item) => item.title.includes('World Cup') && item.rank !== 1),
+    .some((item) => item.title.includes('World Championship') && item.rank !== 1),
   '11 World Cup goals is a top-10 inclusion, not an outright record beat',
 );
 

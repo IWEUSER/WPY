@@ -6,6 +6,8 @@
  * is never enough.
  */
 
+import { leagueDisplayName } from './data/leagueFormat';
+
 export const GOLDEN_BOOT_MIN_GOALS = 25;
 
 /** League goals that put you in the golden-boot conversation. Same in every league. */
@@ -42,15 +44,15 @@ export function evaluateTopGoalscorer(
   if (chance <= 0) {
     return {
       won: false,
-      reason: `${leagueGoals} league goal${leagueGoals === 1 ? '' : 's'} in ${league}.`,
+      reason: `${leagueGoals} league goal${leagueGoals === 1 ? '' : 's'} in ${leagueDisplayName(league)}.`,
     };
   }
   const won = rng() < chance;
   return {
     won,
     reason: won
-      ? `Won the ${league} golden boot with ${leagueGoals} league goals.`
-      : `${leagueGoals} league goals in ${league}, but another striker took the golden boot.`,
+      ? `Won the ${leagueDisplayName(league)} golden boot with ${leagueGoals} league goals.`
+      : `${leagueGoals} league goals in ${leagueDisplayName(league)}, but another striker took the golden boot.`,
   };
 }
 
@@ -85,14 +87,14 @@ export function evaluatePlayerOfTheYear(params: {
   if (chance <= 0) {
     return {
       won: false,
-      reason: `${leagueGoals} league goal${leagueGoals === 1 ? '' : 's'} in ${league}.`,
+      reason: `${leagueGoals} league goal${leagueGoals === 1 ? '' : 's'} in ${leagueDisplayName(league)}.`,
     };
   }
   const won = rng() < chance;
   return {
     won,
     reason: won
-      ? `Won ${league} Player of the Year with ${leagueGoals} league goals.`
-      : `${leagueGoals} league goals in ${league}, but another player took Player of the Year.`,
+      ? `Won ${leagueDisplayName(league)} Player of the Year with ${leagueGoals} league goals.`
+      : `${leagueGoals} league goals in ${leagueDisplayName(league)}, but another player took Player of the Year.`,
   };
 }

@@ -6,8 +6,9 @@ import type { InternationalSeasonRecord, SeasonRecord, TournamentSeasonOutcome }
 
 /** League title as shown on trophies and celebration screens. */
 export function leagueTrophyLabel(club: Club | undefined, league?: string | null): string {
-  if (league === 'MLS' || club?.league === 'MLS') return 'MLS Cup';
-  return league ?? club?.league ?? 'league';
+  const key = league ?? club?.league ?? null;
+  if (key === 'MLS' || club?.league === 'MLS') return 'American League Cup';
+  return leagueDisplayName(key) || 'league';
 }
 
 /** Competition titles won this season, in display order. */
@@ -55,7 +56,7 @@ export function awardLabels(season: SeasonRecord): string[] {
     labels.push(`${clubTournamentAwardName(season)} Player of the Tournament`);
   }
   if (season.continentalTopGoalscorer) {
-    labels.push('Champions League top goalscorer');
+    labels.push(`${CONTINENTAL_CUPS.ucl.name} top goalscorer`);
   }
   const intl = season.international;
   if (intl?.playerOfTheTournament && intl.tournament) {

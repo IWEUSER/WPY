@@ -1,3 +1,5 @@
+import { LEAGUE_DISPLAY_NAMES } from './displayNames';
+
 export type MlsConference = 'east' | 'west';
 
 export const MLS_EAST = new Set([
@@ -68,13 +70,12 @@ export function mlsConferenceOf(id: string): MlsConference | null {
 export function conferenceLabel(conference: MlsConference | null | undefined): string {
   if (conference === 'east') return 'Eastern Conference';
   if (conference === 'west') return 'Western Conference';
-  return 'MLS';
+  return 'American League';
 }
 
 export function leagueDisplayName(league: string | null | undefined): string {
-  if (league === 'Saudi Pro League') return 'Roshn Saudi League';
-  if (league === 'MLS') return 'MLS';
-  return league ?? '';
+  if (!league) return '';
+  return LEAGUE_DISPLAY_NAMES[league] ?? league;
 }
 
 export function isMlsLeague(league: string | null | undefined): boolean {

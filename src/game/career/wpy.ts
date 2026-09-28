@@ -95,7 +95,7 @@ export function evaluateWpy(context: WpySeasonContext, rng: () => number = Math.
   } = context;
 
   if (majorChampionPath(context)) {
-    const name = majorYear === 'world-cup' ? 'the World Cup' : 'the European Championship';
+    const name = majorYear === 'world-cup' ? 'the World Championship' : 'the European Nations Cup';
     return {
       won: true,
       reason: `Won ${name} with ${context.clubGoals} club goals and ${context.majorFinalsGoals} finals goals.`,
@@ -103,17 +103,17 @@ export function evaluateWpy(context: WpySeasonContext, rng: () => number = Math.
   }
 
   if (majorRunnerUpPath(context)) {
-    const name = majorYear === 'world-cup' ? 'World Cup' : 'European Championship';
+    const name = majorYear === 'world-cup' ? 'World Championship' : 'European Nations Cup';
     return {
       won: true,
-      reason: `${name} runner-up, tournament top goalscorer, and Champions League winner with ${context.clubGoals} club goals.`,
+      reason: `${name} runner-up, tournament top goalscorer, and European Cup winner with ${context.clubGoals} club goals.`,
     };
   }
 
   if (clubPath(context)) {
     return {
       won: true,
-      reason: `Won the Champions League and scored ${context.clubGoals} club goals.`,
+      reason: `Won the European Cup and scored ${context.clubGoals} club goals.`,
     };
   }
 

@@ -70,13 +70,13 @@ export default function SeasonSummaryScreen() {
   const honours: string[] = [];
   if (seasonSim?.honours.leagueChampion) {
     honours.push(
-      `Won ${clubLeague === 'MLS' || club.league === 'MLS' ? 'MLS Cup' : leagueDisplayName(clubLeague ?? club.league)}`,
+      `Won ${clubLeague === 'MLS' || club.league === 'MLS' ? 'American League Cup' : leagueDisplayName(clubLeague ?? club.league)}`,
     );
   }
   if (seasonSim?.honours.continentalChampion) {
     honours.push(`Won the ${CONTINENTAL_CUPS[seasonSim.honours.continentalChampion].name}`);
   }
-  if (seasonSim?.honours.superCup) honours.push('Won the Super Cup');
+  if (seasonSim?.honours.superCup) honours.push('Won the European Super Cup');
   if (seasonSim?.honours.domesticSuperCup) honours.push(`Won the ${seasonSim.honours.domesticSuperCup}`);
   if (seasonSim?.honours.internationalChampion) {
     honours.push(`Won the ${INTERNATIONAL_TOURNAMENTS[seasonSim.honours.internationalChampion].name}`);

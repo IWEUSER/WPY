@@ -1,4 +1,5 @@
 import { getClub, TIER_LABEL } from '../data/clubs';
+import { leagueDisplayName } from '../data/leagueFormat';
 import { FIRST_CONTRACT_YEARS, formatWeeklyWage, playerMarketValue, weeklyWageForSquadStatus } from '../playerValue';
 import { CLUB_TRIAL_GAMES, trialRatioRequired } from '../trial';
 import { openingSquadStatus } from '../squadStatus';
@@ -58,7 +59,7 @@ export default function ClubOfferScreen() {
             <div className="flex-1">
               <p className="font-bold">{offerClub.name}</p>
               <p className="text-xs text-white/50">
-                {offerClub.country} · {offerClub.league}
+                {offerClub.country} · {leagueDisplayName(offerClub.league)}
               </p>
               <p className="mt-1 text-xs text-white/70">
                 {FIRST_CONTRACT_YEARS}-year Rising star · {formatWeeklyWage(risingWage(offerClub))}

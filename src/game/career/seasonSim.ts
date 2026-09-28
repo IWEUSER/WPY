@@ -1868,14 +1868,14 @@ export function fixtureTitle(
   if (fixture.kind === 'league') return `League${vs}`;
   if (fixture.kind === 'leagues-cup') {
     const stage = fixture.leaguesCupStage === 'group' ? 'Group' : cupRoundLabel(fixture.leaguesCupStage === 'quarter-final' ? 'quarter-final' : fixture.leaguesCupStage === 'semi-final' ? 'semi-final' : 'final');
-    return `Leagues Cup ${stage}${vs}`;
+    return `${CONTINENTAL_CUPS['leagues-cup'].name} ${stage}${vs}`;
   }
   if (fixture.kind === 'playoff') {
     if (fixture.playoffRound === 'wild-card') return `Playoff wild card${vs}`;
     if (fixture.playoffRound === 'first-round') return `Playoff first round${vs}`;
     if (fixture.playoffRound === 'conference-semi') return `Conference semi-final${vs}`;
     if (fixture.playoffRound === 'conference-final') return `Conference final${vs}`;
-    if (fixture.playoffRound === 'mls-cup') return `MLS Cup${vs}`;
+    if (fixture.playoffRound === 'mls-cup') return `American League Cup${vs}`;
     return `Playoffs${vs}`;
   }
   if (fixture.kind === 'domestic-cup') {
@@ -1939,8 +1939,8 @@ export function trophyNameForFixture(
   if (fixture.kind === 'super-cup' && (fixture.superCupStage === 'final' || !fixture.superCupStage)) {
     return fixture.domesticSuperCupName ?? 'Super Cup';
   }
-  if (fixture.kind === 'leagues-cup' && fixture.leaguesCupStage === 'final') return 'Leagues Cup';
-  if (fixture.kind === 'playoff' && fixture.playoffRound === 'mls-cup') return 'MLS Cup';
+  if (fixture.kind === 'leagues-cup' && fixture.leaguesCupStage === 'final') return CONTINENTAL_CUPS['leagues-cup'].name;
+  if (fixture.kind === 'playoff' && fixture.playoffRound === 'mls-cup') return 'American League Cup';
   if (fixture.kind === 'domestic-cup' && fixture.domesticCupStage === 'final' && fixture.domesticCup) {
     return DOMESTIC_CUPS[fixture.domesticCup].name;
   }

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { getClub, TIER_LABEL } from '../data/clubs';
+import { leagueDisplayName } from '../data/leagueFormat';
 import { getNation } from '../international';
 import { useCareerStore } from '../store';
 import { CLUB_TRIAL_GAMES, trialGoalsNeeded, trialRatioRequired, TRIALS_AT_LEVEL, tierForYouthGoals } from '../trial';
@@ -97,13 +98,13 @@ export default function OpeningBriefScreen() {
             </p>
             <p className="mt-1 text-lg font-bold">{club.name}</p>
             <p className="text-xs text-white/50">
-              {club.country} · {club.league}
+              {club.country} · {leagueDisplayName(club.league)}
             </p>
             <span className="mt-2 inline-block rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/70">
               {TIER_LABEL[club.tier]}
             </span>
             <p className="mt-3 text-sm text-white/70">
-              Three games against {club.league} sides. Score at least {needed} goal
+              Three games against {leagueDisplayName(club.league)} sides. Score at least {needed} goal
               {needed === 1 ? '' : 's'} ({required.toFixed(2)} per game) to start Season 1 as a Rising star.
             </p>
             <p className="mt-3 text-sm font-semibold text-emerald-300">Trial at {club.name}</p>

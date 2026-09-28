@@ -7,6 +7,7 @@ import { FORM_WINDOW_GAMES, RETIREMENT_AGE, SEASON_LENGTH, STARTING_AGE } from '
 import { planSuperCup } from './continentalDraw';
 import { planDomesticSuperCup } from './domesticSuperCup';
 import { getClub, leagueMatchWeeks } from './data/clubs';
+import { migrateTrophyName, rewriteLicensedDisplayText } from './data/displayNames';
 import { CURRENT_RULES_STAMP, migratedRulesStamp, rebuildCurrentSeason } from './rulesStamp';
 import { clubContinentalCup, INTERNATIONAL_TOURNAMENTS, internationalCalendarSeason, isInternationalFinalsSeason, type ContinentalCupId } from './data/competitions';
 import { continentalQualificationForNextSeason } from './europeanQualification';
@@ -2522,7 +2523,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 40,
+      version: 41,
       migrate: (persisted) => {
         try {
           return migrateCareerPersist(persisted);
@@ -2534,6 +2535,30 @@ export const useCareerStore = create<CareerStore>()(
     },
   ),
 );
+
+function rewriteMaybe(value: string | null | undefined): string | null | undefined {
+  if (value == null) return value;
+  return rewriteLicensedDisplayText(value);
+}
+
+function migrateOpponentLabel(opponentId: string | undefined, fallback: string | undefined): string | undefined {
+  if (!opponentId) return fallback ? rewriteLicensedDisplayText(fallback) : fallback;
+  return getClub(opponentId)?.name ?? getNation(opponentId)?.name ?? (fallback ? rewriteLicensedDisplayText(fallback) : fallback);
+}
+
+function migrateCalendarDisplay(calendar: SeasonCalendar | null | undefined): SeasonCalendar | null {
+  if (!calendar) return null;
+  return {
+    ...calendar,
+    fixtures: calendar.fixtures.map((fixture) => ({
+      ...fixture,
+      opponentLabel: migrateOpponentLabel(fixture.opponentId, fixture.opponentLabel) ?? fixture.opponentLabel,
+      domesticSuperCupName: fixture.domesticSuperCupName
+        ? migrateTrophyName(fixture.domesticSuperCupName)
+        : fixture.domesticSuperCupName,
+    })),
+  };
+}
 
 function migrateCareerPersist(persisted: unknown): CareerState {
         const state = persisted as Partial<CareerState>;
@@ -2550,16 +2575,19 @@ function migrateCareerPersist(persisted: unknown): CareerState {
             ?? Math.max(0, (season.leagueGames ?? 0) + (season.cupGames ?? 0)),
           domesticGoals: season.domesticGoals ?? season.leagueGoals ?? season.goals,
           continentalStats: season.continentalStats ?? [],
-          trophies: season.trophies ?? [],
+          trophies: (season.trophies ?? []).map(migrateTrophyName),
           squadStatus: season.squadStatus ? normalizeSquadStatus(season.squadStatus, season.role) : season.squadStatus,
           topGoalscorer: season.topGoalscorer ?? false,
           playerOfTheYear: season.playerOfTheYear ?? false,
           wonWpy: season.wonWpy ?? false,
           clubPlayerOfTheTournament: season.clubPlayerOfTheTournament ?? false,
-          clubPlayerOfTheTournamentReason: season.clubPlayerOfTheTournamentReason ?? null,
+          clubPlayerOfTheTournamentReason: rewriteMaybe(season.clubPlayerOfTheTournamentReason) ?? null,
           continentalTopGoalscorer: season.continentalTopGoalscorer ?? false,
           sponsorship: season.sponsorship ?? 0,
           league: season.league,
+          topGoalscorerReason: rewriteMaybe(season.topGoalscorerReason) ?? season.topGoalscorerReason,
+          playerOfTheYearReason: rewriteMaybe(season.playerOfTheYearReason) ?? season.playerOfTheYearReason,
+          wpyReason: rewriteMaybe(season.wpyReason) ?? season.wpyReason,
           international: season.international
             ? {
                 ...season.international,
@@ -2638,9 +2666,8 @@ function migrateCareerPersist(persisted: unknown): CareerState {
           );
           migratedCalendar = repairUclFinalOpponent(migratedCalendar, migrateClub, migratedSim);
         }
-        return {
-          ...state,
-          openingCampaign: state.openingCampaign
+        migratedCalendar = migrateCalendarDisplay(migratedCalendar);
+        const openingRepaired = state.openingCampaign
             ? repairOpeningCampaign(
                 {
                   ...state.openingCampaign,
@@ -2652,6 +2679,16 @@ function migrateCareerPersist(persisted: unknown): CareerState {
                 },
                 state.nationality ?? null,
               )
+            : null;
+        return {
+          ...state,
+          openingCampaign: openingRepaired
+            ? {
+                ...openingRepaired,
+                youthName: openingRepaired.youthName
+                  ? rewriteLicensedDisplayText(openingRepaired.youthName)
+                  : openingRepaired.youthName,
+              }
             : null,
           careerStart: state.careerStart ?? null,
           nationality: state.nationality ?? null,
@@ -2678,12 +2715,35 @@ function migrateCareerPersist(persisted: unknown): CareerState {
                 group: state.intlQualifying.group,
               }
             : null,
-          seasonSim: repaired.sim ?? null,
+          seasonSim: repaired.sim
+            ? {
+                ...repaired.sim,
+                honours: {
+                  ...repaired.sim.honours,
+                  domesticSuperCup: repaired.sim.honours?.domesticSuperCup
+                    ? migrateTrophyName(repaired.sim.honours.domesticSuperCup)
+                    : repaired.sim.honours?.domesticSuperCup ?? null,
+                },
+              }
+            : null,
           liveMatch: state.liveMatch ?? null,
           formWindow: (state.seasonNumber ?? 1) < 2 ? [] : (state.formWindow ?? []),
-          wpyResult: state.wpyResult ?? null,
-          lastMatchSummary: state.lastMatchSummary ?? null,
-          lastMatchResult: state.lastMatchResult ?? null,
+          wpyResult: state.wpyResult
+            ? { ...state.wpyResult, reason: rewriteLicensedDisplayText(state.wpyResult.reason) }
+            : null,
+          lastMatchSummary: state.lastMatchSummary ? rewriteLicensedDisplayText(state.lastMatchSummary) : state.lastMatchSummary ?? null,
+          lastMatchResult: state.lastMatchResult
+            ? {
+                ...state.lastMatchResult,
+                summary: rewriteLicensedDisplayText(state.lastMatchResult.summary),
+                trophyName: state.lastMatchResult.trophyName
+                  ? migrateTrophyName(state.lastMatchResult.trophyName)
+                  : state.lastMatchResult.trophyName,
+                headline: rewriteMaybe(state.lastMatchResult.headline) ?? state.lastMatchResult.headline,
+                aggregateLine: rewriteMaybe(state.lastMatchResult.aggregateLine) ?? state.lastMatchResult.aggregateLine,
+                nextLine: rewriteMaybe(state.lastMatchResult.nextLine) ?? state.lastMatchResult.nextLine,
+              }
+            : null,
           weeklyWage: state.weeklyWage ?? 0,
           careerEarnings: state.careerEarnings ?? 0,
           contractYears:
@@ -2709,7 +2769,11 @@ function migrateCareerPersist(persisted: unknown): CareerState {
           careerSlotId: state.careerSlotId ?? null,
           legacyReturnPhase: state.legacyReturnPhase ?? null,
           profileReturnPhase: state.profileReturnPhase ?? null,
-          pendingBeats: state.pendingBeats ?? [],
+          pendingBeats: (state.pendingBeats ?? []).map((beat) => ({
+            ...beat,
+            headline: rewriteLicensedDisplayText(beat.headline),
+            copy: rewriteLicensedDisplayText(beat.copy),
+          })),
           seenBeatKinds: state.seenBeatKinds ?? [],
           guidedChanceSeen: state.guidedChanceSeen ?? false,
           squadStatus: (() => {
@@ -2726,11 +2790,13 @@ function migrateCareerPersist(persisted: unknown): CareerState {
             }
             return status;
           })(),
-          lastTransferRejection: state.lastTransferRejection ?? null,
+          lastTransferRejection: rewriteMaybe(state.lastTransferRejection) ?? null,
           rulesStamp: migratedRulesStamp(state),
           pendingTransfer: state.pendingTransfer
             ? {
                 ...state.pendingTransfer,
+                detail: rewriteLicensedDisplayText(state.pendingTransfer.detail),
+                rejectionDetail: rewriteMaybe(state.pendingTransfer.rejectionDetail) ?? state.pendingTransfer.rejectionDetail,
                 stay: state.pendingTransfer.stay
                   ? {
                       ...state.pendingTransfer.stay,

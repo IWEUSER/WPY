@@ -60,13 +60,13 @@ export function applyCareerLayoutPreview(): void {
       domesticGames: 42,
       domesticGoals: 26,
       continentalStats: [{ cup: 'ucl', games: 13, goals: 4 }],
-      trophies: ['La Liga', 'Copa del Rey', 'Champions League'],
+      trophies: ['Spanish League', 'Spanish Cup', 'European Cup'],
       topGoalscorer: true,
       playerOfTheYear: true,
       clubPlayerOfTheTournament: false,
-      clubPlayerOfTheTournamentReason: 'Won the Champions League but scored 0.31 goals per game in it.',
+      clubPlayerOfTheTournamentReason: 'Won the European Cup but scored 0.31 goals per game in it.',
       wonWpy: true,
-      wpyReason: 'Elite goal ratio plus winning the Champions League.',
+      wpyReason: 'Elite goal ratio plus winning the European Cup.',
       earnings: 7_280_000,
       sponsorship: 8_800_000,
       league: 'La Liga',
@@ -98,7 +98,7 @@ export function applyCareerLayoutPreview(): void {
       domesticGames: 40,
       domesticGoals: 22,
       continentalStats: [{ cup: 'super-cup', games: 1, goals: 1 }, { cup: 'ucl', games: 10, goals: 3 }],
-      trophies: ['La Liga', 'Super Cup'],
+      trophies: ['Spanish League', 'European Super Cup'],
       topGoalscorer: true,
       playerOfTheYear: false,
       wonWpy: false,
@@ -133,7 +133,7 @@ export function applyCareerLayoutPreview(): void {
       domesticGames: 48,
       domesticGoals: 21,
       continentalStats: [],
-      trophies: ['Championship'],
+      trophies: ['English Championship'],
       topGoalscorer: true,
       playerOfTheYear: true,
       wonWpy: false,
@@ -183,7 +183,7 @@ export function applyCareerLayoutPreview(): void {
       domesticGames: 36,
       domesticGoals: 17,
       continentalStats: [],
-      trophies: ['MLS Cup'],
+      trophies: ['American League Cup'],
       topGoalscorer: false,
       playerOfTheYear: false,
       wonWpy: false,
@@ -379,7 +379,7 @@ export function applyCareerLayoutPreview(): void {
     if (fx) {
       fx.kind = 'league';
       fx.opponentId = preview === 'match-local' ? 'getafe' : 'barcelona';
-      fx.opponentLabel = preview === 'match-local' ? 'Getafe' : 'Barcelona';
+      fx.opponentLabel = preview === 'match-local' ? 'Getafe' : 'Barcino';
       fx.isHome = wantHome;
       fx.playerChances = 2;
       if (preview === 'match-night') {
@@ -414,7 +414,7 @@ export function applyCareerLayoutPreview(): void {
       fx.kind = 'continental-knockout';
       fx.leg = 1;
       fx.opponentId = 'bayern';
-      fx.opponentLabel = 'Bayern Munich';
+      fx.opponentLabel = 'Munich';
       fx.isHome = true;
       fx.playerChances = 2;
       fx.continentalCup = 'ucl';
@@ -487,7 +487,7 @@ export function applyCareerLayoutPreview(): void {
     if (idx >= 0) {
       const fx = calendar.fixtures[idx];
       fx.opponentId = 'bayern';
-      fx.opponentLabel = 'Bayern Munich';
+      fx.opponentLabel = 'Munich';
       fx.isHome = false;
       fx.continentalCup = 'ucl';
       fx.playerChances = 2;
@@ -553,7 +553,7 @@ export function applyCareerLayoutPreview(): void {
     if (fx) {
       fx.kind = 'league';
       fx.opponentId = 'man-city';
-      fx.opponentLabel = 'Manchester City';
+      fx.opponentLabel = 'Manchester Civic';
       fx.isHome = true;
       fx.playerChances = 2;
     }
@@ -797,7 +797,7 @@ export function applyCareerLayoutPreview(): void {
       cupGoals: 0,
       domesticGames: 46,
       domesticGoals: 24,
-      trophies: n === 4 ? ['Championship'] : [],
+        trophies: n === 4 ? ['English Championship'] : [],
       topGoalscorer: n === 4,
       playerOfTheYear: false,
       wonWpy: false,
@@ -1102,7 +1102,7 @@ export function applyCareerLayoutPreview(): void {
             clubLeague: 'La Liga',
             squadStatus: 'starter',
           },
-          rejectionDetail: 'You agreed terms with Manchester City. Real Madrid rejected the €80m bid — they will not sell a starter to Manchester City on that fee.',
+          rejectionDetail: 'You agreed terms with Manchester Civic. Madrid rejected the €80m bid — they will not sell a starter to Manchester Civic on that fee.',
         }
       : preview === 'transfer'
       ? {
@@ -1400,7 +1400,7 @@ export function applyCareerLayoutPreview(): void {
               domesticGames: 48,
               domesticGoals: 21,
               continentalStats: [],
-              trophies: ['Championship'],
+              trophies: ['English Championship'],
               topGoalscorer: false,
               playerOfTheYear: true,
               clubPlayerOfTheTournament: false,
@@ -1459,7 +1459,7 @@ export function applyCareerLayoutPreview(): void {
       : isYouthNextPreview
       ? 'Spain won 2–0 · 1 goal from 1 chance'
       : preview === 'hub-ucl-leg2'
-      ? 'Won 1–0 vs Bayern Munich · 1 goal from 2 chances · Aggregate 1–0 · second leg to come · Next: Bayern Munich · Away · Champions League quarter-final 2nd leg · 1–0 up from the first leg'
+      ? 'Won 1–0 vs Munich · 1 goal from 2 chances · Aggregate 1–0 · second leg to come · Next: Munich · Away · European Cup quarter-final 2nd leg · 1–0 up from the first leg'
       : preview === 'result-pens'
       ? 'Spain drew 1–1 vs France (won 5–4 on penalties) · through to the quarter-finals · 1 goal from 2 chances'
       : 'Spain won 2–0 vs Italy · 2 goals from 2 chances',
@@ -1481,8 +1481,8 @@ export function applyCareerLayoutPreview(): void {
         }
       : preview === 'hub-ucl-leg2'
       ? {
-          summary: 'Won 1–0 vs Bayern Munich · 1 goal from 2 chances · Aggregate 1–0 · second leg to come · Next: Bayern Munich · Away · Champions League quarter-final 2nd leg · 1–0 up from the first leg',
-          headline: 'Won 1–0 vs Bayern Munich',
+          summary: 'Won 1–0 vs Munich · 1 goal from 2 chances · Aggregate 1–0 · second leg to come · Next: Munich · Away · European Cup quarter-final 2nd leg · 1–0 up from the first leg',
+          headline: 'Won 1–0 vs Munich',
           isFinal: false,
           won: true,
           trophyName: null,
@@ -1490,7 +1490,7 @@ export function applyCareerLayoutPreview(): void {
           playerGoals: 1,
           chances: 2,
           aggregateLine: 'Aggregate 1–0 · second leg to come',
-          nextLine: 'Next: Bayern Munich · Away · Champions League quarter-final 2nd leg · 1–0 up from the first leg',
+          nextLine: 'Next: Munich · Away · European Cup quarter-final 2nd leg · 1–0 up from the first leg',
         }
       : preview === 'copa-final'
       ? {
@@ -1523,7 +1523,7 @@ export function applyCareerLayoutPreview(): void {
           headline: 'Spain won 2–0 vs Italy',
           isFinal: preview === 'result',
           won: true,
-          trophyName: preview === 'result' ? 'European Championship' : null,
+          trophyName: preview === 'result' ? 'European Nations Cup' : null,
           afterPhase: preview === 'result' ? 'season-summary' : 'hub',
           playerGoals: 2,
           chances: 2,
@@ -1548,7 +1548,7 @@ export function applyCareerLayoutPreview(): void {
           ? 'impact'
           : 'starter',
     lastTransferRejection: preview === 'transfer-reject'
-      ? 'You agreed terms with Manchester City. Real Madrid rejected the €80m bid — they will not sell a starter to Manchester City on that fee.'
+      ? 'You agreed terms with Manchester Civic. Madrid rejected the €80m bid — they will not sell a starter to Manchester Civic on that fee.'
       : null,
     rulesStamp: preview === 'rebuild' ? 'old-save' : CURRENT_RULES_STAMP,
     wpyResult: preview === 's1-summary' || preview === 'loan-summary'
@@ -1560,18 +1560,18 @@ export function applyCareerLayoutPreview(): void {
       preview === 'beat-cap'
         ? [firstCapBeat('Spain')]
         : preview === 'beat-tournament'
-          ? [tournamentCallUpBeat('Spain', 'World Cup')]
+          ? [tournamentCallUpBeat('Spain', 'World Championship')]
         : preview === 'beat-title'
-          ? [firstTitleBeat('La Liga')]
+          ? [firstTitleBeat('Spanish League')]
           : preview === 'beat-title-nation'
-            ? [firstTitleBeat('European Championship')]
+            ? [firstTitleBeat('European Nations Cup')]
             : preview === 'beat-league'
-              ? [titleBeat('Premier League')]
+              ? [titleBeat('English League')]
           : preview === 'beat-sold'
-            ? [soldBeat('Real Madrid')]
+            ? [soldBeat('Madrid')]
             : preview === 'beat-record'
               ? [recordBeat({
-                title: 'La Liga season',
+                title: 'Spanish League season',
                 subtitle: 'Goals in a single league season',
                 rankLabel: '1st',
                 rank: 1,
@@ -1581,7 +1581,7 @@ export function applyCareerLayoutPreview(): void {
                 group: 'league',
               }, 'Alex Rivera')]
               : preview === 'beat-award'
-                ? [awardBeat('League top goalscorer', 'Alex Rivera', 'Won the La Liga golden boot with 24 league goals.')]
+                ? [awardBeat('League top goalscorer', 'Alex Rivera', 'Won the Spanish League golden boot with 24 league goals.')]
               : preview === 'beat-retire'
                 ? [retirementBeat('Alex Rivera', 'Inter Miami')]
                 : [],

@@ -107,7 +107,7 @@ export function leagueEligibleForNationalTeam(league: string | null | undefined,
 
 export function callUpLeagueRequirement(nationId: string): string {
   const rank = fifaRank(nationId);
-  if (rank <= 20) return 'the Premier League, La Liga, Serie A, Bundesliga or Ligue 1';
+  if (rank <= 20) return 'the English League, Spanish League, Italian League, German League or French League';
   return 'a top division';
 }
 

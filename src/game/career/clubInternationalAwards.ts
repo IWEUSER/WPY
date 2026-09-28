@@ -1,4 +1,4 @@
-import type { ContinentalCupId } from './data/competitions';
+import { CONTINENTAL_CUPS, type ContinentalCupId } from './data/competitions';
 import type { ContinentalSeasonStat, SeasonRecord } from './types';
 
 /** Goals per continental game required, on top of winning the tournament. */
@@ -34,7 +34,7 @@ export function evaluateClubPlayerOfTheTournament(params: {
   if (ucl.goals >= CL_POT_GOALS_WITHOUT_TITLE) {
     return {
       won: true,
-      reason: `Scored ${ucl.goals} Champions League goals.`,
+      reason: `Scored ${ucl.goals} ${CONTINENTAL_CUPS.ucl.name} goals.`,
     };
   }
   const cup = params.continentalChampion ?? null;

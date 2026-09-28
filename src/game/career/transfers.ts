@@ -1,4 +1,5 @@
 import { CLUBS, clubsInCountry, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, promotionTarget, SECOND_DIVISIONS, secondDivisionOf, TIER_LABEL, type Club, type ClubTier } from './data/clubs';
+import { leagueDisplayName } from './data/leagueFormat';
 import { countryForNationality, pickClubsBiasedToCountry, nearbyTierClubs, tierPool } from './clubOffers';
 import { trialDestinationCountries } from './trialGeography';
 import { selectionRatioForNation } from './international';
@@ -1255,8 +1256,8 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
 
   if (promoted) {
     return parallelTransfers(
-      `${club.name} have been promoted to the ${nextLeague}!`,
-      `Finished ${params.leaguePosition}${params.leaguePosition === 1 ? 'st' : 'nd'} in ${currentLeague}. Stay and play in the ${nextLeague} next season.`,
+      `${club.name} have been promoted to the ${leagueDisplayName(nextLeague)}!`,
+      `Finished ${params.leaguePosition}${params.leaguePosition === 1 ? 'st' : 'nd'} in ${leagueDisplayName(currentLeague)}. Stay and play in the ${leagueDisplayName(nextLeague)} next season.`,
       stayOn({
         weeklyWage: weeklyWageForRatio(club, value, ratio, nextIfStay, nextLeague),
       }),

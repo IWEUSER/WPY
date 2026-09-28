@@ -12,7 +12,7 @@ import {
   meanChancesFromStrength,
 } from '../src/game/career/chanceEngine';
 import { assignClubTier, clubQualityLabel, CLUBS, clubsForSeason, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, leagueMatchWeeks, playableClubsGroupedByLeague, SECOND_DIVISIONS, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
-import { playoffGamesFromOpening, playoffOpeningForPosition } from '../src/game/career/data/leagueFormat';
+import { leagueDisplayName, playoffGamesFromOpening, playoffOpeningForPosition } from '../src/game/career/data/leagueFormat';
 import { clubTransferBudget, consecutivePoorFactor, contractValueFactor, DEFAULT_CONTRACT_YEARS, ELITE_TRANSFER_VALUE_FLOOR, FIRST_CONTRACT_YEARS, firstTopFlightValueCap, formAdjustedRatio, isSeason1ValueLocked, leagueValueWeight, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, MIN_ACCEPTED_FEE_RATIO, newContractYears, playerMarketValue, playerMarketValueFromSeasons, RESERVE_CONTRACT_YEARS, RESERVE_WAGE_FACTOR, RESERVE_WEEKLY_WAGE, seasonalSponsorship, tierForMarketValue, TOP_LEAGUES, transferFeeFromValue, wageCareerMaturityScale, weeklyWageForClub, weeklyWageForRatio, weeklyWageForSquadStatus, weeklyWageForTransferOffer, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { nationKit } from '../src/game/career/data/nationColours';
@@ -567,7 +567,7 @@ if (madrid) {
     const resolved = resolveFixture(simState, firstQualifier, madrid, 1);
     simState = resolved.sim;
     console.log('first qualifier summary', resolved.summary);
-    if (!resolved.summary.includes('Spain') || resolved.summary.includes('Real Madrid')) {
+    if (!resolved.summary.includes('Spain') || resolved.summary.includes(madrid.name)) {
       console.error('qualifier result must be Spain vs a country, not the club');
       process.exitCode = 1;
     }
@@ -578,6 +578,15 @@ console.log('\n--- FIFA nations ---');
 console.log(`nations: ${NATIONS.length} (expect 211)`);
 if (NATIONS.length !== 211) {
   console.error(`expected 211 FIFA nations, got ${NATIONS.length}`);
+  process.exitCode = 1;
+}
+if (
+  leagueDisplayName('Premier League') !== 'English League'
+  || getClub('man-city')?.name !== 'Manchester Civic'
+  || getClub('real-madrid')?.name !== 'Madrid'
+  || getClub('barcelona')?.name !== 'Barcino'
+) {
+  console.error('club and league labels must use store-safe display names');
   process.exitCode = 1;
 }
 
@@ -1074,7 +1083,7 @@ if (madridClub) {
     wonCup: false,
     previousLeague: 'La Liga',
   });
-  if (!shield.include || shield.name !== 'Supercopa de España') {
+  if (!shield.include || shield.name !== 'Spanish Super Cup') {
     console.error('La Liga title winners must play the Supercopa de España');
     process.exitCode = 1;
   }
@@ -1087,7 +1096,7 @@ if (madridClub) {
     domesticSuperCupName: shield.name,
     domesticSuperCupOpponentId: shield.opponentId,
   });
-  if (!withShield.calendar.fixtures.some((f) => f.domesticSuperCup && f.domesticSuperCupName === 'Supercopa de España')) {
+  if (!withShield.calendar.fixtures.some((f) => f.domesticSuperCup && f.domesticSuperCupName === 'Spanish Super Cup')) {
     console.error('domestic super cups must be scheduled at the start of the next season');
     process.exitCode = 1;
   }
@@ -1338,7 +1347,7 @@ const fixedRng = (() => {
 })();
 const youth = createYouthCampaign('spain', fixedRng);
 console.log('U16 opener', youth.youthName, 'group', youth.groupOpponents, 'fixtures', youth.calendar.fixtures.length);
-if (youth.youthName !== 'UEFA Youth Championship' || youth.calendar.fixtures.length !== 3) {
+if (youth.youthName !== 'European Youth Championship' || youth.calendar.fixtures.length !== 3) {
   console.error('Spain must open in the UEFA Youth Championship group of three matches');
   process.exitCode = 1;
 }
@@ -2709,7 +2718,7 @@ if (barca && hilal && lafc) {
     console.error('a Europa League reserve must play every European night and sit league games instead');
     process.exitCode = 1;
   }
-  if (!/Champions League/.test(describeSquadStatus('reserve')) || !/Europa/.test(describeSquadStatus('reserve'))) {
+  if (!/European Cup/.test(describeSquadStatus('reserve')) || !/European Trophy/.test(describeSquadStatus('reserve'))) {
     console.error('reserve copy must mention sitting Champions League and prioritising Europa');
     process.exitCode = 1;
   }
@@ -2902,7 +2911,7 @@ if (barca && hilal && lafc) {
     console.error('elite-to-elite short-fee bids can be vetoed; a move down a level, a forced sale, or last year must go through');
     process.exitCode = 1;
   }
-  if (!/rejected/i.test(starterVeto.detail) || !/Manchester City/i.test(starterVeto.detail)) {
+  if (!/rejected/i.test(starterVeto.detail) || !/Manchester Civic/i.test(starterVeto.detail)) {
     console.error('a rejected bid must tell the player they agreed terms and the club blocked the fee');
     process.exitCode = 1;
   }
@@ -5932,20 +5941,20 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     console.error('market value must ignore a 2-game hot start and stay on completed seasons');
     process.exitCode = 1;
   }
-  if (seasonLeagueLabel({ ...dummySeason, clubId: 'leicester', league: 'Premier League' }) !== 'Premier League') {
+  if (seasonLeagueLabel({ ...dummySeason, clubId: 'leicester', league: 'Premier League' }) !== 'English League') {
     console.error('career cards must show the league the club played after promotion');
     process.exitCode = 1;
   }
   const trophyTally = careerTrophyCounts([
-    { ...dummySeason, trophies: ['La Liga', 'Copa del Rey'] },
-    { ...dummySeason, trophies: ['La Liga'] },
+    { ...dummySeason, trophies: ['Spanish League', 'Spanish Cup'] },
+    { ...dummySeason, trophies: ['Spanish League'] },
   ]);
   const awardTally = careerAwardCounts([
     { ...dummySeason, topGoalscorer: true, playerOfTheYear: true, wonWpy: true },
     { ...dummySeason, topGoalscorer: true, playerOfTheYear: false, wonWpy: false },
   ]);
   console.log('trophy counts', trophyTally, 'award counts', awardTally, formatGamesGoals(2, 0));
-  if (trophyTally.find((t) => t.name === 'La Liga')?.count !== 2 || trophyTally.find((t) => t.name === 'Copa del Rey')?.count !== 1) {
+  if (trophyTally.find((t) => t.name === 'Spanish League')?.count !== 2 || trophyTally.find((t) => t.name === 'Spanish Cup')?.count !== 1) {
     console.error('career trophies must count how many times each title was won');
     process.exitCode = 1;
   }
@@ -5961,9 +5970,9 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     ...dummySeason,
     clubPlayerOfTheTournament: true,
     continentalChampion: 'ucl',
-    trophies: ['Champions League'],
+    trophies: ['European Cup'],
   });
-  if (!namedClubPot.includes('Champions League Player of the Tournament')) {
+  if (!namedClubPot.includes('European Cup Player of the Tournament')) {
     console.error('club tournament player of the tournament must name the cup');
     process.exitCode = 1;
   }
@@ -7192,7 +7201,7 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
   const cruyff = groundForClub('ajax');
   const rams = groundForClub('galatasaray');
   console.log('PT/NL/TR grounds', luz.name, luz.tiers, dragao.tiers, cruyff.tiers, rams.tiers);
-  if (luz.tiers !== 3 || luz.capacity < 60_000 || luz.name !== 'Estádio da Luz') {
+  if (luz.tiers !== 3 || luz.capacity < 60_000 || luz.name !== 'Lisbon Stadium') {
     console.error('Benfica must play in a three-deck Estádio da Luz');
     process.exitCode = 1;
   }
@@ -7342,10 +7351,10 @@ console.log('\n--- Kits, cup nights, FA Cup semis, sun, World Cup copy, African 
   );
   const wcKoTitle = fixtureTitle(
     { week: 34, kind: 'international', isDecisive: false, internationalRound: 'round-of-16', opponentLabel: 'Brazil' },
-    { tournamentName: 'World Cup' },
+    { tournamentName: 'World Championship' },
   );
   console.log('WC titles', wcTitle, wcKoTitle);
-  if (!wcTitle.includes('World Cup') || !wcKoTitle.includes('World Cup')) {
+  if (!wcTitle.includes('World Championship') || !wcKoTitle.includes('World Championship')) {
     console.error('Play Next Match must mention World Cup during the tournament');
     process.exitCode = 1;
   }
@@ -7478,9 +7487,9 @@ console.log('\n--- Kits, cup nights, FA Cup semis, sun, World Cup copy, African 
   }
 
   const uclTitle = fixtureTitle(
-    { week: 12, kind: 'continental-group', isDecisive: false, continentalCup: 'ucl', opponentLabel: 'Bayern Munich' },
+    { week: 12, kind: 'continental-group', isDecisive: false, continentalCup: 'ucl', opponentLabel: 'Munich' },
   );
-  if (!uclTitle.includes('Champions League')) {
+  if (!uclTitle.includes('European Cup')) {
     console.error('continental fixtures must include the tournament name');
     process.exitCode = 1;
   }
@@ -7635,13 +7644,13 @@ console.log('\n--- Club cups, paced tables, transfers, injuries, and elite score
       leg: 2,
       europeanRound: 'quarter-final',
       opponentId: 'bayern',
-      opponentLabel: 'Bayern Munich',
+      opponentLabel: 'Munich',
       isHome: false,
     },
     { knockoutAggFor: 1, knockoutAggAgainst: 0 } as ReturnType<typeof hydrateSeason>['sim'],
   );
   if (
-    qf2Brief.opponent !== 'Bayern Munich'
+    qf2Brief.opponent !== 'Munich'
     || qf2Brief.venue !== 'Away'
     || !qf2Brief.competition.toLowerCase().includes('quarter-final')
     || qf2Brief.stake !== firstLegStakeLine(1, 0)
@@ -7665,7 +7674,7 @@ console.log('\n--- Club cups, paced tables, transfers, injuries, and elite score
       knockoutAggFor: 0,
       knockoutAggAgainst: 0,
     };
-    const leg1Fx = { ...qf1, opponentId: 'bayern', opponentLabel: 'Bayern Munich', isHome: true };
+    const leg1Fx = { ...qf1, opponentId: 'bayern', opponentLabel: 'Munich', isHome: true };
     const resolved = resolveFixture(simBefore, leg1Fx, madrid, 1, () => 0.2);
     const aggLine = resolved.aggregateLine ?? continentalAggregateLine(leg1Fx, simBefore, resolved.result);
     if (!aggLine || !aggLine.includes('Aggregate') || !aggLine.includes('second leg to come')) {
@@ -7673,10 +7682,10 @@ console.log('\n--- Club cups, paced tables, transfers, injuries, and elite score
       process.exitCode = 1;
     }
     const nextLine = formatNextLine(
-      { ...qf2, opponentId: 'bayern', opponentLabel: 'Bayern Munich', isHome: false },
+      { ...qf2, opponentId: 'bayern', opponentLabel: 'Munich', isHome: false },
       resolved.sim,
     );
-    if (!nextLine.includes('Bayern Munich') || !nextLine.includes('2nd leg') || !(nextLine.includes('from the first leg') || nextLine.includes('after the first leg'))) {
+    if (!nextLine.includes('Munich') || !nextLine.includes('2nd leg') || !(nextLine.includes('from the first leg') || nextLine.includes('after the first leg'))) {
       console.error('after a continental first leg, next must name the 2nd-leg opponent and the running score');
       process.exitCode = 1;
     }
@@ -8423,7 +8432,7 @@ console.log('\n--- CONMEBOL WCQ, UCL play-offs, cups, WPY, super cups ---');
       topGoalscorer: false,
     },
   });
-  if (!awards.includes('Champions League top goalscorer') || !awards.includes('African Player of the Year')) {
+  if (!awards.includes('European Cup top goalscorer') || !awards.includes('African Player of the Year')) {
     console.error('career awards must list Champions League top goalscorer and African Player of the Year');
     process.exitCode = 1;
   }
@@ -8433,11 +8442,11 @@ console.log('\n--- CONMEBOL WCQ, UCL play-offs, cups, WPY, super cups ---');
   }
 
   const bothSuper = trophyLabels(
-    { leagueChampion: false, continentalChampion: null, superCup: true, domesticSuperCup: 'Supercopa de España', internationalChampion: null, domesticCup: null },
+    { leagueChampion: false, continentalChampion: null, superCup: true, domesticSuperCup: 'Spanish Super Cup', internationalChampion: null, domesticCup: null },
     getClub('real-madrid'),
     'La Liga',
   );
-  if (!bothSuper.includes('Supercopa de España') || !bothSuper.includes('European Super Cup')) {
+  if (!bothSuper.includes('Spanish Super Cup') || !bothSuper.includes('European Super Cup')) {
     console.error('club and European Super Cups must both appear when won');
     process.exitCode = 1;
   }
@@ -8511,7 +8520,7 @@ console.log('\n--- Concurrent career save slots ---');
     console.error('loading a saved career must restore that season');
     process.exitCode = 1;
   }
-  if (!careerSlotLabel(second).includes('Manchester City') || !careerSlotLabel(first).includes('Season 3')) {
+  if (!careerSlotLabel(second).includes('Manchester Civic') || !careerSlotLabel(first).includes('Season 3')) {
     console.error('saved careers must name the club and season');
     process.exitCode = 1;
   }

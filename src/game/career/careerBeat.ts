@@ -1,5 +1,6 @@
 import type { SeasonLegacyHighlight } from './legacyRecords';
 import { INTERNATIONAL_TOURNAMENTS } from './data/competitions';
+import { migrateTrophyName } from './data/displayNames';
 import { awardLabels, leagueTrophyLabel } from './honoursDisplay';
 import type { Club } from './data/clubs';
 import type { SeasonHonours } from './seasonSim';
@@ -22,7 +23,8 @@ const INTERNATIONAL_TROPHY_NAMES = new Set(
 /** Club cups and leagues use the club kit; World Cup / Euro / Copa use the nation kit. */
 export function portraitForTrophyName(trophyName: string | null | undefined): 'club' | 'nation' {
   if (!trophyName) return 'club';
-  return INTERNATIONAL_TROPHY_NAMES.has(trophyName) ? 'nation' : 'club';
+  const migrated = migrateTrophyName(trophyName);
+  return INTERNATIONAL_TROPHY_NAMES.has(trophyName) || INTERNATIONAL_TROPHY_NAMES.has(migrated) ? 'nation' : 'club';
 }
 
 export function firstCapBeat(nationName: string): CareerBeat {
@@ -82,7 +84,7 @@ export function recordBeat(highlight: SeasonLegacyHighlight, playerName: string)
   };
 }
 
-const NATION_AWARD = /World Cup|European Championship|Copa América|Gold Cup|Africa Cup|Asian Cup|Nations Cup|Nations League/i;
+const NATION_AWARD = /World Championship|World Cup|European Nations Cup|European Championship|South American Championship|Copa Am[eé]rica|North American Championship|Gold Cup|African Championship|Africa Cup|Asian Championship|Asian Cup|Oceania Championship|Nations Cup|Nations League/i;
 
 export function awardBeat(awardName: string, playerName: string, reason?: string | null): CareerBeat {
   const world = /World Player/i.test(awardName);

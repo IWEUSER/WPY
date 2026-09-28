@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { clubQualityLabel, getClub } from '../data/clubs';
+import { leagueDisplayName } from '../data/leagueFormat';
 import { formatEuros, formatWeeklyWage } from '../playerValue';
 import { defaultSquadStatus, squadStatusOnArrival, SQUAD_STATUS_LABEL } from '../squadStatus';
 import { useCareerStore } from '../store';
@@ -50,7 +51,7 @@ function OfferCard({
       <div className="min-w-0 flex-1">
         <p className={`font-bold ${compact ? 'text-sm leading-tight' : ''}`}>{club.name}</p>
         <p className="text-[11px] text-white/50">
-          {club.country} · {club.league}
+          {club.country} · {leagueDisplayName(club.league)}
         </p>
         <p className={`mt-1 text-white/70 ${compact ? 'text-[11px] leading-snug' : 'text-xs'}`}>
           {offer.move === 'loan' ? 'Loan' : offer.fee <= 0 ? 'Free' : `Fee ${formatEuros(offer.fee)}`}
@@ -179,7 +180,7 @@ export default function TransferChoiceScreen() {
               <div className="min-w-0 flex-1">
                 <p className="font-bold">{stayClub.name}</p>
                 <p className="text-[11px] text-white/50">
-                  {stayClub.country} · {stayClub.league}
+                  {stayClub.country} · {leagueDisplayName(stayClub.league)}
                 </p>
                 <p className="mt-1 text-xs text-white/70">
                   {renewalOffer && stayYears != null
