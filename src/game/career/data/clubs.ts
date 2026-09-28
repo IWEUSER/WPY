@@ -27,13 +27,12 @@ export const TIER_LABEL: Record<ClubTier, string> = {
 };
 
 /**
- * Transfer-card band. Second-division clubs never share a top-flight
- * Medium/Strong label — Leicester is English Championship top, Palace is Medium.
+ * Transfer-card band. Second-division clubs sit below first-division
+ * Medium — Leicester is English Championship, Palace is Medium.
  */
 export function clubQualityLabel(club: { tier: ClubTier; league: string }): string {
   if (SECOND_DIVISIONS.has(club.league)) {
-    const short = leagueDisplayName(club.league);
-    return club.tier <= 4 ? `${short} top` : short;
+    return leagueDisplayName(club.league);
   }
   return TIER_LABEL[club.tier];
 }
@@ -78,7 +77,7 @@ export const MLS_SEASON_CLUBS = 20;
 export function leagueTierFloor(country: string, league: string): ClubTier {
   if (league === 'MLS' || country === 'United States') return 3;
   if (country === 'Saudi Arabia' || league === 'Saudi Pro League') return 2;
-  if (SECOND_DIVISIONS.has(league)) return 4;
+  if (SECOND_DIVISIONS.has(league)) return 5;
   return 1;
 }
 

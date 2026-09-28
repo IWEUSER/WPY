@@ -3,7 +3,7 @@ import type { Confederation, InternationalTournamentId } from './data/competitio
 import { clubsInCountry, SECOND_DIVISIONS, type ClubTier } from './data/clubs';
 import { fifaRank } from './data/fifaRankings';
 import { NATIONS, getNation, type Nation } from './data/nations';
-import { TOP_LEAGUES } from './playerValue';
+import { SEMI_EURO_LEAGUES, TOP_LEAGUES } from './playerValue';
 import type { AvailabilityState, InternationalSeasonRecord, SeasonRecord, SquadStatus } from './types';
 
 export type { Nation };
@@ -94,20 +94,29 @@ export const TOP_NATION_SELECTION_RATIO = 0.66;
 
 /**
  * Call-ups follow the league, not the club. Second divisions are never
- * selected. Top-20 nations also need a big-five league — a 0.66 ratio at
- * Benfica or Ajax is not enough for Spain.
+ * selected. Top-20 nations take any big-five top-division club, or a
+ * Strong club in Holland, Portugal, or Turkey.
  */
-export function leagueEligibleForNationalTeam(league: string | null | undefined, nationId?: string | null): boolean {
+export function leagueEligibleForNationalTeam(
+  league: string | null | undefined,
+  nationId?: string | null,
+  clubTier?: ClubTier | null,
+): boolean {
   if (!league) return false;
   if (SECOND_DIVISIONS.has(league)) return false;
   const rank = nationId ? fifaRank(nationId) : 99;
-  if (rank <= 20) return TOP_LEAGUES.has(league);
+  if (rank <= 20) {
+    if (TOP_LEAGUES.has(league)) return true;
+    return SEMI_EURO_LEAGUES.has(league) && clubTier != null && clubTier <= 2;
+  }
   return true;
 }
 
 export function callUpLeagueRequirement(nationId: string): string {
   const rank = fifaRank(nationId);
-  if (rank <= 20) return 'the English League, Spanish League, Italian League, German League or French League';
+  if (rank <= 20) {
+    return 'a top-division English, Spanish, Italian, German or French club, or a strong club in the Dutch League, Portuguese League or Turkish League';
+  }
   return 'a top division';
 }
 
@@ -141,7 +150,7 @@ export function clubEligibleForNationalTeam(
   nationId?: string | null,
   league?: string | null,
 ): boolean {
-  if (league) return leagueEligibleForNationalTeam(league, nationId);
+  if (league) return leagueEligibleForNationalTeam(league, nationId, clubTier);
   return clubTier <= maxClubTierForNation(nationId);
 }
 
@@ -173,7 +182,8 @@ export function playerHasBeenCapped(params: {
  * Call-up uses the ratio passed in (career until this season has a real
  * sample, then this season). Only first-team starters are called.
  * League decides eligibility, not the club: second divisions are out,
- * and top nations need a big-five league. The 20-league-game wait is
+ * and top nations need a big-five club or a Strong Dutch/Portuguese/
+ * Turkish side. The 20-league-game wait is
  * only for the first-ever cap and counts appearances across seasons
  * (19 last year plus 1 this year is enough). Re-check the ratio before
  * every window.

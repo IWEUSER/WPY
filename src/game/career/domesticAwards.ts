@@ -28,11 +28,12 @@ export interface AwardResult {
 }
 
 /**
- * 25 → 20%, then +8% for every extra league goal, capped at 99%.
+ * Same table in every league. 25 → 20%, then +16% for every extra
+ * league goal, so 30 goals is a 99% golden boot.
  */
 export function goldenBootWinChance(leagueGoals: number, _target?: number, _league?: string): number {
   if (leagueGoals < GOLDEN_BOOT_MIN_GOALS) return 0;
-  return Math.min(0.99, 0.2 + (leagueGoals - GOLDEN_BOOT_MIN_GOALS) * 0.08);
+  return Math.min(0.99, 0.2 + (leagueGoals - GOLDEN_BOOT_MIN_GOALS) * 0.16);
 }
 
 export function evaluateTopGoalscorer(

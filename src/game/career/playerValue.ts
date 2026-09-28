@@ -13,6 +13,7 @@ const ANCHOR_STRENGTH = 91;
 const ANCHOR_RATIO = 0.9;
 
 export const TOP_LEAGUES = new Set(['Premier League', 'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1']);
+export const SEMI_EURO_LEAGUES = new Set(['Primeira Liga', 'Eredivisie', 'Super Lig']);
 
 /**
  * How much a league's goals-per-game counts toward market value.
@@ -20,6 +21,7 @@ export const TOP_LEAGUES = new Set(['Premier League', 'La Liga', 'Serie A', 'Bun
  */
 export function leagueValueWeight(league: string): number {
   if (TOP_LEAGUES.has(league)) return 1;
+  if (SEMI_EURO_LEAGUES.has(league)) return 0.55;
   if (league === 'Saudi Pro League') return 0.2;
   if (SECOND_DIVISIONS.has(league)) return 0.4;
   if (league === 'Liga MX') return 0.32;
@@ -33,7 +35,7 @@ export function leagueValueWeight(league: string): number {
  */
 export function leagueOfferWeight(league: string): number {
   if (TOP_LEAGUES.has(league)) return 1;
-  if (league === 'Primeira Liga' || league === 'Eredivisie') return 0.72;
+  if (SEMI_EURO_LEAGUES.has(league) && league !== 'Super Lig') return 0.72;
   if (league === 'Super Lig') return 0.62;
   if (league === 'Saudi Pro League') return 0.7;
   if (league === 'Liga MX') return 0.58;
@@ -143,7 +145,7 @@ export function clubTransferBudget(club: Club): number {
   if (SAUDI_GIANT_IDS.has(club.id)) return 180_000_000;
   const league = club.league;
   if (league === 'MLS') return club.tier <= 3 ? 12_000_000 : 6_000_000;
-  if (league === 'Eredivisie' || league === 'Primeira Liga' || league === 'Super Lig') {
+  if (SEMI_EURO_LEAGUES.has(league)) {
     if (club.tier <= 2) return 22_000_000;
     if (club.tier === 3) return 10_000_000;
     if (club.tier === 4) return 5_000_000;
@@ -152,8 +154,8 @@ export function clubTransferBudget(club: Club): number {
   if (league === 'Liga MX') return club.tier <= 3 ? 10_000_000 : 4_000_000;
   if (league === 'Saudi Pro League') return club.tier <= 2 ? 70_000_000 : 12_000_000;
   if (SECOND_DIVISIONS.has(league)) {
-    if (league === 'Championship') return club.tier === 4 ? 12_000_000 : 5_000_000;
-    return club.tier === 4 ? 5_000_000 : 2_000_000;
+    if (league === 'Championship') return 12_000_000;
+    return 5_000_000;
   }
   if (league === 'Premier League') {
     if (club.tier === 1) return 130_000_000;
@@ -287,9 +289,14 @@ export function youngTopFlightSeasonFloor(params: {
   let best = 0;
   for (const season of params.seasons) {
     if (!countsTowardCareerRecord(season.seasonNumber, season.role)) continue;
-    if (!TOP_LEAGUES.has(seasonLeague(season))) continue;
-    if (season.goals < 6) continue;
-    const raw = (6_000_000 + season.goals * 1_400_000) * ageValueFactor(params.age);
+    const league = seasonLeague(season);
+    const top = TOP_LEAGUES.has(league);
+    const semi = SEMI_EURO_LEAGUES.has(league);
+    if (!top && !semi) continue;
+    if (season.goals < (top ? 6 : 10)) continue;
+    const raw = (top
+      ? 6_000_000 + season.goals * 1_400_000
+      : 5_000_000 + season.goals * 800_000) * ageValueFactor(params.age);
     best = Math.max(best, raw);
   }
   if (best <= 0) return 0;
