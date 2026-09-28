@@ -150,6 +150,8 @@ const CLUB_SEED: Club[] = [
   // England - Premier League
   { id: 'man-city', name: 'Manchester Civic', country: 'England', league: 'Premier League', tier: 1, strength: 94, color: '#6CABDD', reserveGoalRatio: 0.65, firstTeamGoalRatio: 0.5 },
   { id: 'liverpool', name: 'Merseyside', country: 'England', league: 'Premier League', tier: 1, strength: 93, color: '#C8102E', reserveGoalRatio: 0.65, firstTeamGoalRatio: 0.5 },
+  { id: 'man-united', name: 'Manchester North', country: 'England', league: 'Premier League', tier: 1, strength: 88, color: '#DA291C', reserveGoalRatio: 0.65, firstTeamGoalRatio: 0.5 },
+  { id: 'tottenham', name: 'North London', country: 'England', league: 'Premier League', tier: 1, strength: 88, color: '#132257', reserveGoalRatio: 0.65, firstTeamGoalRatio: 0.5 },
   { id: 'arsenal', name: 'Northbank', country: 'England', league: 'Premier League', tier: 2, strength: 88, color: '#EF0107', reserveGoalRatio: 0.55, firstTeamGoalRatio: 0.42 },
   { id: 'chelsea', name: 'West London', country: 'England', league: 'Premier League', tier: 2, strength: 84, color: '#034694', reserveGoalRatio: 0.55, firstTeamGoalRatio: 0.42 },
   { id: 'newcastle', name: 'Tyneside', country: 'England', league: 'Premier League', tier: 3, strength: 79, color: '#241F20', reserveGoalRatio: 0.45, firstTeamGoalRatio: 0.35 },
@@ -227,8 +229,6 @@ const CLUB_SEED: Club[] = [
   { id: 'portland', name: 'Portland', country: 'United States', league: 'MLS', tier: 4, strength: 65, color: '#004812', reserveGoalRatio: 0.35, firstTeamGoalRatio: 0.28 },
   { id: 'chicago', name: 'Chicago', country: 'United States', league: 'MLS', tier: 4, strength: 61, color: '#AF2626', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
 
-  { id: 'tottenham', name: 'North London', country: 'England', league: 'Premier League', tier: 2, strength: 84, color: '#132257', reserveGoalRatio: 0.55, firstTeamGoalRatio: 0.42 },
-  { id: 'man-united', name: 'Manchester North', country: 'England', league: 'Premier League', tier: 2, strength: 82, color: '#DA291C', reserveGoalRatio: 0.55, firstTeamGoalRatio: 0.42 },
   { id: 'brighton', name: 'Brighton', country: 'England', league: 'Premier League', tier: 3, strength: 74, color: '#0057B8', reserveGoalRatio: 0.45, firstTeamGoalRatio: 0.35 },
   { id: 'west-ham', name: 'East London', country: 'England', league: 'Premier League', tier: 4, strength: 71, color: '#7A263A', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
   { id: 'brentford', name: 'West Thames', country: 'England', league: 'Premier League', tier: 4, strength: 70, color: '#E30613', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
