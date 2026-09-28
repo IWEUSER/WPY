@@ -37,6 +37,8 @@ export interface MatchRecord {
   matchNumber: number;
   played: boolean;
   scored: boolean | null;
+  /** Scoring looks this match. 0 means a blank cannot count toward a drop. */
+  chances?: number;
 }
 
 export type ContinentalStatKey = ContinentalCupId | 'super-cup' | 'domestic-super-cup';

@@ -373,10 +373,11 @@ export function samplePenaltyKeeperCommit(rng: RandomSource = defaultRandom): -1
 }
 
 /**
- * Penalty save chance after the keeper has already committed. A wrong-way
- * dive or a standing keeper facing a corner is almost always beaten; a
- * centre shot is usually a goal because keepers dive a side more often
- * than they stay.
+ * Penalty save chance after the keeper has already committed. Historic
+ * on-target conversion is about 80%: a wrong-way dive or a standing
+ * keeper facing a corner is almost always beaten; guessing the right
+ * side is still only a modest save chance, not an open-play one.
+ * A planted keeper facing a centre shot is the exception.
  */
 export function penaltySaveChanceForAim(
   aim: AimPoint,
@@ -388,10 +389,12 @@ export function penaltySaveChanceForAim(
   const guessed = commit === side;
   if (commit === 0) {
     if (side === 0) return clamp(saveChanceForAim(aim, power, curl), 0.82, 0.96);
-    return 0.1;
+    return 0.08;
   }
-  if (side === 0 || !guessed) return 0.1;
-  return saveChanceForAim(aim, power, curl);
+  if (side === 0 || !guessed) return 0.08;
+  const open = saveChanceForAim(aim, power, curl);
+  const t = clamp((open - 0.06) / 0.90, 0, 1);
+  return lerp(0.16, 0.38, t);
 }
 
 /** True only for the three geometric-centre columns (1-based squares 7, 8, 9). */

@@ -148,8 +148,15 @@ export function clubEligibleForNationalTeam(
 /** Public Season 1 has no international call-ups until after this week. */
 export const SEASON_1_CALL_UP_MIN_WEEK = 20;
 
-/** League appearances this season before a nation will make a first call-up. */
+/** League appearances across seasons before a nation will make a first call-up. */
 export const CALL_UP_MIN_LEAGUE_GAMES = 20;
+
+/** First-cap wait uses every league appearance, not only the current season. */
+export function careerLeagueAppearances(
+  seasons: Array<{ leagueGames?: number } | null | undefined> | null | undefined,
+): number {
+  return (seasons ?? []).reduce((n, season) => n + (season?.leagueGames ?? 0), 0);
+}
 
 export function playerHasBeenCapped(params: {
   caps?: number | null;
@@ -167,7 +174,9 @@ export function playerHasBeenCapped(params: {
  * sample, then this season). Only first-team starters are called.
  * League decides eligibility, not the club: second divisions are out,
  * and top nations need a big-five league. The 20-league-game wait is
- * only for the first-ever cap. Re-check the ratio before every window.
+ * only for the first-ever cap and counts appearances across seasons
+ * (19 last year plus 1 this year is enough). Re-check the ratio before
+ * every window.
  */
 export function isSelectedForNationalTeam(params: {
   clubTier: ClubTier;

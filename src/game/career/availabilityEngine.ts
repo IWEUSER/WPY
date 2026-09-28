@@ -37,8 +37,18 @@ export function serveBannedGame(state: AvailabilityState): AvailabilityState {
   return { ...state, bannedGamesRemaining: Math.max(0, state.bannedGamesRemaining - 1) };
 }
 
+/** A match with no scoring look cannot start or continue a drop window. */
+export function matchCountsTowardDrop(chances?: number | null): boolean {
+  return (chances ?? 1) > 0;
+}
+
 /** Applies the outcome of a game the player actually played in. */
-export function applyMatchResult(state: AvailabilityState, scored: boolean): AvailabilityState {
+export function applyMatchResult(
+  state: AvailabilityState,
+  scored: boolean,
+  chances = 1,
+): AvailabilityState {
+  if (!matchCountsTowardDrop(chances)) return state;
   if (scored) return createAvailability();
 
   const windowFails = state.windowFails + 1;

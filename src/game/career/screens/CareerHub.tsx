@@ -15,7 +15,7 @@ import {
   squadRoleRatioGuide,
 } from '../squadStatus';
 import { displaySeasonLabel, displaySeasonNumber } from '../seasonDisplay';
-import { clubEligibleForNationalTeam, callUpLeagueRequirement, CALL_UP_MIN_LEAGUE_GAMES, callUpRatio, getNation, isSelectedForNationalTeam, SEASON_1_CALL_UP_MIN_WEEK, selectionRatioForNation } from '../international';
+import { clubEligibleForNationalTeam, callUpLeagueRequirement, CALL_UP_MIN_LEAGUE_GAMES, callUpRatio, careerLeagueAppearances, getNation, isSelectedForNationalTeam, SEASON_1_CALL_UP_MIN_WEEK, selectionRatioForNation } from '../international';
 import { formatEuros, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
 import { rankLeagueTable, type SeasonStandings } from '../matchEngine';
 import { conferenceTable, ensureInternationalGroup, fixtureTitle, internationalRoundLabel, nextActionableFixture, type SeasonSimState } from '../seasonSim';
@@ -90,6 +90,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const played = season.gamesPlayed;
   const goals = season.goals;
   const ratio = played > 0 ? goals / played : 0;
+  const careerLeagueGames = careerLeagueAppearances([...seasonHistory, season]);
   const onLoan = role === 'loan';
   const threshold = requiredGoalRatio(role, club, parentClub);
   const ratioProgress = Math.min(1, threshold > 0 ? ratio / threshold : 0);
@@ -350,7 +351,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
             league={clubLeague ?? club.league}
             careerRatio={callUpRatio({ season, careerGoals, careerGames })}
             careerToDateRatio={careerGames > 0 ? careerGoals / careerGames : 0}
-            leagueGames={season.leagueGames ?? 0}
+            leagueGames={careerLeagueGames}
             lastSeasonRatio={
               seasonHistory.length > 0 && seasonHistory[seasonHistory.length - 1]!.gamesPlayed > 0
                 ? seasonHistory[seasonHistory.length - 1]!.goals / seasonHistory[seasonHistory.length - 1]!.gamesPlayed
@@ -419,7 +420,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
                     ? seasonHistory[seasonHistory.length - 1]!.goals / seasonHistory[seasonHistory.length - 1]!.gamesPlayed
                     : null
                 }
-                leagueGames={season.leagueGames ?? 0}
+                leagueGames={careerLeagueGames}
                 sim={seasonSimWithGroup}
                 caps={nationalTeam?.caps ?? 0}
                 intlGoals={nationalTeam?.goals ?? 0}
@@ -815,6 +816,9 @@ function InternationalCard({
   return (
     <div className={DATA_CARD}>
       <p className="text-xs uppercase tracking-wide text-white/40">{nationName} {tournamentName ? `· ${tournamentName}` : 'call-up'}</p>
+      <p className="mt-1 text-xs text-white/55">
+        {nationName} need {bar.toFixed(2)} goals/game for a call-up
+      </p>
       <p className={`mt-1 text-sm font-semibold ${inForm ? 'text-emerald-300' : 'text-white/80'}`}>
         {statusLine}
       </p>

@@ -27,8 +27,27 @@ export function leagueValueWeight(league: string): number {
   return 0.3;
 }
 
+/**
+ * How much a league's goals-per-game counts toward transfer-offer bands.
+ * A 0.81 in the Saudi League is not treated like a 0.81 at Madrid.
+ */
+export function leagueOfferWeight(league: string): number {
+  if (TOP_LEAGUES.has(league)) return 1;
+  if (league === 'Primeira Liga' || league === 'Eredivisie') return 0.72;
+  if (league === 'Super Lig') return 0.62;
+  if (league === 'Saudi Pro League') return 0.7;
+  if (league === 'Liga MX') return 0.58;
+  if (league === 'MLS') return 0.52;
+  if (SECOND_DIVISIONS.has(league)) return 0.65;
+  return 0.55;
+}
+
 export function leagueAdjustedRatio(ratio: number, league: string): number {
   return ratio * leagueValueWeight(league);
+}
+
+export function leagueAdjustedOfferRatio(ratio: number, league: string): number {
+  return ratio * leagueOfferWeight(league);
 }
 
 /**
@@ -515,6 +534,24 @@ export function wageCareerMaturityScale(countedSeasonsCompleted: number): number
   return 0.5;
 }
 
+/**
+ * Listed max wage is the 1.0 rate. Offers pay last-season ratio of that
+ * band, then the 5-season discount. 100% of the listed maximum needs a
+ * 1.0 previous season and five counted seasons. A last-season spike with
+ * no career sample is not a proven 1.0 wage.
+ */
+export function wageOfferScale(
+  lastSeasonRatio: number | null | undefined,
+  countedSeasonsCompleted: number,
+  careerRatio?: number | null,
+): number {
+  const last = wageRatioScale(lastSeasonRatio);
+  const maturity = wageCareerMaturityScale(countedSeasonsCompleted);
+  const career = careerRatio == null ? last : wageRatioScale(careerRatio);
+  const proven = career > 0 ? 1 : 0.5;
+  return last * maturity * proven;
+}
+
 export function countedSeasonsCompleted(seasons: SeasonRecord[]): number {
   return seasons.filter((season) => countsTowardCareerRecord(season.seasonNumber, season.role)).length;
 }
@@ -532,19 +569,20 @@ export function weeklyWageForRatio(
   return roundWeeklyWage(top * wageRatioScale(ratio));
 }
 
-/** Incoming transfer / loan offer: career ratio of the listed 1.0 wage, then the 5-season discount. */
+/** Incoming transfer / loan offer: last-season ratio of the listed 1.0 wage, then the 5-season discount. */
 export function weeklyWageForTransferOffer(
   club: Club,
   marketValue: number,
-  careerRatio: number | null | undefined,
+  lastSeasonRatio: number | null | undefined,
   countedSeasonsCompleted: number,
   status: SquadStatus,
   playingLeague?: string | null,
+  careerRatio?: number | null,
 ): number {
   const top = weeklyWageForSquadStatus(club, marketValue, status, playingLeague);
   if (status !== 'starter') return top;
   return roundWeeklyWage(
-    top * wageRatioScale(careerRatio) * wageCareerMaturityScale(countedSeasonsCompleted),
+    top * wageOfferScale(lastSeasonRatio, countedSeasonsCompleted, careerRatio),
   );
 }
 

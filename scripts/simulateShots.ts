@@ -637,6 +637,8 @@ console.log('\n--- Penalty keeper can dive the wrong way or stay central ---');
     process.exitCode = 1;
   }
 
+  let onTarget = 0;
+  let onTargetGoals = 0;
   for (let i = 0; i < PEN_N; i++) {
     const g = gestureFor((Math.random() * 2 - 1) * 0.95, 0.15 + Math.random() * 0.8, 0.6 + Math.random() * 0.8);
     const pen = resolveShot(g, { penalty: true });
@@ -645,6 +647,10 @@ console.log('\n--- Penalty keeper can dive the wrong way or stay central ---');
     if (pen.penaltyCommit === 0) stay += 1;
     else if (side !== 0 && pen.penaltyCommit !== side) wrong += 1;
     else right += 1;
+    if (pen.outcome === 'goal' || pen.outcome === 'saved') {
+      onTarget += 1;
+      if (pen.outcome === 'goal') onTargetGoals += 1;
+    }
     if (Math.abs(pen.aim.x) < 0.18 && (pen.outcome === 'goal' || pen.outcome === 'saved')) {
       centerOnTarget += 1;
       if (pen.outcome === 'goal') centerGoals += 1;
@@ -661,8 +667,9 @@ console.log('\n--- Penalty keeper can dive the wrong way or stay central ---');
   const centerRate = centerOnTarget > 0 ? centerGoals / centerOnTarget : 0;
   const openCenterRate = openCenterOnTarget > 0 ? openCenterGoals / openCenterOnTarget : 0;
   const cornerRate = cornerOnTarget > 0 ? cornerGoals / cornerOnTarget : 0;
+  const onTargetRate = onTarget > 0 ? onTargetGoals / onTarget : 0;
   console.log(`penalty dives stay=${stay} wrong-way=${wrong} with-ball=${right}`);
-  console.log(`on-target conversion center pen=${centerRate.toFixed(3)} open=${openCenterRate.toFixed(3)} corner pen=${cornerRate.toFixed(3)}`);
+  console.log(`on-target conversion center pen=${centerRate.toFixed(3)} open=${openCenterRate.toFixed(3)} corner pen=${cornerRate.toFixed(3)} overall=${onTargetRate.toFixed(3)}`);
   if (stay < 400 || wrong < 400) {
     console.error('FAIL: penalties must sometimes stand in the middle or dive the wrong way');
     process.exitCode = 1;
@@ -671,13 +678,22 @@ console.log('\n--- Penalty keeper can dive the wrong way or stay central ---');
     console.error('FAIL: centre penalties must convert much more often than open-play centre shots');
     process.exitCode = 1;
   }
+  if (onTargetRate < 0.74 || onTargetRate > 0.88) {
+    console.error('FAIL: on-target penalties should score around 80%');
+    process.exitCode = 1;
+  }
   const stayVsCorner = penaltySaveChanceForAim({ x: 0.85, y: 0.85 }, 0);
   const wrongVsCorner = penaltySaveChanceForAim({ x: 0.85, y: 0.85 }, -1);
   const rightVsCenter = penaltySaveChanceForAim({ x: 0, y: 0.45 }, 1);
   const stayVsCenter = penaltySaveChanceForAim({ x: 0, y: 0.45 }, 0);
-  console.log(`save chance stay-corner=${stayVsCorner} wrong-corner=${wrongVsCorner} dive-center=${rightVsCenter} stay-center=${stayVsCenter.toFixed(2)}`);
+  const guessedRightCorner = penaltySaveChanceForAim({ x: 0.85, y: 0.85 }, 1);
+  console.log(`save chance stay-corner=${stayVsCorner} wrong-corner=${wrongVsCorner} dive-center=${rightVsCenter} stay-center=${stayVsCenter.toFixed(2)} guessed-corner=${guessedRightCorner.toFixed(2)}`);
   if (stayVsCorner > 0.15 || wrongVsCorner > 0.15 || rightVsCenter > 0.15 || stayVsCenter < 0.8) {
     console.error('FAIL: penalty save chances must punish a wrong guess and reward staying for a centre shot');
+    process.exitCode = 1;
+  }
+  if (guessedRightCorner > 0.42) {
+    console.error('FAIL: guessing the right way on a penalty must not use open-play save rates');
     process.exitCode = 1;
   }
   if (saveChanceForAim({ x: 0, y: 0.45 }) < 0.7) {

@@ -108,8 +108,10 @@ export function shouldSitToughFixture(status: SquadStatus, completedFixtures: nu
   return completedFixtures % 3 !== 0;
 }
 
-/** Rising star gets one look; Impact gets two; others keep the drawn chances. */
+/** Rising star gets one look; Impact gets two; others keep the drawn chances.
+ * A fixture that drew zero looks stays at zero for every role. */
 export function chancesForSquadStatus(status: SquadStatus, drawn: number): number {
+  if (drawn <= 0) return 0;
   if (status === 'rising-star') return 1;
   if (status === 'impact') return IMPACT_CHANCES;
   return drawn;
@@ -165,13 +167,19 @@ export function isSquadRotationSitOut(
   return shouldSitLeagueFixture(squadStatus, completedFixtures);
 }
 
-/** Trailing played matches that scored. Sit-outs and drops do not break the run. */
-export function consecutiveScoringGames(matches: Pick<MatchRecord, 'played' | 'scored'>[] | undefined): number {
+function isScoringLook(match: Pick<MatchRecord, 'played' | 'scored' | 'chances'>): boolean {
+  return match.played && (match.chances ?? 1) > 0;
+}
+
+/** Trailing played matches that scored. Sit-outs, drops, and 0-chance games do not break the run. */
+export function consecutiveScoringGames(
+  matches: Pick<MatchRecord, 'played' | 'scored' | 'chances'>[] | undefined,
+): number {
   if (!matches?.length) return 0;
   let streak = 0;
   for (let i = matches.length - 1; i >= 0; i -= 1) {
     const match = matches[i];
-    if (!match.played) continue;
+    if (!isScoringLook(match)) continue;
     if (match.scored !== true) break;
     streak += 1;
   }
@@ -209,7 +217,7 @@ export function seasonRatioClearsBar(params: {
  */
 export function promoteSquadStatusDuringSeason(params: {
   current: SquadStatus;
-  matches?: Pick<MatchRecord, 'played' | 'scored'>[];
+  matches?: Pick<MatchRecord, 'played' | 'scored' | 'chances'>[];
   ratio: number;
   gamesPlayed: number;
   bar: number;
@@ -236,13 +244,13 @@ export function promoteSquadStatusDuringSeason(params: {
 
 /** First played match that completed a Rising-star → Impact 3-game scoring run. */
 export function impactPromotionMatchIndex(
-  matches: Pick<MatchRecord, 'played' | 'scored'>[] | undefined,
+  matches: Pick<MatchRecord, 'played' | 'scored' | 'chances'>[] | undefined,
 ): number | null {
   if (!matches?.length) return null;
   let streak = 0;
   for (let i = 0; i < matches.length; i += 1) {
     const match = matches[i];
-    if (!match.played) continue;
+    if (!isScoringLook(match)) continue;
     if (match.scored === true) {
       streak += 1;
       if (streak >= IMPACT_STREAK) return i;
@@ -258,7 +266,7 @@ export function impactPromotionMatchIndex(
  * season as Rising star, the Impact run is discarded and a new 3-game run starts.
  */
 export function consecutiveScoringAsImpact(
-  matches: Pick<MatchRecord, 'played' | 'scored'>[] | undefined,
+  matches: Pick<MatchRecord, 'played' | 'scored' | 'chances'>[] | undefined,
   openedAs: SquadStatus,
 ): number {
   if (!matches?.length) return 0;
@@ -269,7 +277,7 @@ export function consecutiveScoringAsImpact(
   let streak = 0;
   for (let i = matches.length - 1; i > start; i -= 1) {
     const match = matches[i];
-    if (!match.played) continue;
+    if (!isScoringLook(match)) continue;
     if (match.scored !== true) break;
     streak += 1;
   }
@@ -325,7 +333,7 @@ export function squadStatusAfterFormReview(params: {
   gamesPlayed: number;
   bar: number;
   honoursClear?: boolean;
-  matches?: Pick<MatchRecord, 'played' | 'scored'>[];
+  matches?: Pick<MatchRecord, 'played' | 'scored' | 'chances'>[];
   allowYouthRoles?: boolean;
 }): SquadStatus {
   return promoteSquadStatusDuringSeason(params);

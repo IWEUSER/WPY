@@ -21,6 +21,7 @@ import {
   TOP_LEAGUES,
   transferFeeFromValue,
   countedSeasonsCompleted,
+  leagueAdjustedOfferRatio,
   weeklyWageForClub,
   weeklyWageForRatio,
   weeklyWageForSquadStatus,
@@ -89,9 +90,33 @@ export function tierEarnedByRatio(ratio: number): ClubTier {
  */
 export const SECOND_DIVISION_BEST_OFFER_TIER: ClubTier = 4;
 
+/** Saudi, MLS, and Liga MX never open Strong/Elite Europe. Portugal/Dutch/Turkey never Elite. */
+export const SAUDI_BEST_OFFER_TIER: ClubTier = 3;
+export const MLS_BEST_OFFER_TIER: ClubTier = 3;
+export const LIGA_MX_BEST_OFFER_TIER: ClubTier = 3;
+export const SEMI_EURO_BEST_OFFER_TIER: ClubTier = 2;
+
+export function offerRatioForLeague(ratio: number, fromLeague?: string | null): number {
+  if (!fromLeague) return ratio;
+  return leagueAdjustedOfferRatio(ratio, fromLeague);
+}
+
+export function capTierForSourceLeague(tier: ClubTier, fromLeague?: string | null): ClubTier {
+  if (!fromLeague) return tier;
+  if (SECOND_DIVISIONS.has(fromLeague)) {
+    return Math.max(tier, SECOND_DIVISION_BEST_OFFER_TIER) as ClubTier;
+  }
+  if (fromLeague === 'Saudi Pro League') return Math.max(tier, SAUDI_BEST_OFFER_TIER) as ClubTier;
+  if (fromLeague === 'MLS') return Math.max(tier, MLS_BEST_OFFER_TIER) as ClubTier;
+  if (fromLeague === 'Liga MX') return Math.max(tier, LIGA_MX_BEST_OFFER_TIER) as ClubTier;
+  if (fromLeague === 'Primeira Liga' || fromLeague === 'Eredivisie' || fromLeague === 'Super Lig') {
+    return Math.max(tier, SEMI_EURO_BEST_OFFER_TIER) as ClubTier;
+  }
+  return tier;
+}
+
 export function capTierForSecondDivision(tier: ClubTier, fromLeague?: string | null): ClubTier {
-  if (!fromLeague || !SECOND_DIVISIONS.has(fromLeague)) return tier;
-  return Math.max(tier, SECOND_DIVISION_BEST_OFFER_TIER) as ClubTier;
+  return capTierForSourceLeague(tier, fromLeague);
 }
 
 export function offerTierFromStanding(params: {
@@ -112,7 +137,8 @@ export function offerTierFromStanding(params: {
   if ((params.internationalsPlayed ?? 0) > 0 && params.nationId) {
     best = Math.max(best, selectionRatioForNation(params.nationId));
   }
-  let tier = capTierForSecondDivision(tierEarnedByRatio(best), params.fromLeague);
+  best = offerRatioForLeague(best, params.fromLeague);
+  let tier = capTierForSourceLeague(tierEarnedByRatio(best), params.fromLeague);
   if (params.originStatus === 'reserve' && params.currentTier) {
     tier = Math.max(tier, params.currentTier) as ClubTier;
   }
@@ -529,7 +555,7 @@ function pickSecondDivisionClubs(
   _blockElite: boolean,
   qualityTier: ClubTier,
 ): Club[] {
-  const band = capTierForSecondDivision(qualityTier, fromLeague);
+  const band = capTierForSourceLeague(qualityTier, fromLeague);
   const seen = new Set<string>(excludeIds);
   const sameExact = withoutSaudi(clubsInLeague(fromLeague).filter(
     (c) => !seen.has(c.id) && c.playable !== false && c.tier === band,
@@ -564,7 +590,7 @@ export function pickPermanentClubs(
     qualityTier = 2;
   }
   if (fromLeague && SECOND_DIVISIONS.has(fromLeague)) {
-    qualityTier = capTierForSecondDivision(qualityTier, fromLeague);
+    qualityTier = capTierForSourceLeague(qualityTier, fromLeague);
     const local = pickSecondDivisionClubs(
       fromLeague,
       fee,
@@ -856,10 +882,11 @@ function offerTerms(
         weeklyWage: weeklyWageForTransferOffer(
           club,
           value,
-          extras?.playerRatio,
+          extras?.lastSeasonRatio ?? extras?.playerRatio,
           extras?.countedSeasons ?? 0,
           'starter',
           club.league,
+          extras?.playerRatio,
         ),
         contractYears: 1,
         squadStatus: 'starter' as const,
@@ -874,9 +901,11 @@ function offerTerms(
       weeklyWage: weeklyWageForTransferOffer(
         club,
         value,
-        extras?.playerRatio,
+        extras?.lastSeasonRatio ?? extras?.playerRatio,
         extras?.countedSeasons ?? 0,
         status,
+        club.league,
+        extras?.playerRatio,
       ),
       contractYears: years,
       squadStatus: status,
@@ -1093,7 +1122,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
   const offerExtras: OfferTermExtras = {
     currentWeeklyWage: params.weeklyWage,
     originClub: club,
-    playerRatio: Math.max(ratio, formRatio, careerRatio, lastStanding),
+    playerRatio: careerGames > 0 ? careerGoals / careerGames : undefined,
     lastSeasonRatio: lastStanding,
     countedSeasons: seasonsDone,
     allowRisingStar,
@@ -1463,12 +1492,16 @@ function attachCurrentClubRenewal(
   const seasonRatio = params.season.gamesPlayed > 0
     ? params.season.goals / params.season.gamesPlayed
     : undefined;
-  const wage = weeklyWageForRatio(
+  const seasonsDone = countedSeasonsCompleted([...(params.seasonHistory ?? []), params.season]);
+  const careerRatio = params.careerGames > 0 ? params.careerGoals / params.careerGames : 0;
+  const wage = weeklyWageForTransferOffer(
     club,
     value,
     seasonRatio,
+    seasonsDone,
     stayStatus ?? params.squadStatus ?? 'starter',
     params.clubLeague,
+    careerRatio,
   );
   const renewal = {
     clubId: club.id,

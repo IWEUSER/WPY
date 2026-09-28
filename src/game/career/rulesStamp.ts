@@ -1,7 +1,7 @@
 import { currentCalendarWeek } from './calendar';
 import { getClub } from './data/clubs';
 import { clubContinentalCup, internationalCalendarSeason } from './data/competitions';
-import { callUpRatio, isSelectedForNationalTeam, playerHasBeenCapped, qualifierExcludeIds } from './international';
+import { callUpRatio, careerLeagueAppearances, isSelectedForNationalTeam, playerHasBeenCapped, qualifierExcludeIds } from './international';
 import { buildSeasonStandings } from './matchEngine';
 import { expandChampionsLeagueTable, fillMissingEuropeanRounds } from './matchEngine';
 import { ensureInternationalGroup, hydrateSeason, internationalStageWhenSelected, type SeasonSimState } from './seasonSim';
@@ -91,6 +91,7 @@ export function rebuildCurrentSeason(state: CareerState): Partial<CareerState> {
       caps: state.nationalTeam?.caps,
       seasons: [...(state.seasonHistory ?? []), ...(state.currentSeason ? [state.currentSeason] : [])],
     }),
+    leagueGames: careerLeagueAppearances([...(state.seasonHistory ?? []), state.currentSeason]),
   });
 
   const old = state.seasonSim;
@@ -113,7 +114,7 @@ export function rebuildCurrentSeason(state: CareerState): Partial<CareerState> {
     calendarWeek: week,
     squadStatus: state.squadStatus,
     league: club.league,
-    leagueGames: state.currentSeason?.leagueGames ?? 0,
+    leagueGames: careerLeagueAppearances([...(state.seasonHistory ?? []), state.currentSeason]),
     hasBeenCapped: playerHasBeenCapped({
       caps: state.nationalTeam?.caps,
       seasons: [...(state.seasonHistory ?? []), ...(state.currentSeason ? [state.currentSeason] : [])],

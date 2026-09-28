@@ -40,6 +40,7 @@ import {
   bumpInternationalSeason,
   isInternationalFinalsRound,
   callUpRatio,
+  careerLeagueAppearances,
   createNationalTeamState,
   emptyInternationalSeason,
   isSelectedForNationalTeam,
@@ -193,6 +194,7 @@ function withInternationalForm(
     calendar?: SeasonCalendar | null;
     squadStatus?: SquadStatus | null;
     hasBeenCapped?: boolean;
+    seasonHistory?: SeasonRecord[] | null;
   },
 ): SeasonSimState {
   if (!clubId) return sim;
@@ -211,7 +213,7 @@ function withInternationalForm(
     calendarWeek: ctx?.week ?? 1,
     squadStatus: ctx?.squadStatus ?? 'starter',
     league: club.league,
-    leagueGames: season?.leagueGames ?? 0,
+    leagueGames: careerLeagueAppearances([...(ctx?.seasonHistory ?? []), season]),
     hasBeenCapped: ctx?.hasBeenCapped,
   });
   const keepQualifyingCampaign =
@@ -409,6 +411,7 @@ function startSimulatedSeason(
     careerStart: extras?.careerStart,
     squadStatus: extras?.squadStatus ?? (role === 'reserve' ? 'reserve' : 'starter'),
     hasBeenCapped: extras?.hasBeenCapped ?? playerHasBeenCapped({ caps: extras?.caps, seasons: history }),
+    leagueGames: careerLeagueAppearances(history),
   });
   season = {
     ...season,
@@ -1115,6 +1118,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
           calendar,
           squadStatus: reviewed.squadStatus,
           hasBeenCapped: cappedForCallUp(nationalTeam ?? state.nationalTeam, reviewed.currentSeason ?? season, state.seasonHistory),
+          seasonHistory: state.seasonHistory,
         },
       ),
       seasonCalendar: calendar,
@@ -1150,6 +1154,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
         calendar,
         squadStatus: reviewedSquadFields(state, season).squadStatus,
         hasBeenCapped: cappedForCallUp(nationalTeam ?? state.nationalTeam, season, state.seasonHistory),
+        seasonHistory: state.seasonHistory,
       },
     );
     const fixture = calendar.fixtures[sim.fixtureIndex];
@@ -1254,7 +1259,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
     if (chances <= 0) {
       const resolution = resolveFixture(sim, fixture, club, 0, Math.random, { playerParticipated: false });
       sim = { ...resolution.sim, fixtureIndex: sim.fixtureIndex + 1 };
-      const record: MatchRecord = { matchNumber: season.matches.length + 1, played: false, scored: null };
+      const record: MatchRecord = { matchNumber: season.matches.length + 1, played: false, scored: null, chances: 0 };
       const noChancePay = withWeeklyPay(season, careerEarnings, state.weeklyWage);
       season = {
         ...noChancePay.season,
@@ -1323,6 +1328,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
           calendar,
           squadStatus: state.squadStatus,
           hasBeenCapped: cappedForCallUp(nationalTeam ?? state.nationalTeam, season, state.seasonHistory),
+          seasonHistory: state.seasonHistory,
         },
       ),
       seasonCalendar: calendar,
@@ -1388,7 +1394,12 @@ function finishResolvedLiveMatch(
   const openPlayScored = (live.openPlayGoals ?? 0) > 0;
   const isInternational = fixture.kind === 'international';
   const clubAppearance = !isInternational;
-  const record: MatchRecord = { matchNumber: season.matches.length + 1, played: true, scored };
+  const record: MatchRecord = {
+    matchNumber: season.matches.length + 1,
+    played: true,
+    scored,
+    chances: live.chancesTotal,
+  };
   const paid = withWeeklyPay(season, state.careerEarnings, state.weeklyWage);
   const updatedSeason: SeasonRecord = recordClubAppearanceStats(
     {
@@ -1413,10 +1424,10 @@ function finishResolvedLiveMatch(
         historyGoals,
         isInternationalFinalsRound(fixture.internationalRound),
       ),
-      availability: applyMatchResult(nationalTeam.availability, openPlayScored),
+      availability: applyMatchResult(nationalTeam.availability, openPlayScored, live.chancesTotal),
     };
   } else {
-    availability = applyMatchResult(availability, openPlayScored);
+    availability = applyMatchResult(availability, openPlayScored, live.chancesTotal);
   }
 
   const withIntlSeason: SeasonRecord = isInternational
@@ -1451,6 +1462,7 @@ function finishResolvedLiveMatch(
       calendar: nextCalendar,
       squadStatus: state.squadStatus,
       hasBeenCapped: cappedForCallUp(nationalTeam, withIntlSeason, state.seasonHistory),
+      seasonHistory: state.seasonHistory,
     },
   );
   const complete = nextSim.fixtureIndex >= nextCalendar.fixtures.length;

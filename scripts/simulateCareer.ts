@@ -14,7 +14,7 @@ import {
 import { assignClubTier, clubQualityLabel, CLUBS, clubsForSeason, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, leagueMatchWeeks, playableClubsGroupedByLeague, SECOND_DIVISIONS, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
 import { leagueDisplayName, playoffGamesFromOpening, playoffOpeningForPosition } from '../src/game/career/data/leagueFormat';
 import { confederationDisplayName } from '../src/game/career/data/displayNames';
-import { clubTransferBudget, consecutivePoorFactor, contractValueFactor, DEFAULT_CONTRACT_YEARS, ELITE_TRANSFER_VALUE_FLOOR, FIRST_CONTRACT_YEARS, firstTopFlightValueCap, formAdjustedRatio, isSeason1ValueLocked, leagueValueWeight, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, MIN_ACCEPTED_FEE_RATIO, newContractYears, playerMarketValue, playerMarketValueFromSeasons, RESERVE_CONTRACT_YEARS, RESERVE_WAGE_FACTOR, RESERVE_WEEKLY_WAGE, seasonalSponsorship, tierForMarketValue, TOP_LEAGUES, transferFeeFromValue, wageCareerMaturityScale, weeklyWageForClub, weeklyWageForRatio, weeklyWageForSquadStatus, weeklyWageForTransferOffer, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
+import { clubTransferBudget, consecutivePoorFactor, contractValueFactor, DEFAULT_CONTRACT_YEARS, ELITE_TRANSFER_VALUE_FLOOR, FIRST_CONTRACT_YEARS, firstTopFlightValueCap, formAdjustedRatio, isSeason1ValueLocked, leagueAdjustedOfferRatio, leagueValueWeight, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, MIN_ACCEPTED_FEE_RATIO, newContractYears, playerMarketValue, playerMarketValueFromSeasons, RESERVE_CONTRACT_YEARS, RESERVE_WAGE_FACTOR, RESERVE_WEEKLY_WAGE, seasonalSponsorship, tierForMarketValue, TOP_LEAGUES, transferFeeFromValue, wageCareerMaturityScale, wageOfferScale, weeklyWageForClub, weeklyWageForRatio, weeklyWageForSquadStatus, weeklyWageForTransferOffer, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { nationKit } from '../src/game/career/data/nationColours';
 import { reserveStadium, resolveCareerStadium, resolveMatchStadium, trialStadium } from '../src/game/career/matchVenue';
@@ -46,7 +46,7 @@ import { CURRENT_RULES_STAMP, migratedRulesStamp, rebuildCurrentSeason, saveNeed
 import { cupFromLeaguePosition, continentalQualificationForNextSeason } from '../src/game/career/europeanQualification';
 import { fifaRank, knockoutRankCap, nationStrength, nationsInConfederation, tournamentOpponents, worldCupKnockoutRankCap } from '../src/game/career/data/fifaRankings';
 import { countsTowardCareerRecord, displaySeasonLabel, displaySeasonNumber, isFirstPublicSeason } from '../src/game/career/seasonDisplay';
-import { bumpInternationalSeason, CALL_UP_MIN_LEAGUE_GAMES, callUpRatio, isInternationalFinalsRound, isSelectedForNationalTeam, leagueEligibleForNationalTeam, markInjuryMissedFinals, playerHasBeenCapped, SEASON_1_CALL_UP_MIN_WEEK, selectionRatioForNation } from '../src/game/career/international';
+import { bumpInternationalSeason, CALL_UP_MIN_LEAGUE_GAMES, callUpRatio, careerLeagueAppearances, isInternationalFinalsRound, isSelectedForNationalTeam, leagueEligibleForNationalTeam, markInjuryMissedFinals, playerHasBeenCapped, SEASON_1_CALL_UP_MIN_WEEK, selectionRatioForNation } from '../src/game/career/international';
 import { blowoutScorePossible, emptyStanding, expandChampionsLeagueTable, formatHomeAwayScore, missedChanceWinFactor, plausibleGoalCaps, simulateClubMatch, simulateLeagueSeason, simulateMatchTimeline } from '../src/game/career/matchEngine';
 import { chanceImportanceLine, chanceMinute, chanceMinutesForMatch, chancesLeftLine, formatChanceMinute } from '../src/game/shooting/chanceAtmosphere';
 import { awardBeat, enqueueLeagueTitleBeat, firstCapBeat, firstTitleBeat, portraitForTrophyName, pushCareerBeat, retirementBeat, seasonAwardBeats, soldBeat, titleBeat, tournamentCallUpBeat } from '../src/game/career/careerBeat';
@@ -2568,6 +2568,20 @@ if (barca && hilal && lafc) {
     console.error('Rising star matches must be one chance, Impact two, starters the drawn looks');
     process.exitCode = 1;
   }
+  if (chancesForSquadStatus('rising-star', 0) !== 0 || chancesForSquadStatus('impact', 0) !== 0 || chancesForSquadStatus('starter', 0) !== 0) {
+    console.error('a fixture with no chance must stay at zero looks for every role');
+    process.exitCode = 1;
+  }
+  if (
+    consecutiveScoringGames([
+      { played: true, scored: true, chances: 1 },
+      { played: true, scored: false, chances: 0 },
+      { played: true, scored: true, chances: 1 },
+    ]) !== 2
+  ) {
+    console.error('a 0-chance game must not break a scoring streak');
+    process.exitCode = 1;
+  }
   if (openingSquadStatus('first-team') !== 'rising-star') {
     console.error('every first-team path must open as Rising star');
     process.exitCode = 1;
@@ -4209,6 +4223,38 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
     console.log('S1 call-up week 20/21', s1Pick, s1After, 'S2 week 4', s2Early, 'S2 after 20', s2Ready, 'S2 2 games', s2TwoGames, 'already capped', s2AlreadyCapped, 'min week', SEASON_1_CALL_UP_MIN_WEEK);
     if (s1Pick || !s1After || s2Early || !s2Ready || s2TwoGames || !s2AlreadyCapped) {
       console.error('Season 1 internationals wait until after week 20; the 20-league-game wait is only before the first cap');
+      process.exitCode = 1;
+    }
+    const acrossSeasons = careerLeagueAppearances([
+      { leagueGames: 19 },
+      { leagueGames: 1 },
+    ]);
+    const readyAcross = isSelectedForNationalTeam({
+      clubTier: 1,
+      careerGoalRatio: 0.8,
+      nationId: 'spain',
+      publicSeason: 2,
+      calendarWeek: 4,
+      squadStatus: 'starter',
+      league: 'La Liga',
+      leagueGames: acrossSeasons,
+    });
+    const stillShort = isSelectedForNationalTeam({
+      clubTier: 1,
+      careerGoalRatio: 0.8,
+      nationId: 'spain',
+      publicSeason: 2,
+      calendarWeek: 4,
+      squadStatus: 'starter',
+      league: 'La Liga',
+      leagueGames: careerLeagueAppearances([{ leagueGames: 19 }, { leagueGames: 0 }]),
+    });
+    if (acrossSeasons !== CALL_UP_MIN_LEAGUE_GAMES || !readyAcross || stillShort) {
+      console.error('the 20-league-game first cap must add appearances across seasons (19 + 1)');
+      process.exitCode = 1;
+    }
+    if (selectionRatioForNation('spain') !== 0.66 || selectionRatioForNation('albania') !== 0.4) {
+      console.error('international box must keep the nation call-up ratio (0.66 top-20, 0.4 lower)');
       process.exitCode = 1;
     }
     if (!playerHasBeenCapped({ caps: 3 }) || playerHasBeenCapped({ seasons: [] })) {
@@ -8001,6 +8047,15 @@ console.log('\n--- Club cups, paced tables, transfers, injuries, and elite score
     console.error('three open-play blanks must still drop the player');
     process.exitCode = 1;
   }
+  const noChanceWindow = applyMatchResult(
+    applyMatchResult(applyMatchResult(createAvailability(), false, 0), false, 0),
+    false,
+    0,
+  );
+  if (noChanceWindow.bannedGamesRemaining !== 0 || noChanceWindow.windowFails !== 0) {
+    console.error('three consecutive games with no chance must not drop the player');
+    process.exitCode = 1;
+  }
   const keptByOpenPlay = applyMatchResult(applyMatchResult(applyMatchResult(createAvailability(), false), false), true);
   if (keptByOpenPlay.bannedGamesRemaining !== 0 || keptByOpenPlay.windowFails !== 0) {
     console.error('an open-play goal must reset the drop window');
@@ -8234,6 +8289,22 @@ console.log('\n--- Call-up beats, transfer fees, 5-season wage discount ---');
   }
   if (year2at06 !== Math.round((listed * 0.6 * 0.6) / 500) * 500) {
     console.error('transfer offers must use career ratio, then the season discount');
+    process.exitCode = 1;
+  }
+  const unproven094 = weeklyWageForTransferOffer(madrid, 0, 0.94, 5, 'starter', undefined, 0);
+  const hot094 = weeklyWageForTransferOffer(madrid, 0, 0.94, 5, 'starter', undefined, 0.94);
+  const maxWage = weeklyWageForTransferOffer(madrid, 0, 1, 5, 'starter', undefined, 1);
+  console.log('Madrid wage 0.94/career 0 y5', unproven094, '0.94 proven', hot094, '1.0 y5', maxWage, 'listed', listed);
+  if (unproven094 >= Math.round((listed * 0.94) / 500) * 500) {
+    console.error('0.94 last season with a 0 career sample must not pay ~100% of Madrid’s listed wage');
+    process.exitCode = 1;
+  }
+  if (hot094 !== Math.round((listed * 0.94) / 500) * 500 || maxWage !== atOne) {
+    console.error('100% of the listed max is only for 1.0 last season and 1.0 after five seasons');
+    process.exitCode = 1;
+  }
+  if (Math.abs(wageOfferScale(0.94, 5, 0) - 0.47) > 1e-9) {
+    console.error('unproven 0.94 after five seasons must be half of the last-season band');
     process.exitCode = 1;
   }
 }
@@ -8947,6 +9018,55 @@ console.log('\n--- Concurrent career save slots ---');
   }
   if (englandFormTier > 2) {
     console.error('0.61 plus an England cap must draw Strong or Elite free transfers, not mid-table only');
+    process.exitCode = 1;
+  }
+  const saudi081 = offerTierFromStanding({
+    ratio: 0.81,
+    careerRatio: 0.81,
+    marketValue: 40_000_000,
+    fee: 0,
+    fromLeague: 'Saudi Pro League',
+  });
+  const mls081 = offerTierFromStanding({
+    ratio: 0.81,
+    careerRatio: 0.81,
+    marketValue: 12_000_000,
+    fee: 0,
+    fromLeague: 'MLS',
+  });
+  const ajax081 = offerTierFromStanding({
+    ratio: 0.81,
+    careerRatio: 0.81,
+    marketValue: 25_000_000,
+    fee: 0,
+    fromLeague: 'Eredivisie',
+  });
+  const pl081 = offerTierFromStanding({
+    ratio: 0.81,
+    careerRatio: 0.81,
+    marketValue: 80_000_000,
+    fee: 0,
+    fromLeague: 'Premier League',
+  });
+  console.log(
+    'league offer tiers saudi/mls/ajax/pl 0.81',
+    saudi081,
+    mls081,
+    ajax081,
+    pl081,
+    'adj',
+    leagueAdjustedOfferRatio(0.81, 'Saudi Pro League').toFixed(3),
+  );
+  if (saudi081 <= 1 || mls081 <= 1) {
+    console.error('0.81 in the Saudi League or MLS must not unlock Elite European offers');
+    process.exitCode = 1;
+  }
+  if (ajax081 < 2) {
+    console.error('0.81 in the Eredivisie must not unlock Elite clubs');
+    process.exitCode = 1;
+  }
+  if (pl081 > 1) {
+    console.error('0.81 in the Premier League should still be an Elite band');
     process.exitCode = 1;
   }
 
