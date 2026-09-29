@@ -2,7 +2,6 @@ import { clampStrength, getClub, promotionTarget, SECOND_DIVISIONS, STRENGTH_CEI
 import {
   averageWageForClubId,
   cheapestListedTopWage,
-  listedTopWage,
   starterWageForClubId,
   usesPublishedWages,
 } from './data/clubWages';
@@ -88,9 +87,7 @@ export const RESERVE_CONTRACT_YEARS = 2;
 export const RESERVE_WEEKLY_WAGE = 500;
 /** Championship / Segunda starters sit well above the €500 reserve floor. */
 export const SECOND_DIVISION_STARTER_FLOOR = 8_000;
-/** Relegated clubs with a published top-flight salary keep this share in the second division. */
-const SECOND_DIVISION_LISTED_FACTOR = 0.34;
-/** Unlisted second-division sides track this share of the parent league's cheapest listed top. */
+/** Second-division sides track this share of the parent league's cheapest listed top. */
 const SECOND_DIVISION_PARENT_FACTOR = 0.28;
 /** Reserve deals pay this fraction of the destination's listed average wage. */
 export const RESERVE_WAGE_FACTOR = 0.2;
@@ -657,12 +654,9 @@ export function weeklyWageForClub(club: Club, marketValue: number, playingLeague
   const league = playingLeague ?? club.league;
   if (SECOND_DIVISIONS.has(league)) {
     const t = (clampStrength(club.strength) - STRENGTH_FLOOR) / (STRENGTH_CEILING - STRENGTH_FLOOR);
-    const listed = listedTopWage(club.id);
     const parent = promotionTarget(league);
     const parentCheapest = parent ? cheapestListedTopWage(parent, clubLeagueOf) : null;
-    const base = listed != null
-      ? listed * SECOND_DIVISION_LISTED_FACTOR
-      : Math.max(12_000, (parentCheapest ?? 40_000) * SECOND_DIVISION_PARENT_FACTOR);
+    const base = Math.max(12_000, (parentCheapest ?? 40_000) * SECOND_DIVISION_PARENT_FACTOR);
     const wage = base * (0.75 + 0.4 * t);
     return Math.max(SECOND_DIVISION_STARTER_FLOOR, Math.round(wage / 500) * 500);
   }

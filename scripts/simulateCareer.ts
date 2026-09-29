@@ -2414,8 +2414,12 @@ if (barca && hilal && lafc) {
   const champWage = leicester ? weeklyWageForClub(leicester, 8_000_000) : 0;
   const promotedWage = leicester ? weeklyWageForClub(leicester, 8_000_000, 'Premier League') : 0;
   console.log('PL Palace wage', palaceWage, 'Championship Leicester', champWage, 'Leicester in PL', promotedWage);
-  if (palaceWage < 32_000 || promotedWage < 32_000 || promotedWage <= champWage * 3) {
+  if (palaceWage < 32_000 || palaceWage <= champWage * 3) {
     console.error('Premier League wages must sit far above Championship money, even at smaller clubs');
+    process.exitCode = 1;
+  }
+  if (promotedWage < 32_000) {
+    console.error('a Championship club playing in the Premier League must use Premier League pay');
     process.exitCode = 1;
   }
   if (highWage <= 0 || euroWage <= highWage) {
