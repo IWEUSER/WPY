@@ -34,7 +34,8 @@ export default function HomeScreen({ onPractice }: { onPractice: (chance: Practi
   const refreshSlots = () => setSlotTick((n) => n + 1);
 
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center gap-8 px-6 text-center text-white">
+    <div className="h-full w-full overflow-y-auto overscroll-y-contain touch-pan-y">
+    <div className="mx-auto flex min-h-full w-full max-w-lg flex-col items-center justify-center gap-8 px-6 py-[max(1.5rem,env(safe-area-inset-top))] pb-[max(2.5rem,env(safe-area-inset-bottom))] text-center text-white">
       <div className="flex flex-col items-center">
         <img
           src={GAME_LOGO_SRC}
@@ -237,6 +238,7 @@ export default function HomeScreen({ onPractice }: { onPractice: (chance: Practi
           </button>
         )}
       </div>
+    </div>
     </div>
   );
 }
