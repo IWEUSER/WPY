@@ -549,13 +549,16 @@ export function recentAggregateRatio(seasons: SeasonRecord[], take = 5): number 
   return goals / games;
 }
 
+/** Counted seasons needed before last-five aggregate can stand in for a career. */
+export const WAGE_AGGREGATE_SEASONS = 5;
+
 /**
- * @deprecated Season-count maturity is no longer used for offers.
- * Full listed pay now needs 1.0 last season and 1.0 last-five aggregate.
+ * Short-career pay: one hot year is not five years of listed form.
+ * 1 season 50%, then 60 / 70 / 80, and 100% once five counted seasons exist.
  */
 export function wageCareerMaturityScale(countedSeasonsCompleted: number): number {
   const n = Math.max(0, Math.floor(countedSeasonsCompleted));
-  if (n >= 5) return 1;
+  if (n >= WAGE_AGGREGATE_SEASONS) return 1;
   if (n === 4) return 0.8;
   if (n === 3) return 0.7;
   if (n === 2) return 0.6;
@@ -564,21 +567,26 @@ export function wageCareerMaturityScale(countedSeasonsCompleted: number): number
 }
 
 /**
- * Listed max wage is the 1.0 / 1.0 rate. Offers pay last-season ratio of
- * that band, then the last-five-seasons aggregate. 0.91 last and 0.56
- * aggregate is 91% × 56% of the listed top — not 91% after five seasons.
- * A last-season spike with no aggregate sample is half the last-season band.
+ * Listed max wage is the 1.0 last-season / 1.0 last-five-aggregate rate.
+ * After five counted seasons, offers pay last-season × that five-year
+ * aggregate (0.91 last and 0.56 aggregate is 91% × 56% of the listed top).
+ * With fewer than five seasons the aggregate is just the same hot year, so
+ * last-season ratio is scaled by career maturity instead.
  */
 export function wageOfferScale(
   lastSeasonRatio: number | null | undefined,
-  _countedSeasonsCompleted?: number,
+  countedSeasonsCompleted?: number,
   aggregateRatio?: number | null,
 ): number {
   const last = wageRatioScale(lastSeasonRatio);
-  if (aggregateRatio == null) return last * last;
-  const aggregate = wageRatioScale(aggregateRatio);
-  if (aggregate <= 0) return last * 0.5;
-  return last * aggregate;
+  const seasons = Math.max(0, Math.floor(countedSeasonsCompleted ?? 0));
+  if (seasons >= WAGE_AGGREGATE_SEASONS) {
+    if (aggregateRatio == null) return last * last;
+    const aggregate = wageRatioScale(aggregateRatio);
+    if (aggregate <= 0) return last * 0.5;
+    return last * aggregate;
+  }
+  return last * wageCareerMaturityScale(seasons);
 }
 
 export function countedSeasonsCompleted(seasons: SeasonRecord[]): number {

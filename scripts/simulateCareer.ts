@@ -14,7 +14,7 @@ import {
 import { assignClubTier, clubQualityLabel, CLUBS, clubsForSeason, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, leagueMatchWeeks, playableClubsGroupedByLeague, SECOND_DIVISIONS, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
 import { leagueDisplayName, playoffGamesFromOpening, playoffOpeningForPosition } from '../src/game/career/data/leagueFormat';
 import { confederationDisplayName } from '../src/game/career/data/displayNames';
-import { clubTransferBudget, consecutivePoorFactor, contractValueFactor, DEFAULT_CONTRACT_YEARS, ELITE_TRANSFER_VALUE_FLOOR, FIRST_CONTRACT_YEARS, firstTopFlightValueCap, formAdjustedRatio, isSeason1ValueLocked, leagueAdjustedOfferRatio, leagueValueWeight, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, MIN_ACCEPTED_FEE_RATIO, newContractYears, playerMarketValue, playerMarketValueFromSeasons, recentAggregateRatio, RESERVE_CONTRACT_YEARS, RESERVE_WAGE_FACTOR, RESERVE_WEEKLY_WAGE, SECOND_DIVISION_STARTER_FLOOR, seasonalSponsorship, tierForMarketValue, TOP_LEAGUES, transferFeeFromValue, wageOfferScale, weeklyWageForClub, weeklyWageForRatio, weeklyWageForSquadStatus, weeklyWageForTransferOffer, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
+import { clubTransferBudget, consecutivePoorFactor, contractValueFactor, DEFAULT_CONTRACT_YEARS, ELITE_TRANSFER_VALUE_FLOOR, FIRST_CONTRACT_YEARS, firstTopFlightValueCap, formAdjustedRatio, isSeason1ValueLocked, leagueAdjustedOfferRatio, leagueValueWeight, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, MIN_ACCEPTED_FEE_RATIO, newContractYears, playerMarketValue, playerMarketValueFromSeasons, recentAggregateRatio, RESERVE_CONTRACT_YEARS, RESERVE_WAGE_FACTOR, RESERVE_WEEKLY_WAGE, SECOND_DIVISION_STARTER_FLOOR, seasonalSponsorship, tierForMarketValue, TOP_LEAGUES, transferFeeFromValue, wageCareerMaturityScale, wageOfferScale, weeklyWageForClub, weeklyWageForRatio, weeklyWageForSquadStatus, weeklyWageForTransferOffer, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { nationKit } from '../src/game/career/data/nationColours';
 import { reserveStadium, resolveCareerStadium, resolveMatchStadium, trialStadium } from '../src/game/career/matchVenue';
@@ -85,7 +85,7 @@ import {
 import { isHomeLeagueNation, isSaudiTrialClub, nationUsesMlsLower, pickGeographicTrialClubs, trialDestinationCountries, youthTierForNation, youthTrialsAreMlsOnly } from '../src/game/career/trialGeography';
 import { nextYouthKnockoutRound, pickYouthGroupOpponents, pickYouthKnockoutOpponent, youthMaxGames } from '../src/game/career/youthTournament';
 import { chancesForSquadStatus, consecutiveScoringAsImpact, consecutiveScoringGames, describeSquadStatus, IMPACT_CHANCES, IMPACT_STREAK, isContinentalClubFixture, isLowerDivisionLoan, isSquadRotationSitOut, isToughMinutesFixture, nextSquadStatusAfterSeason, openingSquadStatus, promoteSquadStatusDuringSeason, reservePrioritisesContinental, reserveSitsChampionsLeague, RISING_STAR_DOMESTIC_CUP_GAMES, RISING_STAR_MIN_RATIO, ROLE_REVIEW_WEEK, seasonOverridesRatioBar, shouldSitLeagueFixture, shouldSitToughFixture, squadStatusOnArrival, STARTER_STREAK, youthRolesAllowed } from '../src/game/career/squadStatus';
-import { JOIN_RISING_STAR_LABEL, OPENING_ROLE_CARDS } from '../src/game/career/openingRoleCopy';
+import { OPENING_ROLE_CARDS } from '../src/game/career/openingRoleCopy';
 import { needsSeasonTwoPaywall, SEASON_PAYWALL_LEAD, SEASON_PAYWALL_POINTS } from '../src/game/career/seasonPaywall';
 import { clubAllowedByLeagueSample, consecutiveLoanSpells, ELITE_OFFER_MIN_LEAGUE_GAMES, LOAN_OFFER_COUNT, SAUDI_OFFER_MIN_AGE, SECOND_DIVISION_BEST_OFFER_TIER, STRONG_OFFER_MIN_LEAGUE_GAMES, TRANSFER_MARKET_CAP, TRANSFER_OFFER_COUNT, offerFormRatio, offerRatioPreferringLastSeason, offerTierFromStanding, pickLoanClubsForMiss, pickLoanClubsFromOrigin, pickPermanentClubs, requiredGoalRatio, resolveSeasonTransition, seasonStandingRatio, sellingClubAcceptsOffer, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, trialFailTransferPending, tierEarnedByRatio, tierForRatio } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
@@ -2983,24 +2983,24 @@ if (barca && hilal && lafc) {
     const impact = OPENING_ROLE_CARDS.find((card) => card.id === 'impact');
     const starter = OPENING_ROLE_CARDS.find((card) => card.id === 'starter');
     const reserve = OPENING_ROLE_CARDS.find((card) => card.id === 'reserve');
-    if (JOIN_RISING_STAR_LABEL !== 'Join as a Rising star') {
-      console.error('the post-name screen must offer Join as a Rising star');
+    if (OPENING_ROLE_CARDS.length !== 3 || reserve) {
+      console.error('the Season 1 place screen must offer Rising star, Impact, and Starter only');
       process.exitCode = 1;
     }
-    if (!rising || !/every fourth/.test(rising.body) || !/One chance/.test(rising.body) || !/first two domestic cup/.test(rising.body)) {
-      console.error('Rising star on the join screen must explain rotation, one chance, and cup/continental sit-outs');
+    if (!rising || /every fourth/.test(rising.body) || /One chance/.test(rising.body) || /first two/.test(rising.body)) {
+      console.error('Rising star on the place screen must stay high-level, not list sit-outs or chances');
       process.exitCode = 1;
     }
-    if (!impact || !/3 consecutive/.test(impact.body) || !/Two chances/.test(impact.body) || !/continentals/.test(impact.body)) {
-      console.error('Impact on the join screen must explain the 3-game path, two chances, and all competitions');
+    if (!impact || /3 consecutive/.test(impact.body) || /Two chances/.test(impact.body)) {
+      console.error('Impact on the place screen must stay high-level, not list streaks or chance counts');
       process.exitCode = 1;
     }
-    if (!starter || !/starting XI/.test(starter.body) || !/every game/.test(starter.body) || !/internationals/.test(starter.body)) {
-      console.error('Starter on the join screen must explain the starting XI across league, cups, and internationals');
+    if (!starter || /every game/.test(starter.body) || /rotation sit-out/.test(starter.body)) {
+      console.error('Starter on the place screen must stay high-level, not list every-game minutes');
       process.exitCode = 1;
     }
-    if (!reserve || !/lose your place/.test(reserve.body) || !/European Cup/.test(reserve.body)) {
-      console.error('Reserve on the join screen must explain losing a place and European Cup sit-outs');
+    if (!/young player/.test(rising?.body ?? '') || !/starting XI/.test(impact?.body ?? '') || !/Trusted/.test(starter?.body ?? '')) {
+      console.error('each place option must still explain what the role means');
       process.exitCode = 1;
     }
     if (!/19 more seasons/.test(SEASON_PAYWALL_LEAD) || !/saved game/.test(SEASON_PAYWALL_LEAD)) {
@@ -8959,6 +8959,27 @@ console.log('\n--- Call-up beats, transfer fees, 5-season wage discount ---');
   }
   if (Math.abs(wageOfferScale(0.94, 5, 0) - 0.47) > 1e-9) {
     console.error('unproven 0.94 must be half of the last-season band');
+    process.exitCode = 1;
+  }
+  const city = getClub('man-city')!;
+  const cityTop = weeklyWageForClub(city, 0);
+  const s1City = weeklyWageForTransferOffer(city, 0, 0.91, 1, 'starter', undefined, 0.91);
+  const fiveYearCity = weeklyWageForTransferOffer(city, 0, 0.91, 5, 'starter', undefined, 0.91);
+  console.log('City S1 0.91 wage', s1City, 'five-year 0.91', fiveYearCity, 'top', cityTop, 'maturity1', wageCareerMaturityScale(1));
+  if (Math.abs(wageOfferScale(0.91, 1, 0.91) - 0.91 * 0.5) > 1e-9) {
+    console.error('one counted season must not treat last-season ratio as a five-year aggregate');
+    process.exitCode = 1;
+  }
+  if (s1City !== Math.round((cityTop * 0.91 * 0.5) / 500) * 500) {
+    console.error('a first-season City renewal must pay last-season ratio times short-career maturity');
+    process.exitCode = 1;
+  }
+  if (s1City >= Math.round((cityTop * 0.91 * 0.91) / 500) * 500 || s1City >= 500_000) {
+    console.error('an 18-year-old City renewal must not land on a five-year listed wage');
+    process.exitCode = 1;
+  }
+  if (fiveYearCity !== Math.round((cityTop * 0.91 * 0.91) / 500) * 500) {
+    console.error('five counted seasons may still use last-season times the five-year aggregate');
     process.exitCode = 1;
   }
   const aggSeasons = [
