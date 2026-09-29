@@ -26,6 +26,7 @@ import { evaluatePlayerOfTheYear, evaluateTopGoalscorer } from './domesticAwards
 import { evaluateClubPlayerOfTheTournament, evaluateContinentalTopGoalscorer } from './clubInternationalAwards';
 import { evaluateInternationalTournamentAwards } from './internationalAwards';
 import { countsTowardCareerRecord, displaySeasonNumber } from './seasonDisplay';
+import { needsSeasonTwoPaywall } from './seasonPaywall';
 import { trophyLabels } from './honoursDisplay';
 import {
   enqueueEndOfSeasonBeats,
@@ -807,6 +808,8 @@ function initialState(): CareerState {
     pendingBeats: [],
     seenBeatKinds: [],
     guidedChanceSeen: false,
+    fullCareerUnlocked: false,
+    pendingSeasonTwoChoice: null,
   };
 }
 
@@ -941,6 +944,7 @@ interface CareerActions {
   chooseClub: (clubId: string) => void;
   chooseNationality: (nationId: string) => void;
   confirmPlayerName: (name: string, look?: { skin: string; hair: string }) => void;
+  joinAsRisingStar: () => void;
   setPlayerLook: (look: { skin: string; hair: string }) => void;
   advance: () => void;
   recordMatchChance: (result: ShotResult) => void;
@@ -952,6 +956,8 @@ interface CareerActions {
   recordMatchShot: (result: ShotResult) => void;
   continueAfterSeason: () => void;
   resolveTransferChoice: (clubId: string | null) => void;
+  continuePastSeasonPaywall: () => void;
+  backFromSeasonPaywall: () => void;
   openCareerRecord: () => void;
   openProfile: () => void;
   returnFromProfile: () => void;
@@ -1581,6 +1587,9 @@ export const useCareerStore = create<CareerStore>()(
 
       backFromSetup: () =>
         set((state) => {
+          if (state.phase === 'opening-role') {
+            return { phase: 'player-name' };
+          }
           if (state.phase === 'player-name') {
             return { phase: 'nationality-choice', playerName: null, playerSkin: null, playerHair: null };
           }
@@ -1696,6 +1705,26 @@ export const useCareerStore = create<CareerStore>()(
           };
           const nationId = state.nationality;
           if (!nationId) return { playerName, ...appearance, phase: 'nationality-choice' };
+          return {
+            playerName,
+            ...appearance,
+            nationality: nationId,
+            nationalTeam: state.nationalTeam ?? createNationalTeamState(nationId),
+            phase: 'opening-role',
+          };
+        }),
+
+      joinAsRisingStar: () =>
+        set((state) => {
+          const playerName = state.playerName?.replace(/\s+/g, ' ').trim();
+          const appearance = {
+            playerSkin: state.playerSkin ?? null,
+            playerHair: state.playerHair ?? null,
+          };
+          const nationId = state.nationality;
+          if (!nationId || !playerName) {
+            return { phase: playerName ? 'nationality-choice' : 'player-name' };
+          }
           const nationalTeam = state.nationalTeam ?? createNationalTeamState(nationId);
           if (state.careerStart === 'favourite-trial' && state.clubId) {
             const club = getClub(state.clubId);
@@ -2207,6 +2236,9 @@ export const useCareerStore = create<CareerStore>()(
           if (!state.clubId || !state.parentClubId) return state;
 
           if (clubId === null) {
+            if (needsSeasonTwoPaywall(state) && state.phase !== 'season-paywall') {
+              return { pendingSeasonTwoChoice: { clubId: null }, phase: 'season-paywall' };
+            }
             const stay = pending.stay ?? {
               clubId: state.clubId,
               parentClubId: state.parentClubId,
@@ -2334,6 +2366,9 @@ export const useCareerStore = create<CareerStore>()(
                 },
               };
             }
+          }
+          if (needsSeasonTwoPaywall(state) && state.phase !== 'season-paywall') {
+            return { pendingSeasonTwoChoice: { clubId }, phase: 'season-paywall' };
           }
           const takeLoan = offer ? offer.move === 'loan' : pending.kind === 'loan';
           const renewing = Boolean(!takeLoan && clubId === state.clubId);
@@ -2472,6 +2507,23 @@ export const useCareerStore = create<CareerStore>()(
           };
         }),
 
+      continuePastSeasonPaywall: () => {
+        const choice = get().pendingSeasonTwoChoice;
+        const clubId = choice ? choice.clubId : null;
+        set({
+          fullCareerUnlocked: true,
+          pendingSeasonTwoChoice: null,
+          phase: 'transfer-choice',
+        });
+        get().resolveTransferChoice(clubId);
+      },
+
+      backFromSeasonPaywall: () =>
+        set((state) => {
+          if (state.phase !== 'season-paywall') return {};
+          return { phase: 'transfer-choice', pendingSeasonTwoChoice: null };
+        }),
+
       resetCareer: () => set(initialState()),
 
       saveCurrentCareer: () => {
@@ -2556,7 +2608,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 41,
+      version: 42,
       migrate: (persisted) => {
         try {
           return migrateCareerPersist(persisted);
@@ -2825,6 +2877,8 @@ function migrateCareerPersist(persisted: unknown): CareerState {
           })(),
           lastTransferRejection: rewriteMaybe(state.lastTransferRejection) ?? null,
           rulesStamp: migratedRulesStamp(state),
+          fullCareerUnlocked: state.fullCareerUnlocked ?? false,
+          pendingSeasonTwoChoice: state.pendingSeasonTwoChoice ?? null,
           pendingTransfer: state.pendingTransfer
             ? {
                 ...state.pendingTransfer,

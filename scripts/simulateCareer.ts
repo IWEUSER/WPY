@@ -85,6 +85,8 @@ import {
 import { isHomeLeagueNation, isSaudiTrialClub, nationUsesMlsLower, pickGeographicTrialClubs, trialDestinationCountries, youthTierForNation, youthTrialsAreMlsOnly } from '../src/game/career/trialGeography';
 import { nextYouthKnockoutRound, pickYouthGroupOpponents, pickYouthKnockoutOpponent, youthMaxGames } from '../src/game/career/youthTournament';
 import { chancesForSquadStatus, consecutiveScoringAsImpact, consecutiveScoringGames, describeSquadStatus, IMPACT_CHANCES, IMPACT_STREAK, isContinentalClubFixture, isLowerDivisionLoan, isSquadRotationSitOut, isToughMinutesFixture, nextSquadStatusAfterSeason, openingSquadStatus, promoteSquadStatusDuringSeason, reservePrioritisesContinental, reserveSitsChampionsLeague, RISING_STAR_DOMESTIC_CUP_GAMES, RISING_STAR_MIN_RATIO, ROLE_REVIEW_WEEK, seasonOverridesRatioBar, shouldSitLeagueFixture, shouldSitToughFixture, squadStatusOnArrival, STARTER_STREAK, youthRolesAllowed } from '../src/game/career/squadStatus';
+import { JOIN_RISING_STAR_LABEL, OPENING_ROLE_CARDS } from '../src/game/career/openingRoleCopy';
+import { needsSeasonTwoPaywall, SEASON_PAYWALL_LEAD, SEASON_PAYWALL_POINTS } from '../src/game/career/seasonPaywall';
 import { clubAllowedByLeagueSample, consecutiveLoanSpells, ELITE_OFFER_MIN_LEAGUE_GAMES, LOAN_OFFER_COUNT, SAUDI_OFFER_MIN_AGE, SECOND_DIVISION_BEST_OFFER_TIER, STRONG_OFFER_MIN_LEAGUE_GAMES, TRANSFER_MARKET_CAP, TRANSFER_OFFER_COUNT, offerFormRatio, offerRatioPreferringLastSeason, offerTierFromStanding, pickLoanClubsForMiss, pickLoanClubsFromOrigin, pickPermanentClubs, requiredGoalRatio, resolveSeasonTransition, seasonStandingRatio, sellingClubAcceptsOffer, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, trialFailTransferPending, tierEarnedByRatio, tierForRatio } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
 import { internationalCampaignForSeason } from '../src/game/career/data/competitions';
@@ -2975,6 +2977,58 @@ if (barca && hilal && lafc) {
   if (!/first two domestic cup/.test(describeSquadStatus('rising-star')) || !/No continental/.test(describeSquadStatus('rising-star'))) {
     console.error('Rising star copy must sit continental nights and only play the first two domestic cups');
     process.exitCode = 1;
+  }
+  {
+    const rising = OPENING_ROLE_CARDS.find((card) => card.id === 'rising-star');
+    const impact = OPENING_ROLE_CARDS.find((card) => card.id === 'impact');
+    const starter = OPENING_ROLE_CARDS.find((card) => card.id === 'starter');
+    const reserve = OPENING_ROLE_CARDS.find((card) => card.id === 'reserve');
+    if (JOIN_RISING_STAR_LABEL !== 'Join as a Rising star') {
+      console.error('the post-name screen must offer Join as a Rising star');
+      process.exitCode = 1;
+    }
+    if (!rising || !/every fourth/.test(rising.body) || !/One chance/.test(rising.body) || !/first two domestic cup/.test(rising.body)) {
+      console.error('Rising star on the join screen must explain rotation, one chance, and cup/continental sit-outs');
+      process.exitCode = 1;
+    }
+    if (!impact || !/3 consecutive/.test(impact.body) || !/Two chances/.test(impact.body) || !/continentals/.test(impact.body)) {
+      console.error('Impact on the join screen must explain the 3-game path, two chances, and all competitions');
+      process.exitCode = 1;
+    }
+    if (!starter || !/starting XI/.test(starter.body) || !/every game/.test(starter.body) || !/internationals/.test(starter.body)) {
+      console.error('Starter on the join screen must explain the starting XI across league, cups, and internationals');
+      process.exitCode = 1;
+    }
+    if (!reserve || !/lose your place/.test(reserve.body) || !/European Cup/.test(reserve.body)) {
+      console.error('Reserve on the join screen must explain losing a place and European Cup sit-outs');
+      process.exitCode = 1;
+    }
+    if (!/19 more seasons/.test(SEASON_PAYWALL_LEAD) || !/saved game/.test(SEASON_PAYWALL_LEAD)) {
+      console.error('Season 2 paywall copy must mention 19 more seasons and saved games');
+      process.exitCode = 1;
+    }
+    if (!SEASON_PAYWALL_POINTS.some((p) => /No ads/.test(p)) || !SEASON_PAYWALL_POINTS.some((p) => /No additional purchases/.test(p))) {
+      console.error('Season 2 paywall copy must say no ads and no extra purchases are required to succeed');
+      process.exitCode = 1;
+    }
+    const pendingStay = { kind: 'end-of-season' as const, detail: '', clubIds: [] as string[], offers: [], allowDecline: true };
+    const pendingTrial = { kind: 'trial-offers' as const, detail: '', clubIds: [] as string[], offers: [], allowDecline: false };
+    const s1Finished = {
+      fullCareerUnlocked: false,
+      pendingTransfer: pendingStay,
+      seasonHistory: [{ seasonNumber: 1, clubId: 'liverpool', role: 'first-team' as const, matches: [], goals: 10, gamesPlayed: 20, ratioMet: true, age: 17, leagueGoals: 10, trophies: [], topGoalscorer: false, playerOfTheYear: false, wonWpy: false }],
+      currentSeason: null,
+      careerStart: 'favourite-first-team' as const,
+      role: 'first-team' as const,
+    };
+    if (!needsSeasonTwoPaywall(s1Finished) || needsSeasonTwoPaywall({ ...s1Finished, fullCareerUnlocked: true })) {
+      console.error('Season 2 paywall must gate the first public season once, then stay unlocked');
+      process.exitCode = 1;
+    }
+    if (needsSeasonTwoPaywall({ ...s1Finished, pendingTransfer: pendingTrial })) {
+      console.error('trial offers must not hit the Season 2 paywall');
+      process.exitCode = 1;
+    }
   }
   if (isSquadRotationSitOut('reserve', 'reserve', 'league', 0, { seasonMatchCount: 0 }) !== false
     || isSquadRotationSitOut('reserve', 'reserve', 'league', 12, { seasonMatchCount: 12 }) !== false) {

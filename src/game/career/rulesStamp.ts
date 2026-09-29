@@ -10,7 +10,7 @@ import type { CareerState } from './types';
 /** Bump when calendar generation, playable leagues, or cup rules change. */
 export const CURRENT_RULES_STAMP = 'career-trials-intl-v1';
 
-const SETUP_PHASES = new Set<string>(['menu', 'club-choice', 'nationality-choice']);
+const SETUP_PHASES = new Set<string>(['menu', 'club-choice', 'nationality-choice', 'player-name', 'opening-role']);
 
 export function seasonIsInProgress(
   state: Pick<CareerState, 'phase' | 'seasonCalendar' | 'seasonSim'>,

@@ -195,6 +195,7 @@ export type CareerPhase =
   | 'opening-brief'
   | 'nationality-choice'
   | 'player-name'
+  | 'opening-role'
   | 'club-choice'
   | 'hub'
   | 'match'
@@ -204,7 +205,8 @@ export type CareerPhase =
   | 'profile'
   | 'legacy'
   | 'career-end'
-  | 'match-result';
+  | 'match-result'
+  | 'season-paywall';
 
 export interface CareerState {
   phase: CareerPhase;
@@ -307,6 +309,10 @@ export interface CareerState {
   seenBeatKinds?: CareerBeatKind[];
   /** One guided first chance, then leave the player alone. */
   guidedChanceSeen?: boolean;
+  /** One-time unlock after Season 1. Older saves remain unlocked. */
+  fullCareerUnlocked?: boolean;
+  /** Stay (`clubId: null`) or offer chosen on the Season 2 paywall. */
+  pendingSeasonTwoChoice?: { clubId: string | null } | null;
 }
 
 export interface LastMatchResult {

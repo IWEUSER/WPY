@@ -6,6 +6,8 @@ import TrialScreen from './screens/TrialScreen';
 import ClubOfferScreen from './screens/ClubOfferScreen';
 import NationalityScreen from './screens/NationalityScreen';
 import PlayerNameScreen from './screens/PlayerNameScreen';
+import OpeningRoleScreen from './screens/OpeningRoleScreen';
+import SeasonPaywallScreen from './screens/SeasonPaywallScreen';
 import CareerHub from './screens/CareerHub';
 import CareerRecordScreen from './screens/CareerRecordScreen';
 import ProfileScreen from './screens/ProfileScreen';
@@ -106,7 +108,7 @@ export default function CareerApp() {
   }
 
   const nextBeat = pendingBeats?.[0];
-  if (nextBeat && phase !== 'menu' && phase !== 'nationality-choice' && phase !== 'player-name' && phase !== 'club-choice') {
+  if (nextBeat && phase !== 'menu' && phase !== 'nationality-choice' && phase !== 'player-name' && phase !== 'club-choice' && phase !== 'opening-role' && phase !== 'season-paywall') {
     return <CareerBeatScreen beat={nextBeat} />;
   }
 
@@ -127,6 +129,10 @@ export default function CareerApp() {
       return <NationalityScreen />;
     case 'player-name':
       return <PlayerNameScreen />;
+    case 'opening-role':
+      return <OpeningRoleScreen />;
+    case 'season-paywall':
+      return <SeasonPaywallScreen />;
     case 'match':
       if (!liveMatch && !openingCampaign) {
         return <CareerHub onOpenMenu={returnToMenu} />;

@@ -1186,6 +1186,10 @@ export function applyCareerLayoutPreview(): void {
         ? 'profile'
         : preview === 'player-name'
         ? 'player-name'
+        : preview === 'opening-role'
+        ? 'opening-role'
+        : preview === 'season-paywall'
+        ? 'season-paywall'
         : preview === 'legacy'
         ? 'legacy'
         : preview === 'club-choice'
@@ -1540,6 +1544,8 @@ export function applyCareerLayoutPreview(): void {
     injuryGamesRemaining: 0,
     intlQualifying: { tournament: 'euro', points: 7, played: 3 },
     pendingTransfer,
+    pendingSeasonTwoChoice: preview === 'season-paywall' ? { clubId: null } : null,
+    fullCareerUnlocked: preview === 'season-paywall' ? false : preview === 'opening-role' ? false : true,
     squadStatus: preview === 'hub-rising-star' || preview === 'reserve-promo' || preview === 's1-summary' || preview === 'rising-loans' || preview === 'rising-loans-s2'
       ? 'rising-star'
       : preview === 'hub-rotation'

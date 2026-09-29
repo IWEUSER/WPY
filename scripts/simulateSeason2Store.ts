@@ -44,6 +44,12 @@ if (store.getState().phase !== 'nationality-choice') {
 function pickNation(nationId: string, name = 'Ian Test') {
   store.getState().chooseNationality(nationId);
   store.getState().confirmPlayerName(name);
+  if (store.getState().phase !== 'opening-role') {
+    console.error('Naming the player must open the Rising star screen');
+    process.exitCode = 1;
+    return;
+  }
+  store.getState().joinAsRisingStar();
 }
 
 pickNation('spain');
@@ -527,6 +533,11 @@ if (!loanClubId) {
 } else {
   const offeredWage = loanOffer?.weeklyWage ?? 0;
   store.getState().resolveTransferChoice(loanClubId);
+  if (store.getState().phase !== 'season-paywall') {
+    console.error('a Season 1 loan pick must open the Season 2 paywall');
+    process.exitCode = 1;
+  }
+  store.getState().continuePastSeasonPaywall();
   const loaned = store.getState();
   console.log(
     'S2 loan',
@@ -802,17 +813,24 @@ pickNation('england');
     store.getState().resolveTransferChoice(null);
     const stayed = store.getState();
     console.log('S2 after stay-without-renew', stayed.contractYearsRemaining, stayed.phase, stayed.seasonNumber);
-    if (stayed.contractYearsRemaining !== 1 || stayed.phase !== 'hub') {
-      console.error('continuing without renewing must leave 1 year on the existing deal');
+    if (stayed.phase !== 'season-paywall' || stayed.fullCareerUnlocked) {
+      console.error('the Season 1 stay pick must open the Season 2 paywall before Season 2 starts');
       process.exitCode = 1;
     }
-    if (!stayed.currentSeason) {
+    store.getState().continuePastSeasonPaywall();
+    const unlocked = store.getState();
+    console.log('S2 after paywall', unlocked.contractYearsRemaining, unlocked.phase, unlocked.seasonNumber, unlocked.fullCareerUnlocked);
+    if (unlocked.contractYearsRemaining !== 1 || unlocked.phase !== 'hub' || !unlocked.fullCareerUnlocked) {
+      console.error('continuing without renewing must leave 1 year on the existing deal after the Season 2 paywall');
+      process.exitCode = 1;
+    }
+    if (!unlocked.currentSeason) {
       console.error('Season 2 must start after staying without a renewal');
       process.exitCode = 1;
     } else {
       store.setState({
         currentSeason: {
-          ...stayed.currentSeason,
+          ...unlocked.currentSeason,
           goals: 30,
           gamesPlayed: 38,
           leagueGoals: 30,
@@ -823,15 +841,19 @@ pickNation('england');
       });
       store.getState().continueAfterSeason();
       const late = store.getState().pendingTransfer;
-      const lateRenewal = late?.offers?.find((o) => o.renewal && o.clubId === stayed.clubId);
+      const lateRenewal = late?.offers?.find((o) => o.renewal && o.clubId === unlocked.clubId);
       console.log('S2 end renewal', Boolean(lateRenewal), lateRenewal?.contractYears);
       if (!lateRenewal) {
         console.error('the end of Season 2 must still offer a contract renewal');
         process.exitCode = 1;
       } else {
-        store.getState().resolveTransferChoice(stayed.clubId);
+        store.getState().resolveTransferChoice(unlocked.clubId);
         const renewed = store.getState();
-        console.log('S3 after renew', renewed.contractYearsRemaining);
+        console.log('S3 after renew', renewed.contractYearsRemaining, renewed.phase);
+        if (renewed.phase === 'season-paywall') {
+          console.error('Season 3 must not show the Season 2 paywall again');
+          process.exitCode = 1;
+        }
         if (renewed.contractYearsRemaining !== lateRenewal.contractYears) {
           console.error('accepting the renewal must apply the new contract length');
           process.exitCode = 1;
