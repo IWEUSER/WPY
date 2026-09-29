@@ -128,6 +128,7 @@ export function youthTierForNation(goals: number, nationId?: string | null): Clu
 
 /** A blank / Lower youth campaign uses MLS only for North American nations. */
 export function nationUsesMlsLower(nationId: string | null | undefined): boolean {
+  if (!nationId) return false;
   return getNation(nationId)?.confederation === 'CONCACAF';
 }
 
@@ -189,7 +190,7 @@ export function pickGeographicTrialClubs(
       ? picks
       : [...picks, ...shuffle(mlsClubsAtTier(5, [...exclude, ...picks.map((c) => c.id)]))].slice(0, count);
   }
-  if (getNation(nationId)?.confederation === 'CONMEBOL' && tier >= 5) {
+  if (nationId && getNation(nationId)?.confederation === 'CONMEBOL' && tier >= 5) {
     return shuffle(southAmericanLowerTrialClubs(exclude)).slice(0, count);
   }
 
