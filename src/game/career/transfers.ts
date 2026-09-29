@@ -375,6 +375,7 @@ function lowerLeagueCountryPool(originCountry: string, excludeIds: string[]): Cl
       isPlayableLoanClub(c, excludeIds) &&
       !TOP_LEAGUES.has(c.league) &&
       !SECOND_DIVISIONS.has(c.league) &&
+      c.tier >= 4 &&
       leagueValueWeight(c.league) + 1e-9 >= MLS_LOAN_FLOOR_WEIGHT &&
       c.country !== originCountry,
   );
@@ -384,8 +385,9 @@ function lowerLeagueCountryPool(originCountry: string, excludeIds: string[]): Cl
  * Rising-star (0.33+) loans follow the origin club, not the destination
  * first-team bar. Elite/Strong top-flight sides send the player to lower-scale
  * clubs in the same division; medium-or-lower top-flight sides send them to
- * the domestic second division; a second-division origin loans to a weaker
- * country's top flight, with MLS as the floor.
+ * the domestic second division; a second-division origin loans to Medium and
+ * Lower clubs in a weaker country's top flight, with MLS as the floor.
+ * Strong Portugal / Dutch / Turkish sides are never in that away pool.
  */
 export function pickLoanClubsFromOrigin(
   fromClub: Club,
@@ -550,13 +552,22 @@ export function pickLoanClubsForMiss(
           canLoanToSameDivision(effectiveRatio, c),
       ))
     : [];
+  const sameLeagueAll = parentLeague
+    ? withoutSaudi(CLUBS.filter(
+        (c) =>
+          c.playable !== false &&
+          c.league === parentLeague &&
+          !exclude.includes(c.id),
+      ))
+    : [];
   const otherTopFlight = withoutSaudi(CLUBS.filter(
     (c) =>
       c.playable !== false &&
       !SECOND_DIVISIONS.has(c.league) &&
       c.league !== parentLeague &&
       !exclude.includes(c.id) &&
-      canLoanToSameDivision(effectiveRatio, c),
+      canLoanToSameDivision(effectiveRatio, c) &&
+      (parent == null || c.tier >= parent.tier),
   ));
   const skipSecond = parentAlreadySecond;
   const secondIn = (country: string | null) =>
@@ -582,8 +593,12 @@ export function pickLoanClubsForMiss(
         (c) => c.playable !== false && SECOND_DIVISIONS.has(c.league) && !exclude.includes(c.id),
       ));
 
-  const quality = sameDivision.length > 0 ? sameDivision : otherTopFlight;
-  const extra = sameDivision.length > 0 ? otherTopFlight : [];
+  const quality = parentAlreadySecond
+    ? (sameDivision.length > 0 ? sameDivision : sameLeagueAll)
+    : sameDivision.length > 0 ? sameDivision : otherTopFlight;
+  const extra = parentAlreadySecond
+    ? lowerLeagueCountryPool(parentCountry ?? '', exclude)
+    : sameDivision.length > 0 ? otherTopFlight : [];
   const last = [...homeSecond, ...natSecond, ...worldSecond];
   return withGeographicLoanBias(quality, nationality, count, exclude, extra, last);
 }

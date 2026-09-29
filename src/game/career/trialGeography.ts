@@ -126,9 +126,33 @@ export function youthTierForNation(goals: number, nationId?: string | null): Clu
   return 5;
 }
 
-/** A blank youth campaign from a nation outside the top 10 is MLS only. */
+/** A blank / Lower youth campaign uses MLS only for North American nations. */
+export function nationUsesMlsLower(nationId: string | null | undefined): boolean {
+  return getNation(nationId)?.confederation === 'CONCACAF';
+}
+
 export function youthTrialsAreMlsOnly(goals: number, nationId?: string | null): boolean {
-  return !isTopTenNation(nationId) && goals <= 0;
+  return nationUsesMlsLower(nationId) && youthTierForNation(goals, nationId) >= 5;
+}
+
+/** Portuguese lower-level Primeira sides plus Spain's second division. */
+export function southAmericanLowerTrialClubs(excludeIds: string[] = []): Club[] {
+  const exclude = new Set(excludeIds);
+  const portugalLower = clubsInLeague('Primeira Liga').filter(
+    (c) => c.playable !== false && c.tier >= 4 && !exclude.has(c.id),
+  );
+  const spainSecond = clubsInLeague('La Liga 2').filter(
+    (c) => c.playable !== false && !exclude.has(c.id),
+  );
+  return [...portugalLower, ...spainSecond];
+}
+
+function excludeMlsUnlessNorthAmerica(
+  clubs: Club[],
+  nationId: string | null | undefined,
+): Club[] {
+  if (nationUsesMlsLower(nationId)) return clubs;
+  return clubs.filter((club) => club.league !== 'MLS');
 }
 
 export function clubsInCountries(countries: string[], tier?: ClubTier, excludeIds: string[] = []): Club[] {
@@ -158,10 +182,15 @@ export function pickGeographicTrialClubs(
   homeLooks = 2,
 ): Club[] {
   const exclude = [...excludeIds];
-  if (youthTrialsAreMlsOnly(0, nationId) && tier === 5) {
+  if (nationUsesMlsLower(nationId) && tier >= 5) {
     const mls = shuffle(mlsClubsAtTier(5, exclude));
     const picks = mls.slice(0, count);
-    return picks.length >= count ? picks : [...picks, ...shuffle(clubsByTier(5).filter((c) => !exclude.includes(c.id) && c.league === 'MLS'))].slice(0, count);
+    return picks.length >= count
+      ? picks
+      : [...picks, ...shuffle(mlsClubsAtTier(5, [...exclude, ...picks.map((c) => c.id)]))].slice(0, count);
+  }
+  if (getNation(nationId)?.confederation === 'CONMEBOL' && tier >= 5) {
+    return shuffle(southAmericanLowerTrialClubs(exclude)).slice(0, count);
   }
 
   const destinations = trialDestinationCountries(nationId);
@@ -174,9 +203,9 @@ export function pickGeographicTrialClubs(
     }
   };
   if (destinations.length > 0) {
-    takeFrom(shuffle(clubsInCountries(destinations, tier, exclude)).slice(0, Math.min(homeLooks, count)));
+    takeFrom(shuffle(excludeMlsUnlessNorthAmerica(clubsInCountries(destinations, tier, exclude), nationId)).slice(0, Math.min(homeLooks, count)));
     if (picks.length < count) {
-      takeFrom(shuffle(clubsInCountries(destinations, tier, exclude)));
+      takeFrom(shuffle(excludeMlsUnlessNorthAmerica(clubsInCountries(destinations, tier, exclude), nationId)));
     }
     // Pathway nations (Africa→France, Brazil→Iberia) stay in dest countries.
     // Home-league nations (Germany, Spain, …) keep the earned band and
@@ -184,13 +213,19 @@ export function pickGeographicTrialClubs(
     if (picks.length < count && !isHomeLeagueNation(nationId)) {
       for (const nearby of [tier + 1, tier - 1, tier + 2, tier - 2]) {
         if (nearby < 1 || nearby > 5) continue;
-        takeFrom(shuffle(clubsInCountries(destinations, nearby as ClubTier, exclude)));
+        takeFrom(shuffle(excludeMlsUnlessNorthAmerica(
+          clubsInCountries(destinations, nearby as ClubTier, exclude),
+          nationId,
+        )));
       }
       return picks.slice(0, count);
     }
   }
   if (picks.length < count) {
-    const rest = shuffle(clubsByTier(tier).filter((c) => !exclude.includes(c.id)));
+    const rest = shuffle(excludeMlsUnlessNorthAmerica(
+      clubsByTier(tier).filter((c) => !exclude.includes(c.id)),
+      nationId,
+    ));
     takeFrom(rest);
   }
   return picks.slice(0, count);

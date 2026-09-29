@@ -59,12 +59,12 @@ export function openingSquadStatus(role: PlayerRole): SquadStatus {
 export function describeSquadStatus(status: SquadStatus): string {
   if (status === 'starter') return 'In the starting XI across league, cups and internationals';
   if (status === 'rising-star') {
-    return 'Rising star — temporary Season 1–2 role, one chance each time you play. Score in 3 consecutive games for Impact, then another 3 for Starter. Extra goals in one game still count as one.';
+    return 'Rising star — temporary Season 1–2 role, one chance each time you play. Score in 3 consecutive games for Impact, then another 3 for Starter. Extra goals in one game still count as one. Scoring earns the next selection even if you were due to sit.';
   }
   if (status === 'reserve') {
     return 'Reserve — sits European Cup nights. In the European Trophy or lower, continental ties come first and league games are the ones rotated. Every second other game. Score in 3 consecutive games for Starter, the same way as Rising star and Impact.';
   }
-  return 'Impact — same games as Rising star, two chances each time you play. Keeps for the rest of the season; score in 3 consecutive games for Starter.';
+  return 'Impact — same games as Rising star, two chances each time you play. Keeps for the rest of the season; score in 3 consecutive games for Starter. Scoring earns the next selection even if you were due to sit.';
 }
 
 export function describeRotationSitOut(status: SquadStatus): string {
@@ -141,6 +141,20 @@ export function reservePrioritisesContinental(
   return fixtureKind.startsWith('continental') || fixtureKind === 'leagues-cup';
 }
 
+/** Last played look that actually had a chance. Sit-outs and 0-chance games are skipped. */
+export function lastLookWasGoal(
+  matches: Pick<MatchRecord, 'played' | 'scored' | 'chances'>[] | undefined,
+): boolean {
+  if (!matches?.length) return false;
+  for (let i = matches.length - 1; i >= 0; i -= 1) {
+    const match = matches[i];
+    if (!match.played) continue;
+    if ((match.chances ?? 1) <= 0) continue;
+    return match.scored === true;
+  }
+  return false;
+}
+
 export function isSquadRotationSitOut(
   role: PlayerRole,
   squadStatus: SquadStatus,
@@ -150,11 +164,16 @@ export function isSquadRotationSitOut(
     toughMinutes?: boolean;
     seasonMatchCount?: number;
     continentalCup?: ContinentalCupId | null;
+    /** Rising star / Impact: a goal last look plays this fixture even if due to sit. */
+    rewardAppearance?: boolean;
   },
 ): boolean {
   // Academy / reserve-year football is every game except injury.
   if (role === 'reserve') return false;
   if (fixtureKind === 'rest') return false;
+  if ((squadStatus === 'rising-star' || squadStatus === 'impact') && extra?.rewardAppearance) {
+    return false;
+  }
   // Rising star sits the first first-team appearance of a campaign.
   if (squadStatus === 'rising-star' && extra?.seasonMatchCount === 0) return true;
   if (squadStatus === 'reserve') {

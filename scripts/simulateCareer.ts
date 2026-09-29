@@ -14,7 +14,7 @@ import {
 import { assignClubTier, clubQualityLabel, CLUBS, clubsForSeason, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, leagueMatchWeeks, playableClubsGroupedByLeague, SECOND_DIVISIONS, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
 import { leagueDisplayName, playoffGamesFromOpening, playoffOpeningForPosition } from '../src/game/career/data/leagueFormat';
 import { confederationDisplayName } from '../src/game/career/data/displayNames';
-import { clubTransferBudget, consecutivePoorFactor, contractValueFactor, DEFAULT_CONTRACT_YEARS, ELITE_TRANSFER_VALUE_FLOOR, FIRST_CONTRACT_YEARS, firstTopFlightValueCap, formAdjustedRatio, isSeason1ValueLocked, leagueAdjustedOfferRatio, leagueValueWeight, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, MIN_ACCEPTED_FEE_RATIO, newContractYears, playerMarketValue, playerMarketValueFromSeasons, recentAggregateRatio, RESERVE_CONTRACT_YEARS, RESERVE_WAGE_FACTOR, RESERVE_WEEKLY_WAGE, seasonalSponsorship, tierForMarketValue, TOP_LEAGUES, transferFeeFromValue, wageOfferScale, weeklyWageForClub, weeklyWageForRatio, weeklyWageForSquadStatus, weeklyWageForTransferOffer, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
+import { clubTransferBudget, consecutivePoorFactor, contractValueFactor, DEFAULT_CONTRACT_YEARS, ELITE_TRANSFER_VALUE_FLOOR, FIRST_CONTRACT_YEARS, firstTopFlightValueCap, formAdjustedRatio, isSeason1ValueLocked, leagueAdjustedOfferRatio, leagueValueWeight, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, MIN_ACCEPTED_FEE_RATIO, newContractYears, playerMarketValue, playerMarketValueFromSeasons, recentAggregateRatio, RESERVE_CONTRACT_YEARS, RESERVE_WAGE_FACTOR, RESERVE_WEEKLY_WAGE, SECOND_DIVISION_STARTER_FLOOR, seasonalSponsorship, tierForMarketValue, TOP_LEAGUES, transferFeeFromValue, wageOfferScale, weeklyWageForClub, weeklyWageForRatio, weeklyWageForSquadStatus, weeklyWageForTransferOffer, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { nationKit } from '../src/game/career/data/nationColours';
 import { reserveStadium, resolveCareerStadium, resolveMatchStadium, trialStadium } from '../src/game/career/matchVenue';
@@ -82,9 +82,9 @@ import {
   trialContractWon,
   TRIALS_AT_LEVEL,
 } from '../src/game/career/trial';
-import { isHomeLeagueNation, trialDestinationCountries, youthTierForNation, youthTrialsAreMlsOnly } from '../src/game/career/trialGeography';
+import { isHomeLeagueNation, nationUsesMlsLower, pickGeographicTrialClubs, trialDestinationCountries, youthTierForNation, youthTrialsAreMlsOnly } from '../src/game/career/trialGeography';
 import { nextYouthKnockoutRound, pickYouthGroupOpponents, pickYouthKnockoutOpponent, youthMaxGames } from '../src/game/career/youthTournament';
-import { chancesForSquadStatus, consecutiveScoringAsImpact, consecutiveScoringGames, describeSquadStatus, IMPACT_CHANCES, IMPACT_STREAK, isLowerDivisionLoan, isSquadRotationSitOut, isToughMinutesFixture, nextSquadStatusAfterSeason, openingSquadStatus, promoteSquadStatusDuringSeason, reservePrioritisesContinental, reserveSitsChampionsLeague, RISING_STAR_MIN_RATIO, ROLE_REVIEW_WEEK, seasonOverridesRatioBar, shouldSitLeagueFixture, shouldSitToughFixture, squadStatusOnArrival, STARTER_STREAK, youthRolesAllowed } from '../src/game/career/squadStatus';
+import { chancesForSquadStatus, consecutiveScoringAsImpact, consecutiveScoringGames, describeSquadStatus, IMPACT_CHANCES, IMPACT_STREAK, isLowerDivisionLoan, isSquadRotationSitOut, isToughMinutesFixture, lastLookWasGoal, nextSquadStatusAfterSeason, openingSquadStatus, promoteSquadStatusDuringSeason, reservePrioritisesContinental, reserveSitsChampionsLeague, RISING_STAR_MIN_RATIO, ROLE_REVIEW_WEEK, seasonOverridesRatioBar, shouldSitLeagueFixture, shouldSitToughFixture, squadStatusOnArrival, STARTER_STREAK, youthRolesAllowed } from '../src/game/career/squadStatus';
 import { clubAllowedByLeagueSample, consecutiveLoanSpells, ELITE_OFFER_MIN_LEAGUE_GAMES, LOAN_OFFER_COUNT, SAUDI_OFFER_MIN_AGE, SECOND_DIVISION_BEST_OFFER_TIER, STRONG_OFFER_MIN_LEAGUE_GAMES, TRANSFER_MARKET_CAP, TRANSFER_OFFER_COUNT, offerFormRatio, offerRatioPreferringLastSeason, offerTierFromStanding, pickLoanClubsForMiss, pickLoanClubsFromOrigin, pickPermanentClubs, requiredGoalRatio, resolveSeasonTransition, seasonStandingRatio, sellingClubAcceptsOffer, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, trialFailTransferPending, tierEarnedByRatio, tierForRatio } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
 import { internationalCampaignForSeason } from '../src/game/career/data/competitions';
@@ -1310,9 +1310,44 @@ if (youthTierForNation(6, 'ghana') !== 2 || youthTierForNation(4, 'ghana') !== 3
   console.error('nations outside the FIFA top 10 cannot earn Elite youth trials');
   process.exitCode = 1;
 }
-if (tierForYouthGoals(7, 7, 'ghana') !== 2 || tierForYouthGoals(0, 7, 'ghana') !== 5 || !youthTrialsAreMlsOnly(0, 'ghana')) {
-  console.error('a blank youth campaign from outside the top 10 must stay lower-level and MLS-only');
+if (tierForYouthGoals(7, 7, 'ghana') !== 2 || tierForYouthGoals(0, 7, 'ghana') !== 5 || youthTrialsAreMlsOnly(0, 'ghana')) {
+  console.error('a blank Ghana youth campaign is Lower in France, not MLS-only');
   process.exitCode = 1;
+}
+if (!youthTrialsAreMlsOnly(0, 'united-states') || !youthTrialsAreMlsOnly(2, 'mexico')) {
+  console.error('MLS is the Lower youth path only for North American nations');
+  process.exitCode = 1;
+}
+if (nationUsesMlsLower('ghana') || nationUsesMlsLower('brazil') || !nationUsesMlsLower('united-states') || !nationUsesMlsLower('mexico')) {
+  console.error('MLS Lower is CONCACAF only');
+  process.exitCode = 1;
+}
+{
+  const brazilLower = pickGeographicTrialClubs(5, 'brazil', [], 3);
+  const usLower = pickGeographicTrialClubs(5, 'united-states', [], 3);
+  const brazilLooks = offerClubsForTrial(0, 3, 'brazil', 7);
+  console.log(
+    'Brazil Lower',
+    brazilLower.map((c) => `${c.id}:${c.league}:${c.tier}`),
+    'US Lower',
+    usLower.map((c) => `${c.id}:${c.league}`),
+    'Brazil 0-goal looks',
+    brazilLooks.map((c) => `${c.id}:${c.league}:${c.tier}`),
+  );
+  const southAmericanLower = (club: { league: string; tier: number }) =>
+    (club.league === 'Primeira Liga' && club.tier >= 4) || club.league === 'La Liga 2';
+  if (
+    brazilLower.length !== 3
+    || brazilLower.some((club) => !southAmericanLower(club) || club.league === 'MLS')
+    || brazilLooks.some((club) => !southAmericanLower(club) || club.league === 'MLS')
+  ) {
+    console.error('South American Lower youth trials must be Portuguese lower-level or Spain second division, not MLS');
+    process.exitCode = 1;
+  }
+  if (usLower.length !== 3 || usLower.some((club) => club.league !== 'MLS')) {
+    console.error('North American Lower youth trials must stay in MLS');
+    process.exitCode = 1;
+  }
 }
 if (tierForYouthGoals(6, 7, 'spain') !== 1 || tierForYouthGoals(5, 7, 'spain') !== 2 || tierForYouthGoals(3, 7, 'spain') !== 4) {
   console.error('top-10 nations need 6+ youth goals for Elite and 5 for Strong');
@@ -2279,9 +2314,99 @@ if (barca && hilal && lafc) {
       process.exitCode = 1;
     }
   }
-  if (lowWage > 5_000) {
-    console.error('lowest-level weekly wages must sit well below €5k');
+  if (lowWage < SECOND_DIVISION_STARTER_FLOOR) {
+    console.error('Championship starter wages must sit above the €500 reserve floor');
     process.exitCode = 1;
+  }
+  if (luton) {
+    const champScaled = weeklyWageForTransferOffer(luton, 0, 0.33, 3, 'starter', 'Championship', 0.33);
+    console.log('Championship 0.33×0.33 starter offer', champScaled);
+    if (champScaled < SECOND_DIVISION_STARTER_FLOOR) {
+      console.error('a 0.33 Championship starter offer must sit above the €500 reserve floor');
+      process.exitCode = 1;
+    }
+  }
+  {
+    const lutonS3 = resolveSeasonTransition({
+      season: {
+        ...dummySeason,
+        seasonNumber: 3,
+        clubId: 'luton',
+        league: 'Championship',
+        goals: 10,
+        gamesPlayed: 30,
+        leagueGoals: 10,
+        leagueGames: 30,
+        role: 'first-team',
+        squadStatus: 'starter',
+      },
+      role: 'first-team',
+      clubId: 'luton',
+      parentClubId: 'luton',
+      seasonsAtCurrentClub: 2,
+      age: 20,
+      careerGoals: 30,
+      careerGames: 90,
+      nationality: 'england',
+      loansUsed: 0,
+      seasonHistory: [
+        {
+          ...dummySeason,
+          seasonNumber: 1,
+          clubId: 'luton',
+          league: 'Championship',
+          goals: 10,
+          gamesPlayed: 30,
+          leagueGoals: 10,
+          leagueGames: 30,
+          role: 'first-team',
+          squadStatus: 'starter',
+        },
+        {
+          ...dummySeason,
+          seasonNumber: 2,
+          clubId: 'luton',
+          league: 'Championship',
+          goals: 10,
+          gamesPlayed: 30,
+          leagueGoals: 10,
+          leagueGames: 30,
+          role: 'first-team',
+          squadStatus: 'starter',
+        },
+      ],
+      contractYearsRemaining: 1,
+      careerStart: 'favourite-first-team',
+      squadStatus: 'starter',
+      weeklyWage: 500,
+      clubLeague: 'Championship',
+    });
+    const lutonRenewal = (lutonS3.pendingTransfer?.offers ?? []).find((o) => o.clubId === 'luton' && o.renewal);
+    const champStarters = (lutonS3.pendingTransfer?.offers ?? []).filter((o) => {
+      const dest = getClub(o.clubId);
+      return o.move === 'permanent' && o.squadStatus === 'starter' && dest?.league === 'Championship';
+    });
+    console.log(
+      'Luton S3 0.33 renewal',
+      lutonRenewal?.weeklyWage,
+      'Championship starter offers',
+      champStarters.map((o) => `${o.clubId}:${o.weeklyWage}`),
+    );
+    if (!lutonRenewal) {
+      console.error('Season 3 Luton at 0.33 must still table a renewal');
+      process.exitCode = 1;
+    }
+    if ((lutonRenewal?.weeklyWage ?? 0) < SECOND_DIVISION_STARTER_FLOOR) {
+      console.error('a Championship starter renewal must sit above the €500 reserve floor');
+      process.exitCode = 1;
+    }
+    if (
+      champStarters.length > 0
+      && champStarters.some((o) => (o.weeklyWage ?? 0) < SECOND_DIVISION_STARTER_FLOOR)
+    ) {
+      console.error('Championship starter free-transfer offers must sit above the €500 reserve floor');
+      process.exitCode = 1;
+    }
   }
   const palace = getClub('crystal-palace');
   const leicester = getClub('leicester');
@@ -2735,6 +2860,30 @@ if (barca && hilal && lafc) {
   if (isSquadRotationSitOut('first-team', 'rising-star', 'league', 0, { seasonMatchCount: 0 }) !== true
     || isSquadRotationSitOut('first-team', 'rising-star', 'league', 1, { seasonMatchCount: 1 }) !== false) {
     console.error('a Rising star must sit the first first-team match of the season');
+    process.exitCode = 1;
+  }
+  if (
+    lastLookWasGoal([{ played: true, scored: true, chances: 1 }]) !== true
+    || lastLookWasGoal([
+      { played: true, scored: true, chances: 1 },
+      { played: false, scored: null, chances: 0 },
+      { played: true, scored: false, chances: 0 },
+    ]) !== true
+    || lastLookWasGoal([
+      { played: true, scored: true, chances: 1 },
+      { played: true, scored: false, chances: 1 },
+    ]) !== false
+  ) {
+    console.error('a goal last look must still count through sit-outs and 0-chance games');
+    process.exitCode = 1;
+  }
+  if (
+    isSquadRotationSitOut('first-team', 'rising-star', 'league', 3, { seasonMatchCount: 3 }) !== true
+    || isSquadRotationSitOut('first-team', 'rising-star', 'league', 3, { seasonMatchCount: 3, rewardAppearance: true }) !== false
+    || isSquadRotationSitOut('first-team', 'impact', 'league', 1, { toughMinutes: true }) !== true
+    || isSquadRotationSitOut('first-team', 'impact', 'league', 1, { toughMinutes: true, rewardAppearance: true }) !== false
+  ) {
+    console.error('scoring must earn the next Rising star / Impact selection even when rotation would sit them');
     process.exitCode = 1;
   }
   if (shouldSitToughFixture('rising-star', 0) !== false || shouldSitToughFixture('rising-star', 1) !== true) {
@@ -4176,10 +4325,59 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
       leicesterLoans.length !== LOAN_OFFER_COUNT
       || leicesterLoans.some((c) => {
         const weight = leagueValueWeight(c.league);
-        return TOP_LEAGUES.has(c.league) || SECOND_DIVISIONS.has(c.league) || weight + 1e-9 < leagueValueWeight('MLS');
+        return TOP_LEAGUES.has(c.league) || SECOND_DIVISIONS.has(c.league) || c.tier <= 2 || weight + 1e-9 < leagueValueWeight('MLS');
       })
     ) {
-      console.error('a 0.33+ Championship rising star must loan to a lower-league country with MLS as the floor');
+      console.error('a 0.33+ Championship rising star must loan to Medium/Lower clubs in a weaker league, not Strong Portugal');
+      process.exitCode = 1;
+    }
+
+    const luton = getClub('luton')!;
+    const lutonMissLoans = pickLoanClubsForMiss(0.2, 'england', LOAN_OFFER_COUNT, [luton.id], luton.id);
+    const lutonS1 = resolveSeasonTransition({
+      season: {
+        ...dummySeason,
+        seasonNumber: 1,
+        clubId: 'luton',
+        goals: 6,
+        gamesPlayed: 30,
+        leagueGoals: 6,
+        league: 'Championship',
+        squadStatus: 'rising-star',
+      },
+      role: 'first-team',
+      clubId: 'luton',
+      parentClubId: 'luton',
+      seasonsAtCurrentClub: 0,
+      age: 17,
+      careerGoals: 6,
+      careerGames: 30,
+      nationality: 'england',
+      loansUsed: 0,
+      contractYearsRemaining: FIRST_CONTRACT_YEARS,
+      careerStart: 'favourite-first-team',
+      squadStatus: 'rising-star',
+      clubLeague: 'Championship',
+    });
+    const lutonS1Loans = (lutonS1.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan');
+    console.log('Luton 0.2 loans', lutonMissLoans.map((c) => `${c.id}:${c.league}:${c.tier}`), lutonS1Loans.map((o) => `${o.clubId}:${getClub(o.clubId)?.league}:${getClub(o.clubId)?.tier}`));
+    if (
+      lutonMissLoans.length !== LOAN_OFFER_COUNT
+      || lutonMissLoans.some((c) => c.tier <= 2 || c.league === 'Primeira Liga' && c.tier <= 2)
+      || lutonS1Loans.some((o) => (getClub(o.clubId)?.tier ?? 1) <= 2)
+    ) {
+      console.error('Luton 0.2 Season 1 loans must stay Championship / lower, not Strong Portugal');
+      process.exitCode = 1;
+    }
+    if (lutonMissLoans.some((c) => c.league !== 'Championship')) {
+      console.error('a 0.2 Luton miss must loan inside the Championship, not a stronger foreign league');
+      process.exitCode = 1;
+    }
+    if (
+      lutonS1Loans.length !== LOAN_OFFER_COUNT
+      || lutonS1Loans.some((o) => getClub(o.clubId)?.league !== 'Championship' || (getClub(o.clubId)?.tier ?? 1) <= 2)
+    ) {
+      console.error('Season 1 Luton 0.2 loan offers must stay Championship, not Strong Portugal');
       process.exitCode = 1;
     }
 

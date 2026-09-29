@@ -112,6 +112,7 @@ import {
   defaultSquadStatus,
   isSquadRotationSitOut,
   isToughMinutesFixture,
+  lastLookWasGoal,
   nextSquadStatusAfterSeason,
   normalizeSquadStatus,
   openingSquadStatus,
@@ -1211,6 +1212,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
         toughMinutes: isToughMinutesFixture(fixture, club, state.nationality),
         seasonMatchCount: season.matches.length,
         continentalCup: fixture.continentalCup,
+        rewardAppearance: lastLookWasGoal(season.matches),
       },
     );
     if (rotatedOut) {

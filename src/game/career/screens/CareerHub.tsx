@@ -11,6 +11,7 @@ import {
   describeRotationSitOut,
   isSquadRotationSitOut,
   isToughMinutesFixture,
+  lastLookWasGoal,
   SQUAD_STATUS_LABEL,
   squadRoleRatioGuide,
 } from '../squadStatus';
@@ -113,6 +114,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         toughMinutes: isToughMinutesFixture(nextFixture, club, nationality),
         seasonMatchCount: season.matches.length,
         continentalCup: nextFixture.continentalCup,
+        rewardAppearance: lastLookWasGoal(season.matches),
       },
     ),
   );
