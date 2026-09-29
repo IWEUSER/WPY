@@ -5,9 +5,9 @@
  * Run with: npx tsx scripts/simulateSeason2Store.ts
  */
 import { useCareerStore } from '../src/game/career/store';
-import { getClub, leagueMatchWeeks } from '../src/game/career/data/clubs';
+import { getClub, leagueMatchWeeks, SECOND_DIVISIONS } from '../src/game/career/data/clubs';
 import { currentCalendarWeek } from '../src/game/career/calendar';
-import { FIRST_CONTRACT_YEARS, playerMarketValue, playerMarketValueFromSeasons, weeklyWageForSquadStatus, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
+import { FIRST_CONTRACT_YEARS, playerMarketValue, playerMarketValueFromSeasons, SECOND_DIVISION_STARTER_FLOOR, weeklyWageForSquadStatus, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import type { ShotResult } from '../src/game/shooting/types';
 
 function fakeShot(scored: boolean): ShotResult {
@@ -518,12 +518,14 @@ console.log(
     process.exitCode = 1;
   }
 }
-const loanClubId = store.getState().pendingTransfer?.offers?.find((o) => o.move === 'loan' && !o.renewal)?.clubId
+const loanOffer = store.getState().pendingTransfer?.offers?.find((o) => o.move === 'loan' && !o.renewal);
+const loanClubId = loanOffer?.clubId
   ?? store.getState().pendingTransfer?.clubIds.find((id) => id !== loanParent);
 if (!loanClubId) {
   console.error('Season 1 loan offers must include a club');
   process.exitCode = 1;
 } else {
+  const offeredWage = loanOffer?.weeklyWage ?? 0;
   store.getState().resolveTransferChoice(loanClubId);
   const loaned = store.getState();
   console.log(
@@ -537,6 +539,8 @@ if (!loanClubId) {
     loaned.contractYearsRemaining,
     'sponsorship',
     loaned.seasonSponsorship,
+    'wage',
+    loaned.weeklyWage,
   );
   if (loaned.role !== 'loan' || loaned.seasonNumber !== 2 || loaned.age !== 18) {
     console.error('A Season 1 loan move must start Season 2 on loan at age 18');
@@ -544,20 +548,12 @@ if (!loanClubId) {
   }
   {
     const dest = loaned.clubId ? getClub(loaned.clubId) : undefined;
-    const destWage = dest
-      ? weeklyWageForSquadStatus(dest, playerMarketValueFromSeasons({
-          age: loaned.age,
-          careerGoals: loaned.careerGoals,
-          careerGames: loaned.careerGames,
-          seasons: loaned.seasonHistory,
-          fallbackClub: dest,
-          seasonNumber: loaned.seasonNumber,
-          calendarWeek: 99,
-          role: 'loan',
-        }), 'starter', dest.league)
-      : 0;
-    if (loaned.weeklyWage !== destWage) {
-      console.error('The first loan must pay the destination starter wage');
+    if (loaned.weeklyWage !== offeredWage || offeredWage <= 0) {
+      console.error('The first loan must pay the destination starter wage from the offer');
+      process.exitCode = 1;
+    }
+    if (dest && SECOND_DIVISIONS.has(dest.league) && offeredWage < SECOND_DIVISION_STARTER_FLOOR) {
+      console.error('a second-division loan starter must sit above the €500 reserve floor');
       process.exitCode = 1;
     }
   }
