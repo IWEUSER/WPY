@@ -268,7 +268,7 @@ export default function SeasonSummaryScreen() {
                 <p className="mt-0.5 text-xs text-white/50">
                   {risingKept
                     ? `Retained for Season ${(publicSeason ?? 1) + 1}`
-                    : 'Below 0.33 — Reserve next season'}
+                    : 'Below 0.33 — a Season 2 loan is available'}
                 </p>
               </div>
               <StatusMark ok={risingKept} />
@@ -276,7 +276,7 @@ export default function SeasonSummaryScreen() {
           )}
           {!risingKept && showRisingStarTrack && (
             <p className="mt-3 text-xs text-white/55">
-              You can stay as a reserve team player, or take a loan or transfer if offers come through when you continue.
+              Stay as a Rising star, or take a loan. A transfer is not required after Season 1.
             </p>
           )}
         </div>

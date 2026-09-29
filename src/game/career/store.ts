@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { applyMatchResult, createAvailability, isAvailable, serveBannedGame } from './availabilityEngine';
+import { applyMatchResult, availabilityDropsApply, createAvailability, isAvailable, serveBannedGame } from './availabilityEngine';
 import { rollInjuryAbsence, sitOutGamesAfterPlayedMatch } from './injury';
 import { clubSeasonTotals, recordClubAppearanceStats } from './seasonStats';
 import { FORM_WINDOW_GAMES, RETIREMENT_AGE, SEASON_LENGTH, STARTING_AGE } from './constants';
@@ -1169,6 +1169,11 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
     }
 
     const isInternational = fixture.kind === 'international';
+    const liveStatus = state.squadStatus ?? defaultSquadStatus(state.role);
+    if (!availabilityDropsApply(liveStatus)) {
+      availability = createAvailability();
+      if (nationalTeam) nationalTeam = { ...nationalTeam, availability: createAvailability() };
+    }
     const squad = isInternational ? nationalTeam?.availability : availability;
     if (injuryGamesRemaining > 0) {
       const resolution = resolveFixture(sim, fixture, club, 0, Math.random, { playerParticipated: false });
@@ -1227,7 +1232,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
       if (isFinalFixture(fixture)) return sitOutFinalResult();
       return sitOutHub();
     }
-    if (squad && !isAvailable(squad)) {
+    if (squad && !isAvailable(squad) && availabilityDropsApply(liveStatus)) {
       const resolution = resolveFixture(sim, fixture, club, 0, Math.random, { playerParticipated: false });
       sim = { ...resolution.sim, fixtureIndex: sim.fixtureIndex + 1 };
       const record: MatchRecord = { matchNumber: season.matches.length + 1, played: false, scored: null };
@@ -1415,6 +1420,11 @@ function finishResolvedLiveMatch(
   );
   let availability = state.availability;
   let nationalTeam = state.nationalTeam;
+  const liveStatus = state.squadStatus ?? defaultSquadStatus(state.role);
+  if (!availabilityDropsApply(liveStatus)) {
+    availability = createAvailability();
+    if (nationalTeam) nationalTeam = { ...nationalTeam, availability: createAvailability() };
+  }
   if (isInternational && nationalTeam) {
     nationalTeam = {
       ...recordInternationalAppearance(
@@ -1424,10 +1434,15 @@ function finishResolvedLiveMatch(
         historyGoals,
         isInternationalFinalsRound(fixture.internationalRound),
       ),
-      availability: applyMatchResult(nationalTeam.availability, openPlayScored, live.chancesTotal),
+      availability: applyMatchResult(
+        nationalTeam.availability,
+        openPlayScored,
+        live.chancesTotal,
+        liveStatus,
+      ),
     };
   } else {
-    availability = applyMatchResult(availability, openPlayScored, live.chancesTotal);
+    availability = applyMatchResult(availability, openPlayScored, live.chancesTotal, liveStatus);
   }
 
   const withIntlSeason: SeasonRecord = isInternational
@@ -1905,7 +1920,12 @@ export const useCareerStore = create<CareerStore>()(
           const matches = [...season.matches, record];
           const goals = season.goals + (scored ? 1 : 0);
           const gamesPlayed = season.gamesPlayed + 1;
-          const availability = applyMatchResult(state.availability, scored);
+          const availability = applyMatchResult(
+            state.availability,
+            scored,
+            1,
+            state.squadStatus ?? defaultSquadStatus(state.role),
+          );
           const paid = withWeeklyPay(season, state.careerEarnings, state.weeklyWage);
           const updatedSeason: SeasonRecord = {
             ...paid.season,

@@ -22,7 +22,7 @@ import { crowdSwatch, kitFromColor, kitFromScheme, luminance } from '../src/game
 import { AFRICA_SKIN_TONES, createPitchView, idleKeeperPose, MAX_SHOT_DISTANCE_M, MIN_SHOT_DISTANCE_M, PLAYER_SKIN_TONES, pickPlayerLook, pickPlayerSkin, SHORTS_HALF_H, THIGH_SHARE } from '../src/game/shooting/render';
 import { appearanceRegionForNation, HAIR_SWATCHES, isBlackHair, isBlondeHair, isFairSkin, SKIN_SWATCHES } from '../src/game/shooting/appearance';
 import { practiceChanceOptions, PRACTICE_CHANCES, rollChanceSetup } from '../src/game/shooting/chanceSetup';
-import { applyMatchResult, createAvailability } from '../src/game/career/availabilityEngine';
+import { applyMatchResult, availabilityDropsApply, createAvailability } from '../src/game/career/availabilityEngine';
 import { useCareerStore } from '../src/game/career/store';
 import { standBottomY, crowdCellSize, pitchQualityFromStrength, stadiumLayout, stadiumRoofBand } from '../src/game/shooting/stadium';
 import {
@@ -3416,13 +3416,12 @@ if (barca && hilal && lafc) {
   const favFirstRenewal = favFirstMissOffers.find((o) => o.renewal && o.clubId === 'real-madrid');
   if (
     favFirstMiss.pendingTransfer?.kind !== 'loan-or-transfer'
-    || favFirstMiss.pendingTransfer.allowDecline
-    || favFirstMiss.pendingTransfer.stay
-    || !/loan move required/i.test(favFirstMiss.headline)
+    || !favFirstMiss.pendingTransfer.allowDecline
+    || !favFirstMiss.pendingTransfer.stay
+    || !/stay, or take a loan/i.test(favFirstMiss.headline)
     || favFirstMissLoans.length === 0
-    || favFirstMissPerms.length === 0
   ) {
-    console.error('Season 1 below 0.33 must force a loan or transfer, not a Reserve stay');
+    console.error('Season 1 below 0.33 must always offer a loan and allow a stay — a transfer is not forced');
     process.exitCode = 1;
   }
   if (
@@ -4274,8 +4273,8 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
       'loan years',
       risingS2Loans.map((o) => o.contractYears),
     );
-    if (risingS2.pendingTransfer?.stay || risingS2.pendingTransfer?.allowDecline) {
-      console.error('Season 2 at 0.33+ must force a loan or transfer, not a stay');
+    if (!risingS2.pendingTransfer?.stay || !risingS2.pendingTransfer?.allowDecline) {
+      console.error('Season 2 at 0.33+ must still allow a stay, with a loan on the table');
       process.exitCode = 1;
     }
     if (risingS2Loans.length === 0 || risingS2Loans.some((o) => o.contractYears !== 1)) {
@@ -5805,12 +5804,12 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     const arsenalBlankRenewal = (arsenalBlank.pendingTransfer?.offers ?? []).find((o) => o.renewal && o.clubId === 'arsenal');
     const arsenalBlankLoans = (arsenalBlank.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan');
     console.log('Arsenal 0.0 window', arsenalBlank.headline, 'renewal', Boolean(arsenalBlankRenewal), 'stay', Boolean(arsenalBlank.pendingTransfer?.stay), 'loans', arsenalBlankLoans.length);
-    if (arsenalBlankRenewal || arsenalBlank.pendingTransfer?.stay || arsenalBlank.pendingTransfer?.allowDecline) {
-      console.error('0.0 at an elite club must force a Season 2 loan or transfer, not a Reserve stay');
+    if (arsenalBlankRenewal || !arsenalBlank.pendingTransfer?.stay || !arsenalBlank.pendingTransfer?.allowDecline) {
+      console.error('0.0 at an elite club must still allow a Season 2 stay, with a loan always available');
       process.exitCode = 1;
     }
-    if (!/loan move required/i.test(arsenalBlank.headline)) {
-      console.error('missing the Rising star line must headline a required loan');
+    if (!/stay, or take a loan/i.test(arsenalBlank.headline)) {
+      console.error('missing the Rising star line must headline a stay-or-loan window, not a forced transfer');
       process.exitCode = 1;
     }
     if (arsenalBlankLoans.length !== LOAN_OFFER_COUNT || arsenalBlankLoans.some((o) => o.weeklyWage === 154_000)) {
@@ -8198,6 +8197,26 @@ console.log('\n--- Club cups, paced tables, transfers, injuries, and elite score
     console.error('an open-play goal must reset the drop window');
     process.exitCode = 1;
   }
+  if (availabilityDropsApply('rising-star') || availabilityDropsApply('impact') || !availabilityDropsApply('starter') || !availabilityDropsApply('reserve')) {
+    console.error('Rising star and Impact must be exempt from the drop window; Starter and Reserve keep it');
+    process.exitCode = 1;
+  }
+  const youthBlanks = applyMatchResult(
+    applyMatchResult(applyMatchResult(createAvailability(), false, 1, 'rising-star'), false, 1, 'rising-star'),
+    false,
+    1,
+    'rising-star',
+  );
+  const impactBlanks = applyMatchResult(
+    applyMatchResult(applyMatchResult(createAvailability(), false, 1, 'impact'), false, 1, 'impact'),
+    false,
+    1,
+    'impact',
+  );
+  if (youthBlanks.bannedGamesRemaining !== 0 || youthBlanks.windowFails !== 0 || impactBlanks.bannedGamesRemaining !== 0) {
+    console.error('three blanks as Rising star or Impact must not drop the player');
+    process.exitCode = 1;
+  }
 
   let trialPens = 0;
   for (let i = 0; i < 80; i++) {
@@ -9089,12 +9108,62 @@ console.log('\n--- Concurrent career save slots ---');
   const burnleyMissLoans = (burnleyMiss.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan');
   const burnleyMissPerms = (burnleyMiss.pendingTransfer?.offers ?? []).filter((o) => o.move === 'permanent' && !o.renewal);
   console.log('Burnley 0.11', burnleyMiss.headline, 'stay', Boolean(burnleyMiss.pendingTransfer?.stay), 'loans', burnleyMissLoans.length, 'perms', burnleyMissPerms.length);
-  if (burnleyMiss.pendingTransfer?.stay || burnleyMiss.pendingTransfer?.allowDecline || !/loan move required/i.test(burnleyMiss.headline)) {
-    console.error('Impact below the Rising star line must be forced onto a Season 2 loan, not promoted to Reserve');
+  if (!burnleyMiss.pendingTransfer?.stay || !burnleyMiss.pendingTransfer?.allowDecline || !/stay, or take a loan/i.test(burnleyMiss.headline)) {
+    console.error('Impact below the Rising star line must keep a Season 2 stay, with a loan always available');
     process.exitCode = 1;
   }
-  if (burnleyMissLoans.length === 0 || burnleyMissPerms.length === 0) {
-    console.error('a forced Season 2 loan window must still table loan and transfer offers');
+  if (burnleyMissLoans.length === 0) {
+    console.error('a Season 1 miss must always table loan offers');
+    process.exitCode = 1;
+  }
+
+  const s3ExpiredMiss = resolveSeasonTransition({
+    season: {
+      ...dummySeason,
+      seasonNumber: 3,
+      clubId: 'arsenal',
+      goals: 6,
+      gamesPlayed: 32,
+      leagueGoals: 5,
+      league: 'Premier League',
+      squadStatus: 'reserve',
+    },
+    role: 'first-team',
+    clubId: 'arsenal',
+    parentClubId: 'arsenal',
+    seasonsAtCurrentClub: 2,
+    age: 19,
+    careerGoals: 22,
+    careerGames: 80,
+    nationality: 'england',
+    loansUsed: 0,
+    contractYearsRemaining: 1,
+    careerStart: 'favourite-first-team',
+    squadStatus: 'reserve',
+    clubLeague: 'Premier League',
+    seasonHistory: [
+      { ...dummySeason, seasonNumber: 1, clubId: 'arsenal', goals: 8, gamesPlayed: 24, league: 'Premier League' },
+      { ...dummySeason, seasonNumber: 2, clubId: 'arsenal', goals: 8, gamesPlayed: 24, league: 'Premier League' },
+    ],
+  });
+  const s3ExpiredLoans = (s3ExpiredMiss.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan');
+  console.log(
+    'S3 expired miss',
+    s3ExpiredMiss.headline,
+    s3ExpiredMiss.pendingTransfer?.kind,
+    'stay',
+    Boolean(s3ExpiredMiss.pendingTransfer?.stay),
+    'loans',
+    s3ExpiredLoans.length,
+  );
+  if (
+    s3ExpiredMiss.pendingTransfer?.kind !== 'sold'
+    || s3ExpiredMiss.pendingTransfer.allowDecline
+    || s3ExpiredMiss.pendingTransfer.stay
+    || s3ExpiredLoans.length > 0
+    || !/will not offer a new contract/i.test(s3ExpiredMiss.headline)
+  ) {
+    console.error('Season 3 with an expired deal and no new contract must force a transfer');
     process.exitCode = 1;
   }
 

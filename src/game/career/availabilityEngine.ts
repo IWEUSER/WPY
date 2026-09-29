@@ -1,4 +1,4 @@
-import type { AvailabilityState } from './types';
+import type { AvailabilityState, SquadStatus } from './types';
 
 /**
  * The escalating suspension rule:
@@ -12,7 +12,17 @@ import type { AvailabilityState } from './types';
  * Scoring at ANY point resets straight back to phase 0 with a fresh 3-game
  * allowance - there is no partial credit, but there is also no permanent
  * penalty: one goal wipes the slate clean.
+ *
+ * Rising star and Impact already get one or two looks, rotation sit-outs,
+ * and 0-chance fixtures. Dropping them on top of that produces weeks with
+ * no games, so the window never runs for those roles.
  */
+
+/** Drop windows only run for Starter and Reserve. */
+export function availabilityDropsApply(status: SquadStatus | null | undefined): boolean {
+  return status !== 'rising-star' && status !== 'impact';
+}
+
 export function allowanceForPhase(phase: number): number {
   if (phase <= 0) return 3;
   if (phase === 1) return 2;
@@ -47,7 +57,9 @@ export function applyMatchResult(
   state: AvailabilityState,
   scored: boolean,
   chances = 1,
+  squadStatus?: SquadStatus,
 ): AvailabilityState {
+  if (!availabilityDropsApply(squadStatus)) return state;
   if (!matchCountsTowardDrop(chances)) return state;
   if (scored) return createAvailability();
 
@@ -64,7 +76,11 @@ export function applyMatchResult(
 }
 
 /** Human-readable status for the career hub UI. */
-export function describeAvailability(state: AvailabilityState): string {
+export function describeAvailability(
+  state: AvailabilityState,
+  squadStatus?: SquadStatus,
+): string {
+  if (!availabilityDropsApply(squadStatus)) return 'In the squad';
   if (!isAvailable(state)) {
     const games = state.bannedGamesRemaining;
     return `Dropped from the squad \u2014 ${games} game${games === 1 ? '' : 's'} remaining`;

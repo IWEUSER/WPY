@@ -3,7 +3,7 @@ import { clubKit } from '../data/clubKits';
 import { getClub, leagueMatchWeeks } from '../data/clubs';
 import { conferenceLabel, leagueDisplayName, mlsConferenceOf } from '../data/leagueFormat';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
-import { describeAvailability, isAvailable } from '../availabilityEngine';
+import { availabilityDropsApply, describeAvailability, isAvailable } from '../availabilityEngine';
 import { describeInjury } from '../injury';
 import {
   chancesForSquadStatus,
@@ -117,7 +117,8 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
     ),
   );
   const noChance = chancesForSquadStatus(squadStatus, nextFixture?.playerChances ?? 1) <= 0;
-  const available = isAvailable(squadAvailability) && !injured && !rotatedOut && !noChance;
+  const dropApplies = availabilityDropsApply(squadStatus);
+  const available = (dropApplies ? isAvailable(squadAvailability) : true) && !injured && !rotatedOut && !noChance;
   const briefing = nextFixture
     ? nextMatchBriefing(nextFixture, seasonSimWithGroup, {
         playerNationName: nation?.name,
@@ -131,8 +132,8 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
       : noChance
         ? 'No chance this match'
         : nextIsInternational
-        ? describeAvailability(squadAvailability)
-        : describeAvailability(availability);
+        ? describeAvailability(squadAvailability, squadStatus)
+        : describeAvailability(availability, squadStatus);
   const week = seasonCalendar && seasonSimWithGroup
     ? currentCalendarWeek(seasonCalendar, seasonSimWithGroup.fixtureIndex)
     : season.matches.length + 1;
