@@ -91,9 +91,6 @@ export default function HomeScreen({ onPractice }: { onPractice: (chance: Practi
               className="rounded-2xl bg-emerald-500 px-6 py-4 text-lg font-bold text-black shadow-lg shadow-emerald-500/20 transition active:scale-[0.98]"
             >
               Career mode
-              <span className="mt-1 block text-xs font-medium text-black/70">
-                20 seasons. Start without a club, or pick one now.
-              </span>
             </button>
 
             {careerOpen && (
@@ -103,9 +100,9 @@ export default function HomeScreen({ onPractice }: { onPractice: (chance: Practi
                   onClick={startYouthChampionships}
                   className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3.5 text-left transition active:scale-[0.98]"
                 >
-                  <span className="block text-base font-bold text-white">Start as a youth player</span>
+                  <span className="block text-base font-bold text-white">Get scouted as a youth player</span>
                   <span className="mt-1 block text-xs font-medium text-white/60">
-                    No club yet. Play your country’s youth tournament, trial, then Season 1 as a Rising star.
+                    No club yet. Play your country’s youth tournament, then trial.
                   </span>
                 </button>
                 <button
@@ -113,10 +110,7 @@ export default function HomeScreen({ onPractice }: { onPractice: (chance: Practi
                   onClick={() => startFavouritePath('favourite-first-team')}
                   className="rounded-2xl border border-white/10 bg-black/20 px-5 py-3.5 text-left transition active:scale-[0.98]"
                 >
-                  <span className="block text-base font-bold text-white">Pick a club</span>
-                  <span className="mt-1 block text-xs font-medium text-white/60">
-                    Join any club now as a Rising star on a 3-year deal at 10% of that club’s average wage.
-                  </span>
+                  <span className="block text-base font-bold text-white">Join any club now</span>
                 </button>
               </>
             )}

@@ -115,7 +115,8 @@ import {
   isToughMinutesFixture,
   nextSquadStatusAfterSeason,
   normalizeSquadStatus,
-  openingSquadStatus,
+  resolveOpeningSquadStatus,
+  type OpeningSquadPick,
   promoteSquadStatusDuringSeason,
   seasonOverridesRatioBar,
   seasonRatioClearsBar,
@@ -810,6 +811,7 @@ function initialState(): CareerState {
     guidedChanceSeen: false,
     fullCareerUnlocked: false,
     pendingSeasonTwoChoice: null,
+    openingSquadPick: null,
   };
 }
 
@@ -885,16 +887,18 @@ function beginSignedCareer(
   role: 'reserve' | 'first-team',
   nationId: string | null,
   careerStart: CareerStart | null,
+  openingPick?: CareerState['openingSquadPick'],
 ): Partial<CareerState> {
   const club = getClub(clubId);
   const seasonNumber = 1;
   const age = role === 'first-team' ? STARTING_AGE + 1 : STARTING_AGE;
   const dealYears = role === 'reserve' ? RESERVE_CONTRACT_YEARS : FIRST_CONTRACT_YEARS;
+  const squadStatus = resolveOpeningSquadStatus(role, openingPick);
   const weeklyWage = club
     ? weeklyWageForSquadStatus(
         club,
         playerMarketValue({ age, ratio: 0.3, careerGoals: 0, club }),
-        role === 'reserve' ? 'reserve' : openingSquadStatus(role),
+        squadStatus,
       )
     : role === 'reserve'
       ? 1000
@@ -903,7 +907,7 @@ function beginSignedCareer(
     clubId,
     parentClubId: clubId,
     role,
-    squadStatus: openingSquadStatus(role),
+    squadStatus,
     lastTransferRejection: null,
     seasonNumber,
     age,
@@ -913,18 +917,77 @@ function beginSignedCareer(
     contractYears: dealYears,
     contractYearsRemaining: dealYears,
     careerStart,
+    openingSquadPick: role === 'first-team' ? (openingPick ?? squadStatus) : openingPick ?? null,
     ...startSimulatedSeason(seasonNumber, clubId, role, [], nationId, age, 0, 0, null, undefined, {
       league: club?.league,
       careerEarnings: 0,
       contractYearsRemaining: dealYears,
       careerStart,
-      squadStatus: openingSquadStatus(role),
+      squadStatus,
     }),
     pendingTransfer: null,
     openingCampaign: null,
     trial: null,
     liveMatch: null,
     phase: 'hub',
+  };
+}
+
+function startCareerFromOpeningRole(state: CareerState, status: OpeningSquadPick): Partial<CareerState> {
+  const playerName = state.playerName?.replace(/\s+/g, ' ').trim();
+  const appearance = {
+    playerSkin: state.playerSkin ?? null,
+    playerHair: state.playerHair ?? null,
+  };
+  const nationId = state.nationality;
+  if (!nationId || !playerName) {
+    return { phase: playerName ? 'nationality-choice' : 'player-name', openingSquadPick: status };
+  }
+  const nationalTeam = state.nationalTeam ?? createNationalTeamState(nationId);
+  if (state.careerStart === 'favourite-trial' && state.clubId) {
+    const club = getClub(state.clubId);
+    if (!club) return { playerName, ...appearance, nationality: nationId, nationalTeam, openingSquadPick: status };
+    const opening = beginFavouriteClubTrial(club);
+    return {
+      playerName,
+      ...appearance,
+      nationality: nationId,
+      nationalTeam,
+      openingSquadPick: status,
+      openingCampaign: opening,
+      clubId: club.id,
+      parentClubId: club.id,
+      trial: null,
+      liveMatch: liveFromOpening(opening),
+      seasonCalendar: opening.calendar,
+      phase: 'match',
+    };
+  }
+  if ((state.careerStart === 'favourite-reserve' || state.careerStart === 'favourite-first-team') && state.clubId) {
+    return {
+      nationality: nationId,
+      nationalTeam,
+      ...beginSignedCareer(state.clubId, 'first-team', nationId, state.careerStart, status),
+      playerName,
+      ...appearance,
+    };
+  }
+  if (state.clubId && !isFavouriteStart(state.careerStart)) {
+    return { playerName, ...appearance, nationality: nationId, nationalTeam, openingSquadPick: status, phase: 'hub' };
+  }
+  const opening = createYouthCampaign(nationId);
+  return {
+    playerName,
+    ...appearance,
+    nationality: nationId,
+    nationalTeam,
+    openingSquadPick: status,
+    careerStart: state.careerStart ?? 'youth',
+    openingCampaign: opening,
+    trial: null,
+    liveMatch: liveFromOpening(opening),
+    seasonCalendar: opening.calendar,
+    phase: 'match',
   };
 }
 
@@ -944,6 +1007,7 @@ interface CareerActions {
   chooseClub: (clubId: string) => void;
   chooseNationality: (nationId: string) => void;
   confirmPlayerName: (name: string, look?: { skin: string; hair: string }) => void;
+  confirmOpeningRole: (status: OpeningSquadPick) => void;
   joinAsRisingStar: () => void;
   setPlayerLook: (look: { skin: string; hair: string }) => void;
   advance: () => void;
@@ -1687,7 +1751,7 @@ export const useCareerStore = create<CareerStore>()(
         }),
 
       chooseClub: (clubId) =>
-        set((state) => beginSignedCareer(clubId, 'first-team', state.nationality, state.careerStart)),
+        set((state) => beginSignedCareer(clubId, 'first-team', state.nationality, state.careerStart, state.openingSquadPick)),
 
       chooseNationality: (nationId) =>
         set({
@@ -1714,62 +1778,11 @@ export const useCareerStore = create<CareerStore>()(
           };
         }),
 
+      confirmOpeningRole: (status) =>
+        set((state) => startCareerFromOpeningRole(state, status)),
+
       joinAsRisingStar: () =>
-        set((state) => {
-          const playerName = state.playerName?.replace(/\s+/g, ' ').trim();
-          const appearance = {
-            playerSkin: state.playerSkin ?? null,
-            playerHair: state.playerHair ?? null,
-          };
-          const nationId = state.nationality;
-          if (!nationId || !playerName) {
-            return { phase: playerName ? 'nationality-choice' : 'player-name' };
-          }
-          const nationalTeam = state.nationalTeam ?? createNationalTeamState(nationId);
-          if (state.careerStart === 'favourite-trial' && state.clubId) {
-            const club = getClub(state.clubId);
-            if (!club) return { playerName, ...appearance, nationality: nationId, nationalTeam };
-            const opening = beginFavouriteClubTrial(club);
-            return {
-              playerName,
-              ...appearance,
-              nationality: nationId,
-              nationalTeam,
-              openingCampaign: opening,
-              clubId: club.id,
-              parentClubId: club.id,
-              trial: null,
-              liveMatch: liveFromOpening(opening),
-              seasonCalendar: opening.calendar,
-              phase: 'match',
-            };
-          }
-          if ((state.careerStart === 'favourite-reserve' || state.careerStart === 'favourite-first-team') && state.clubId) {
-            return {
-              nationality: nationId,
-              nationalTeam,
-              ...beginSignedCareer(state.clubId, 'first-team', nationId, state.careerStart),
-              playerName,
-              ...appearance,
-            };
-          }
-          if (state.clubId && !isFavouriteStart(state.careerStart)) {
-            return { playerName, ...appearance, nationality: nationId, nationalTeam, phase: 'hub' };
-          }
-          const opening = createYouthCampaign(nationId);
-          return {
-            playerName,
-            ...appearance,
-            nationality: nationId,
-            nationalTeam,
-            careerStart: state.careerStart ?? 'youth',
-            openingCampaign: opening,
-            trial: null,
-            liveMatch: liveFromOpening(opening),
-            seasonCalendar: opening.calendar,
-            phase: 'match',
-          };
-        }),
+        set((state) => startCareerFromOpeningRole(state, 'rising-star')),
 
       setPlayerLook: (look) => set({ playerSkin: look.skin, playerHair: look.hair }),
 
@@ -2231,7 +2244,7 @@ export const useCareerStore = create<CareerStore>()(
           if (!pending) return state;
           if (pending.kind === 'trial-offers') {
             if (!clubId) return state;
-            return beginSignedCareer(clubId, 'first-team', state.nationality, state.careerStart);
+            return beginSignedCareer(clubId, 'first-team', state.nationality, state.careerStart, state.openingSquadPick);
           }
           if (!state.clubId || !state.parentClubId) return state;
 
@@ -2608,7 +2621,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 42,
+      version: 43,
       migrate: (persisted) => {
         try {
           return migrateCareerPersist(persisted);
@@ -2879,6 +2892,7 @@ function migrateCareerPersist(persisted: unknown): CareerState {
           rulesStamp: migratedRulesStamp(state),
           fullCareerUnlocked: state.fullCareerUnlocked ?? false,
           pendingSeasonTwoChoice: state.pendingSeasonTwoChoice ?? null,
+          openingSquadPick: state.openingSquadPick ?? null,
           pendingTransfer: state.pendingTransfer
             ? {
                 ...state.pendingTransfer,

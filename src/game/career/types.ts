@@ -313,6 +313,8 @@ export interface CareerState {
   fullCareerUnlocked?: boolean;
   /** Stay (`clubId: null`) or offer chosen on the Season 2 paywall. */
   pendingSeasonTwoChoice?: { clubId: string | null } | null;
+  /** Season 1 place chosen on the opening-role screen. */
+  openingSquadPick?: SquadStatus | null;
 }
 
 export interface LastMatchResult {

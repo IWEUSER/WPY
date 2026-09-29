@@ -49,7 +49,7 @@ function pickNation(nationId: string, name = 'Ian Test') {
     process.exitCode = 1;
     return;
   }
-  store.getState().joinAsRisingStar();
+  store.getState().confirmOpeningRole('rising-star');
 }
 
 pickNation('spain');
@@ -748,6 +748,21 @@ pickNation('england');
   console.log('favourite first-team S1 week', week, 'value', value, 'cup', s.seasonSim?.europeanStanding?.cup);
   if (value !== YOUTH_MARKET_VALUE) {
     console.error('Favourite first-team Season 1 must show €100k until week 20');
+    process.exitCode = 1;
+  }
+}
+
+store.getState().resetCareer();
+store.getState().startFavouritePath('favourite-first-team');
+store.getState().chooseFavouriteClub('liverpool');
+store.getState().chooseNationality('england');
+store.getState().confirmPlayerName('Ian Test');
+store.getState().confirmOpeningRole('starter');
+{
+  const s = store.getState();
+  console.log('favourite starter pick', s.phase, s.squadStatus, s.openingSquadPick);
+  if (s.phase !== 'hub' || s.squadStatus !== 'starter' || s.openingSquadPick !== 'starter') {
+    console.error('the Season 1 place screen must be able to start as a Starter');
     process.exitCode = 1;
   }
 }

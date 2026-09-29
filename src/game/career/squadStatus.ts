@@ -56,6 +56,17 @@ export function openingSquadStatus(role: PlayerRole): SquadStatus {
   return defaultSquadStatus(role);
 }
 
+export type OpeningSquadPick = 'rising-star' | 'impact' | 'starter';
+
+export function isOpeningSquadPick(status: string | null | undefined): status is OpeningSquadPick {
+  return status === 'rising-star' || status === 'impact' || status === 'starter';
+}
+
+export function resolveOpeningSquadStatus(role: PlayerRole, pick?: SquadStatus | null): SquadStatus {
+  if (role !== 'first-team') return openingSquadStatus(role);
+  return isOpeningSquadPick(pick) ? pick : openingSquadStatus(role);
+}
+
 export function describeSquadStatus(status: SquadStatus): string {
   if (status === 'starter') return 'In the starting XI across league, cups and internationals';
   if (status === 'rising-star') {

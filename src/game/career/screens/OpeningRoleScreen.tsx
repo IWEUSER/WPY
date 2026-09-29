@@ -1,8 +1,9 @@
-import { JOIN_RISING_STAR_LABEL, OPENING_ROLE_CARDS, OPENING_ROLE_EYEBROW, OPENING_ROLE_LEAD, OPENING_ROLE_TITLE } from '../openingRoleCopy';
+import { OPENING_ROLE_CARDS, OPENING_ROLE_EYEBROW, OPENING_ROLE_LEAD, OPENING_ROLE_TITLE } from '../openingRoleCopy';
+import type { OpeningSquadPick } from '../squadStatus';
 import { useCareerStore } from '../store';
 
 export default function OpeningRoleScreen() {
-  const joinAsRisingStar = useCareerStore((s) => s.joinAsRisingStar);
+  const confirmOpeningRole = useCareerStore((s) => s.confirmOpeningRole);
   const backFromSetup = useCareerStore((s) => s.backFromSetup);
   const playerName = useCareerStore((s) => s.playerName);
 
@@ -26,23 +27,17 @@ export default function OpeningRoleScreen() {
 
       <div className="flex w-full max-w-sm flex-col gap-3 text-left">
         {OPENING_ROLE_CARDS.map((card) => (
-          <section
+          <button
             key={card.id}
-            className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3.5"
+            type="button"
+            onClick={() => confirmOpeningRole(card.id as OpeningSquadPick)}
+            className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3.5 text-left transition active:scale-[0.98]"
           >
             <p className="text-sm font-bold text-white">{card.title}</p>
             <p className="mt-1.5 text-xs leading-relaxed text-white/60">{card.body}</p>
-          </section>
+          </button>
         ))}
       </div>
-
-      <button
-        type="button"
-        onClick={joinAsRisingStar}
-        className="w-full max-w-sm rounded-2xl bg-emerald-500 px-6 py-4 text-lg font-bold text-black shadow-lg shadow-emerald-500/20 transition active:scale-[0.98]"
-      >
-        {JOIN_RISING_STAR_LABEL}
-      </button>
     </div>
   );
 }
