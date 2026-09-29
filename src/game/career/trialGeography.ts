@@ -7,6 +7,14 @@ import { shuffle } from './util';
 export const YOUTH_ELITE_RANK_CAP = 10;
 
 const IRELAND_ENGLAND = new Set(['republic-of-ireland', 'northern-ireland']);
+const BRITISH_ISLES_ENGLAND = new Set(['scotland', 'wales', 'gibraltar']);
+const CENTRAL_EUROPE = new Set([
+  'austria',
+  'belgium',
+  'liechtenstein',
+  'luxembourg',
+  'switzerland',
+]);
 
 const NORDIC = new Set([
   'sweden',
@@ -78,14 +86,22 @@ export function trialDestinationCountries(nationId: string | null | undefined): 
   const nation = getNation(nationId);
   if (!nation) return [];
   if (HOME_LEAGUE_COUNTRIES.has(nation.name)) return [nation.name];
-  if (IRELAND_ENGLAND.has(nationId)) return ['England'];
+  if (IRELAND_ENGLAND.has(nationId) || BRITISH_ISLES_ENGLAND.has(nationId)) return ['England'];
   if (nation.confederation === 'CAF') return ['France'];
   if (NORDIC.has(nationId)) return ['Germany', 'Netherlands'];
-  if (EASTERN_EUROPE.has(nationId)) return ['Germany', 'Netherlands', 'Italy'];
+  if (CENTRAL_EUROPE.has(nationId)) return ['Germany', 'Netherlands', 'France'];
+  if (EASTERN_EUROPE.has(nationId) || nation.confederation === 'UEFA') {
+    return ['Germany', 'Netherlands', 'Italy'];
+  }
   if (nation.confederation === 'CONMEBOL') return ['Spain', 'Portugal'];
   if (nation.confederation === 'CONCACAF') return ['United States'];
   if (MIDDLE_EAST.has(nationId)) return ['Saudi Arabia'];
   return [];
+}
+
+export function isEuropeanNation(nationId: string | null | undefined): boolean {
+  if (!nationId) return false;
+  return getNation(nationId)?.confederation === 'UEFA';
 }
 
 export function isTopTenNation(nationId: string | null | undefined): boolean {
@@ -148,6 +164,30 @@ export function southAmericanLowerTrialClubs(excludeIds: string[] = []): Club[] 
   return [...portugalLower, ...spainSecond];
 }
 
+const EUROPEAN_SECOND_DIVISIONS = [
+  'Championship',
+  'La Liga 2',
+  'Serie B',
+  '2. Bundesliga',
+  'Ligue 2',
+] as const;
+
+const EUROPEAN_LOWER_TOP_FLIGHTS = ['Primeira Liga', 'Eredivisie', 'Super Lig'] as const;
+
+/** European second divisions plus Portuguese / Dutch / Turkish lower-level sides. */
+export function europeanLowerTrialClubs(excludeIds: string[] = []): Club[] {
+  const exclude = new Set(excludeIds);
+  const second = EUROPEAN_SECOND_DIVISIONS.flatMap((league) =>
+    clubsInLeague(league).filter((club) => club.playable !== false && !exclude.has(club.id)),
+  );
+  const lowerTop = EUROPEAN_LOWER_TOP_FLIGHTS.flatMap((league) =>
+    clubsInLeague(league).filter(
+      (club) => club.playable !== false && club.tier >= 4 && !exclude.has(club.id),
+    ),
+  );
+  return [...second, ...lowerTop];
+}
+
 function excludeMlsUnlessNorthAmerica(
   clubs: Club[],
   nationId: string | null | undefined,
@@ -195,6 +235,7 @@ export function pickGeographicTrialClubs(
   }
 
   const destinations = trialDestinationCountries(nationId);
+  const europeanLower = isEuropeanNation(nationId) && tier >= 5;
   const picks: Club[] = [];
   const takeFrom = (pool: Club[]) => {
     for (const club of pool) {
@@ -211,7 +252,9 @@ export function pickGeographicTrialClubs(
     // Pathway nations (Africa→France, Brazil→Iberia) stay in dest countries.
     // Home-league nations (Germany, Spain, …) keep the earned band and
     // world-fill the remaining Elite/Strong slots rather than dropping a tier.
-    if (picks.length < count && !isHomeLeagueNation(nationId)) {
+    // European Lower (2 goals or fewer) stays on that geographic map.
+    const stayOnDestMap = !isHomeLeagueNation(nationId) || europeanLower;
+    if (picks.length < count && stayOnDestMap) {
       for (const nearby of [tier + 1, tier - 1, tier + 2, tier - 2]) {
         if (nearby < 1 || nearby > 5) continue;
         takeFrom(shuffle(excludeMlsUnlessNorthAmerica(
@@ -219,8 +262,16 @@ export function pickGeographicTrialClubs(
           nationId,
         )));
       }
+      if (!isHomeLeagueNation(nationId)) return picks.slice(0, count);
+    }
+    if (europeanLower && picks.length < count) {
+      takeFrom(shuffle(europeanLowerTrialClubs(exclude)));
       return picks.slice(0, count);
     }
+  }
+  if (picks.length < count && europeanLower) {
+    takeFrom(shuffle(europeanLowerTrialClubs(exclude)));
+    return picks.slice(0, count);
   }
   if (picks.length < count) {
     const rest = shuffle(excludeMlsUnlessNorthAmerica(

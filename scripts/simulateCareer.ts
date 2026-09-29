@@ -1272,6 +1272,18 @@ if (trialDestinationCountries('republic-of-ireland').join() !== 'England' || tri
   console.error('Ireland and Northern Ireland must trial in England');
   process.exitCode = 1;
 }
+if (trialDestinationCountries('scotland').join() !== 'England' || trialDestinationCountries('wales').join() !== 'England') {
+  console.error('Scotland and Wales must follow the Ireland path into England');
+  process.exitCode = 1;
+}
+if (trialDestinationCountries('belgium').join() !== 'Germany,Netherlands,France') {
+  console.error('Belgium and the rest of central Europe must trial in Germany, the Netherlands or France');
+  process.exitCode = 1;
+}
+if (trialDestinationCountries('greece').join() !== 'Germany,Netherlands,Italy') {
+  console.error('remaining European nations must use the Eastern Europe trial map');
+  process.exitCode = 1;
+}
 if (trialDestinationCountries('nigeria').join() !== 'France') {
   console.error('African players must see French trial clubs');
   process.exitCode = 1;
@@ -1346,6 +1358,40 @@ if (nationUsesMlsLower('ghana') || nationUsesMlsLower('brazil') || !nationUsesMl
   }
   if (usLower.length !== 3 || usLower.some((club) => club.league !== 'MLS')) {
     console.error('North American Lower youth trials must stay in MLS');
+    process.exitCode = 1;
+  }
+  const spainLower = offerClubsForTrial(2, 3, 'spain', 7);
+  const englandLower = offerClubsForTrial(1, 3, 'england', 7);
+  const irelandLower = offerClubsForTrial(2, 3, 'republic-of-ireland', 7);
+  const polandLower = offerClubsForTrial(0, 3, 'poland', 7);
+  const belgiumLower = offerClubsForTrial(2, 3, 'belgium', 7);
+  const scotlandLower = offerClubsForTrial(2, 3, 'scotland', 7);
+  console.log(
+    'Europe Lower Spain',
+    spainLower.map((c) => `${c.id}:${c.country}:${c.league}`),
+    'England',
+    englandLower.map((c) => `${c.id}:${c.league}`),
+    'Ireland',
+    irelandLower.map((c) => `${c.country}:${c.league}`),
+    'Poland',
+    polandLower.map((c) => `${c.country}:${c.league}`),
+    'Belgium',
+    belgiumLower.map((c) => `${c.country}:${c.league}`),
+    'Scotland',
+    scotlandLower.map((c) => `${c.country}:${c.league}`),
+  );
+  if (
+    youthTrialsAreMlsOnly(2, 'spain')
+    || youthTrialsAreMlsOnly(0, 'poland')
+    || youthTrialsAreMlsOnly(2, 'belgium')
+    || spainLower.some((club) => club.country !== 'Spain' || club.league === 'MLS')
+    || englandLower.some((club) => club.country !== 'England' || club.league === 'MLS')
+    || irelandLower.some((club) => club.country !== 'England' || club.league === 'MLS')
+    || polandLower.some((club) => !['Germany', 'Netherlands', 'Italy'].includes(club.country) || club.league === 'MLS')
+    || belgiumLower.some((club) => !['Germany', 'Netherlands', 'France'].includes(club.country) || club.league === 'MLS')
+    || scotlandLower.some((club) => club.country !== 'England' || club.league === 'MLS')
+  ) {
+    console.error('Europe 2 goals or fewer must keep the geographic trial map, not MLS or the South American Lower pool');
     process.exitCode = 1;
   }
 }
