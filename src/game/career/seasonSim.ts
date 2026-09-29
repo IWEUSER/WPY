@@ -313,7 +313,7 @@ export interface HydrateSeasonParams {
   careerStart?: string | null;
   /** Starters only are called up. Omitted treats the player as a starter. */
   squadStatus?: SquadStatus | null;
-  /** League appearances across seasons. First-ever call-ups wait until 20. */
+  /** League appearances this season. First-ever call-ups wait until 20 here. */
   leagueGames?: number;
   /** After the first cap, the 20-game wait is not repeated. */
   hasBeenCapped?: boolean;

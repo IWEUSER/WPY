@@ -2,7 +2,7 @@ import { CLUBS, clubsByTier, clubsForSeason, type Club, type ClubTier } from './
 import { countryForNationality, pickClubsBiasedToCountry } from './clubOffers';
 import type { CalendarFixture, SeasonCalendar } from './calendar';
 import {
-  nationUsesMlsLower,
+  excludeRestrictedTrials,
   pickGeographicTrialClubs,
   youthTierForNation,
   youthTrialsAreMlsOnly,
@@ -83,11 +83,10 @@ export function pickTrialClubs(
   const exclude = [...excludeIds, ...picks.map((club) => club.id)];
   const preferCountry = options.preferCountry ?? countryForNationality(nationality);
   while (picks.length < count) {
-    const pool = clubsByTier(tier).filter((c) => {
-      if (exclude.includes(c.id)) return false;
-      if (c.league === 'MLS' && !nationUsesMlsLower(nationId)) return false;
-      return true;
-    });
+    const pool = excludeRestrictedTrials(
+      clubsByTier(tier).filter((c) => !exclude.includes(c.id)),
+      nationId,
+    );
     if (pool.length === 0) break;
     const home = preferCountry ? pool.filter((c) => c.country === preferCountry) : [];
     if (options.requireHome && home[0]) {

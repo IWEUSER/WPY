@@ -16,7 +16,7 @@ import {
   squadRoleRatioGuide,
 } from '../squadStatus';
 import { displaySeasonLabel, displaySeasonNumber } from '../seasonDisplay';
-import { clubEligibleForNationalTeam, callUpLeagueRequirement, CALL_UP_MIN_LEAGUE_GAMES, callUpRatio, careerLeagueAppearances, getNation, isSelectedForNationalTeam, SEASON_1_CALL_UP_MIN_WEEK, selectionRatioForNation } from '../international';
+import { clubEligibleForNationalTeam, callUpLeagueRequirement, CALL_UP_MIN_LEAGUE_GAMES, callUpRatio, getNation, isSelectedForNationalTeam, SEASON_1_CALL_UP_MIN_WEEK, selectionRatioForNation } from '../international';
 import { formatEuros, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
 import { rankLeagueTable, type SeasonStandings } from '../matchEngine';
 import { conferenceTable, ensureInternationalGroup, fixtureTitle, internationalRoundLabel, nextActionableFixture, type SeasonSimState } from '../seasonSim';
@@ -55,6 +55,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const seasonHistory = useCareerStore((s) => s.seasonHistory);
   const nationalTeam = useCareerStore((s) => s.nationalTeam);
   const contractYearsRemaining = useCareerStore((s) => s.contractYearsRemaining);
+  const homeContractYearsRemaining = useCareerStore((s) => s.homeContractYearsRemaining);
   const clubLeague = useCareerStore((s) => s.clubLeague);
   const seasonSponsorship = useCareerStore((s) => s.seasonSponsorship);
   const injuryGamesRemaining = useCareerStore((s) => s.injuryGamesRemaining);
@@ -91,7 +92,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const played = season.gamesPlayed;
   const goals = season.goals;
   const ratio = played > 0 ? goals / played : 0;
-  const careerLeagueGames = careerLeagueAppearances([...seasonHistory, season]);
+  const seasonLeagueGames = season.leagueGames ?? 0;
   const onLoan = role === 'loan';
   const threshold = requiredGoalRatio(role, club, parentClub);
   const ratioProgress = Math.min(1, threshold > 0 ? ratio / threshold : 0);
@@ -153,7 +154,10 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
     careerStart,
     role,
   });
-  const transferFee = transferFeeFromValue(marketValue, contractYearsRemaining);
+  const feeYears = onLoan && homeContractYearsRemaining != null && homeContractYearsRemaining > 0
+    ? homeContractYearsRemaining
+    : contractYearsRemaining;
+  const transferFee = transferFeeFromValue(marketValue, feeYears);
 
   return (
     <div className="flex h-full w-full flex-col overflow-y-auto px-5 py-[max(1.25rem,env(safe-area-inset-top))] pb-10 text-white">
@@ -354,7 +358,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
             league={clubLeague ?? club.league}
             careerRatio={callUpRatio({ season, careerGoals, careerGames })}
             careerToDateRatio={careerGames > 0 ? careerGoals / careerGames : 0}
-            leagueGames={careerLeagueGames}
+            leagueGames={seasonLeagueGames}
             lastSeasonRatio={
               seasonHistory.length > 0 && seasonHistory[seasonHistory.length - 1]!.gamesPlayed > 0
                 ? seasonHistory[seasonHistory.length - 1]!.goals / seasonHistory[seasonHistory.length - 1]!.gamesPlayed
@@ -423,7 +427,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
                     ? seasonHistory[seasonHistory.length - 1]!.goals / seasonHistory[seasonHistory.length - 1]!.gamesPlayed
                     : null
                 }
-                leagueGames={careerLeagueGames}
+                leagueGames={seasonLeagueGames}
                 sim={seasonSimWithGroup}
                 caps={nationalTeam?.caps ?? 0}
                 intlGoals={nationalTeam?.goals ?? 0}
@@ -762,7 +766,7 @@ function InternationalCard({
   const pos = group ? groupPosition(group, nationId) : 0;
   const campaignLine = (() => {
     if (!clubOk) return `Call-ups are from ${callUpLeagueRequirement(nationId)}.`;
-    if (waitingForLeagueGames) return `First call-up needs ${CALL_UP_MIN_LEAGUE_GAMES} league games (${leagueGames} so far).`;
+    if (waitingForLeagueGames) return `First call-up needs ${CALL_UP_MIN_LEAGUE_GAMES} league games this season (${leagueGames} so far).`;
     if (waitingSeason1) return `Season 1 call-ups open after week ${SEASON_1_CALL_UP_MIN_WEEK}.`;
     if (!sim || !selected || !tournamentName) return `Not selected for ${nationName} this window.`;
     if (dropped) return `Dropped for this ${tournamentName} match.`;
@@ -796,7 +800,7 @@ function InternationalCard({
       return `Call-ups are for starters — currently ${SQUAD_STATUS_LABEL[squadStatus]}.`;
     }
     if (waitingForLeagueGames) {
-      return `Need ${CALL_UP_MIN_LEAGUE_GAMES} league games before a first call-up — currently ${leagueGames}.`;
+      return `Need ${CALL_UP_MIN_LEAGUE_GAMES} league games this season before a first call-up — currently ${leagueGames}.`;
     }
     if (waitingSeason1) {
       return `International call-ups start after week ${SEASON_1_CALL_UP_MIN_WEEK} in Season 1.`;

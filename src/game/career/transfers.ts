@@ -1125,10 +1125,12 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
   const ratio = season.gamesPlayed > 0 ? season.goals / season.gamesPlayed : 0;
   const lastStanding = seasonStandingRatio(season);
   const yearsLeft = params.contractYearsRemaining ?? DEFAULT_CONTRACT_YEARS;
+  const parentYears = params.homeContractYearsRemaining;
   const seasons = [...(params.seasonHistory ?? []), season];
   const formRatio = offerFormRatio({ lastSeason: season, careerGoals, careerGames });
   const value = playerValueFromParams(params, role === 'loan' ? getClub(parentClubId) ?? club : club);
-  const fee = transferFeeFromValue(value, yearsLeft);
+  const feeYears = role === 'loan' && parentYears != null && parentYears > 0 ? parentYears : yearsLeft;
+  const fee = transferFeeFromValue(value, feeYears);
   const blockElite = consecutiveSeasonsBelow(seasons, 0.5) >= 2;
   const currentLeague = params.clubLeague ?? club.league;
   const promoted = role === 'first-team' && earnedPromotion(currentLeague, params.leaguePosition);
@@ -1224,12 +1226,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     fromLeague: currentLeague,
     leagueGames: leagueSample,
   });
-  const parentYears = params.homeContractYearsRemaining;
-  const feeAllowsLoans = (
-    role === 'loan' && parentYears != null
-      ? transferFeeFromValue(value, parentYears)
-      : fee
-  ) > 0;
+  const feeAllowsLoans = fee > 0;
   const canOfferLoans = openingContractWindow || feeAllowsLoans;
   const offerExtras: OfferTermExtras = {
     currentWeeklyWage: params.weeklyWage,
@@ -1335,7 +1332,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     const transfers = pickPermanentClubs(transferTier, fee, exclude, nationality, blockElite, club.league, value, age, leagueSample);
     const canLoanAgain = canOfferLoans && loansUsed < MAX_CONSECUTIVE_LOANS;
     const loans = canLoanAgain
-      ? loanPick(exclude, club)
+      ? loanPick(exclude, parentClub ?? club)
       : [];
     const stepDown = withStepDownStarterClubs(
       club,

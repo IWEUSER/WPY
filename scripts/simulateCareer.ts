@@ -82,7 +82,7 @@ import {
   trialContractWon,
   TRIALS_AT_LEVEL,
 } from '../src/game/career/trial';
-import { isHomeLeagueNation, nationUsesMlsLower, pickGeographicTrialClubs, trialDestinationCountries, youthTierForNation, youthTrialsAreMlsOnly } from '../src/game/career/trialGeography';
+import { isHomeLeagueNation, isSaudiTrialClub, nationUsesMlsLower, pickGeographicTrialClubs, trialDestinationCountries, youthTierForNation, youthTrialsAreMlsOnly } from '../src/game/career/trialGeography';
 import { nextYouthKnockoutRound, pickYouthGroupOpponents, pickYouthKnockoutOpponent, youthMaxGames } from '../src/game/career/youthTournament';
 import { chancesForSquadStatus, consecutiveScoringAsImpact, consecutiveScoringGames, describeSquadStatus, IMPACT_CHANCES, IMPACT_STREAK, isLowerDivisionLoan, isSquadRotationSitOut, isToughMinutesFixture, lastLookWasGoal, nextSquadStatusAfterSeason, openingSquadStatus, promoteSquadStatusDuringSeason, reservePrioritisesContinental, reserveSitsChampionsLeague, RISING_STAR_MIN_RATIO, ROLE_REVIEW_WEEK, seasonOverridesRatioBar, shouldSitLeagueFixture, shouldSitToughFixture, squadStatusOnArrival, STARTER_STREAK, youthRolesAllowed } from '../src/game/career/squadStatus';
 import { clubAllowedByLeagueSample, consecutiveLoanSpells, ELITE_OFFER_MIN_LEAGUE_GAMES, LOAN_OFFER_COUNT, SAUDI_OFFER_MIN_AGE, SECOND_DIVISION_BEST_OFFER_TIER, STRONG_OFFER_MIN_LEAGUE_GAMES, TRANSFER_MARKET_CAP, TRANSFER_OFFER_COUNT, offerFormRatio, offerRatioPreferringLastSeason, offerTierFromStanding, pickLoanClubsForMiss, pickLoanClubsFromOrigin, pickPermanentClubs, requiredGoalRatio, resolveSeasonTransition, seasonStandingRatio, sellingClubAcceptsOffer, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, trialFailTransferPending, tierEarnedByRatio, tierForRatio } from '../src/game/career/transfers';
@@ -1404,20 +1404,90 @@ if (youthTierForNation(4, 'cameroon') !== 3 || trialDestinationCountries('camero
   process.exitCode = 1;
 }
 {
+  const destCountries = (nationId: string) => trialDestinationCountries(nationId);
+  const samples = (n: number, pick: () => ReturnType<typeof offerClubsForTrial>) => {
+    const rows: ReturnType<typeof offerClubsForTrial>[] = [];
+    for (let i = 0; i < n; i++) rows.push(pick());
+    return rows;
+  };
   const cameroonLooks = pickTrialClubs(3, 'cameroon', [], 3, { geographyNationId: 'cameroon', sameTierOnly: true });
   const japanLooks = offerClubsForTrial(5, 3, 'japan', 7);
+  const argentinaLooks = offerClubsForTrial(15, 3, 'argentina', 7);
+  const englandLooks = offerClubsForTrial(6, 3, 'england', 7);
   console.log(
     'Cameroon 4 goals France',
     cameroonLooks.map((c) => `${c.id}:${c.country}:${c.tier}`),
     'Japan 5 goals',
-    japanLooks.map((c) => `${c.id}:${c.tier}`),
+    japanLooks.map((c) => `${c.id}:${c.country}:${c.tier}`),
+    'Argentina 15 Elite',
+    argentinaLooks.map((c) => `${c.id}:${c.country}:${c.tier}`),
+    'England 6 Elite',
+    englandLooks.map((c) => `${c.id}:${c.country}:${c.tier}`),
   );
-  if (cameroonLooks.length === 0 || cameroonLooks.some((club) => club.country !== 'France')) {
-    console.error('African youth trials must stay in France');
+  const cameroonGeo = cameroonLooks.filter((club) => club.country === 'France').length;
+  if (
+    cameroonLooks.length !== 3
+    || cameroonGeo < 2
+    || cameroonLooks.some((club) => club.tier !== 3 || isSaudiTrialClub(club))
+  ) {
+    console.error('African Mid-table youth trials must keep two French looks at Mid-table, then one other Mid-table club — not drop a band and not Saudi');
     process.exitCode = 1;
   }
-  if (tierForYouthGoals(5, 7, 'japan') !== 3 || japanLooks.some((club) => club.tier === 1)) {
-    console.error('Japan 5 youth goals are ranking-capped Mid-table, not Elite or Strong');
+  if (
+    tierForYouthGoals(5, 7, 'japan') !== 3
+    || japanLooks.some((club) => club.tier !== 3 || isSaudiTrialClub(club) || club.league === 'MLS')
+  ) {
+    console.error('Japan 5 youth goals are ranking-capped Mid-table random trials, not Elite/Strong/Saudi');
+    process.exitCode = 1;
+  }
+  const argentinaDest = destCountries('argentina');
+  const argentinaGeo = argentinaLooks.filter((club) => argentinaDest.includes(club.country));
+  const argentinaOther = argentinaLooks.filter((club) => !argentinaDest.includes(club.country));
+  if (
+    youthTierForNation(15, 'argentina') !== 1
+    || argentinaLooks.length !== 3
+    || argentinaLooks.some((club) => club.tier !== 1 || isSaudiTrialClub(club))
+    || argentinaGeo.length < 2
+    || (argentinaGeo.length >= 2 && argentinaOther.length !== 1)
+  ) {
+    console.error('Argentina Elite youth trials must be two Iberian Elite looks plus one other Elite club, not a Portugal Strong fill');
+    process.exitCode = 1;
+  }
+  const englandGeo = englandLooks.filter((club) => club.country === 'England');
+  const englandOther = englandLooks.filter((club) => club.country !== 'England');
+  if (
+    youthTierForNation(6, 'england') !== 1
+    || englandLooks.length !== 3
+    || englandLooks.some((club) => club.tier !== 1 || isSaudiTrialClub(club))
+    || englandGeo.length !== 2
+    || englandOther.length !== 1
+  ) {
+    console.error('England Elite youth trials must be two English Elite looks plus one other Elite club, not Saudi');
+    process.exitCode = 1;
+  }
+  let japanSaudi = 0;
+  let englandSaudi = 0;
+  let ghanaSaudi = 0;
+  let qatarSaudi = 0;
+  for (const row of samples(30, () => offerClubsForTrial(6, 3, 'japan', 7))) {
+    if (row.some(isSaudiTrialClub)) japanSaudi += 1;
+  }
+  for (const row of samples(30, () => offerClubsForTrial(6, 3, 'england', 7))) {
+    if (row.some(isSaudiTrialClub)) englandSaudi += 1;
+  }
+  for (const row of samples(30, () => offerClubsForTrial(5, 3, 'ghana', 7))) {
+    if (row.some(isSaudiTrialClub)) ghanaSaudi += 1;
+  }
+  for (const row of samples(30, () => offerClubsForTrial(6, 3, 'qatar', 7))) {
+    if (row.filter(isSaudiTrialClub).length >= 2) qatarSaudi += 1;
+  }
+  console.log('trial Saudi samples', { japanSaudi, englandSaudi, ghanaSaudi, qatarSaudi });
+  if (japanSaudi > 0 || englandSaudi > 0 || ghanaSaudi > 0) {
+    console.error('Saudi youth trials are only for Middle Eastern nations');
+    process.exitCode = 1;
+  }
+  if (qatarSaudi < 20) {
+    console.error('Qatar Strong youth trials must usually include two Saudi looks');
     process.exitCode = 1;
   }
   if (trialDestinationCountries('japan').length > 0 || trialDestinationCountries('australia').length > 0) {
@@ -4423,11 +4493,77 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
       console.error('a 0.2 Luton miss must loan inside the Championship, not a stronger foreign league');
       process.exitCode = 1;
     }
-    if (
-      lutonS1Loans.length !== LOAN_OFFER_COUNT
+    if (lutonS1Loans.length !== LOAN_OFFER_COUNT
       || lutonS1Loans.some((o) => getClub(o.clubId)?.league !== 'Championship' || (getClub(o.clubId)?.tier ?? 1) <= 2)
     ) {
       console.error('Season 1 Luton 0.2 loan offers must stay Championship, not Strong Portugal');
+      process.exitCode = 1;
+    }
+
+    const cityS1 = {
+      ...dummySeason,
+      seasonNumber: 1,
+      clubId: 'man-city',
+      league: 'Premier League',
+      role: 'first-team' as const,
+      goals: 23,
+      gamesPlayed: 38,
+      leagueGoals: 23,
+      squadStatus: 'rising-star' as const,
+    };
+    const cityLeedsS2 = resolveSeasonTransition({
+      season: {
+        ...dummySeason,
+        seasonNumber: 2,
+        clubId: 'leeds',
+        league: 'Premier League',
+        role: 'loan',
+        goals: 27,
+        gamesPlayed: 38,
+        leagueGoals: 27,
+        squadStatus: 'starter',
+      },
+      role: 'loan',
+      clubId: 'leeds',
+      parentClubId: 'man-city',
+      seasonsAtCurrentClub: 0,
+      age: 18,
+      careerGoals: 50,
+      careerGames: 76,
+      nationality: 'england',
+      loansUsed: 1,
+      contractYearsRemaining: 1,
+      homeContractYearsRemaining: 2,
+      careerStart: 'favourite-first-team',
+      squadStatus: 'starter',
+      clubLeague: 'Premier League',
+      seasonHistory: [cityS1],
+    });
+    const cityLeedsLoans = (cityLeedsS2.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan');
+    const cityLeedsPerms = (cityLeedsS2.pendingTransfer?.offers ?? []).filter((o) => o.move === 'permanent');
+    console.log(
+      'City Leeds 0.71',
+      cityLeedsS2.headline,
+      'loans',
+      cityLeedsLoans.map((o) => `${o.clubId}:${getClub(o.clubId)?.league}:${getClub(o.clubId)?.tier}`),
+      'fees',
+      cityLeedsPerms.map((o) => o.fee),
+      'city bar',
+      getClub('man-city')?.firstTeamGoalRatio,
+    );
+    if ((cityLeedsS2.pendingTransfer?.stay?.clubId ?? cityLeedsS2.immediate?.clubId) === 'man-city') {
+      console.error('0.71 at Leeds must miss Manchester Civic’s first-team bar');
+      process.exitCode = 1;
+    }
+    if (
+      cityLeedsLoans.length !== LOAN_OFFER_COUNT
+      || cityLeedsLoans.some((o) => getClub(o.clubId)?.league !== 'Premier League')
+    ) {
+      console.error('a missed City recall after a Leeds loan must still offer Premier League loans, not the Championship');
+      process.exitCode = 1;
+    }
+    if (cityLeedsPerms.length === 0 || cityLeedsPerms.some((o) => (o.fee ?? 0) <= 0)) {
+      console.error('end of Season 2 on the original 3-year deal must still ask a transfer fee, not a free');
       process.exitCode = 1;
     }
 
@@ -4601,32 +4737,32 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
       console.error('Season 1 internationals wait until after week 20; the 20-league-game wait is only before the first cap');
       process.exitCode = 1;
     }
-    const acrossSeasons = careerLeagueAppearances([
+    const thisSeasonShort = isSelectedForNationalTeam({
+      clubTier: 1,
+      careerGoalRatio: 0.8,
+      nationId: 'spain',
+      publicSeason: 2,
+      calendarWeek: 4,
+      squadStatus: 'starter',
+      league: 'La Liga',
+      leagueGames: 1,
+    });
+    const thisSeasonReady = isSelectedForNationalTeam({
+      clubTier: 1,
+      careerGoalRatio: 0.8,
+      nationId: 'spain',
+      publicSeason: 2,
+      calendarWeek: 4,
+      squadStatus: 'starter',
+      league: 'La Liga',
+      leagueGames: CALL_UP_MIN_LEAGUE_GAMES,
+    });
+    const lastYearCarry = careerLeagueAppearances([
       { leagueGames: 19 },
       { leagueGames: 1 },
     ]);
-    const readyAcross = isSelectedForNationalTeam({
-      clubTier: 1,
-      careerGoalRatio: 0.8,
-      nationId: 'spain',
-      publicSeason: 2,
-      calendarWeek: 4,
-      squadStatus: 'starter',
-      league: 'La Liga',
-      leagueGames: acrossSeasons,
-    });
-    const stillShort = isSelectedForNationalTeam({
-      clubTier: 1,
-      careerGoalRatio: 0.8,
-      nationId: 'spain',
-      publicSeason: 2,
-      calendarWeek: 4,
-      squadStatus: 'starter',
-      league: 'La Liga',
-      leagueGames: careerLeagueAppearances([{ leagueGames: 19 }, { leagueGames: 0 }]),
-    });
-    if (acrossSeasons !== CALL_UP_MIN_LEAGUE_GAMES || !readyAcross || stillShort) {
-      console.error('the 20-league-game first cap must add appearances across seasons (19 + 1)');
+    if (lastYearCarry !== CALL_UP_MIN_LEAGUE_GAMES || thisSeasonShort || !thisSeasonReady) {
+      console.error('the 20-league-game first cap must be earned in the call-up season, not 19 last year plus 1 this year');
       process.exitCode = 1;
     }
     if (selectionRatioForNation('spain') !== 0.66 || selectionRatioForNation('albania') !== 0.4) {

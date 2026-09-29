@@ -48,6 +48,7 @@ export default function ProfileScreen() {
   const careerEarnings = useCareerStore((s) => s.careerEarnings);
   const weeklyWage = useCareerStore((s) => s.weeklyWage);
   const contractYearsRemaining = useCareerStore((s) => s.contractYearsRemaining);
+  const homeContractYearsRemaining = useCareerStore((s) => s.homeContractYearsRemaining);
   const seasonNumber = useCareerStore((s) => s.seasonNumber);
   const seasonCalendar = useCareerStore((s) => s.seasonCalendar);
   const seasonSim = useCareerStore((s) => s.seasonSim);
@@ -83,7 +84,12 @@ export default function ProfileScreen() {
           role: current?.role ?? role,
         })
       : null;
-  const fee = value != null ? transferFeeFromValue(value, contractYearsRemaining) : null;
+  const feeYears = (current?.role ?? role) === 'loan'
+    && homeContractYearsRemaining != null
+    && homeContractYearsRemaining > 0
+    ? homeContractYearsRemaining
+    : contractYearsRemaining;
+  const fee = value != null ? transferFeeFromValue(value, feeYears) : null;
   const name = playerName?.trim() || 'Player';
   const seededLook = pickPlayerLook(
     name.split('').reduce((hash, ch) => (hash * 33 + ch.charCodeAt(0)) >>> 0, 0) || 1,

@@ -40,7 +40,6 @@ import {
   bumpInternationalSeason,
   isInternationalFinalsRound,
   callUpRatio,
-  careerLeagueAppearances,
   createNationalTeamState,
   emptyInternationalSeason,
   isSelectedForNationalTeam,
@@ -214,7 +213,7 @@ function withInternationalForm(
     calendarWeek: ctx?.week ?? 1,
     squadStatus: ctx?.squadStatus ?? 'starter',
     league: club.league,
-    leagueGames: careerLeagueAppearances([...(ctx?.seasonHistory ?? []), season]),
+    leagueGames: season?.leagueGames ?? 0,
     hasBeenCapped: ctx?.hasBeenCapped,
   });
   const keepQualifyingCampaign =
@@ -412,7 +411,7 @@ function startSimulatedSeason(
     careerStart: extras?.careerStart,
     squadStatus: extras?.squadStatus ?? (role === 'reserve' ? 'reserve' : 'starter'),
     hasBeenCapped: extras?.hasBeenCapped ?? playerHasBeenCapped({ caps: extras?.caps, seasons: history }),
-    leagueGames: careerLeagueAppearances(history),
+    leagueGames: season.leagueGames ?? 0,
   });
   season = {
     ...season,
