@@ -59,12 +59,12 @@ export function openingSquadStatus(role: PlayerRole): SquadStatus {
 export function describeSquadStatus(status: SquadStatus): string {
   if (status === 'starter') return 'In the starting XI across league, cups and internationals';
   if (status === 'rising-star') {
-    return 'Rising star — temporary Season 1–2 role, one chance each time you play. Score in 3 consecutive games for Impact, then another 3 for Starter. Extra goals in one game still count as one. Scoring earns the next selection even if you were due to sit.';
+    return 'Rising star — temporary Season 1–2 role, one chance each time you play. League games rotate. No continental or super-cup minutes, and only the first two domestic cup ties. Score in 3 consecutive games for Impact, then another 3 for Starter. Extra goals in one game still count as one.';
   }
   if (status === 'reserve') {
     return 'Reserve — sits European Cup nights. In the European Trophy or lower, continental ties come first and league games are the ones rotated. Every second other game. Score in 3 consecutive games for Starter, the same way as Rising star and Impact.';
   }
-  return 'Impact — same games as Rising star, two chances each time you play. Keeps for the rest of the season; score in 3 consecutive games for Starter. Scoring earns the next selection even if you were due to sit.';
+  return 'Impact — league, cups and continentals on the same every-fourth rotation as before, two chances each time you play. Keeps for the rest of the season; score in 3 consecutive games for Starter.';
 }
 
 export function describeRotationSitOut(status: SquadStatus): string {
@@ -117,12 +117,29 @@ export function chancesForSquadStatus(status: SquadStatus, drawn: number): numbe
   return drawn;
 }
 
+/** Rising star only plays this many domestic-cup ties; later rounds are sit-outs. */
+export const RISING_STAR_DOMESTIC_CUP_GAMES = 2;
+
 export function completedLeagueFixtureCount(
   calendar: SeasonCalendar | null | undefined,
   fixtureIndex: number,
 ): number {
   if (!calendar) return 0;
   return calendar.fixtures.slice(0, fixtureIndex).filter((fixture) => fixture.kind !== 'rest').length;
+}
+
+export function completedFixtureKindCount(
+  calendar: SeasonCalendar | null | undefined,
+  fixtureIndex: number,
+  kind: CalendarFixture['kind'],
+): number {
+  if (!calendar) return 0;
+  return calendar.fixtures.slice(0, fixtureIndex).filter((fixture) => fixture.kind === kind).length;
+}
+
+/** Club continental nights, super cups, and Leagues Cup — not domestic cups. */
+export function isContinentalClubFixture(kind: CalendarFixture['kind']): boolean {
+  return kind.startsWith('continental') || kind === 'super-cup' || kind === 'leagues-cup';
 }
 
 export function reserveSitsChampionsLeague(
@@ -141,20 +158,6 @@ export function reservePrioritisesContinental(
   return fixtureKind.startsWith('continental') || fixtureKind === 'leagues-cup';
 }
 
-/** Last played look that actually had a chance. Sit-outs and 0-chance games are skipped. */
-export function lastLookWasGoal(
-  matches: Pick<MatchRecord, 'played' | 'scored' | 'chances'>[] | undefined,
-): boolean {
-  if (!matches?.length) return false;
-  for (let i = matches.length - 1; i >= 0; i -= 1) {
-    const match = matches[i];
-    if (!match.played) continue;
-    if ((match.chances ?? 1) <= 0) continue;
-    return match.scored === true;
-  }
-  return false;
-}
-
 export function isSquadRotationSitOut(
   role: PlayerRole,
   squadStatus: SquadStatus,
@@ -164,15 +167,17 @@ export function isSquadRotationSitOut(
     toughMinutes?: boolean;
     seasonMatchCount?: number;
     continentalCup?: ContinentalCupId | null;
-    /** Rising star / Impact: a goal last look plays this fixture even if due to sit. */
-    rewardAppearance?: boolean;
+    domesticCupAppearances?: number;
   },
 ): boolean {
   // Academy / reserve-year football is every game except injury.
   if (role === 'reserve') return false;
   if (fixtureKind === 'rest') return false;
-  if ((squadStatus === 'rising-star' || squadStatus === 'impact') && extra?.rewardAppearance) {
-    return false;
+  if (squadStatus === 'rising-star') {
+    if (isContinentalClubFixture(fixtureKind)) return true;
+    if (fixtureKind === 'domestic-cup') {
+      return (extra?.domesticCupAppearances ?? 0) >= RISING_STAR_DOMESTIC_CUP_GAMES;
+    }
   }
   // Rising star sits the first first-team appearance of a campaign.
   if (squadStatus === 'rising-star' && extra?.seasonMatchCount === 0) return true;
@@ -413,7 +418,7 @@ export function squadRoleRatioGuide(status: SquadStatus, clubBar: number): {
   return {
     keepLabel: 'Impact',
     keepRatio: RISING_STAR_MIN_RATIO,
-    keepHint: 'Keeps this season · two chances, same games as Rising star',
+    keepHint: 'Keeps this season · two chances across league, cups and continentals',
     nextLabel: 'Starter',
     nextRatio: clubBar,
     nextHint: 'Score in 3 consecutive games after becoming Impact',

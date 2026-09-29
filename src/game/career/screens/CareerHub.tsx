@@ -7,11 +7,11 @@ import { availabilityDropsApply, describeAvailability, isAvailable } from '../av
 import { describeInjury } from '../injury';
 import {
   chancesForSquadStatus,
+  completedFixtureKindCount,
   completedLeagueFixtureCount,
   describeRotationSitOut,
   isSquadRotationSitOut,
   isToughMinutesFixture,
-  lastLookWasGoal,
   SQUAD_STATUS_LABEL,
   squadRoleRatioGuide,
 } from '../squadStatus';
@@ -115,7 +115,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         toughMinutes: isToughMinutesFixture(nextFixture, club, nationality),
         seasonMatchCount: season.matches.length,
         continentalCup: nextFixture.continentalCup,
-        rewardAppearance: lastLookWasGoal(season.matches),
+        domesticCupAppearances: completedFixtureKindCount(seasonCalendar, seasonSimWithGroup.fixtureIndex, 'domestic-cup'),
       },
     ),
   );

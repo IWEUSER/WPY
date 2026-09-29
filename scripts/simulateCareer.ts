@@ -84,7 +84,7 @@ import {
 } from '../src/game/career/trial';
 import { isHomeLeagueNation, isSaudiTrialClub, nationUsesMlsLower, pickGeographicTrialClubs, trialDestinationCountries, youthTierForNation, youthTrialsAreMlsOnly } from '../src/game/career/trialGeography';
 import { nextYouthKnockoutRound, pickYouthGroupOpponents, pickYouthKnockoutOpponent, youthMaxGames } from '../src/game/career/youthTournament';
-import { chancesForSquadStatus, consecutiveScoringAsImpact, consecutiveScoringGames, describeSquadStatus, IMPACT_CHANCES, IMPACT_STREAK, isLowerDivisionLoan, isSquadRotationSitOut, isToughMinutesFixture, lastLookWasGoal, nextSquadStatusAfterSeason, openingSquadStatus, promoteSquadStatusDuringSeason, reservePrioritisesContinental, reserveSitsChampionsLeague, RISING_STAR_MIN_RATIO, ROLE_REVIEW_WEEK, seasonOverridesRatioBar, shouldSitLeagueFixture, shouldSitToughFixture, squadStatusOnArrival, STARTER_STREAK, youthRolesAllowed } from '../src/game/career/squadStatus';
+import { chancesForSquadStatus, consecutiveScoringAsImpact, consecutiveScoringGames, describeSquadStatus, IMPACT_CHANCES, IMPACT_STREAK, isContinentalClubFixture, isLowerDivisionLoan, isSquadRotationSitOut, isToughMinutesFixture, nextSquadStatusAfterSeason, openingSquadStatus, promoteSquadStatusDuringSeason, reservePrioritisesContinental, reserveSitsChampionsLeague, RISING_STAR_DOMESTIC_CUP_GAMES, RISING_STAR_MIN_RATIO, ROLE_REVIEW_WEEK, seasonOverridesRatioBar, shouldSitLeagueFixture, shouldSitToughFixture, squadStatusOnArrival, STARTER_STREAK, youthRolesAllowed } from '../src/game/career/squadStatus';
 import { clubAllowedByLeagueSample, consecutiveLoanSpells, ELITE_OFFER_MIN_LEAGUE_GAMES, LOAN_OFFER_COUNT, SAUDI_OFFER_MIN_AGE, SECOND_DIVISION_BEST_OFFER_TIER, STRONG_OFFER_MIN_LEAGUE_GAMES, TRANSFER_MARKET_CAP, TRANSFER_OFFER_COUNT, offerFormRatio, offerRatioPreferringLastSeason, offerTierFromStanding, pickLoanClubsForMiss, pickLoanClubsFromOrigin, pickPermanentClubs, requiredGoalRatio, resolveSeasonTransition, seasonStandingRatio, sellingClubAcceptsOffer, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, trialFailTransferPending, tierEarnedByRatio, tierForRatio } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
 import { internationalCampaignForSeason } from '../src/game/career/data/competitions';
@@ -2968,8 +2968,12 @@ if (barca && hilal && lafc) {
     console.error('Rising star copy must mention one chance and the 3-game Impact promotion');
     process.exitCode = 1;
   }
-  if (!/two chances/.test(describeSquadStatus('impact')) || !/same games as Rising star/.test(describeSquadStatus('impact'))) {
-    console.error('Impact copy must match Rising star minutes with two chances');
+  if (!/two chances/.test(describeSquadStatus('impact')) || /same games as Rising star/.test(describeSquadStatus('impact'))) {
+    console.error('Impact copy must mention two chances and not copy Rising star minutes');
+    process.exitCode = 1;
+  }
+  if (!/first two domestic cup/.test(describeSquadStatus('rising-star')) || !/No continental/.test(describeSquadStatus('rising-star'))) {
+    console.error('Rising star copy must sit continental nights and only play the first two domestic cups');
     process.exitCode = 1;
   }
   if (isSquadRotationSitOut('reserve', 'reserve', 'league', 0, { seasonMatchCount: 0 }) !== false
@@ -2983,27 +2987,25 @@ if (barca && hilal && lafc) {
     process.exitCode = 1;
   }
   if (
-    lastLookWasGoal([{ played: true, scored: true, chances: 1 }]) !== true
-    || lastLookWasGoal([
-      { played: true, scored: true, chances: 1 },
-      { played: false, scored: null, chances: 0 },
-      { played: true, scored: false, chances: 0 },
-    ]) !== true
-    || lastLookWasGoal([
-      { played: true, scored: true, chances: 1 },
-      { played: true, scored: false, chances: 1 },
-    ]) !== false
+    isSquadRotationSitOut('first-team', 'rising-star', 'league', 3, { seasonMatchCount: 3 }) !== true
+    || isSquadRotationSitOut('first-team', 'impact', 'league', 1, { toughMinutes: true }) !== true
   ) {
-    console.error('a goal last look must still count through sit-outs and 0-chance games');
+    console.error('Rising star and Impact still sit every fourth league game and two of three tough games');
     process.exitCode = 1;
   }
   if (
-    isSquadRotationSitOut('first-team', 'rising-star', 'league', 3, { seasonMatchCount: 3 }) !== true
-    || isSquadRotationSitOut('first-team', 'rising-star', 'league', 3, { seasonMatchCount: 3, rewardAppearance: true }) !== false
-    || isSquadRotationSitOut('first-team', 'impact', 'league', 1, { toughMinutes: true }) !== true
-    || isSquadRotationSitOut('first-team', 'impact', 'league', 1, { toughMinutes: true, rewardAppearance: true }) !== false
+    !isContinentalClubFixture('continental-group')
+    || !isContinentalClubFixture('super-cup')
+    || isContinentalClubFixture('domestic-cup')
+    || isSquadRotationSitOut('first-team', 'rising-star', 'continental-group', 0, { seasonMatchCount: 4 }) !== true
+    || isSquadRotationSitOut('first-team', 'rising-star', 'super-cup', 2, { seasonMatchCount: 2 }) !== true
+    || isSquadRotationSitOut('first-team', 'rising-star', 'domestic-cup', 4, { seasonMatchCount: 4, domesticCupAppearances: 0 }) !== false
+    || isSquadRotationSitOut('first-team', 'rising-star', 'domestic-cup', 8, { seasonMatchCount: 8, domesticCupAppearances: 1 }) !== false
+    || isSquadRotationSitOut('first-team', 'rising-star', 'domestic-cup', 12, { seasonMatchCount: 12, domesticCupAppearances: RISING_STAR_DOMESTIC_CUP_GAMES }) !== true
+    || isSquadRotationSitOut('first-team', 'impact', 'continental-group', 0, { seasonMatchCount: 4 }) !== false
+    || isSquadRotationSitOut('first-team', 'impact', 'domestic-cup', 12, { seasonMatchCount: 12, domesticCupAppearances: 3 }) !== false
   ) {
-    console.error('scoring must earn the next Rising star / Impact selection even when rotation would sit them');
+    console.error('Rising star must sit continental nights and cup ties after the first two; Impact still plays them');
     process.exitCode = 1;
   }
   if (shouldSitToughFixture('rising-star', 0) !== false || shouldSitToughFixture('rising-star', 1) !== true) {
@@ -4422,16 +4424,16 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
     console.log('origin loans Leicester', leicesterLoans.map((c) => `${c.id}:${c.league}:${c.country}`));
     if (
       barcaLoans.length !== LOAN_OFFER_COUNT
-      || barcaLoans.some((c) => c.league !== 'La Liga' || c.tier < 3 || c.id === 'barcelona')
+      || barcaLoans.some((c) => c.league !== 'La Liga' || c.tier < 2 || c.tier > 3 || c.id === 'barcelona')
     ) {
-      console.error('a 0.33+ Barcelona rising star must loan to lower-scale La Liga clubs, not Segunda');
+      console.error('a 0.33+ Barcelona rising star must loan to Strong or Mid-table La Liga clubs, not Segunda or Medium');
       process.exitCode = 1;
     }
     if (
       arsenalLoans.length !== LOAN_OFFER_COUNT
-      || arsenalLoans.some((c) => c.league !== 'Premier League' || c.tier < 3 || c.id === 'arsenal')
+      || arsenalLoans.some((c) => c.league !== 'Premier League' || c.tier < 2 || c.tier > 3 || c.id === 'arsenal')
     ) {
-      console.error('a 0.33+ Arsenal rising star must loan to lower-scale Premier League clubs, not the Championship');
+      console.error('a 0.33+ Arsenal rising star must loan to Strong or Mid-table Premier League clubs, not the Championship or Medium');
       process.exitCode = 1;
     }
     if (
@@ -4615,9 +4617,66 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
     }
     if (
       risingS1Loans.length !== LOAN_OFFER_COUNT
-      || risingS1Loans.some((o) => getClub(o.clubId)?.league !== 'Premier League' || o.contractYears !== 1)
+      || risingS1Loans.some((o) => {
+        const dest = getClub(o.clubId);
+        return !dest || dest.league !== 'Premier League' || dest.tier < 2 || dest.tier > 3 || o.contractYears !== 1;
+      })
     ) {
-      console.error('Season 1 Arsenal 0.33+ loans must be 1-year Premier League moves, not lower-level clubs');
+      console.error('Season 1 Arsenal 0.33+ loans must be 1-year Premier League Strong/Mid-table moves, not Medium or Championship');
+      process.exitCode = 1;
+    }
+    if (risingS1Perms.length !== TRANSFER_OFFER_COUNT) {
+      console.error('Season 1 transfer offers must stay at six, not a longer list of step-down extras');
+      process.exitCode = 1;
+    }
+
+    const cityRising = resolveSeasonTransition({
+      season: {
+        ...dummySeason,
+        seasonNumber: 1,
+        clubId: 'man-city',
+        league: 'Premier League',
+        goals: 13,
+        gamesPlayed: 38,
+        leagueGoals: 13,
+        squadStatus: 'rising-star',
+      },
+      role: 'first-team',
+      clubId: 'man-city',
+      parentClubId: 'man-city',
+      seasonsAtCurrentClub: 0,
+      age: 17,
+      careerGoals: 13,
+      careerGames: 38,
+      nationality: 'england',
+      loansUsed: 0,
+      contractYearsRemaining: FIRST_CONTRACT_YEARS,
+      careerStart: 'favourite-first-team',
+      squadStatus: 'rising-star',
+      clubLeague: 'Premier League',
+    });
+    const cityRisingLoans = (cityRising.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan');
+    const cityRisingPerms = (cityRising.pendingTransfer?.offers ?? []).filter((o) => o.move === 'permanent' && !o.renewal);
+    console.log(
+      'City 0.34 S1',
+      cityRising.headline,
+      'loans',
+      cityRisingLoans.map((o) => `${o.clubId}:${getClub(o.clubId)?.league}:${getClub(o.clubId)?.tier}`),
+      'perms',
+      cityRisingPerms.length,
+    );
+    if (
+      cityRisingLoans.length !== LOAN_OFFER_COUNT
+      || cityRisingLoans.some((o) => {
+        const dest = getClub(o.clubId);
+        return !dest || dest.league !== 'Premier League' || dest.tier < 2 || dest.tier > 3;
+      })
+    ) {
+      console.error('Season 1 City 0.34 loans must be Premier League Strong/Mid-table, not Medium');
+      process.exitCode = 1;
+    }
+    if (cityRisingPerms.length !== TRANSFER_OFFER_COUNT) {
+      console.error('Season 1 City 0.34 must table six transfer offers, not nine');
       process.exitCode = 1;
     }
     if (risingValue >= 10_000_000 && risingS1Perms.every((o) => o.fee > 0 && o.fee < 4_000_000)) {

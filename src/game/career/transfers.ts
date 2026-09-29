@@ -337,6 +337,27 @@ function withStepDownStarterClubs(
   return pickStepDownStarterClubs(origin, excludeIds, count);
 }
 
+/** Permanent bids stay at six. Keep most market transfers; step-down only fills the last slots. */
+function clubsForPermanentOffers(transfers: Club[], stepDown: Club[]): Club[] {
+  const seen = new Set<string>();
+  const out: Club[] = [];
+  const stepKeep = Math.min(2, stepDown.length);
+  const marketKeep = TRANSFER_OFFER_COUNT - stepKeep;
+  for (const club of transfers) {
+    if (out.length >= marketKeep) break;
+    if (seen.has(club.id)) continue;
+    seen.add(club.id);
+    out.push(club);
+  }
+  for (const club of [...stepDown, ...transfers]) {
+    if (out.length >= TRANSFER_OFFER_COUNT) break;
+    if (seen.has(club.id)) continue;
+    seen.add(club.id);
+    out.push(club);
+  }
+  return out;
+}
+
 function pickStepDownStarterClubs(origin: Club, excludeIds: string[], count = 3): Club[] {
   const seen = new Set(excludeIds);
   const homeSecond = !SECOND_DIVISIONS.has(origin.league)
@@ -383,11 +404,13 @@ function lowerLeagueCountryPool(originCountry: string, excludeIds: string[]): Cl
 
 /**
  * Rising-star (0.33+) loans follow the origin club, not the destination
- * first-team bar. Elite/Strong top-flight sides send the player to lower-scale
- * clubs in the same division; medium-or-lower top-flight sides send them to
- * the domestic second division; a second-division origin loans to Medium and
- * Lower clubs in a weaker country's top flight, with MLS as the floor.
- * Strong Portugal / Dutch / Turkish sides are never in that away pool.
+ * first-team bar. Elite/Strong top-flight sides send the player to the next
+ * bands down in the same division (Strong and Mid-table from Elite, Mid-table
+ * from Strong) — not Medium or the Championship. Medium-or-lower top-flight
+ * sides send them to the domestic second division; a second-division origin
+ * loans to Medium and Lower clubs in a weaker country's top flight, with MLS
+ * as the floor. Strong Portugal / Dutch / Turkish sides are never in that
+ * away pool.
  */
 export function pickLoanClubsFromOrigin(
   fromClub: Club,
@@ -398,15 +421,18 @@ export function pickLoanClubsFromOrigin(
   const exclude = [...excludeIds.filter(Boolean), fromClub.id];
   const fromLeague = fromClub.league;
   const eliteOrStrong = fromClub.tier <= 2;
-  const sameLeagueLower = (minTier: ClubTier) =>
-    clubsInLeague(fromLeague).filter((c) => isPlayableLoanClub(c, exclude) && c.tier >= minTier);
-  const otherTopFlightLower = () =>
+  const inBand = (minTier: ClubTier, maxTier: ClubTier) =>
+    clubsInLeague(fromLeague).filter(
+      (c) => isPlayableLoanClub(c, exclude) && c.tier >= minTier && c.tier <= maxTier,
+    );
+  const otherTopFlightBand = (minTier: ClubTier, maxTier: ClubTier) =>
     CLUBS.filter(
       (c) =>
         isPlayableLoanClub(c, exclude) &&
         TOP_LEAGUES.has(c.league) &&
         c.league !== fromLeague &&
-        c.tier >= 3,
+        c.tier >= minTier &&
+        c.tier <= maxTier,
     );
   const floorAway = () => lowerLeagueCountryPool(fromClub.country, exclude);
   const mls = clubsInLeague('MLS').filter((c) => isPlayableLoanClub(c, exclude));
@@ -417,8 +443,10 @@ export function pickLoanClubsFromOrigin(
     quality = floorAway();
     extra = mls;
   } else if (TOP_LEAGUES.has(fromLeague) && eliteOrStrong) {
-    quality = sameLeagueLower(3);
-    extra = otherTopFlightLower();
+    const minTier = Math.min(5, fromClub.tier + 1) as ClubTier;
+    const maxTier = 3 as ClubTier;
+    quality = inBand(minTier, maxTier);
+    extra = otherTopFlightBand(minTier, maxTier);
   } else if (TOP_LEAGUES.has(fromLeague)) {
     const second = secondDivisionOf(fromLeague);
     quality = second
@@ -426,8 +454,9 @@ export function pickLoanClubsFromOrigin(
       : [];
     extra = CLUBS.filter((c) => SECOND_DIVISIONS.has(c.league) && isPlayableLoanClub(c, exclude));
   } else if (eliteOrStrong) {
-    quality = sameLeagueLower(3);
-    extra = [...floorAway().filter((c) => c.tier >= 3), ...mls];
+    const minTier = Math.min(5, fromClub.tier + 1) as ClubTier;
+    quality = inBand(minTier, 3);
+    extra = [...floorAway().filter((c) => c.tier >= minTier && c.tier <= 3), ...mls];
   } else {
     quality = floorAway();
     extra = mls;
@@ -1068,7 +1097,7 @@ function parallelTransfers(
   const offers = withTwilightMlsOffers(
     [
       ...offerTerms(loans, 'loan', value, 0, age, loanYears, extras),
-      ...offerTerms([...stepDown, ...transfers], 'permanent', value, fee, age, permYears, extras),
+      ...offerTerms(clubsForPermanentOffers(transfers, stepDown), 'permanent', value, fee, age, permYears, extras),
     ],
     age,
     value,
@@ -1341,7 +1370,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     );
     const offers = withTwilight([
       ...offerTerms(loans, 'loan', value, 0, age, loanYears, offerExtras),
-      ...offerTerms([...stepDown, ...transfers], 'permanent', value, fee, age, permYears, offerExtras),
+      ...offerTerms(clubsForPermanentOffers(transfers, stepDown), 'permanent', value, fee, age, permYears, offerExtras),
     ]);
     if (canLoanAgain && loans.length > 0) {
       return {
@@ -1430,7 +1459,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     const loans = loanPick([club.id], club);
     const offers = withTwilight([
       ...offerTerms(loans, 'loan', value, 0, age, loanYears, offerExtras),
-      ...offerTerms([...stepDown, ...transfers], 'permanent', value, fee, age, permYears, offerExtras),
+      ...offerTerms(clubsForPermanentOffers(transfers, stepDown), 'permanent', value, fee, age, permYears, offerExtras),
     ]);
     const missedYouthBar = !honoursClear && ratio + 1e-9 < RISING_STAR_MIN_RATIO;
     if (missedYouthBar) {
@@ -1496,7 +1525,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     );
     const offers = withTwilight([
       ...offerTerms(loans, 'loan', value, 0, age, loanYears, offerExtras),
-      ...offerTerms([...stepDown, ...transfers], 'permanent', value, fee, age, permYears, offerExtras),
+      ...offerTerms(clubsForPermanentOffers(transfers, stepDown), 'permanent', value, fee, age, permYears, offerExtras),
     ]);
     if (includeOpeningLoans && loans.length > 0) {
       return {
