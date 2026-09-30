@@ -37,7 +37,18 @@ export interface SwipeGesture {
    * Omitted (or 1) on a planted penalty.
    */
   takeQuality?: number;
+  /** 0–1 how far under the ball the swipe started. */
+  contactLift?: number;
+  /** 0–1 current bounce height when the swipe started. */
+  bounceHeight?: number;
+  /** How the idle ball is travelling — roll, bounce, volley, or header. */
+  ballFlight?: 'roll' | 'bounce' | 'volley' | 'header';
+  /** 0 ground … 1 head height, used to loft the strike. */
+  contactHeight?: number;
 }
+
+/** How the same upward swipe was struck — poke, chip, drive, or lofted floater. */
+export type ShotStyle = 'poke' | 'chip' | 'drive' | 'floater';
 
 export type ShotZoneX = 'far-left' | 'left' | 'center' | 'right' | 'far-right';
 export type ShotZoneY = 'low' | 'mid' | 'high';
@@ -92,6 +103,12 @@ export interface ShotResult {
   saveCell?: SaveCell;
   /** How well-timed the take was on a rolling ball, in [0, 1]. */
   takeQuality?: number;
+  /** Which strike the swipe produced. */
+  shotStyle?: ShotStyle;
+  /** True when a downward air strike skipped off the turf before the goal. */
+  groundBounce?: boolean;
+  /** True when the rolling ball ran out of play. */
+  outOfPlay?: boolean;
 }
 
 export interface ShotDifficulty {

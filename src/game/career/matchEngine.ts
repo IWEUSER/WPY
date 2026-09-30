@@ -4,14 +4,15 @@ import {
   clubContinentalCup,
   type ContinentalCupId,
 } from './data/competitions';
+import { CHAMPIONS_LEAGUE_FIELD_SIZE, championsLeagueField } from './continentalDraw';
 
 /**
  * Probabilistic club-vs-club engine for seasons 2-20. Stronger squads
  * (`Club.strength`) win more often, never deterministically. Tier is only a
- * fallback when a test passes no explicit strength. Regular league and group
- * fixtures use this independently of the player's chances; the player's
- * goals are then added as one extra input. Missed chances scale P(win)
- * down so finishing is linked to the result without a 1-chance lock.
+ * fallback when a test passes no explicit strength. Teammate and opponent
+ * goals are rolled first and capped so remaining player chances still fit a
+ * realistic score; the player's goals are then added on top. The board does
+ * not re-roll when those goals change, so the overlay matches full time.
  */
 
 export interface ClubMatchContext {
@@ -58,7 +59,8 @@ export function expectedScore(us: number, them: number): number {
 
 /**
  * Multiplier on P(win) from missed finishing chances. Four blanks hurt a
- * lot; a single miss is a nudge. Scoring still adds to the scoreline.
+ * lot; a single miss is a nudge. Kept for sit-out / briefing copy; live
+ * boards no longer re-roll the match from this factor.
  */
 export function missedChanceWinFactor(misses: number): number {
   if (misses <= 0) return 1;
@@ -68,21 +70,62 @@ export function missedChanceWinFactor(misses: number): number {
   return 0.35;
 }
 
-export function simulateClubMatch(
+/** Traditional scoreboard: home on the left, away on the right. Neutral uses player-left. */
+export function formatHomeAwayScore(scoreFor: number, scoreAgainst: number, playerOnLeft: boolean): string {
+  return playerOnLeft
+    ? `${scoreFor}\u2013${scoreAgainst}`
+    : `${scoreAgainst}\u2013${scoreFor}`;
+}
+
+/** A 6–0 is only on the table when the sides are a class apart. */
+export function blowoutScorePossible(us: number, them: number): boolean {
+  return us - them >= 18;
+}
+
+export function plausibleGoalCaps(
+  us: number,
+  them: number,
+  knockout = false,
+): { maxFor: number; maxAgainst: number } {
+  if (knockout) return { maxFor: 3, maxAgainst: 3 };
+  const gap = us - them;
+  const maxFor = gap >= 18 ? 6 : gap >= 10 ? 5 : gap >= -4 ? 4 : 3;
+  const maxAgainst = -gap >= 18 ? 6 : -gap >= 10 ? 5 : -gap >= -4 ? 4 : 3;
+  return { maxFor, maxAgainst };
+}
+
+export interface NpcMatchScore {
+  teammateGoals: number;
+  goalsAgainst: number;
+  us: number;
+  them: number;
+  eliteClash: boolean;
+  knockout: boolean;
+  gap: number;
+}
+
+export interface TimedNpcGoal {
+  side: 'for' | 'against';
+  minute: number;
+}
+
+export interface MatchTimeline {
+  teammateGoals: number;
+  goalsAgainst: number;
+  goals: TimedNpcGoal[];
+}
+
+/** Teammate and opponent goals before the player's finishes are added. */
+export function rollNpcScore(
   context: ClubMatchContext,
   rng: () => number = Math.random,
-  playerGoals = 0,
   playerChances?: number,
-): ClubMatchResult {
+): NpcMatchScore {
   const us = resolveStrength(context.clubStrength, context.clubTier) + (context.isHome ? 3.5 : 0);
   const them = resolveStrength(context.opponentStrength, context.opponentTier);
   const diff = us - them;
   const expected = expectedScore(us, them);
-  const misses =
-    playerChances != null && playerChances > 0
-      ? Math.max(0, playerChances - Math.max(0, playerGoals))
-      : 0;
-  const pWin = expected * 0.92 * missedChanceWinFactor(misses);
+  const pWin = expected * 0.92;
   const pDraw = 0.16 * Math.exp(-((diff / 16) ** 2));
   const roll = rng();
   let outcome: ClubMatchResult['outcome'];
@@ -105,32 +148,103 @@ export function simulateClubMatch(
     scoreFor = tied;
     scoreAgainst = tied;
   }
-  scoreFor = scoreFor + Math.max(0, playerGoals);
-  scoreAgainst = Math.min(6, scoreAgainst);
+
+  const reserved = Math.max(0, playerChances ?? 0);
+  const caps = plausibleGoalCaps(us, them, knockout);
+  const maxTeammate = Math.max(0, caps.maxFor - reserved);
+  scoreFor = Math.min(scoreFor, maxTeammate);
+  scoreAgainst = Math.min(6, scoreAgainst, caps.maxAgainst);
+
+  const projected = scoreFor + reserved + scoreAgainst;
+  if (projected >= 9 && rng() >= 0.012) {
+    scoreAgainst = Math.min(scoreAgainst, Math.max(0, 7 - scoreFor - Math.min(reserved, 2)));
+  }
+
   if (eliteClash) {
+    scoreFor = Math.min(scoreFor, 4);
+    scoreAgainst = Math.min(scoreAgainst, 3);
+    if (scoreFor + reserved + scoreAgainst > 6) {
+      scoreAgainst = Math.max(0, 6 - scoreFor - reserved);
+    }
+  }
+
+  return { teammateGoals: scoreFor, goalsAgainst: scoreAgainst, us, them, eliteClash, knockout, gap };
+}
+
+function rollGoalMinute(rng: () => number): number {
+  const secondHalf = rng() >= 0.42;
+  return secondHalf ? 46 + Math.floor(rng() * 45) : 1 + Math.floor(rng() * 45);
+}
+
+export function assignNpcGoalMinutes(
+  teammateGoals: number,
+  goalsAgainst: number,
+  rng: () => number,
+): TimedNpcGoal[] {
+  const goals: TimedNpcGoal[] = [];
+  for (let i = 0; i < teammateGoals; i++) goals.push({ side: 'for', minute: rollGoalMinute(rng) });
+  for (let i = 0; i < goalsAgainst; i++) goals.push({ side: 'against', minute: rollGoalMinute(rng) });
+  return goals.sort((a, b) => a.minute - b.minute || (a.side === 'for' ? -1 : 1));
+}
+
+/** Same NPC totals as simulateClubMatch, plus a minute for each non-player goal. */
+export function simulateMatchTimeline(
+  context: ClubMatchContext,
+  rng: () => number = Math.random,
+  playerChances?: number,
+): MatchTimeline {
+  const npc = rollNpcScore(context, rng, playerChances);
+  return {
+    teammateGoals: npc.teammateGoals,
+    goalsAgainst: npc.goalsAgainst,
+    goals: assignNpcGoalMinutes(npc.teammateGoals, npc.goalsAgainst, rng),
+  };
+}
+
+export function liveScoreFromTimeline(
+  timeline: MatchTimeline,
+  minute: number,
+  playerGoals: number,
+): { scoreFor: number; scoreAgainst: number } {
+  let teammate = 0;
+  let against = 0;
+  for (const goal of timeline.goals) {
+    if (goal.minute < minute) {
+      if (goal.side === 'for') teammate += 1;
+      else against += 1;
+    }
+  }
+  return {
+    scoreFor: teammate + Math.max(0, playerGoals),
+    scoreAgainst: against,
+  };
+}
+
+function finishClubMatch(npc: NpcMatchScore, playerGoals: number): ClubMatchResult {
+  let scoreFor = npc.teammateGoals + Math.max(0, playerGoals);
+  let scoreAgainst = Math.min(6, npc.goalsAgainst);
+  if (npc.eliteClash) {
     scoreFor = Math.min(scoreFor, Math.max(playerGoals, 4));
     scoreAgainst = Math.min(scoreAgainst, 3);
     if (scoreFor + scoreAgainst > 6) {
       scoreAgainst = Math.max(0, 6 - scoreFor);
     }
   }
-  if (playerGoals > 0 && scoreFor <= scoreAgainst && outcome !== 'draw') {
-    // A player goal can still turn a simulated loss into a draw/win - teammates aren't the whole story.
-    const attempt = scoreAgainst + (rng() < 0.55 ? 1 : 0);
-    scoreFor = Math.max(scoreFor, attempt);
-    if (eliteClash) {
-      scoreFor = Math.min(scoreFor, Math.max(playerGoals, 4));
-      if (scoreFor + scoreAgainst > 6) {
-        scoreAgainst = Math.max(0, 6 - scoreFor);
-      }
-    }
-  }
-  if (knockout) {
-    const capped = capKnockoutScoreline(scoreFor, scoreAgainst, gap, playerGoals);
+  if (npc.knockout) {
+    const capped = capKnockoutScoreline(scoreFor, scoreAgainst, npc.gap, playerGoals);
     scoreFor = capped.scoreFor;
     scoreAgainst = capped.scoreAgainst;
   }
   return applyPlayerGoalsFloor({ scoreFor, scoreAgainst, outcome: outcomeOf(scoreFor, scoreAgainst) }, playerGoals);
+}
+
+export function simulateClubMatch(
+  context: ClubMatchContext,
+  rng: () => number = Math.random,
+  playerGoals = 0,
+  playerChances?: number,
+): ClubMatchResult {
+  return finishClubMatch(rollNpcScore(context, rng, playerChances), playerGoals);
 }
 
 /** World Cup last-16 blowouts like 5–0 vs a much weaker side are not realistic. */
@@ -200,6 +314,7 @@ export interface LeagueStanding {
 
 export type EuropeanStage =
   | 'group'
+  | 'play-off'
   | 'round-of-16'
   | 'quarter-final'
   | 'semi-final'
@@ -285,7 +400,8 @@ export function buildSeasonStandings(
   return { league: rankLeagueTable(league), europeanStanding };
 }
 
-export function clubsForContinentalCup(cup: ContinentalCupId): string[] {
+export function clubsForContinentalCup(cup: ContinentalCupId, playerClubId?: string | null): string[] {
+  if (cup === 'ucl') return championsLeagueField(playerClubId);
   return CLUBS.filter((c) => clubContinentalCup(c) === cup).map((c) => c.id);
 }
 
@@ -298,6 +414,16 @@ function pairingHash(key: string): number {
   return h >>> 0;
 }
 
+function seededRng(seed: number): () => number {
+  let t = seed >>> 0;
+  return () => {
+    t += 0x6D2B79F5;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 /** Pair leftover clubs for a matchweek (first of each pair is treated as home). */
 export function pairClubs(clubIds: string[]): [string, string][] {
   const ids = [...clubIds];
@@ -308,6 +434,83 @@ export function pairClubs(clubIds: string[]): [string, string][] {
     if (a && b) pairs.push([a, b]);
   }
   return pairs;
+}
+
+/** Simulate the rest of a continental league-phase matchday. */
+export function simulateRestOfEuropeanRound(
+  table: LeagueStanding[],
+  playerClubId: string,
+  playerOpponentId: string,
+  rng: () => number = Math.random,
+  pairingSeed = '',
+): LeagueStanding[] {
+  return simulateRestOfLeagueRound(table, playerClubId, playerOpponentId, rng, pairingSeed);
+}
+
+export function emptyEuropeanTable(clubIds: string[]): LeagueStanding[] {
+  return clubIds.map((id) => emptyStanding(id));
+}
+
+/** Keep earned rows and pad the rest of the 36-club Champions League field. */
+export function expandChampionsLeagueTable(
+  table: LeagueStanding[] | undefined,
+  playerClubId?: string | null,
+): LeagueStanding[] {
+  const field = championsLeagueField(playerClubId);
+  const byId = new Map((table ?? []).map((row) => [row.clubId, row]));
+  return rankLeagueTable(field.map((id) => byId.get(id) ?? emptyStanding(id)));
+}
+
+export function championsLeagueTableNeedsRepair(
+  table: LeagueStanding[] | undefined,
+  cup?: ContinentalCupId | null,
+): boolean {
+  return cup === 'ucl' && (table?.length ?? 0) !== CHAMPIONS_LEAGUE_FIELD_SIZE;
+}
+
+/**
+ * After expanding an old 8-club group table, fill the new sides so they
+ * have played the same number of league-phase matches as the player.
+ */
+export function fillMissingEuropeanRounds(
+  table: LeagueStanding[],
+  playerClubId: string,
+  targetPlayed: number,
+): LeagueStanding[] {
+  if (targetPlayed <= 0) return rankLeagueTable(table);
+  let next = table.map((row) => ({ ...row }));
+  for (let round = 0; round < targetPlayed; round++) {
+    const need = next
+      .filter((row) => row.clubId !== playerClubId && row.played < targetPlayed)
+      .map((row) => row.clubId);
+    if (need.length < 2) break;
+    const ordered = [...need].sort((a, b) => {
+      const ha = pairingHash(`ucl-fill|${round}|${a}`);
+      const hb = pairingHash(`ucl-fill|${round}|${b}`);
+      return ha - hb || a.localeCompare(b);
+    });
+    for (const [homeId, awayId] of pairClubs(ordered)) {
+      const home = getClub(homeId);
+      const away = getClub(awayId);
+      if (!home || !away) continue;
+      const result = simulateClubMatch(
+        {
+          clubStrength: home.strength,
+          opponentStrength: away.strength,
+          clubTier: home.tier,
+          opponentTier: away.tier,
+          isHome: true,
+        },
+        seededRng(pairingHash(`ucl-fill-match|${round}|${homeId}|${awayId}`)),
+      );
+      next = applyMatchToTable(next, homeId, awayId, {
+        scoreFor: result.scoreFor,
+        scoreAgainst: result.scoreAgainst,
+        outcome: result.outcome,
+      });
+    }
+  }
+  return rankLeagueTable(next);
 }
 
 /** Simulate every *other* league fixture this matchweek so the table moves

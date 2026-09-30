@@ -7,6 +7,7 @@ import { describeAvailability, isAvailable } from '../availabilityEngine';
 import { describeInjury } from '../injury';
 import {
   chancesForSquadStatus,
+  completedFixtureKindCount,
   completedLeagueFixtureCount,
   describeRotationSitOut,
   isSquadRotationSitOut,
@@ -15,11 +16,11 @@ import {
   squadRoleRatioGuide,
 } from '../squadStatus';
 import { displaySeasonLabel, displaySeasonNumber } from '../seasonDisplay';
-import { clubEligibleForNationalTeam, callUpLeagueRequirement, callUpRatio, getNation, isSelectedForNationalTeam, SEASON_1_CALL_UP_MIN_WEEK, selectionRatioForNation } from '../international';
+import { clubEligibleForNationalTeam, callUpLeagueRequirement, CALL_UP_MIN_LEAGUE_GAMES, callUpRatio, getNation, isSelectedForNationalTeam, SEASON_1_CALL_UP_MIN_WEEK, selectionRatioForNation } from '../international';
 import { formatEuros, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
-import type { SeasonStandings } from '../matchEngine';
+import { rankLeagueTable, type SeasonStandings } from '../matchEngine';
 import { conferenceTable, ensureInternationalGroup, fixtureTitle, internationalRoundLabel, nextActionableFixture, type SeasonSimState } from '../seasonSim';
-import { nextMatchBriefing, playerGoalsLine } from '../matchBriefing';
+import { nextMatchBriefing, playerGoalsLine, sitOutRecapLine } from '../matchBriefing';
 import { groupPosition, sortGroupTable } from '../internationalTable';
 import { requiredGoalRatio } from '../transfers';
 import { competitionStageLabel } from '../honoursDisplay';
@@ -54,6 +55,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const seasonHistory = useCareerStore((s) => s.seasonHistory);
   const nationalTeam = useCareerStore((s) => s.nationalTeam);
   const contractYearsRemaining = useCareerStore((s) => s.contractYearsRemaining);
+  const homeContractYearsRemaining = useCareerStore((s) => s.homeContractYearsRemaining);
   const clubLeague = useCareerStore((s) => s.clubLeague);
   const seasonSponsorship = useCareerStore((s) => s.seasonSponsorship);
   const injuryGamesRemaining = useCareerStore((s) => s.injuryGamesRemaining);
@@ -90,6 +92,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const played = season.gamesPlayed;
   const goals = season.goals;
   const ratio = played > 0 ? goals / played : 0;
+  const seasonLeagueGames = season.leagueGames ?? 0;
   const onLoan = role === 'loan';
   const threshold = requiredGoalRatio(role, club, parentClub);
   const ratioProgress = Math.min(1, threshold > 0 ? ratio / threshold : 0);
@@ -111,6 +114,8 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
       {
         toughMinutes: isToughMinutesFixture(nextFixture, club, nationality),
         seasonMatchCount: season.matches.length,
+        continentalCup: nextFixture.continentalCup,
+        domesticCupAppearances: completedFixtureKindCount(seasonCalendar, seasonSimWithGroup.fixtureIndex, 'domestic-cup'),
       },
     ),
   );
@@ -129,8 +134,8 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
       : noChance
         ? 'No chance this match'
         : nextIsInternational
-        ? describeAvailability(squadAvailability)
-        : describeAvailability(availability);
+        ? describeAvailability(squadAvailability, squadStatus)
+        : describeAvailability(availability, squadStatus);
   const week = seasonCalendar && seasonSimWithGroup
     ? currentCalendarWeek(seasonCalendar, seasonSimWithGroup.fixtureIndex)
     : season.matches.length + 1;
@@ -148,7 +153,10 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
     careerStart,
     role,
   });
-  const transferFee = transferFeeFromValue(marketValue, contractYearsRemaining);
+  const feeYears = onLoan && homeContractYearsRemaining != null && homeContractYearsRemaining > 0
+    ? homeContractYearsRemaining
+    : contractYearsRemaining;
+  const transferFee = transferFeeFromValue(marketValue, feeYears);
 
   return (
     <div className="flex h-full w-full flex-col overflow-y-auto px-5 py-[max(1.25rem,env(safe-area-inset-top))] pb-10 text-white">
@@ -349,12 +357,12 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
             league={clubLeague ?? club.league}
             careerRatio={callUpRatio({ season, careerGoals, careerGames })}
             careerToDateRatio={careerGames > 0 ? careerGoals / careerGames : 0}
+            leagueGames={seasonLeagueGames}
             lastSeasonRatio={
               seasonHistory.length > 0 && seasonHistory[seasonHistory.length - 1]!.gamesPlayed > 0
                 ? seasonHistory[seasonHistory.length - 1]!.goals / seasonHistory[seasonHistory.length - 1]!.gamesPlayed
                 : null
             }
-            seasonGames={season.gamesPlayed}
             sim={seasonSimWithGroup}
             caps={nationalTeam?.caps ?? 0}
             intlGoals={nationalTeam?.goals ?? 0}
@@ -370,7 +378,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         <details className={DATA_CARD}>
           <summary className="cursor-pointer list-none text-sm font-semibold text-white/85 [&::-webkit-details-marker]:hidden">
             Tables
-            <span className="mt-0.5 block text-xs font-medium text-white/40">League, cups, internationals</span>
+            <span className="mt-0.5 block text-xs font-medium text-white/40">League, Europe, internationals</span>
           </summary>
           <div className="mt-4 flex flex-col gap-5">
             {seasonStandings && (
@@ -381,6 +389,28 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
                 cupStage={seasonSim?.domesticCupStage ?? null}
                 sim={seasonSimWithGroup}
                 nested
+              />
+            )}
+            {seasonSimWithGroup && (
+              <LeagueTableCard
+                table={seasonSimWithGroup.leagueTable}
+                clubId={club.id}
+                leagueName={leagueDisplayName(clubLeague ?? club.league)}
+              />
+            )}
+            {seasonSimWithGroup && (
+              <EuropeanTableCard
+                table={seasonSimWithGroup.europeanTable ?? []}
+                clubId={club.id}
+                standing={seasonSimWithGroup.europeanStanding}
+                remainingOpponents={(seasonCalendar?.fixtures ?? [])
+                  .map((fixture, index) => ({ fixture, index }))
+                  .filter(({ fixture, index }) =>
+                    fixture.kind === 'continental-group'
+                    && index >= (seasonSimWithGroup.fixtureIndex ?? 0)
+                    && Boolean(fixture.opponentLabel),
+                  )
+                  .map(({ fixture }) => fixture.opponentLabel!)}
               />
             )}
             {nation && role !== 'reserve' && seasonSimWithGroup?.internationalGroup && (
@@ -396,7 +426,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
                     ? seasonHistory[seasonHistory.length - 1]!.goals / seasonHistory[seasonHistory.length - 1]!.gamesPlayed
                     : null
                 }
-                seasonGames={season.gamesPlayed}
+                leagueGames={seasonLeagueGames}
                 sim={seasonSimWithGroup}
                 caps={nationalTeam?.caps ?? 0}
                 intlGoals={nationalTeam?.goals ?? 0}
@@ -432,15 +462,16 @@ function LastMatchRecap({
       ? playerGoalsLine(result.playerGoals, result.chances)
       : null;
   const structured = Boolean(result?.headline || result?.aggregateLine || result?.nextLine || playerLine);
+  const sitOutLine = sitOutRecapLine(result?.sitOutReason);
 
   return (
     <div className={`mt-3 ${DATA_INSET}`}>
       <p className="text-xs uppercase tracking-wide text-white/40">Last match</p>
       <p className="mt-1 text-sm font-semibold text-white/90">{headline}</p>
       {structured && playerLine && <p className="mt-1 text-sm text-white/70">{playerLine}</p>}
-      {result?.sitOutReason && (
+      {sitOutLine && (
         <p className="mt-1 text-sm font-semibold text-amber-200">
-          You did not play — {result.sitOutReason}
+          {sitOutLine}
         </p>
       )}
       {result?.aggregateLine && <p className="mt-1 text-sm font-semibold text-emerald-200">{result.aggregateLine}</p>}
@@ -477,11 +508,13 @@ function StandingsCard({
   if (europe) {
     competitions.push({
       name: CONTINENTAL_CUPS[europe.cup]?.name ?? europe.cup,
-      stage: competitionStageLabel(europe.stage),
+      stage: competitionStageLabel(europe.stage, {
+        leaguePhase: europe.cup === 'ucl' || europe.cup === 'uel' || europe.cup === 'uecl',
+      }),
     });
   } else if (sim?.leaguesCupStage && sim.leaguesCupStage !== 'not-entered') {
     competitions.push({
-      name: 'Leagues Cup',
+      name: CONTINENTAL_CUPS['leagues-cup'].name,
       stage: competitionStageLabel(sim.leaguesCupStage),
     });
   }
@@ -541,6 +574,136 @@ function StandingsCard({
   );
 }
 
+function LeagueTableRows({
+  table,
+  clubId,
+}: {
+  table: SeasonSimState['leagueTable'];
+  clubId: string;
+}) {
+  const rows = rankLeagueTable(table ?? []).filter((row) => row.played > 0);
+  if (rows.length === 0) return null;
+  return (
+    <table className="mt-3 w-full table-fixed border-collapse text-left text-xs">
+      <thead>
+        <tr className="text-[10px] uppercase tracking-wide text-white/40">
+          <th className="pb-1 font-medium">Club</th>
+          <th className="w-10 pb-1 text-right font-medium">P</th>
+          <th className="w-10 pb-1 text-right font-medium">GD</th>
+          <th className="w-10 pb-1 text-right font-medium">Pts</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => {
+          const name = getClub(row.clubId)?.name ?? row.clubId;
+          return (
+            <tr key={row.clubId} className={row.clubId === clubId ? 'font-semibold text-white' : 'text-white/70'}>
+              <td className="py-0.5 pr-2">{row.position}. {name}</td>
+              <td className="py-0.5 text-right tabular-nums">{row.played}</td>
+              <td className="py-0.5 text-right tabular-nums">{row.goalsFor - row.goalsAgainst}</td>
+              <td className="py-0.5 text-right tabular-nums">{row.points}</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
+function LeagueTableCard({
+  table,
+  clubId,
+  leagueName,
+}: {
+  table: SeasonSimState['leagueTable'];
+  clubId: string;
+  leagueName: string;
+}) {
+  const inMls = Boolean(mlsConferenceOf(clubId));
+  const conference = inMls ? conferenceTable(table ?? [], clubId) : [];
+  const overall = table ?? [];
+  const hasConference = inMls && rankLeagueTable(conference).some((row) => row.played > 0);
+  const hasOverall = rankLeagueTable(overall).some((row) => row.played > 0);
+  if (!hasConference && !hasOverall) return null;
+
+  return (
+    <div className="flex flex-col gap-5">
+      {hasConference && (
+        <div>
+          <p className="text-xs uppercase tracking-wide text-white/40">
+            {leagueName} · {conferenceLabel(mlsConferenceOf(clubId))}
+          </p>
+          <LeagueTableRows table={conference} clubId={clubId} />
+        </div>
+      )}
+      <div>
+        <p className="text-xs uppercase tracking-wide text-white/40">
+          {inMls ? `${leagueName} table` : leagueName}
+        </p>
+        <LeagueTableRows table={overall} clubId={clubId} />
+      </div>
+    </div>
+  );
+}
+
+function EuropeanTableCard({
+  table,
+  clubId,
+  standing,
+  remainingOpponents = [],
+}: {
+  table: SeasonSimState['europeanTable'];
+  clubId: string;
+  standing: SeasonSimState['europeanStanding'];
+  remainingOpponents?: string[];
+}) {
+  const cupName = standing ? (CONTINENTAL_CUPS[standing.cup]?.name ?? standing.cup) : null;
+  const rows = rankLeagueTable(table ?? []);
+  if (!cupName || rows.length === 0) return null;
+  const leaguePhase = standing?.cup === 'ucl' || standing?.cup === 'uel' || standing?.cup === 'uecl';
+
+  return (
+    <div>
+      <p className="text-xs uppercase tracking-wide text-white/40">
+        {cupName}
+        {standing?.stage ? ` · ${competitionStageLabel(standing.stage, { leaguePhase })}` : ''}
+        {leaguePhase || rows.length >= 24 ? ` · ${rows.length} clubs` : ''}
+        {standing?.cup === 'ucl' ? ' · 8 matches' : ''}
+      </p>
+      {remainingOpponents.length > 0 && standing?.cup === 'ucl' && (
+        <p className="mt-1 text-[11px] text-white/50">
+          Remaining ties: {remainingOpponents.join(' · ')}
+        </p>
+      )}
+      <div className="mt-3 max-h-72 overflow-y-auto pr-1">
+      <table className="w-full table-fixed border-collapse text-left text-xs">
+        <thead>
+          <tr className="text-[10px] uppercase tracking-wide text-white/40">
+            <th className="pb-1 font-medium">Club</th>
+            <th className="w-10 pb-1 text-right font-medium">P</th>
+            <th className="w-10 pb-1 text-right font-medium">GD</th>
+            <th className="w-10 pb-1 text-right font-medium">Pts</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const name = getClub(row.clubId)?.name ?? row.clubId;
+            return (
+              <tr key={row.clubId} className={row.clubId === clubId ? 'font-semibold text-white' : 'text-white/70'}>
+                <td className="py-0.5 pr-2">{row.position}. {name}</td>
+                <td className="py-0.5 text-right tabular-nums">{row.played}</td>
+                <td className="py-0.5 text-right tabular-nums">{row.goalsFor - row.goalsAgainst}</td>
+                <td className="py-0.5 text-right tabular-nums">{row.points}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  );
+}
+
 function InternationalCard({
   nationId,
   nationName,
@@ -549,7 +712,7 @@ function InternationalCard({
   careerRatio,
   careerToDateRatio,
   lastSeasonRatio,
-  seasonGames = 0,
+  leagueGames = 0,
   sim,
   caps,
   intlGoals,
@@ -568,7 +731,7 @@ function InternationalCard({
   careerRatio: number;
   careerToDateRatio?: number;
   lastSeasonRatio?: number | null;
-  seasonGames?: number;
+  leagueGames?: number;
   sim: SeasonSimState | null;
   caps: number;
   intlGoals: number;
@@ -590,7 +753,10 @@ function InternationalCard({
     calendarWeek,
     squadStatus,
     league,
+    leagueGames,
+    hasBeenCapped: caps > 0,
   });
+  const waitingForLeagueGames = caps <= 0 && leagueGames < CALL_UP_MIN_LEAGUE_GAMES;
   const waitingSeason1 = publicSeason === 1 && calendarWeek <= SEASON_1_CALL_UP_MIN_WEEK;
   const tournamentName = sim?.internationalTournament
     ? INTERNATIONAL_TOURNAMENTS[sim.internationalTournament]?.name
@@ -599,6 +765,7 @@ function InternationalCard({
   const pos = group ? groupPosition(group, nationId) : 0;
   const campaignLine = (() => {
     if (!clubOk) return `Call-ups are from ${callUpLeagueRequirement(nationId)}.`;
+    if (waitingForLeagueGames) return `First call-up needs ${CALL_UP_MIN_LEAGUE_GAMES} league games this season (${leagueGames} so far).`;
     if (waitingSeason1) return `Season 1 call-ups open after week ${SEASON_1_CALL_UP_MIN_WEEK}.`;
     if (!sim || !selected || !tournamentName) return `Not selected for ${nationName} this window.`;
     if (dropped) return `Dropped for this ${tournamentName} match.`;
@@ -631,6 +798,9 @@ function InternationalCard({
     if (squadStatus && squadStatus !== 'starter') {
       return `Call-ups are for starters — currently ${SQUAD_STATUS_LABEL[squadStatus]}.`;
     }
+    if (waitingForLeagueGames) {
+      return `Need ${CALL_UP_MIN_LEAGUE_GAMES} league games this season before a first call-up — currently ${leagueGames}.`;
+    }
     if (waitingSeason1) {
       return `International call-ups start after week ${SEASON_1_CALL_UP_MIN_WEEK} in Season 1.`;
     }
@@ -638,7 +808,7 @@ function InternationalCard({
     return `Need a ${bar.toFixed(2)} goals/game ratio for a call-up — currently ${careerRatio.toFixed(2)}.`;
   })();
   const ratioBreakdown = (() => {
-    if (seasonGames >= 15) return null;
+    if (caps > 0 || leagueGames >= CALL_UP_MIN_LEAGUE_GAMES) return null;
     const careerLine = `Career ${(careerToDateRatio ?? careerRatio).toFixed(2)}`;
     if (lastSeasonRatio == null) return careerLine;
     return `${careerLine} · Last season ${lastSeasonRatio.toFixed(2)}`;
@@ -678,6 +848,9 @@ function InternationalCard({
   return (
     <div className={DATA_CARD}>
       <p className="text-xs uppercase tracking-wide text-white/40">{nationName} {tournamentName ? `· ${tournamentName}` : 'call-up'}</p>
+      <p className="mt-1 text-xs text-white/55">
+        {nationName} need {bar.toFixed(2)} goals/game for a call-up
+      </p>
       <p className={`mt-1 text-sm font-semibold ${inForm ? 'text-emerald-300' : 'text-white/80'}`}>
         {statusLine}
       </p>
@@ -761,12 +934,12 @@ function SeasonCompetitions({ calendar }: { calendar: SeasonCalendar | null }) {
       )}
       {hasLeaguesCup && (
         <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/70">
-          Leagues Cup
+          {CONTINENTAL_CUPS['leagues-cup'].name}
         </span>
       )}
       {hasPlayoffs && (
         <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/70">
-          MLS Cup Playoffs
+          American League Playoffs
         </span>
       )}
       {superCupLabel && (

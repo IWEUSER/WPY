@@ -1,10 +1,12 @@
 import { getClub } from '../data/clubs';
 import { formatInternationalSeason, seasonClubName, seasonLeagueLabel } from '../honoursDisplay';
+import { formatEuros } from '../playerValue';
 import { countsTowardCareerRecord, displaySeasonLabel } from '../seasonDisplay';
-import { aggregateContinental, aggregateDomesticSplit, seasonDomesticSplit } from '../seasonStats';
+import { aggregateContinental, aggregateDomesticSplit, careerClubRecord, careerTransferFeesPaid, seasonDomesticSplit } from '../seasonStats';
 import { useCareerStore } from '../store';
 import type { SeasonRecord } from '../types';
 import { DATA_CARD, DATA_TILE } from './dataUi';
+import { SeasonHonoursLines } from './HonoursPills';
 import { ClubCompetitionTable, InternationalSeasonBlock } from './StatsTable';
 
 const ROLE_LABEL: Record<string, string> = {
@@ -16,8 +18,6 @@ const ROLE_LABEL: Record<string, string> = {
 export default function CareerRecordScreen() {
   const history = useCareerStore((s) => s.seasonHistory);
   const current = useCareerStore((s) => s.currentSeason);
-  const careerGoals = useCareerStore((s) => s.careerGoals);
-  const careerGames = useCareerStore((s) => s.careerGames);
   const returnToHub = useCareerStore((s) => s.returnToHub);
 
   const seasons: Array<SeasonRecord & { inProgress?: boolean }> = [
@@ -28,7 +28,9 @@ export default function CareerRecordScreen() {
   const scoredSeasons = recordSeasons.filter((s) => countsTowardCareerRecord(s.seasonNumber, s.role));
   const domestic = aggregateDomesticSplit(scoredSeasons);
   const continental = aggregateContinental(scoredSeasons);
-  const ratio = careerGames > 0 ? careerGoals / careerGames : 0;
+  const feesPaid = careerTransferFeesPaid(recordSeasons);
+  const clubRecord = careerClubRecord(scoredSeasons);
+  const ratio = clubRecord.ratio;
 
   return (
     <div className="flex h-full w-full flex-col overflow-y-auto px-5 py-[max(1.25rem,env(safe-area-inset-top))] pb-10 text-white">
@@ -40,9 +42,12 @@ export default function CareerRecordScreen() {
       </div>
 
       <div className="grid grid-cols-3 gap-2">
-        <StatTile value={String(careerGames)} label="Club games" />
-        <StatTile value={String(careerGoals)} label="Club goals" />
+        <StatTile value={String(clubRecord.games)} label="Club games" />
+        <StatTile value={String(clubRecord.goals)} label="Club goals" />
         <StatTile value={ratio.toFixed(2)} label="Club ratio" />
+      </div>
+      <div className="mt-2 grid grid-cols-1 gap-2">
+        <StatTile value={feesPaid > 0 ? formatEuros(feesPaid) : '—'} label="Transfer fees paid" />
       </div>
 
       <div className={`mt-3 ${DATA_CARD} text-sm`}>
@@ -91,6 +96,12 @@ function SeasonCard({ season }: { season: SeasonRecord & { inProgress?: boolean 
           <p className="text-xs text-white/50">
             {seasonLeagueLabel(season)} · {ROLE_LABEL[season.role] ?? season.role}
           </p>
+          {(season.transferFeePaid ?? 0) > 0 && (
+            <p className="mt-1 text-xs font-semibold text-amber-200/90">
+              Transfer fee {formatEuros(season.transferFeePaid ?? 0)}
+              {season.transferFromClubId ? ` from ${getClub(season.transferFromClubId)?.name ?? season.transferFromClubId}` : ''}
+            </p>
+          )}
         </div>
       </div>
 
@@ -98,6 +109,7 @@ function SeasonCard({ season }: { season: SeasonRecord & { inProgress?: boolean 
         split={seasonDomesticSplit(season)}
         continental={season.continentalStats ?? []}
       />
+      <SeasonHonoursLines season={season} />
       {season.international && formatInternationalSeason(season.international) && (
         <div className="mt-2">
           <InternationalSeasonBlock

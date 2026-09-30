@@ -323,6 +323,28 @@ export function pickPlayerLook(seed: number, region: AppearanceRegion = 'any'): 
   return { skin, hair: hairForRegion(region, skin, Math.floor(seed)) };
 }
 
+/** Player-selectable skin tones shown on the identity screens. */
+export const SKIN_SWATCHES = [
+  '#f7e4cc',
+  '#f6dec0',
+  '#edd0a8',
+  '#e8b88a',
+  '#e0c09a',
+  '#d4a574',
+  '#c68642',
+  '#8d5524',
+  '#6b3d1f',
+] as const;
+
+/** Player-selectable hair colours shown on the identity screens. */
+export const HAIR_SWATCHES = [
+  HAIR_BLONDE,
+  HAIR_DARK_BLONDE,
+  HAIR_BROWN,
+  HAIR_DARK_BROWN,
+  HAIR_BLACK,
+] as const;
+
 /** Fair skin only — used by tests and eastern-Europe sampling. */
 export function isFairSkin(hex: string): boolean {
   return luminance(hex) > 0.58;

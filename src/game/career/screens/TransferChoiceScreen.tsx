@@ -1,4 +1,6 @@
-import { getClub, TIER_LABEL } from '../data/clubs';
+import { useEffect, useRef } from 'react';
+import { clubQualityLabel, getClub } from '../data/clubs';
+import { leagueDisplayName } from '../data/leagueFormat';
 import { formatEuros, formatWeeklyWage } from '../playerValue';
 import { defaultSquadStatus, squadStatusOnArrival, SQUAD_STATUS_LABEL } from '../squadStatus';
 import { useCareerStore } from '../store';
@@ -49,7 +51,7 @@ function OfferCard({
       <div className="min-w-0 flex-1">
         <p className={`font-bold ${compact ? 'text-sm leading-tight' : ''}`}>{club.name}</p>
         <p className="text-[11px] text-white/50">
-          {club.country} · {club.league}
+          {club.country} · {leagueDisplayName(club.league)}
         </p>
         <p className={`mt-1 text-white/70 ${compact ? 'text-[11px] leading-snug' : 'text-xs'}`}>
           {offer.move === 'loan' ? 'Loan' : offer.fee <= 0 ? 'Free' : `Fee ${formatEuros(offer.fee)}`}
@@ -72,7 +74,7 @@ function OfferCard({
         <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/70">
           {offer.move === 'loan' ? 'Loan' : isCurrentClubRenewal ? 'New contract' : 'Transfer'}
         </span>
-        <span className="text-[10px] uppercase tracking-wide text-white/40">{TIER_LABEL[club.tier]}</span>
+        <span className="text-[10px] uppercase tracking-wide text-white/40">{clubQualityLabel(club)}</span>
       </div>
     </button>
   );
@@ -84,6 +86,19 @@ export default function TransferChoiceScreen() {
   const lastTransferRejection = useCareerStore((s) => s.lastTransferRejection);
   const resolveTransferChoice = useCareerStore((s) => s.resolveTransferChoice);
   const currentSeason = useCareerStore((s) => s.currentSeason);
+  const currentWeeklyWage = useCareerStore((s) => s.weeklyWage);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const rejectionRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!lastTransferRejection && !pending?.rejectionDetail) return;
+    const scroller = scrollerRef.current;
+    if (scroller) {
+      scroller.scrollTop = 0;
+      scroller.scrollTo({ top: 0, behavior: 'auto' });
+    }
+    rejectionRef.current?.scrollIntoView({ block: 'start', behavior: 'auto' });
+  }, [lastTransferRejection, pending?.rejectionDetail]);
 
   const currentClub = clubId ? getClub(clubId) : undefined;
   if (!pending) return null;
@@ -95,8 +110,11 @@ export default function TransferChoiceScreen() {
   );
   const renewalOffer = offers.find((o) => o.renewal && o.clubId === clubId) ?? null;
   const otherOffers = offers.filter((o) => o !== renewalOffer);
+  const keepDealWage = currentWeeklyWage > 0
+    ? currentWeeklyWage
+    : (pending.stay?.weeklyWage != null && pending.stay.weeklyWage > 0 ? pending.stay.weeklyWage : 0);
   const homeWage = renewalOffer?.weeklyWage
-    || (pending.stay?.weeklyWage != null && pending.stay.weeklyWage > 0 ? pending.stay.weeklyWage : undefined);
+    || (keepDealWage > 0 ? keepDealWage : undefined);
   const stayYears = pending.stay?.contractYearsRemaining;
   const outOfContract = stayYears != null && stayYears <= 0;
   const showStay = Boolean(pending.allowDecline && pending.stay && stayClub && !outOfContract);
@@ -118,7 +136,7 @@ export default function TransferChoiceScreen() {
   };
 
   return (
-    <div className="flex h-full w-full flex-col items-center gap-6 overflow-y-auto px-6 py-[max(1.5rem,env(safe-area-inset-top))] text-center text-white">
+    <div ref={scrollerRef} className="flex h-full w-full flex-col items-center gap-6 overflow-y-auto px-6 py-[max(1.5rem,env(safe-area-inset-top))] text-center text-white">
       <div>
         <h1 className="font-display text-2xl font-bold">Choose your next move</h1>
         <p className="mt-2 max-w-sm text-sm text-white/60">{KIND_LABEL[pending.kind] ?? 'Clubs'}</p>
@@ -133,7 +151,10 @@ export default function TransferChoiceScreen() {
       </div>
 
       {(lastTransferRejection || pending.rejectionDetail) && (
-        <div className="w-full max-w-md rounded-2xl border border-amber-300/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+        <div
+          ref={rejectionRef}
+          className="w-full max-w-md rounded-2xl border border-amber-300/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100"
+        >
           {lastTransferRejection ?? pending.rejectionDetail}
         </div>
       )}
@@ -159,7 +180,7 @@ export default function TransferChoiceScreen() {
               <div className="min-w-0 flex-1">
                 <p className="font-bold">{stayClub.name}</p>
                 <p className="text-[11px] text-white/50">
-                  {stayClub.country} · {stayClub.league}
+                  {stayClub.country} · {leagueDisplayName(stayClub.league)}
                 </p>
                 <p className="mt-1 text-xs text-white/70">
                   {renewalOffer && stayYears != null
@@ -167,9 +188,11 @@ export default function TransferChoiceScreen() {
                     : pending.stay?.clubId && pending.stay.clubId !== clubId
                       ? 'Return to parent club'
                       : 'Stay at this club'}
-                  {pending.stay?.weeklyWage != null && pending.stay.weeklyWage > 0
-                    ? ` · ${formatWeeklyWage(pending.stay.weeklyWage)}`
-                    : ''}
+                  {renewalOffer
+                    ? (keepDealWage > 0 ? ` · ${formatWeeklyWage(keepDealWage)}` : '')
+                    : pending.stay?.weeklyWage != null && pending.stay.weeklyWage > 0
+                      ? ` · ${formatWeeklyWage(pending.stay.weeklyWage)}`
+                      : ''}
                   {` · ${SQUAD_STATUS_LABEL[nextIfStay]}`}
                 </p>
               </div>

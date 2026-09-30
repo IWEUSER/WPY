@@ -104,9 +104,9 @@ export function stadiumScaleFromTier(tier: number | undefined): StadiumScale {
 
 export function profileFromScale(scale: StadiumScale): ClubGround {
   if (scale === 'elite') {
-    return { name: 'Camp Nou', capacity: 105_000, tiers: 5, unique: 'camp-nou' };
+    return { name: 'Catalan Stadium', capacity: 105_000, tiers: 5, unique: 'camp-nou' };
   }
-  if (scale === 'strong') return { name: 'Allianz Arena', capacity: 75_000, tiers: 3 };
+  if (scale === 'strong') return { name: 'Munich Stadium', capacity: 75_000, tiers: 3 };
   return { name: 'Municipal Stadium', capacity: 28_000, tiers: 2 };
 }
 
@@ -133,7 +133,7 @@ export const DEFAULT_STADIUM: StadiumAppearance = {
   capacity: 105_000,
   standTiers: 5,
   unique: 'camp-nou',
-  groundName: 'Camp Nou',
+  groundName: 'Catalan Stadium',
   pitchQuality: 'elite',
   pitchStripes: true,
 };

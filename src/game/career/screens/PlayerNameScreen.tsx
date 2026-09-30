@@ -1,5 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { appearanceRegionForNation, pickPlayerLook } from '../../shooting/appearance';
+import { getNation } from '../international';
 import { useCareerStore } from '../store';
+import { AppearancePicker } from './AppearancePicker';
 
 const MAX_LENGTH = 32;
 
@@ -17,7 +20,14 @@ function validPlayerName(value: string): string | null {
 export default function PlayerNameScreen() {
   const confirmPlayerName = useCareerStore((s) => s.confirmPlayerName);
   const backFromSetup = useCareerStore((s) => s.backFromSetup);
+  const nationality = useCareerStore((s) => s.nationality);
   const [value, setValue] = useState('');
+  const suggested = useMemo(() => {
+    const nation = nationality ? getNation(nationality) : undefined;
+    return pickPlayerLook(1, appearanceRegionForNation(nation ?? null));
+  }, [nationality]);
+  const [skin, setSkin] = useState(suggested.skin);
+  const [hair, setHair] = useState(suggested.hair);
   const error = value.trim() ? validPlayerName(value) : null;
 
   return (
@@ -33,7 +43,7 @@ export default function PlayerNameScreen() {
         <p className="text-sm text-white/50">Career identity</p>
         <h1 className="font-display text-2xl font-bold">Name the player</h1>
         <p className="mt-2 max-w-sm text-sm text-white/60">
-          This is the name that appears on your profile, records, and season review.
+          This is the name that appears on your profile, records, and season review. Pick a skin and hair colour so the portrait matches.
         </p>
       </div>
 
@@ -43,7 +53,7 @@ export default function PlayerNameScreen() {
           event.preventDefault();
           const problem = validPlayerName(value);
           if (problem) return;
-          confirmPlayerName(value.replace(/\s+/g, ' ').trim());
+          confirmPlayerName(value.replace(/\s+/g, ' ').trim(), { skin, hair });
         }}
       >
         <input
@@ -56,6 +66,14 @@ export default function PlayerNameScreen() {
           className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-center text-lg text-white placeholder:text-white/40 outline-none focus:border-emerald-400/60"
         />
         {error && <p className="text-xs text-rose-300">{error}</p>}
+        <AppearancePicker
+          skin={skin}
+          hair={hair}
+          onChange={(look) => {
+            setSkin(look.skin);
+            setHair(look.hair);
+          }}
+        />
         <button
           type="submit"
           disabled={Boolean(validPlayerName(value))}

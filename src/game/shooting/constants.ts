@@ -87,6 +87,15 @@ export const CURL_BOW_SENSITIVITY = 0.32;
  * of canvas width. */
 export const MAX_BEND_RATIO = 0.055;
 
+/** Swipes shorter than this (px) are a jab: poke along the ground or a chip. */
+export const JAB_MAX_LENGTH = 88;
+/** Aimed height at or above this turns a jab into a chip rather than a poke. */
+export const CHIP_LOFT = 0.3;
+/** Long, slow, high swipes become floaters instead of drives. */
+export const FLOATER_MIN_LENGTH = 110;
+export const FLOATER_LOFT = 0.55;
+export const FLOATER_SPEED_RATIO = 0.88;
+
 export const DEFAULT_DIFFICULTY: ShotDifficulty = {
   baseNoise: 0.04,
   powerNoisePenalty: 0.16,

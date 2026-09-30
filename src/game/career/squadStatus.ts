@@ -1,5 +1,6 @@
 import type { CalendarFixture, SeasonCalendar } from './calendar';
 import { getClub, SECOND_DIVISIONS, type Club } from './data/clubs';
+import type { ContinentalCupId } from './data/competitions';
 import { nationStrength } from './data/fifaRankings';
 import { leagueValueWeight } from './playerValue';
 import type { MatchRecord, PlayerRole, SeasonRecord, SquadStatus } from './types';
@@ -15,9 +16,9 @@ export const SQUAD_STATUS_LABEL: Record<SquadStatus, string> = {
 export const RISING_STAR_MIN_RATIO = 0.33;
 
 /** Score in this many consecutive played games to move Rising star → Impact. */
-export const IMPACT_STREAK = 2;
+export const IMPACT_STREAK = 3;
 
-/** Score in this many consecutive played games to move up to Starter. */
+/** After Impact, score in this many more consecutive games to become Starter. */
 export const STARTER_STREAK = 3;
 
 /** Impact looks in a match they play (Rising star stays at 1). */
@@ -55,15 +56,26 @@ export function openingSquadStatus(role: PlayerRole): SquadStatus {
   return defaultSquadStatus(role);
 }
 
+export type OpeningSquadPick = 'rising-star' | 'impact' | 'starter';
+
+export function isOpeningSquadPick(status: string | null | undefined): status is OpeningSquadPick {
+  return status === 'rising-star' || status === 'impact' || status === 'starter';
+}
+
+export function resolveOpeningSquadStatus(role: PlayerRole, pick?: SquadStatus | null): SquadStatus {
+  if (role !== 'first-team') return openingSquadStatus(role);
+  return isOpeningSquadPick(pick) ? pick : openingSquadStatus(role);
+}
+
 export function describeSquadStatus(status: SquadStatus): string {
   if (status === 'starter') return 'In the starting XI across league, cups and internationals';
   if (status === 'rising-star') {
-    return 'Rising star — temporary Season 1–2 role, one chance each time you play. Score in 2 consecutive games for Impact, or 3 for Starter.';
+    return 'Rising star — temporary Season 1–2 role, one chance each time you play. League games rotate. No continental or super-cup minutes, and only the first two domestic cup ties. Score in 3 consecutive games for Impact, then another 3 for Starter. Extra goals in one game still count as one.';
   }
   if (status === 'reserve') {
-    return 'Reserve — every second game across league, cups and internationals. Hit the starter bar at any time and you keep Starter.';
+    return 'Reserve — sits European Cup nights. In the European Trophy or lower, continental ties come first and league games are the ones rotated. Every second other game. Score in 3 consecutive games for Starter, the same way as Rising star and Impact.';
   }
-  return 'Impact — same games as Rising star, two chances each time you play. Keeps for the rest of the season; score in 3 consecutive games for Starter.';
+  return 'Impact — league, cups and continentals on the same every-fourth rotation as before, two chances each time you play. Keeps for the rest of the season; score in 3 consecutive games for Starter.';
 }
 
 export function describeRotationSitOut(status: SquadStatus): string {
@@ -107,12 +119,17 @@ export function shouldSitToughFixture(status: SquadStatus, completedFixtures: nu
   return completedFixtures % 3 !== 0;
 }
 
-/** Rising star gets one look; Impact gets two; others keep the drawn chances. */
+/** Rising star gets one look; Impact gets two; others keep the drawn chances.
+ * A fixture that drew zero looks stays at zero for every role. */
 export function chancesForSquadStatus(status: SquadStatus, drawn: number): number {
+  if (drawn <= 0) return 0;
   if (status === 'rising-star') return 1;
   if (status === 'impact') return IMPACT_CHANCES;
   return drawn;
 }
+
+/** Rising star only plays this many domestic-cup ties; later rounds are sit-outs. */
+export const RISING_STAR_DOMESTIC_CUP_GAMES = 2;
 
 export function completedLeagueFixtureCount(
   calendar: SeasonCalendar | null | undefined,
@@ -120,6 +137,36 @@ export function completedLeagueFixtureCount(
 ): number {
   if (!calendar) return 0;
   return calendar.fixtures.slice(0, fixtureIndex).filter((fixture) => fixture.kind !== 'rest').length;
+}
+
+export function completedFixtureKindCount(
+  calendar: SeasonCalendar | null | undefined,
+  fixtureIndex: number,
+  kind: CalendarFixture['kind'],
+): number {
+  if (!calendar) return 0;
+  return calendar.fixtures.slice(0, fixtureIndex).filter((fixture) => fixture.kind === kind).length;
+}
+
+/** Club continental nights, super cups, and Leagues Cup — not domestic cups. */
+export function isContinentalClubFixture(kind: CalendarFixture['kind']): boolean {
+  return kind.startsWith('continental') || kind === 'super-cup' || kind === 'leagues-cup';
+}
+
+export function reserveSitsChampionsLeague(
+  fixtureKind: CalendarFixture['kind'],
+  continentalCup?: ContinentalCupId | null,
+): boolean {
+  return continentalCup === 'ucl' && fixtureKind.startsWith('continental');
+}
+
+/** Europa League, Conference, ACLE, Leagues Cup — play these ahead of the league. */
+export function reservePrioritisesContinental(
+  fixtureKind: CalendarFixture['kind'],
+  continentalCup?: ContinentalCupId | null,
+): boolean {
+  if (!continentalCup || continentalCup === 'ucl') return false;
+  return fixtureKind.startsWith('continental') || fixtureKind === 'leagues-cup';
 }
 
 export function isSquadRotationSitOut(
@@ -130,26 +177,44 @@ export function isSquadRotationSitOut(
   extra?: {
     toughMinutes?: boolean;
     seasonMatchCount?: number;
+    continentalCup?: ContinentalCupId | null;
+    domesticCupAppearances?: number;
   },
 ): boolean {
   // Academy / reserve-year football is every game except injury.
   if (role === 'reserve') return false;
   if (fixtureKind === 'rest') return false;
+  if (squadStatus === 'rising-star') {
+    if (isContinentalClubFixture(fixtureKind)) return true;
+    if (fixtureKind === 'domestic-cup') {
+      return (extra?.domesticCupAppearances ?? 0) >= RISING_STAR_DOMESTIC_CUP_GAMES;
+    }
+  }
   // Rising star sits the first first-team appearance of a campaign.
   if (squadStatus === 'rising-star' && extra?.seasonMatchCount === 0) return true;
+  if (squadStatus === 'reserve') {
+    if (reserveSitsChampionsLeague(fixtureKind, extra?.continentalCup)) return true;
+    if (reservePrioritisesContinental(fixtureKind, extra?.continentalCup)) return false;
+  }
   if (extra?.toughMinutes && (squadStatus === 'rising-star' || squadStatus === 'impact')) {
     return shouldSitToughFixture(squadStatus, completedFixtures);
   }
   return shouldSitLeagueFixture(squadStatus, completedFixtures);
 }
 
-/** Trailing played matches that scored. Sit-outs and drops do not break the run. */
-export function consecutiveScoringGames(matches: Pick<MatchRecord, 'played' | 'scored'>[] | undefined): number {
+function isScoringLook(match: Pick<MatchRecord, 'played' | 'scored' | 'chances'>): boolean {
+  return match.played && (match.chances ?? 1) > 0;
+}
+
+/** Trailing played matches that scored. Sit-outs, drops, and 0-chance games do not break the run. */
+export function consecutiveScoringGames(
+  matches: Pick<MatchRecord, 'played' | 'scored' | 'chances'>[] | undefined,
+): number {
   if (!matches?.length) return 0;
   let streak = 0;
   for (let i = matches.length - 1; i >= 0; i -= 1) {
     const match = matches[i];
-    if (!match.played) continue;
+    if (!isScoringLook(match)) continue;
     if (match.scored !== true) break;
     streak += 1;
   }
@@ -180,50 +245,90 @@ export function seasonRatioClearsBar(params: {
   return params.gamesPlayed > 0 && params.ratio >= params.bar;
 }
 
-function hitsStarterBar(params: {
-  ratio: number;
-  gamesPlayed: number;
-  bar: number;
-  honoursClear?: boolean;
-}): boolean {
-  return Boolean(params.honoursClear) || (params.gamesPlayed > 0 && params.ratio + 1e-9 >= params.bar);
-}
-
 /**
  * In-season promotions only — never a mid-season drop to Reserve.
- * Reserve → Starter when the club bar is hit, then it sticks.
- * Rising star / Impact (Seasons 1–2): 2-game scoring streak → Impact, 3 → Starter.
+ * Reserve (Season 3+), Rising star, and Impact all need 3 consecutive
+ * scoring games to move up. Multiple goals in one game count as one.
  */
 export function promoteSquadStatusDuringSeason(params: {
   current: SquadStatus;
-  matches?: Pick<MatchRecord, 'played' | 'scored'>[];
+  matches?: Pick<MatchRecord, 'played' | 'scored' | 'chances'>[];
   ratio: number;
   gamesPlayed: number;
   bar: number;
   honoursClear?: boolean;
   allowYouthRoles?: boolean;
+  /** Status at the start of this season — needed so an Impact carry-in can still use a fresh 3-game run. */
+  openedAs?: SquadStatus;
 }): SquadStatus {
   const current = params.current;
   if (current === 'starter') return 'starter';
-  const hitBar = hitsStarterBar(params);
-  if (current === 'reserve') return hitBar ? 'starter' : 'reserve';
-  if (params.allowYouthRoles && (current === 'rising-star' || current === 'impact')) {
-    const streak = consecutiveScoringGames(params.matches);
-    if (streak >= STARTER_STREAK) return 'starter';
-    if (streak >= IMPACT_STREAK) return 'impact';
-    return current;
+  if (current === 'reserve') {
+    return consecutiveScoringGames(params.matches) >= STARTER_STREAK ? 'starter' : 'reserve';
   }
-  if (hitBar) return 'starter';
+  if (params.allowYouthRoles && (current === 'rising-star' || current === 'impact')) {
+    if (current === 'rising-star') {
+      return consecutiveScoringGames(params.matches) >= IMPACT_STREAK ? 'impact' : 'rising-star';
+    }
+    const openedAs = params.openedAs ?? 'impact';
+    if (consecutiveScoringAsImpact(params.matches, openedAs) >= STARTER_STREAK) return 'starter';
+    return 'impact';
+  }
   return current;
+}
+
+/** First played match that completed a Rising-star → Impact 3-game scoring run. */
+export function impactPromotionMatchIndex(
+  matches: Pick<MatchRecord, 'played' | 'scored' | 'chances'>[] | undefined,
+): number | null {
+  if (!matches?.length) return null;
+  let streak = 0;
+  for (let i = 0; i < matches.length; i += 1) {
+    const match = matches[i];
+    if (!isScoringLook(match)) continue;
+    if (match.scored === true) {
+      streak += 1;
+      if (streak >= IMPACT_STREAK) return i;
+    } else {
+      streak = 0;
+    }
+  }
+  return null;
+}
+
+/**
+ * Trailing scoring games that count toward Starter. If the player opened the
+ * season as Rising star, the Impact run is discarded and a new 3-game run starts.
+ */
+export function consecutiveScoringAsImpact(
+  matches: Pick<MatchRecord, 'played' | 'scored' | 'chances'>[] | undefined,
+  openedAs: SquadStatus,
+): number {
+  if (!matches?.length) return 0;
+  const after = openedAs === 'rising-star' || openedAs === 'reserve'
+    ? impactPromotionMatchIndex(matches)
+    : null;
+  const start = after == null ? -1 : after;
+  let streak = 0;
+  for (let i = matches.length - 1; i > start; i -= 1) {
+    const match = matches[i];
+    if (!isScoringLook(match)) continue;
+    if (match.scored !== true) break;
+    streak += 1;
+  }
+  return streak;
 }
 
 /**
  * End-of-season playing-time change. The player sees this before the transfer
  * window so they know their status going into the next campaign.
  *
- * Season 1 (`allowRisingStar`): below 0.33 → Reserve; club bar → Starter;
- * otherwise keep Rising star / Impact / Starter into Season 2.
- * Season 2 onward: Starter if the club bar is met, otherwise Reserve.
+ * Season 1 (`allowRisingStar`): keep the current Rising star / Impact /
+ * Starter role. Missing 0.33 never becomes Reserve — Season 2 can still be
+ * at this club as Rising star, with a loan always on the table.
+ * Hitting the club bar does not skip the 3-game scoring streak.
+ * Season 2 onward: a Starter who hits the bar stays Starter. Youth roles
+ * and Reserve do not become Starter at the window — that happens in-season.
  * Impact and Rising star never continue into Season 3.
  */
 export function nextSquadStatusAfterSeason(params: {
@@ -243,15 +348,14 @@ export function nextSquadStatusAfterSeason(params: {
   const hitBar = honours || (gamesPlayed > 0 && ratio + 1e-9 >= bar);
 
   if (allowRisingStar) {
-    if (!honours && ratio + 1e-9 < RISING_STAR_MIN_RATIO) return 'reserve';
-    // Honours keep a youth role; only the club ratio (or a mid-season streak) makes Starter.
-    if (gamesPlayed >= 12 && ratio + 1e-9 >= bar) return 'starter';
-    return current === 'impact' || current === 'starter' || current === 'rising-star'
-      ? current
-      : 'rising-star';
+    // Missing the 0.33 line never becomes Reserve — that role plays more
+    // often than Impact. Season 2 can stay as Rising star, or take a loan.
+    if (current === 'starter') return 'starter';
+    return current === 'impact' || current === 'rising-star' ? current : 'rising-star';
   }
 
-  return hitBar ? 'starter' : 'reserve';
+  if (current === 'starter') return hitBar ? 'starter' : 'reserve';
+  return 'reserve';
 }
 
 /**
@@ -264,7 +368,7 @@ export function squadStatusAfterFormReview(params: {
   gamesPlayed: number;
   bar: number;
   honoursClear?: boolean;
-  matches?: Pick<MatchRecord, 'played' | 'scored'>[];
+  matches?: Pick<MatchRecord, 'played' | 'scored' | 'chances'>[];
   allowYouthRoles?: boolean;
 }): SquadStatus {
   return promoteSquadStatusDuringSeason(params);
@@ -285,11 +389,34 @@ export function isLowerDivisionLoan(
   return leagueValueWeight(fromClub.league) + 1e-9 < leagueValueWeight(toClub.league);
 }
 
+/** Destination is a weaker pyramid step: second division from a top flight, or a worse tier in a different league. Same league is never a step down. */
+export function isStepDownClub(
+  origin: Club | null | undefined,
+  dest: Club | null | undefined,
+): boolean {
+  if (!origin || !dest) return false;
+  if (origin.league === dest.league) return false;
+  if (SECOND_DIVISIONS.has(dest.league) && !SECOND_DIVISIONS.has(origin.league)) return true;
+  return dest.tier > origin.tier;
+}
+
+/** Same league, or the same transfer band, and not a step down. */
+export function isPeerClub(
+  origin: Club | null | undefined,
+  dest: Club | null | undefined,
+): boolean {
+  if (!origin || !dest) return false;
+  if (origin.league === dest.league) return true;
+  if (isStepDownClub(origin, dest)) return false;
+  return dest.tier === origin.tier;
+}
+
 /**
- * Playing time after a move. Loans are first-team football.
- * Permanent moves use last-season ratio against the destination bar:
- * starter if you meet it, Rising star if you hold 0.33, otherwise reserve.
- * Without a ratio, a step up still starts as reserve.
+ * Playing time after a move. Same-level loans are Rising star, not Starter.
+ * A step-down loan is still Starter. Permanent moves use last-season ratio
+ * against the destination bar: starter if you meet it, Rising star if you
+ * hold 0.33, otherwise reserve. Without a ratio, a step up still starts as
+ * reserve.
  */
 export function squadRoleRatioGuide(status: SquadStatus, clubBar: number): {
   keepLabel: string;
@@ -306,29 +433,29 @@ export function squadRoleRatioGuide(status: SquadStatus, clubBar: number): {
     return {
       keepLabel: 'Rising star',
       keepRatio: RISING_STAR_MIN_RATIO,
-      keepHint: `${RISING_STAR_MIN_RATIO.toFixed(2)} at season end or you become a Reserve`,
+      keepHint: `${RISING_STAR_MIN_RATIO.toFixed(2)} at season end, or a Season 2 loan is available`,
       nextLabel: 'Impact',
       nextRatio: null,
-      nextHint: 'Score in 2 consecutive games · 3 for Starter',
+      nextHint: 'Score in 3 consecutive games for Impact, then 3 more for Starter',
     };
   }
   if (status === 'reserve') {
     return {
       keepLabel: 'Reserve',
       keepRatio: clubBar,
-      keepHint: 'Every second game until you hit the starter bar',
+      keepHint: 'Every second game until you score in 3 consecutive matches',
       nextLabel: 'Starter',
-      nextRatio: clubBar,
-      nextHint: `${clubBar.toFixed(2)} at any time — then you keep Starter`,
+      nextRatio: null,
+      nextHint: 'Score in 3 consecutive games for Starter',
     };
   }
   return {
     keepLabel: 'Impact',
     keepRatio: RISING_STAR_MIN_RATIO,
-    keepHint: 'Keeps this season · two chances, same games as Rising star',
+    keepHint: 'Keeps this season · two chances across league, cups and continentals',
     nextLabel: 'Starter',
     nextRatio: clubBar,
-    nextHint: 'Score in 3 consecutive games, or hit the club bar',
+    nextHint: 'Score in 3 consecutive games after becoming Impact',
   };
 }
 
@@ -349,7 +476,10 @@ export function squadStatusOnArrival(params: {
     }
     return 'starter';
   }
-  if (params.move === 'loan') return 'starter';
+  if (params.move === 'loan') {
+    if (isPeerClub(params.fromClub, params.toClub)) return 'rising-star';
+    return 'starter';
+  }
   if (params.move === 'promotion') return 'rising-star';
   const allowRisingStar = params.allowRisingStar !== false;
   if (params.toClub && params.playerRatio != null) {

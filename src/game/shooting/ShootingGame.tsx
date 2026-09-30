@@ -1,7 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as audio from './audio';
+import * as haptics from './haptics';
+import {
+  chanceBeatLine,
+  chanceImportanceLine,
+  chanceMinute,
+  crowdLevelForChance,
+  crowdReactsToOutcome,
+  defaultVenueLine,
+  formatChanceMinute,
+  resultHoldMs,
+  type ChanceStake,
+} from './chanceAtmosphere';
 import { MAX_ARC_ALONG_PATH, MAX_BEND_RATIO, MIN_ARC_ALONG_PATH, DEFAULT_DIFFICULTY } from './constants';
-import { cellCenter, computeKeeperDive, computeSwipeCurl, isValidSwipe, resolveShot } from './shotEngine';
+import { cellCenter, computeKeeperDive, computeSwipeCurl, isValidSwipe, outOfPlayResult, resolveShot } from './shotEngine';
 import {
   BALL_SCREEN_Y,
   ballRadiusAtGoal,
@@ -15,10 +27,12 @@ import {
   drawPitch,
   drawTrail,
   goalToPixel,
+  FIFA,
   idleKeeperPose,
   pickPlayerLook,
   pickPlayerSkin,
   worldToScreen,
+  headerBallLiftRatio,
   type KeeperPose,
   type SkinPalette,
 } from './render';
@@ -29,6 +43,7 @@ import { getClub } from '../career/data/clubs';
 import { clubKit } from '../career/data/clubKits';
 import { nationStrength } from '../career/data/fifaRankings';
 import { TOP_LEAGUES } from '../career/playerValue';
+import { allowLayoutPreview } from '../previewTools';
 import {
   advanceDefender,
   ballHasReachedDefender,
@@ -36,26 +51,38 @@ import {
   defenderBlocksBall,
   defenderScreenBody,
   shotLineHitsDefender,
+  PRACTICE_CHANCES,
+  practiceChanceOptions,
   rollChanceSetup,
   type ChanceKind,
   type ChanceSetup,
   type DefenderPose,
+  type PracticeChanceId,
 } from './chanceSetup';
-import type { ShotOutcomeKind, ShotResult, SwipeGesture } from './types';
+import type { ShotOutcomeKind, ShotResult, ShotStyle, SwipeGesture } from './types';
 import StatsBar, { type ShotStats } from './StatsBar';
 import {
   advanceBallTravel,
   applyHorizontalKnock,
-  KNOCK_HOLD_MS,
+  BALL_BOUNCE_PERIOD_S,
+  ballBounceLift,
   chanceBallTravels,
+  bouncePeriodS,
+  flightBounces,
+  headerLiftAtProgress,
+  headerRanOutOfPlay,
+  headerTravelBoundsForView,
+  idleBallHeightRatio,
   KNOCK_SLIDE_MS,
   pickBallTravelDir,
   swipeIsHorizontalKnock,
   takeQualityFromXRatio,
+  underSwipeLift,
+  type BallFlight,
   type BallTravelDir,
 } from './ballTravel';
 
-type Phase = 'idle' | 'dragging' | 'shooting' | 'result';
+type Phase = 'intro' | 'idle' | 'dragging' | 'shooting' | 'result';
 
 interface Point {
   x: number;
@@ -91,14 +118,46 @@ interface AnimState {
   /** Metres from the ball to the goal line. */
   shotDistanceM: number;
   chanceKind: ChanceKind;
+  ballFlight: BallFlight;
+  travelSpeed: number;
   defender: DefenderPose | null;
   defenders: DefenderPose[];
   lastTickMs: number;
+  introUntilMs: number;
+  resultHoldMs: number;
+  bounceElapsedS: number;
+  headerStartXRatio: number;
+  headerPeakLift: number;
+  headerFloorLift: number;
+  headerLandingXRatio: number;
 }
 
-const RESULT_HOLD_MS = 1500;
 const SHAKE_DURATION_MS = 280;
 const MAX_DRAG_POINTS = 400;
+
+function headerLiftFromAnim(
+  anim: Pick<AnimState, 'ballFlight' | 'ballStartXRatio' | 'headerStartXRatio' | 'headerLandingXRatio' | 'headerPeakLift' | 'headerFloorLift' | 'defender' | 'defenders'>,
+  view: ReturnType<typeof createPitchView>,
+): number | undefined {
+  if (anim.ballFlight !== 'header') return undefined;
+  if (anim.headerPeakLift > 0) {
+    return headerLiftAtProgress(
+      anim.ballStartXRatio,
+      anim.headerStartXRatio,
+      anim.headerLandingXRatio,
+      anim.headerPeakLift,
+      anim.headerFloorLift,
+    );
+  }
+  return headerBallLiftRatio(view, anim.defender ?? anim.defenders[0] ?? null);
+}
+
+const SHOT_STYLE_LABEL: Record<ShotStyle, string> = {
+  poke: 'Poke',
+  chip: 'Chip',
+  drive: 'Drive',
+  floater: 'Floater',
+};
 
 const OUTCOME_LABEL: Record<ShotOutcomeKind, string> = {
   goal: 'GOAL!',
@@ -164,6 +223,21 @@ function readDevPenalty(): boolean {
   if (!import.meta.env.DEV) return false;
   const raw = new URLSearchParams(window.location.search).get('penalty');
   return raw === '1' || raw === 'true';
+}
+
+function readDevChanceKind(): ChanceKind | null {
+  if (!import.meta.env.DEV) return null;
+  const raw = new URLSearchParams(window.location.search).get('kind');
+  if (raw === 'open' || raw === 'penalty' || raw === 'cross') return raw;
+  return null;
+}
+
+function readDevFlight(): BallFlight | null {
+  if (!allowLayoutPreview()) return null;
+  const q = new URLSearchParams(window.location.search);
+  const raw = q.get('flight') ?? q.get('kind');
+  if (raw === 'roll' || raw === 'bounce' || raw === 'volley' || raw === 'header') return raw;
+  return null;
 }
 
 function readDevDefenderOff(): boolean {
@@ -256,6 +330,36 @@ function readDevDualDefenders(): boolean {
   return raw === '2' || raw === 'dual';
 }
 
+function readDevIntroOff(): boolean {
+  if (!import.meta.env.DEV) return false;
+  const raw = new URLSearchParams(window.location.search).get('intro');
+  return raw === 'off' || raw === '0';
+}
+
+function readDevStake(): ChanceStake | null {
+  if (!import.meta.env.DEV) return null;
+  const raw = new URLSearchParams(window.location.search).get('stake');
+  if (raw === 'league' || raw === 'cup' || raw === 'final' || raw === 'penalty') return raw;
+  return null;
+}
+
+function readDevVenueLine(): string | null {
+  if (!import.meta.env.DEV) return null;
+  return new URLSearchParams(window.location.search).get('venue');
+}
+
+function readDevLastChance(): boolean {
+  if (!import.meta.env.DEV) return false;
+  const raw = new URLSearchParams(window.location.search).get('last');
+  return raw === '1' || raw === 'true';
+}
+
+function readDevScoreLine(): string | null {
+  if (!import.meta.env.DEV) return null;
+  const raw = new URLSearchParams(window.location.search).get('score');
+  return raw && raw.includes('-') ? raw.replace('-', '\u2013') : raw;
+}
+
 /** DEV: ?strength=94, ?opponent=man-city, or ?nation=france. */
 function readDevOpponentStrength(): number | undefined {
   if (!import.meta.env.DEV) return undefined;
@@ -281,18 +385,27 @@ function nextChance(
   allowPenalties = true,
   opponentStrength?: number,
   forcePenaltyChance = false,
+  practiceChance?: PracticeChanceId,
 ): ChanceSetup {
-  const forcePenalty = (allowPenalties && readDevPenalty()) || forcePenaltyChance;
+  const practice = practiceChanceOptions(practiceChance);
+  const forcePenalty = (allowPenalties && readDevPenalty()) || forcePenaltyChance || Boolean(practice.forcePenalty);
   const forceDistance = readDevDistance();
+  const flight = readDevFlight() ?? practice.forceFlight;
   return rollChanceSetup({
     clubStrength,
     opponentStrength: opponentStrength ?? readDevOpponentStrength(),
     forcePenalty,
-    forceDistanceM: forcePenalty ? undefined : (forceDistance ?? undefined),
+    forceDistanceM: forcePenalty
+      ? undefined
+      : flight === 'header'
+        ? FIFA.sixYardDepth + 0.35
+        : (practice.forceDistanceM ?? forceDistance ?? undefined),
     disableDefender: readDevDefenderOff(),
     skinPalette,
     allowPenalties,
     forceDualDefenders: readDevDualDefenders(),
+    forceKind: forcePenalty ? 'penalty' : readDevChanceKind() ?? practice.forceKind,
+    forceFlight: flight ?? undefined,
   });
 }
 
@@ -370,6 +483,27 @@ export interface ShootingGameProps {
   allowPenalties?: boolean;
   /** Force this session to a penalty kick (cup shootouts). */
   forcePenalty?: boolean;
+  /** Ground / home-away / night line shown in the chance run-up. */
+  venueLine?: string;
+  /** How much atmosphere this fixture carries. */
+  chanceStake?: ChanceStake;
+  /** When true, this match is already a last-chance beat. */
+  lastChance?: boolean;
+  /** Live board shown between chances, e.g. "1–0". */
+  matchScoreLine?: string;
+  /** Player goals on the live board (for stake copy). */
+  chanceScoreFor?: number;
+  /** Opponent goals on the live board. */
+  chanceScoreAgainst?: number;
+  /** 0-based chances already taken this match. */
+  chanceTaken?: number;
+  /** Total chances in this match. */
+  chanceTotal?: number;
+  /** Knockout / must-score nights get extra stake copy. */
+  knockoutChance?: boolean;
+  /** Free-practice lock: one chance type, or a random mix. */
+  practiceChance?: PracticeChanceId;
+  onPracticeChanceChange?: (id: PracticeChanceId) => void;
 }
 
 export default function ShootingGame({
@@ -387,22 +521,41 @@ export default function ShootingGame({
   opponentSkinPalette = 'any',
   allowPenalties = true,
   forcePenalty = false,
+  venueLine,
+  chanceStake,
+  lastChance = false,
+  matchScoreLine,
+  chanceScoreFor,
+  chanceScoreAgainst,
+  chanceTaken,
+  chanceTotal,
+  knockoutChance = false,
+  practiceChance,
+  onPracticeChanceChange,
 }: ShootingGameProps = {}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const hintRef = useRef<HTMLDivElement | null>(null);
   const sizeRef = useRef({ w: 0, h: 0, dpr: 1 });
 
-  const [uiPhase, setUiPhase] = useState<Phase>('idle');
+  const [uiPhase, setUiPhase] = useState<Phase>(readDevIntroOff() ? 'idle' : 'intro');
   const [resultLabel, setResultLabel] = useState<{ text: string; color: string; detail: string | null } | null>(null);
   const [stats, setStats] = useState<ShotStats>({ shots: 0, goals: 0, streak: 0, bestStreak: 0 });
   const [muted, setMuted] = useState(false);
+  const [introLine, setIntroLine] = useState<{
+    venue: string;
+    beat: string;
+    minute?: string;
+    left?: string;
+    importance?: string | null;
+  } | null>(null);
 
   const [initialChance] = useState(() =>
-    nextChance(clubStrength, opponentSkinPalette, allowPenalties, opponentStrength, forcePenalty),
+    nextChance(clubStrength, opponentSkinPalette, allowPenalties, opponentStrength, forcePenalty, practiceChance),
   );
   const [ballHintX, setBallHintX] = useState(initialChance.ballStartXRatio);
   const [chanceKind, setChanceKind] = useState<ChanceKind>(initialChance.kind);
+  const [ballFlight, setBallFlight] = useState<BallFlight>(initialChance.flight ?? 'roll');
   const [defenderCount, setDefenderCount] = useState(chanceDefenders(initialChance).length);
 
   const shotsTakenRef = useRef(0);
@@ -424,6 +577,27 @@ export default function ShootingGame({
   forcePenaltyRef.current = forcePenalty;
   const stadiumRef = useRef<StadiumAppearance>(stadium ?? readDevStadium() ?? DEFAULT_STADIUM);
   stadiumRef.current = stadium ?? readDevStadium() ?? DEFAULT_STADIUM;
+  const venueLineRef = useRef(venueLine);
+  venueLineRef.current = venueLine;
+  const chanceStakeRef = useRef(chanceStake);
+  chanceStakeRef.current = chanceStake;
+  const lastChancePropRef = useRef(lastChance);
+  lastChancePropRef.current = lastChance;
+  const matchScoreRef = useRef(matchScoreLine);
+  matchScoreRef.current = matchScoreLine;
+  const chanceScoreForRef = useRef(chanceScoreFor);
+  chanceScoreForRef.current = chanceScoreFor;
+  const chanceScoreAgainstRef = useRef(chanceScoreAgainst);
+  chanceScoreAgainstRef.current = chanceScoreAgainst;
+  const chanceTakenRef = useRef(chanceTaken);
+  chanceTakenRef.current = chanceTaken;
+  const chanceTotalRef = useRef(chanceTotal);
+  chanceTotalRef.current = chanceTotal;
+  const knockoutChanceRef = useRef(knockoutChance);
+  knockoutChanceRef.current = knockoutChance;
+  const practiceChanceRef = useRef(practiceChance);
+  practiceChanceRef.current = practiceChance;
+  const introStartedRef = useRef(false);
 
   const animRef = useRef<AnimState>({
     phase: 'idle',
@@ -440,7 +614,7 @@ export default function ShootingGame({
     shakeMagnitude: 0,
     shakeUntilMs: 0,
     ballStartXRatio: initialChance.ballStartXRatio,
-    ballTravelDir: pickBallTravelDir(initialChance.ballStartXRatio),
+    ballTravelDir: pickBallTravelDir(initialChance.ballStartXRatio, Math.random, initialChance.flight),
     ballTravelActive: chanceBallTravels(initialChance.kind) && !readDevTravelOff(),
     knockFromX: initialChance.ballStartXRatio,
     knockToX: initialChance.ballStartXRatio,
@@ -448,18 +622,106 @@ export default function ShootingGame({
     knockHoldUntilMs: 0,
     shotDistanceM: initialChance.distanceM,
     chanceKind: initialChance.kind,
+    ballFlight: initialChance.flight ?? 'roll',
+    travelSpeed: initialChance.travelSpeed ?? 0.22,
     defender: initialChance.defender,
     defenders: chanceDefenders(initialChance),
     lastTickMs: 0,
+    introUntilMs: 0,
+    resultHoldMs: 1600,
+    bounceElapsedS: Math.random() * BALL_BOUNCE_PERIOD_S,
+    headerStartXRatio: initialChance.ballStartXRatio,
+    headerPeakLift: initialChance.headerPeakLift ?? 0,
+    headerFloorLift: initialChance.headerFloorLift ?? 0,
+    headerLandingXRatio: initialChance.headerLandingXRatio ?? initialChance.ballStartXRatio,
   });
+
+  const effectiveStake = useCallback((kind: ChanceKind): ChanceStake => {
+    if (forcePenaltyRef.current || kind === 'penalty') return 'penalty';
+    return readDevStake() ?? chanceStakeRef.current ?? 'league';
+  }, []);
+
+  const isLastChanceNow = useCallback((_kind: ChanceKind): boolean => {
+    if (readDevLastChance() || lastChancePropRef.current) return true;
+    const limit = maxShotsRef.current;
+    return limit !== undefined && shotsTakenRef.current + 1 >= limit;
+  }, []);
+
+  const beginChanceIntro = useCallback((_first: boolean, kind: ChanceKind) => {
+    const look = stadiumRef.current;
+    const stake = effectiveStake(kind);
+    const last = isLastChanceNow(kind);
+    const venue = readDevVenueLine()
+      ?? venueLineRef.current
+      ?? defaultVenueLine({ groundName: look.groundName, isHome: look.isHome, night: look.night });
+    const beat = chanceBeatLine(
+      stake,
+      Boolean(look.night),
+      readDevScoreLine() ?? matchScoreRef.current,
+    );
+    const skip = readDevIntroOff();
+    const taken = chanceTakenRef.current ?? shotsTakenRef.current;
+    const total = chanceTotalRef.current ?? maxShotsRef.current ?? 1;
+    const remaining = Math.max(1, total - taken);
+    const matchStake = forcePenaltyRef.current
+      ? 'penalty'
+      : (readDevStake() ?? chanceStakeRef.current ?? 'league');
+    const minute = formatChanceMinute(chanceMinute(taken, total, matchStake));
+    const left = '';
+    const scoreFor = chanceScoreForRef.current;
+    const scoreAgainst = chanceScoreAgainstRef.current;
+    const importance = scoreFor != null && scoreAgainst != null
+      ? chanceImportanceLine(scoreFor, scoreAgainst, remaining, knockoutChanceRef.current)
+      : null;
+    const anim = animRef.current;
+    anim.phase = skip ? 'idle' : 'intro';
+    anim.introUntilMs = 0;
+    anim.lastTickMs = 0;
+    setIntroLine(skip ? null : { venue, beat, minute, left, importance });
+    setUiPhase(skip ? 'idle' : 'intro');
+    audio.startCrowdBed(crowdLevelForChance({
+      home: look.isHome,
+      night: look.night,
+      stake,
+      lastChance: last,
+      crowdFill: look.crowdFill,
+    }));
+  }, [effectiveStake, isLastChanceNow]);
+
+  const beginFromIntro = useCallback(() => {
+    const anim = animRef.current;
+    if (anim.phase !== 'intro') return;
+    anim.phase = 'idle';
+    anim.lastTickMs = performance.now();
+    setUiPhase('idle');
+    setIntroLine(null);
+  }, []);
 
   useEffect(() => {
     audio.setMuted(muted);
-  }, [muted]);
+    if (muted) return;
+    const look = stadiumRef.current;
+    const kind = animRef.current.chanceKind;
+    audio.startCrowdBed(crowdLevelForChance({
+      home: look.isHome,
+      night: look.night,
+      stake: effectiveStake(kind),
+      lastChance: isLastChanceNow(kind),
+      crowdFill: look.crowdFill,
+    }));
+  }, [muted, effectiveStake, isLastChanceNow]);
+
+  useEffect(() => {
+    if (introStartedRef.current) return;
+    introStartedRef.current = true;
+    beginChanceIntro(true, animRef.current.chanceKind);
+    return () => audio.stopCrowdBed();
+  }, [beginChanceIntro]);
 
   useEffect(() => {
     setBallHintX(animRef.current.ballStartXRatio);
     setChanceKind(animRef.current.chanceKind);
+    setBallFlight(animRef.current.ballFlight);
   }, []);
 
   useEffect(() => {
@@ -497,6 +759,7 @@ export default function ShootingGame({
       allowPenaltiesRef.current,
       opponentStrengthRef.current,
       forcePenaltyRef.current,
+      practiceChanceRef.current,
     );
     const view = createPitchView(w, h, chance.distanceM);
     const start = ballStartPixel(view, chance.ballStartXRatio);
@@ -506,7 +769,7 @@ export default function ShootingGame({
     anim.dragPoints = [];
     anim.result = null;
     anim.ballStartXRatio = chance.ballStartXRatio;
-    anim.ballTravelDir = pickBallTravelDir(chance.ballStartXRatio);
+    anim.ballTravelDir = pickBallTravelDir(chance.ballStartXRatio, Math.random, chance.flight);
     anim.ballTravelActive = chanceBallTravels(chance.kind) && !readDevTravelOff();
     anim.knockFromX = chance.ballStartXRatio;
     anim.knockToX = chance.ballStartXRatio;
@@ -514,6 +777,8 @@ export default function ShootingGame({
     anim.knockHoldUntilMs = 0;
     anim.shotDistanceM = chance.distanceM;
     anim.chanceKind = chance.kind;
+    anim.ballFlight = chance.flight ?? 'roll';
+    anim.travelSpeed = chance.travelSpeed ?? 0.22;
     anim.defender = chance.defender;
     anim.defenders = chanceDefenders(chance);
     anim.lastTickMs = 0;
@@ -524,12 +789,27 @@ export default function ShootingGame({
     anim.keeperPose = makeIdleKeeper(skinPaletteRef.current);
     anim.shakeMagnitude = 0;
     anim.shakeUntilMs = 0;
+    anim.bounceElapsedS = Math.random() * BALL_BOUNCE_PERIOD_S;
+    anim.headerStartXRatio = chance.ballStartXRatio;
+    anim.headerPeakLift = chance.headerPeakLift ?? 0;
+    anim.headerFloorLift = chance.headerFloorLift ?? 0;
+    anim.headerLandingXRatio = chance.headerLandingXRatio ?? chance.ballStartXRatio;
     setBallHintX(chance.ballStartXRatio);
     setChanceKind(chance.kind);
+    setBallFlight(chance.flight ?? 'roll');
     setDefenderCount(chanceDefenders(chance).length);
-    setUiPhase('idle');
     setResultLabel(null);
-  }, []);
+    beginChanceIntro(false, chance.kind);
+  }, [beginChanceIntro]);
+
+  const practiceChanceReady = useRef(false);
+  useEffect(() => {
+    if (!practiceChanceReady.current) {
+      practiceChanceReady.current = true;
+      return;
+    }
+    resetForNextShot();
+  }, [practiceChance, resetForNextShot]);
 
   const launchShot = useCallback((gesture: SwipeGesture) => {
     const anim = animRef.current;
@@ -542,6 +822,7 @@ export default function ShootingGame({
     setUiPhase('shooting');
     setResultLabel(null);
     audio.playKick(result.power);
+    haptics.hapticKick(result.power);
   }, []);
 
   useEffect(() => {
@@ -595,25 +876,43 @@ export default function ShootingGame({
         bestStreak: Math.max(prev.bestStreak, streak),
       };
     });
-    const detailParts = [powerTierLabel(result.power), curlStyleLabel(result), takeTimingLabel(result.takeQuality)].filter(Boolean) as string[];
+    const detailParts = [
+      result.shotStyle ? SHOT_STYLE_LABEL[result.shotStyle] : null,
+      result.groundBounce ? 'Bounced' : null,
+      powerTierLabel(result.power),
+      curlStyleLabel(result),
+      takeTimingLabel(result.takeQuality),
+    ].filter(Boolean) as string[];
     setResultLabel({
-      text: OUTCOME_LABEL[result.outcome],
+      text: result.outOfPlay ? 'OUT OF PLAY' : OUTCOME_LABEL[result.outcome],
       color: OUTCOME_COLOR[result.outcome],
       detail: detailParts.length > 0 ? detailParts.join(' \u00b7 ') : null,
     });
     setUiPhase('result');
+    const kind = animRef.current.chanceKind;
+    const limit = maxShotsRef.current;
+    const last = readDevLastChance() || lastChancePropRef.current || (limit !== undefined && shotsTakenRef.current >= limit);
+    animRef.current.resultHoldMs = resultHoldMs(result.outcome, effectiveStake(kind), last, result.power);
+    const homeCrowd = stadiumRef.current.isHome !== false;
+    const scored = result.outcome === 'goal';
+    if (crowdReactsToOutcome(result.outcome)) {
+      audio.reactCrowd(scored === homeCrowd ? 'cheer' : 'groan');
+    }
     if (result.outcome === 'goal') {
-      audio.playGoal();
+      haptics.hapticGoal();
       if (result.power > 1.15) {
         const anim = animRef.current;
         anim.shakeMagnitude = Math.min(14, (result.power - 1) * 14);
         anim.shakeUntilMs = performance.now() + SHAKE_DURATION_MS;
       }
-    } else if (result.outcome === 'saved') audio.playSave();
-    else if (result.outcome === 'post') audio.playPost();
-    else if (result.outcome === 'blocked') audio.playBlock();
-    else audio.playMiss();
-  }, []);
+    } else if (result.outcome === 'post') {
+      audio.playPost();
+      haptics.hapticPost();
+    } else if (result.outcome === 'blocked') {
+      audio.playBlock();
+      haptics.hapticBlock();
+    }
+  }, [effectiveStake]);
 
   // Main animation loop.
   useEffect(() => {
@@ -650,8 +949,10 @@ export default function ShootingGame({
         });
         drawGoal(ctx, view);
 
-        if (anim.phase === 'idle' || anim.phase === 'dragging') {
-          const dt = anim.lastTickMs > 0 ? Math.min(0.05, (now - anim.lastTickMs) / 1000) : 0;
+        if (anim.phase === 'intro' || anim.phase === 'idle' || anim.phase === 'dragging') {
+          const dt = anim.phase === 'intro'
+            ? 0
+            : (anim.lastTickMs > 0 ? Math.min(0.05, (now - anim.lastTickMs) / 1000) : 0);
           anim.lastTickMs = now;
           if (anim.phase === 'idle' && anim.ballTravelActive && dt > 0) {
             if (anim.knockUntilMs > now) {
@@ -660,20 +961,32 @@ export default function ShootingGame({
               anim.ballStartXRatio = anim.knockFromX + (anim.knockToX - anim.knockFromX) * eased;
               anim.ballRotation += anim.ballTravelDir * dt * 16;
             } else {
-              const holdKnock = anim.knockHoldUntilMs > now;
+              const header = anim.ballFlight === 'header';
+              const bounds = header ? headerTravelBoundsForView(view) : undefined;
               const rolled = advanceBallTravel(anim.ballStartXRatio, anim.ballTravelDir, dt, {
-                bounce: !holdKnock,
+                speed: anim.travelSpeed,
+                bounce: !header,
+                minX: bounds?.minX,
+                maxX: bounds?.maxX,
               });
               anim.ballStartXRatio = rolled.xRatio;
               anim.ballTravelDir = rolled.direction;
               anim.ballRotation += rolled.direction * dt * 9;
+              if (header && headerRanOutOfPlay(rolled.xRatio, rolled.direction, bounds)) {
+                anim.ballTravelActive = false;
+                const lost = outOfPlayResult();
+                anim.result = lost;
+                anim.phase = 'result';
+                anim.resultAtMs = now;
+                finishShot(lost);
+              }
             }
           }
           if (hintRef.current) {
             const x = Math.min(0.82, Math.max(0.18, anim.ballStartXRatio));
             hintRef.current.style.left = `${x * 100}%`;
           }
-          if (anim.defenders.length > 0 && dt > 0) {
+          if (anim.defenders.length > 0 && dt > 0 && anim.phase !== 'intro') {
             const paired = anim.defenders.length > 1;
             anim.defenders = anim.defenders.map((defender) =>
               advanceDefender(
@@ -683,12 +996,24 @@ export default function ShootingGame({
                 dt,
                 opponentStrengthRef.current ?? 70,
                 paired,
+                anim.ballFlight === 'header',
+                anim.headerLandingXRatio,
               ),
             );
             anim.defender = anim.defenders[0] ?? null;
           }
+          if (anim.ballTravelActive && dt > 0 && flightBounces(anim.ballFlight)) {
+            anim.bounceElapsedS += dt;
+          }
           const start = ballStartPixel(view, anim.ballStartXRatio);
-          anim.ballPixel = start;
+          const liftRatio = idleBallHeightRatio(
+            anim.ballFlight,
+            flightBounces(anim.ballFlight)
+              ? ballBounceLift(anim.bounceElapsedS, bouncePeriodS(anim.ballFlight))
+              : 0,
+            headerLiftFromAnim(anim, view),
+          );
+          anim.ballPixel = { x: start.x, y: start.y - liftRatio * h };
           anim.ballRadius = ballRadiusNear(view);
           const devPose = readDevKeeperPose();
           const devCell = readDevPoseCell();
@@ -714,7 +1039,15 @@ export default function ShootingGame({
           const t = Math.min(1, elapsed / result.travelTimeMs);
           const eased = t * t * (3 - 2 * t); // smoothstep
 
-          const start = ballStartPixel(view, anim.ballStartXRatio);
+          const grounded = ballStartPixel(view, anim.ballStartXRatio);
+          const startLift = idleBallHeightRatio(
+            anim.ballFlight,
+            flightBounces(anim.ballFlight)
+              ? ballBounceLift(anim.bounceElapsedS, bouncePeriodS(anim.ballFlight))
+              : 0,
+            headerLiftFromAnim(anim, view),
+          );
+          const start = { x: grounded.x, y: grounded.y - startLift * h };
           // The ball always flies to where it truly ends up - never redirect
           // its visual path toward the keeper - so what you see is always
           // consistent with the outcome (no more "that went in" saves).
@@ -722,15 +1055,18 @@ export default function ShootingGame({
 
           const powerT = clamp((result.power - 0.25) / (1.8 - 0.25), 0, 1);
           const pathLen = Math.hypot(end.x - start.x, end.y - start.y);
-          const arcHeight = lerpNum(MAX_ARC_ALONG_PATH, MIN_ARC_ALONG_PATH, powerT) * pathLen;
+          const style = result.shotStyle;
+          const arcMul = style === 'floater' ? 1.55 : style === 'chip' ? 1.35 : style === 'poke' ? 0.45 : 1;
+          const arcHeight = lerpNum(MAX_ARC_ALONG_PATH, MIN_ARC_ALONG_PATH, powerT) * pathLen * arcMul;
           const bend = result.curl * w * MAX_BEND_RATIO;
 
           // Gentle banana: a little early bow, then settle into the aimed
           // point so the shot does not whip sideways at the end.
+          const skip = result.groundBounce ? h * 0.12 : 0;
           const c1x = lerpNum(start.x, end.x, 0.38) + bend;
-          const c1y = lerpNum(start.y, end.y, 0.38) - arcHeight;
+          const c1y = lerpNum(start.y, end.y, 0.38) - arcHeight + skip;
           const c2x = lerpNum(start.x, end.x, 0.78) + bend * 0.2;
-          const c2y = lerpNum(start.y, end.y, 0.78) - arcHeight * 0.22;
+          const c2y = lerpNum(start.y, end.y, 0.78) - arcHeight * 0.22 - skip * 0.35;
 
           const x = cubicBezier(start.x, c1x, c2x, end.x, eased);
           const y = cubicBezier(start.y, c1y, c2y, end.y, eased);
@@ -815,7 +1151,7 @@ export default function ShootingGame({
             drawDefender(ctx, view, defender.worldX, defender.z, defenderKit, defender.stride, defender.skinTone, defender.hairColor, look.showSun === false);
           }
           drawBall(ctx, anim.ballPixel.x, anim.ballPixel.y, anim.ballRadius, anim.ballRotation);
-          if (now - anim.resultAtMs > RESULT_HOLD_MS) {
+          if (now - anim.resultAtMs > anim.resultHoldMs) {
             const limit = maxShotsRef.current;
             if (limit !== undefined && shotsTakenRef.current >= limit) {
               onCompleteRef.current?.();
@@ -844,7 +1180,7 @@ export default function ShootingGame({
 
     const onPointerDown = (e: PointerEvent) => {
       const anim = animRef.current;
-      if (anim.phase !== 'idle') return;
+      if (anim.phase !== 'idle') return; // intro, flight, and result ignore swipes
       e.preventDefault();
       canvas.setPointerCapture(e.pointerId);
       const p = getPoint(e);
@@ -879,7 +1215,15 @@ export default function ShootingGame({
       const curl = computeSwipeCurl(anim.dragPoints);
       const { w, h } = sizeRef.current;
       const view = createPitchView(w, h, anim.shotDistanceM);
-      const ball = ballStartPixel(view, anim.ballStartXRatio);
+      const grounded = ballStartPixel(view, anim.ballStartXRatio);
+      const liftRatio = idleBallHeightRatio(
+        anim.ballFlight,
+        flightBounces(anim.ballFlight)
+          ? ballBounceLift(anim.bounceElapsedS, bouncePeriodS(anim.ballFlight))
+          : 0,
+        headerLiftFromAnim(anim, view),
+      );
+      const ball = { x: grounded.x, y: grounded.y - liftRatio * h };
       const gesture: SwipeGesture = {
         dx,
         dy,
@@ -892,22 +1236,36 @@ export default function ShootingGame({
         canvasW: w,
         canvasH: h,
         distanceM: anim.shotDistanceM,
-        takeQuality: anim.ballTravelActive ? takeQualityFromXRatio(anim.ballStartXRatio) : 1,
+        takeQuality: anim.ballTravelActive ? takeQualityFromXRatio(anim.ballStartXRatio, anim.chanceKind) : 1,
+        contactLift: anim.ballTravelActive && anim.ballFlight !== 'header'
+          ? underSwipeLift(start.y, ball.y, anim.ballRadius, liftRatio)
+          : 0,
+        bounceHeight: flightBounces(anim.ballFlight)
+          ? ballBounceLift(anim.bounceElapsedS, bouncePeriodS(anim.ballFlight))
+          : liftRatio,
+        ballFlight: anim.ballFlight,
+        contactHeight: anim.ballFlight === 'header'
+          ? Math.min(0.98, Math.max(0.52, 0.42 + liftRatio * 1.55))
+          : anim.ballFlight === 'volley'
+            ? 0.38 + liftRatio * 2.2
+            : liftRatio > 0 ? 0.35 : 0,
       };
 
       anim.dragStart = null;
       anim.dragPoints = [];
 
-      if (anim.ballTravelActive && swipeIsHorizontalKnock(dx, dy)) {
+      if (anim.ballTravelActive && anim.ballFlight !== 'header' && swipeIsHorizontalKnock(dx, dy)) {
         const knock = applyHorizontalKnock(anim.ballStartXRatio, dx, durationMs);
         anim.knockFromX = anim.ballStartXRatio;
         anim.knockToX = knock.xRatio;
         anim.ballTravelDir = knock.direction;
         const now = performance.now();
         anim.knockUntilMs = now + KNOCK_SLIDE_MS;
-        anim.knockHoldUntilMs = now + KNOCK_SLIDE_MS + KNOCK_HOLD_MS;
+        anim.knockHoldUntilMs = 0;
         anim.phase = 'idle';
         setUiPhase('idle');
+        audio.playKnock();
+        haptics.hapticKnock();
         return;
       }
 
@@ -930,14 +1288,14 @@ export default function ShootingGame({
       canvas.removeEventListener('pointerup', onPointerUp);
       canvas.removeEventListener('pointercancel', onPointerUp);
     };
-  }, [launchShot]);
+  }, [launchShot, finishShot]);
 
   return (
     <div className="relative flex h-full w-full flex-col">
       <header className="z-10 flex items-center justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 text-white">
         <div>
           <h1 className="font-display text-lg font-bold sm:text-xl">{title ?? 'Football Legacy'}</h1>
-          <p className="text-xs text-white/50">{subtitle ?? 'Knock the ball sideways, then swipe up to shoot'}</p>
+          <p className="text-xs text-white/50">{subtitle ?? 'Knock sideways, then jab, drive, or loft'}</p>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {progressLabel && (
               <p className="inline-block rounded-full bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-white/80">
@@ -952,6 +1310,31 @@ export default function ShootingGame({
             {chanceKind === 'open' && defenderCount > 1 && (
               <p className="inline-block rounded-full bg-sky-400/15 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-sky-200">
                 Two defenders
+              </p>
+            )}
+            {chanceKind === 'cross' && (
+              <p className="inline-block rounded-full bg-orange-400/20 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-orange-200">
+                Ball across goal
+              </p>
+            )}
+            {ballFlight === 'volley' && (
+              <p className="inline-block rounded-full bg-violet-400/20 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-violet-200">
+                Volley
+              </p>
+            )}
+            {ballFlight === 'header' && (
+              <p className="inline-block rounded-full bg-rose-400/20 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-rose-200">
+                Header
+              </p>
+            )}
+            {chanceKind !== 'penalty' && ballFlight === 'roll' && (
+              <p className="inline-block rounded-full bg-lime-400/15 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-lime-200">
+                Ground ball
+              </p>
+            )}
+            {chanceKind !== 'penalty' && ballFlight === 'bounce' && (
+              <p className="inline-block rounded-full bg-cyan-400/15 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-cyan-200">
+                Bouncing ball
               </p>
             )}
           </div>
@@ -973,6 +1356,28 @@ export default function ShootingGame({
       <div ref={containerRef} className="relative min-h-0 flex-1 select-none touch-none">
         <canvas ref={canvasRef} className="absolute inset-0 h-full w-full touch-none" />
 
+        {uiPhase === 'intro' && introLine && (
+          <button
+            type="button"
+            onClick={beginFromIntro}
+            className="absolute inset-0 z-10 flex items-center justify-center bg-black/20 px-4"
+          >
+            <div className="flex w-full max-w-sm flex-col items-center gap-2 rounded-2xl border border-white/15 bg-black/70 px-7 py-6 text-center backdrop-blur-sm">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">{introLine.venue}</p>
+              <p className="font-display text-3xl font-bold text-white sm:text-4xl">{introLine.beat}</p>
+              {(introLine.minute || introLine.left) && (
+                <p className="text-sm font-semibold text-white/80">
+                  {[introLine.minute, introLine.left].filter(Boolean).join(' · ')}
+                </p>
+              )}
+              {introLine.importance && (
+                <p className="text-sm font-semibold text-amber-200">{introLine.importance}</p>
+              )}
+              <p className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-200/90">Tap to begin</p>
+            </div>
+          </button>
+        )}
+
         {uiPhase === 'idle' && (
           <div
             ref={hintRef}
@@ -984,7 +1389,19 @@ export default function ShootingGame({
             }}
           >
             <div className="animate-pulse rounded-full bg-black/40 px-4 py-1.5 text-sm text-white/80 backdrop-blur">
-              {chanceKind === 'penalty' ? 'Swipe up on the ball to shoot ⬆' : 'Swipe sideways to move · up to shoot'}
+              {chanceKind === 'penalty'
+                ? 'Swipe up on the ball to shoot ⬆'
+                : ballFlight === 'header'
+                  ? 'Header — one swipe as it comes across'
+                  : ballFlight === 'volley'
+                    ? 'High bounce — volley it'
+                    : chanceKind === 'cross'
+                      ? 'Ball whipping across — swipe quickly'
+                      : ballFlight === 'bounce'
+                        ? 'Bouncing ball — time the bounce'
+                        : ballFlight === 'roll'
+                          ? 'Ground ball — knock, then strike'
+                          : 'Swipe sideways to move · jab, drive, or loft'}
             </div>
           </div>
         )}
@@ -1003,6 +1420,28 @@ export default function ShootingGame({
           </div>
         )}
       </div>
+
+      {onPracticeChanceChange && (
+        <div className="z-10 flex gap-1.5 overflow-x-auto px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
+          {PRACTICE_CHANCES.map((chance) => {
+            const selected = (practiceChance ?? 'random') === chance.id;
+            return (
+              <button
+                key={chance.id}
+                type="button"
+                onClick={() => onPracticeChanceChange(chance.id)}
+                className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
+                  selected
+                    ? 'bg-emerald-400 text-black'
+                    : 'bg-white/10 text-white/75'
+                }`}
+              >
+                {chance.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <style>{`
         @keyframes pop {

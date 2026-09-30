@@ -24,6 +24,8 @@ export default function TrialScreen() {
       maxShots={TRIAL_SHOTS}
       allowPenalties={false}
       stadium={trialStadium(nation)}
+      venueLine="The trial pitch"
+      chanceStake="league"
       onShotResolved={recordTrialShot}
       onComplete={finishTrial}
     />

@@ -1,4 +1,4 @@
-import type { AvailabilityState } from './types';
+import type { AvailabilityState, SquadStatus } from './types';
 
 /**
  * The escalating suspension rule:
@@ -12,7 +12,16 @@ import type { AvailabilityState } from './types';
  * Scoring at ANY point resets straight back to phase 0 with a fresh 3-game
  * allowance - there is no partial credit, but there is also no permanent
  * penalty: one goal wipes the slate clean.
+ *
+ * This window runs for every squad role, including Rising star and Impact.
+ * Rotation sit-outs and 0-chance fixtures still do not count as misses.
  */
+
+/** Drop windows run for every squad role, including Rising star and Impact. */
+export function availabilityDropsApply(_status?: SquadStatus | null): boolean {
+  return true;
+}
+
 export function allowanceForPhase(phase: number): number {
   if (phase <= 0) return 3;
   if (phase === 1) return 2;
@@ -37,8 +46,20 @@ export function serveBannedGame(state: AvailabilityState): AvailabilityState {
   return { ...state, bannedGamesRemaining: Math.max(0, state.bannedGamesRemaining - 1) };
 }
 
+/** A match with no scoring look cannot start or continue a drop window. */
+export function matchCountsTowardDrop(chances?: number | null): boolean {
+  return (chances ?? 1) > 0;
+}
+
 /** Applies the outcome of a game the player actually played in. */
-export function applyMatchResult(state: AvailabilityState, scored: boolean): AvailabilityState {
+export function applyMatchResult(
+  state: AvailabilityState,
+  scored: boolean,
+  chances = 1,
+  squadStatus?: SquadStatus,
+): AvailabilityState {
+  if (!availabilityDropsApply(squadStatus)) return state;
+  if (!matchCountsTowardDrop(chances)) return state;
   if (scored) return createAvailability();
 
   const windowFails = state.windowFails + 1;
@@ -54,7 +75,11 @@ export function applyMatchResult(state: AvailabilityState, scored: boolean): Ava
 }
 
 /** Human-readable status for the career hub UI. */
-export function describeAvailability(state: AvailabilityState): string {
+export function describeAvailability(
+  state: AvailabilityState,
+  squadStatus?: SquadStatus,
+): string {
+  if (!availabilityDropsApply(squadStatus)) return 'In the squad';
   if (!isAvailable(state)) {
     const games = state.bannedGamesRemaining;
     return `Dropped from the squad \u2014 ${games} game${games === 1 ? '' : 's'} remaining`;

@@ -6,12 +6,12 @@ import { chancesForLeagueMatch } from './chanceEngine';
 import { simulateClubMatch } from './matchEngine';
 
 export const YOUTH_TOURNAMENTS: Record<Confederation, { id: string; name: string }> = {
-  UEFA: { id: 'uefa-u16', name: 'UEFA Youth Championship' },
+  UEFA: { id: 'uefa-u16', name: 'European Youth Championship' },
   CONMEBOL: { id: 'conmebol-u16', name: 'South American Youth Championship' },
-  CONCACAF: { id: 'concacaf-u16', name: 'CONCACAF Youth Championship' },
-  CAF: { id: 'caf-u16', name: 'Africa Youth Cup of Nations' },
-  AFC: { id: 'afc-u16', name: 'AFC Youth Asian Cup' },
-  OFC: { id: 'ofc-u16', name: 'OFC Youth Championship' },
+  CONCACAF: { id: 'concacaf-u16', name: 'North American Youth Championship' },
+  CAF: { id: 'caf-u16', name: 'African Youth Championship' },
+  AFC: { id: 'afc-u16', name: 'Asian Youth Championship' },
+  OFC: { id: 'ofc-u16', name: 'Oceania Youth Championship' },
 };
 
 export type YouthKnockoutRound = 'round-of-16' | 'quarter-final' | 'semi-final' | 'final' | 'third-place';

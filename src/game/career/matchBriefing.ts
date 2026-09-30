@@ -31,6 +31,13 @@ export function playerGoalsLine(goals: number, chances: number): string {
   return `${goals} goal${goals === 1 ? '' : 's'} from ${chances} chance${chances === 1 ? '' : 's'}`;
 }
 
+/** No-chance weeks still count as appearances — do not say the player sat them out. */
+export function sitOutRecapLine(reason: string | null | undefined): string | null {
+  if (!reason) return null;
+  if (reason === 'no chance this match') return 'No chance this match';
+  return `You did not play — ${reason}`;
+}
+
 export function composeMatchSummary(parts: {
   headline: string;
   playerLine?: string | null;

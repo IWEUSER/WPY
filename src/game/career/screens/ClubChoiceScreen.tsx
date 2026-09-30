@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { playableClubsGroupedByLeague, TIER_LABEL } from '../data/clubs';
+import { leagueDisplayName } from '../data/leagueFormat';
 import { useCareerStore } from '../store';
 
 export default function ClubChoiceScreen() {
@@ -16,6 +17,7 @@ export default function ClubChoiceScreen() {
           (c) =>
             !q ||
             c.name.toLowerCase().includes(q) ||
+            leagueDisplayName(c.league).toLowerCase().includes(q) ||
             c.league.toLowerCase().includes(q) ||
             c.country.toLowerCase().includes(q),
         ),
@@ -35,9 +37,6 @@ export default function ClubChoiceScreen() {
         </button>
         <p className="text-sm text-white/50">Career mode</p>
         <h1 className="font-display text-2xl font-bold">Pick your club</h1>
-        <p className="mt-2 max-w-sm text-sm text-white/60">
-          Season 1 starts as a Rising star on a 2-year deal at 10% of that club’s top wage. You can renew or leave at the end of the season.
-        </p>
       </div>
 
       <input
@@ -52,7 +51,7 @@ export default function ClubChoiceScreen() {
         {groups.map((group) => (
           <section key={group.league} className="text-left">
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-white/40">
-              {group.league}
+              {leagueDisplayName(group.league)}
             </p>
             <div className="flex flex-col gap-2">
               {group.clubs.map((club) => (
@@ -66,7 +65,7 @@ export default function ClubChoiceScreen() {
                   <div className="flex-1">
                     <p className="font-bold">{club.name}</p>
                     <p className="text-xs text-white/50">
-                      {club.country} · {club.league}
+                      {club.country} · {leagueDisplayName(club.league)}
                     </p>
                   </div>
                   <span className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/70">

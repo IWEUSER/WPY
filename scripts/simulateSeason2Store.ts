@@ -5,9 +5,9 @@
  * Run with: npx tsx scripts/simulateSeason2Store.ts
  */
 import { useCareerStore } from '../src/game/career/store';
-import { getClub, leagueMatchWeeks } from '../src/game/career/data/clubs';
+import { getClub, leagueMatchWeeks, SECOND_DIVISIONS } from '../src/game/career/data/clubs';
 import { currentCalendarWeek } from '../src/game/career/calendar';
-import { FIRST_CONTRACT_YEARS, playerMarketValue, playerMarketValueFromSeasons, weeklyWageForSquadStatus, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
+import { FIRST_CONTRACT_YEARS, openingWeeklyWageForSquadStatus, playerMarketValue, playerMarketValueFromSeasons, SECOND_DIVISION_STARTER_FLOOR, weeklyWageForSquadStatus, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import type { ShotResult } from '../src/game/shooting/types';
 
 function fakeShot(scored: boolean): ShotResult {
@@ -44,6 +44,12 @@ if (store.getState().phase !== 'nationality-choice') {
 function pickNation(nationId: string, name = 'Ian Test') {
   store.getState().chooseNationality(nationId);
   store.getState().confirmPlayerName(name);
+  if (store.getState().phase !== 'opening-role') {
+    console.error('Naming the player must open the Rising star screen');
+    process.exitCode = 1;
+    return;
+  }
+  store.getState().confirmOpeningRole('rising-star');
 }
 
 pickNation('spain');
@@ -198,7 +204,7 @@ console.log(
     || signed.contractYearsRemaining !== FIRST_CONTRACT_YEARS
     || signed.weeklyWage !== risingWage
   ) {
-    console.error('A passed trial must start Season 1 as a Rising star on a 2-year deal at 10% of that club’s top wage');
+    console.error('A passed trial must start Season 1 as a Rising star on a 3-year deal at 10% of that club’s average wage');
     process.exitCode = 1;
   }
 }
@@ -290,7 +296,7 @@ if (s2.seasonSim?.internationalSelected) {
   process.exitCode = 1;
 }
 if (s2.contractYearsRemaining !== FIRST_CONTRACT_YEARS) {
-  console.error('Season 1 as a Rising star must start a 2-year contract');
+  console.error('Season 1 as a Rising star must start a 3-year contract');
   process.exitCode = 1;
 }
 
@@ -504,25 +510,34 @@ console.log(
   const pending = store.getState().pendingTransfer;
   const renewal = pending?.offers?.find((o) => o.renewal && o.clubId === loanParent);
   const otherWages = (pending?.offers ?? []).filter((o) => !o.renewal).map((o) => o.weeklyWage);
+  const loans = (pending?.offers ?? []).filter((o) => o.move === 'loan');
   if (
     store.getState().phase !== 'transfer-choice'
     || !pending?.allowDecline
-    || !renewal
-    || renewal.weeklyWage <= 0
+    || !pending?.stay
+    || renewal
+    || loans.length === 0
     || otherWages.length === 0
     || otherWages.some((wage) => wage <= 0)
   ) {
-    console.error('Missing Season 1 must still offer a current-club renewal wage plus other clubs’ salary offers');
+    console.error('Missing Season 1 must still allow a stay, with a loan always available; wage offers remain');
     process.exitCode = 1;
   }
 }
-const loanClubId = store.getState().pendingTransfer?.offers?.find((o) => o.move === 'loan' && !o.renewal)?.clubId
+const loanOffer = store.getState().pendingTransfer?.offers?.find((o) => o.move === 'loan' && !o.renewal);
+const loanClubId = loanOffer?.clubId
   ?? store.getState().pendingTransfer?.clubIds.find((id) => id !== loanParent);
 if (!loanClubId) {
   console.error('Season 1 loan offers must include a club');
   process.exitCode = 1;
 } else {
+  const offeredWage = loanOffer?.weeklyWage ?? 0;
   store.getState().resolveTransferChoice(loanClubId);
+  if (store.getState().phase !== 'season-paywall') {
+    console.error('a Season 1 loan pick must open the Season 2 paywall');
+    process.exitCode = 1;
+  }
+  store.getState().continuePastSeasonPaywall();
   const loaned = store.getState();
   console.log(
     'S2 loan',
@@ -535,6 +550,8 @@ if (!loanClubId) {
     loaned.contractYearsRemaining,
     'sponsorship',
     loaned.seasonSponsorship,
+    'wage',
+    loaned.weeklyWage,
   );
   if (loaned.role !== 'loan' || loaned.seasonNumber !== 2 || loaned.age !== 18) {
     console.error('A Season 1 loan move must start Season 2 on loan at age 18');
@@ -542,20 +559,12 @@ if (!loanClubId) {
   }
   {
     const dest = loaned.clubId ? getClub(loaned.clubId) : undefined;
-    const destWage = dest
-      ? weeklyWageForSquadStatus(dest, playerMarketValueFromSeasons({
-          age: loaned.age,
-          careerGoals: loaned.careerGoals,
-          careerGames: loaned.careerGames,
-          seasons: loaned.seasonHistory,
-          fallbackClub: dest,
-          seasonNumber: loaned.seasonNumber,
-          calendarWeek: 99,
-          role: 'loan',
-        }), 'starter', dest.league)
-      : 0;
-    if (loaned.weeklyWage !== destWage) {
-      console.error('The first loan must pay the destination starter wage');
+    if (loaned.weeklyWage !== offeredWage || offeredWage <= 0) {
+      console.error('The first loan must pay the destination starter wage from the offer');
+      process.exitCode = 1;
+    }
+    if (dest && SECOND_DIVISIONS.has(dest.league) && (loaned.squadStatus === 'starter') && offeredWage < SECOND_DIVISION_STARTER_FLOOR) {
+      console.error('a second-division loan starter must sit above the €500 reserve floor');
       process.exitCode = 1;
     }
   }
@@ -618,7 +627,7 @@ if (store.getState().phase === 'club-offer') {
       : -1)
     || s.contractYearsRemaining !== FIRST_CONTRACT_YEARS
   ) {
-    console.error('Hitting a favourite-club trial must sign a 2-year Rising star deal at 10% of that club’s top wage');
+    console.error('Hitting a favourite-club trial must sign a 3-year Rising star deal at 10% of that club’s average wage');
     process.exitCode = 1;
   }
   const kinds = new Set(s.seasonCalendar?.fixtures.map((f) => f.kind) ?? []);
@@ -708,7 +717,7 @@ pickNation('england');
     || !kinds.has('league')
     || !kinds.has('domestic-cup')
   ) {
-    console.error('Favourite first-team must start Season 1 at age 17 on a 2-year deal as a Rising star with the full calendar');
+    console.error('Favourite first-team must start Season 1 at age 17 on a 3-year deal as a Rising star with the full calendar');
     process.exitCode = 1;
   }
   const tournamentGames = (s.seasonCalendar?.fixtures ?? []).filter(
@@ -739,6 +748,34 @@ pickNation('england');
   console.log('favourite first-team S1 week', week, 'value', value, 'cup', s.seasonSim?.europeanStanding?.cup);
   if (value !== YOUTH_MARKET_VALUE) {
     console.error('Favourite first-team Season 1 must show €100k until week 20');
+    process.exitCode = 1;
+  }
+}
+
+store.getState().resetCareer();
+store.getState().startFavouritePath('favourite-first-team');
+store.getState().chooseFavouriteClub('liverpool');
+store.getState().chooseNationality('england');
+store.getState().confirmPlayerName('Ian Test');
+store.getState().confirmOpeningRole('starter');
+{
+  const s = store.getState();
+  const club = getClub('liverpool');
+  const expected = club
+    ? openingWeeklyWageForSquadStatus(
+        club,
+        playerMarketValue({ age: s.age, ratio: 0.3, careerGoals: 0, club }),
+        'starter',
+      )
+    : 0;
+  const listed = club ? weeklyWageForSquadStatus(club, playerMarketValue({ age: s.age, ratio: 0.3, careerGoals: 0, club }), 'starter') : 0;
+  console.log('favourite starter pick', s.phase, s.squadStatus, s.openingSquadPick, s.weeklyWage, expected, listed);
+  if (s.phase !== 'hub' || s.squadStatus !== 'starter' || s.openingSquadPick !== 'starter') {
+    console.error('the Season 1 place screen must be able to start as a Starter');
+    process.exitCode = 1;
+  }
+  if (s.weeklyWage !== expected || s.weeklyWage >= listed) {
+    console.error('pick-your-club Starter must sign at the club average, not the listed maximum');
     process.exitCode = 1;
   }
 }
@@ -776,6 +813,7 @@ pickNation('england');
       },
       seasonsAtCurrentClub: 1,
       contractYearsRemaining: 2,
+      squadStatus: 'rising-star',
     });
     store.getState().continueAfterSeason();
     const pending = store.getState().pendingTransfer;
@@ -783,55 +821,67 @@ pickNation('england');
     console.log(
       'S1 end renewal',
       Boolean(renewal),
-      'years',
-      renewal?.contractYears,
       'stay',
       pending?.stay?.contractYearsRemaining,
+      'status',
+      pending?.stay?.squadStatus,
     );
     const otherWages = (pending?.offers ?? []).filter((o) => !o.renewal).map((o) => o.weeklyWage);
     if (
-      !renewal
-      || renewal.weeklyWage <= 0
+      renewal
       || !pending?.allowDecline
       || pending.stay?.contractYearsRemaining !== 1
+      || pending.stay?.squadStatus !== 'rising-star'
       || otherWages.length === 0
       || otherWages.some((wage) => wage <= 0)
     ) {
-      console.error('after Season 1 there must be a current-club salary offer plus other clubs’ wage offers');
+      console.error('after Season 1 a Rising star must not get a current-club renewal; other wage offers stay');
       process.exitCode = 1;
     }
     store.getState().resolveTransferChoice(null);
     const stayed = store.getState();
     console.log('S2 after stay-without-renew', stayed.contractYearsRemaining, stayed.phase, stayed.seasonNumber);
-    if (stayed.contractYearsRemaining !== 1 || stayed.phase !== 'hub') {
-      console.error('continuing without renewing must leave 1 year on the existing deal');
+    if (stayed.phase !== 'season-paywall' || stayed.fullCareerUnlocked) {
+      console.error('the Season 1 stay pick must open the Season 2 paywall before Season 2 starts');
       process.exitCode = 1;
     }
-    if (!stayed.currentSeason) {
+    store.getState().continuePastSeasonPaywall();
+    const unlocked = store.getState();
+    console.log('S2 after paywall', unlocked.contractYearsRemaining, unlocked.phase, unlocked.seasonNumber, unlocked.fullCareerUnlocked);
+    if (unlocked.contractYearsRemaining !== 1 || unlocked.phase !== 'hub' || !unlocked.fullCareerUnlocked) {
+      console.error('continuing without renewing must leave 1 year on the existing deal after the Season 2 paywall');
+      process.exitCode = 1;
+    }
+    if (!unlocked.currentSeason) {
       console.error('Season 2 must start after staying without a renewal');
       process.exitCode = 1;
     } else {
       store.setState({
         currentSeason: {
-          ...stayed.currentSeason,
+          ...unlocked.currentSeason,
           goals: 30,
           gamesPlayed: 38,
           leagueGoals: 30,
         },
         seasonsAtCurrentClub: 2,
         contractYearsRemaining: 1,
+        squadStatus: 'starter',
       });
       store.getState().continueAfterSeason();
       const late = store.getState().pendingTransfer;
-      const lateRenewal = late?.offers?.find((o) => o.renewal && o.clubId === stayed.clubId);
+      const lateRenewal = late?.offers?.find((o) => o.renewal && o.clubId === unlocked.clubId);
       console.log('S2 end renewal', Boolean(lateRenewal), lateRenewal?.contractYears);
       if (!lateRenewal) {
         console.error('the end of Season 2 must still offer a contract renewal');
         process.exitCode = 1;
       } else {
-        store.getState().resolveTransferChoice(stayed.clubId);
+        store.getState().resolveTransferChoice(unlocked.clubId);
         const renewed = store.getState();
-        console.log('S3 after renew', renewed.contractYearsRemaining);
+        console.log('S3 after renew', renewed.contractYearsRemaining, renewed.phase);
+        if (renewed.phase === 'season-paywall') {
+          console.error('Season 3 must not show the Season 2 paywall again');
+          process.exitCode = 1;
+        }
         if (renewed.contractYearsRemaining !== lateRenewal.contractYears) {
           console.error('accepting the renewal must apply the new contract length');
           process.exitCode = 1;

@@ -1,17 +1,9 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { CONFEDERATION_ORDER, nationsGroupedByConfederation } from '../data/nations';
 import { CONTINENTAL_TOURNAMENT_FOR_CONFEDERATION, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
+import { confederationDisplayName } from '../data/displayNames';
 import { YOUTH_TOURNAMENTS } from '../youthTournament';
 import { useCareerStore } from '../store';
-
-const CONFEDERATION_LABEL: Record<string, string> = {
-  UEFA: 'UEFA — Europe',
-  CONMEBOL: 'CONMEBOL — South America',
-  CONCACAF: 'CONCACAF — North & Central America',
-  CAF: 'CAF — Africa',
-  AFC: 'AFC — Asia',
-  OFC: 'OFC — Oceania',
-};
 
 export default function NationalityScreen() {
   const chooseNationality = useCareerStore((s) => s.chooseNationality);
@@ -45,20 +37,20 @@ export default function NationalityScreen() {
         </button>
         <p className="text-sm text-white/50">International career</p>
         <h1 className="font-display text-2xl font-bold">Who do you play for?</h1>
+        {!favourite && (
         <p className="mt-2 max-w-sm text-sm text-white/60">
-          {favourite
-            ? 'This is independent of your club. You join the club you picked as a Rising star and play Season 1.'
-            : clubId
-              ? 'This is independent of your club. Selectors later look at your goal ratio and the level of club you play for.'
-              : 'Choose your nationality first. You play that country’s youth tournament, trial for a club, then Season 1 starts as a Rising star.'}
+          {clubId
+            ? 'This is independent of your club. Selectors later look at your goal ratio and the level of club you play for.'
+            : 'Choose your nationality first. You play that country’s youth tournament, trial for a club, then Season 1.'}
         </p>
+        )}
       </div>
 
       <input
         type="search"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search 211 FIFA nations"
+        placeholder="Search 211 nations"
         className="w-full max-w-sm rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white placeholder:text-white/40 outline-none focus:border-emerald-400/60"
       />
 
@@ -68,7 +60,7 @@ export default function NationalityScreen() {
         </FilterChip>
         {CONFEDERATION_ORDER.map((id) => (
           <FilterChip key={id} active={confederation === id} onClick={() => setConfederation(id)}>
-            {id}
+            {confederationDisplayName(id)}
           </FilterChip>
         ))}
       </div>
@@ -81,7 +73,7 @@ export default function NationalityScreen() {
           return (
             <section key={group.confederation} className="text-left">
               <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-white/40">
-                {CONFEDERATION_LABEL[group.confederation]}
+                {confederationDisplayName(group.confederation)}
                 <span className="ml-2 font-normal normal-case tracking-normal text-white/30">
                   {tournament.name}
                 </span>
@@ -96,7 +88,7 @@ export default function NationalityScreen() {
                   >
                     <div className="flex-1">
                       <p className="font-bold">{nation.name}</p>
-                      <p className="text-xs text-white/50">{group.confederation}</p>
+                      <p className="text-xs text-white/50">{confederationDisplayName(group.confederation)}</p>
                     </div>
                   </button>
                 ))}

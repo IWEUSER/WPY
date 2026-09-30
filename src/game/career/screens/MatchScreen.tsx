@@ -1,14 +1,15 @@
 import { useRef } from 'react';
 import ShootingGame from '../../shooting/ShootingGame';
 import type { ShotResult } from '../../shooting/types';
-import { currentCalendarWeek, fixtureVenueLabel } from '../calendar';
+import { currentCalendarWeek, fixtureVenueLabel, isFinalFixture, scoreboardPlayerOnLeft } from '../calendar';
+import { formatHomeAwayScore } from '../matchEngine';
 import { getClub, leagueMatchWeeks } from '../data/clubs';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { nationStrength } from '../data/fifaRankings';
 import { getNation } from '../international';
 import { appearanceRegionForNation } from '../../shooting/appearance';
 import { resolveCareerStadium } from '../matchVenue';
-import { fixtureTitle } from '../seasonSim';
+import { fixtureTitle, isOneOffKnockout, liveMatchBoardLine, liveMatchBoardScores } from '../seasonSim';
 import { firstLegStakeLine, isTwoLeggedClubKnockout } from '../matchBriefing';
 import { useCareerStore } from '../store';
 
@@ -58,19 +59,41 @@ export default function MatchScreen() {
 
   const penaltyKick = Boolean(liveMatch?.penaltyKick);
   const ninetyLine =
-    liveMatch?.ninetyScoreFor != null && liveMatch?.ninetyScoreAgainst != null
-      ? `${liveMatch.ninetyScoreFor}\u2013${liveMatch.ninetyScoreAgainst}`
+    liveMatch?.ninetyScoreFor != null && liveMatch?.ninetyScoreAgainst != null && fixture
+      ? formatHomeAwayScore(liveMatch.ninetyScoreFor, liveMatch.ninetyScoreAgainst, scoreboardPlayerOnLeft(fixture))
+      : liveMatch?.ninetyScoreFor != null && liveMatch?.ninetyScoreAgainst != null
+        ? `${liveMatch.ninetyScoreFor}\u2013${liveMatch.ninetyScoreAgainst}`
+        : null;
+  const boardScores = simulated && seasonSim && fixture && club && liveMatch && !penaltyKick
+    ? liveMatchBoardScores({
+      sim: seasonSim,
+      fixture,
+      club,
+      live: liveMatch,
+      seasonNumber,
+    })
+    : penaltyKick && liveMatch?.ninetyScoreFor != null && liveMatch?.ninetyScoreAgainst != null
+      ? {
+        scoreFor: liveMatch.ninetyScoreFor,
+        scoreAgainst: liveMatch.ninetyScoreAgainst,
+        line: ninetyLine ?? `${liveMatch.ninetyScoreFor}\u2013${liveMatch.ninetyScoreAgainst}`,
+      }
       : null;
+  const knockoutChance = Boolean(
+    fixture && (
+      isOneOffKnockout(fixture)
+      || fixture.kind === 'continental-knockout'
+      || fixture.kind === 'continental-semi-final'
+    ),
+  );
   const chances = penaltyKick ? 1 : (liveMatch?.chancesTotal ?? 1);
   const subtitle = penaltyKick
     ? ninetyLine
       ? `The tie is level ${ninetyLine} — take your penalty`
       : 'The tie is level — take your penalty'
     : simulated
-    ? chances === 1
-      ? 'One chance this game — make it count'
-      : `${chances} chances this game`
-    : 'Your one big chance this game - make it count';
+    ? 'A chance to change the game'
+    : 'Your chance this game — make it count';
 
   const weekLabel = simulated && calendar && liveMatch
     ? `Week ${currentCalendarWeek(calendar, liveMatch.fixtureIndex)} of ${calendar.totalWeeks}`
@@ -83,7 +106,7 @@ export default function MatchScreen() {
         ? 'First of two legs'
         : null;
   const progressLabel = simulated && calendar && liveMatch
-    ? `${weekLabel}${competitionName ? ` · ${competitionName}` : ''}${venueLabel ? ` · ${venueLabel}` : ''}${tieStake ? ` · ${tieStake}` : ''}${penaltyKick ? ' · Penalty shootout' : ` · ${chances} chance${chances === 1 ? '' : 's'}`}`
+    ? `${weekLabel}${competitionName ? ` · ${competitionName}` : ''}${venueLabel ? ` · ${venueLabel}` : ''}${tieStake ? ` · ${tieStake}` : ''}${penaltyKick ? ' · Penalty shootout' : ''}`
     : weekLabel;
 
   const stadium = resolveCareerStadium({
@@ -118,6 +141,40 @@ export default function MatchScreen() {
       allowPenalties={opening?.kind !== 'club-trial' && (penaltyKick || squadStatus === 'starter')}
       forcePenalty={penaltyKick}
       stadium={stadium}
+      venueLine={[
+        stadium.groundName,
+        venueLabel,
+        stadium.night ? 'Night' : null,
+      ].filter(Boolean).join(' · ') || undefined}
+      chanceStake={
+        penaltyKick
+          ? 'penalty'
+          : fixture && isFinalFixture(fixture)
+            ? 'final'
+            : fixture && fixture.kind !== 'league' && fixture.kind !== 'rest'
+              ? 'cup'
+              : 'league'
+      }
+      lastChance={!penaltyKick && chances === 1}
+      matchScoreLine={
+        penaltyKick && ninetyLine
+          ? ninetyLine
+          : boardScores?.line
+            ?? (simulated && seasonSim && fixture && club && liveMatch
+              ? liveMatchBoardLine({
+                sim: seasonSim,
+                fixture,
+                club,
+                live: liveMatch,
+                seasonNumber,
+              })
+              : undefined)
+      }
+      chanceScoreFor={boardScores?.scoreFor}
+      chanceScoreAgainst={boardScores?.scoreAgainst}
+      chanceTaken={liveMatch?.chancesTaken ?? 0}
+      chanceTotal={chances}
+      knockoutChance={knockoutChance}
       opponentSkinPalette={appearanceRegionForNation(opponentNation)}
       onShotResolved={(result) => {
         lastResultRef.current = result;

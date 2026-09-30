@@ -1,4 +1,10 @@
-import { clampStrength, getClub, SECOND_DIVISIONS, type Club, type ClubTier } from './data/clubs';
+import { clampStrength, getClub, promotionTarget, SECOND_DIVISIONS, STRENGTH_CEILING, STRENGTH_FLOOR, type Club, type ClubTier } from './data/clubs';
+import {
+  averageWageForClubId,
+  cheapestListedTopWage,
+  starterWageForClubId,
+  usesPublishedWages,
+} from './data/clubWages';
 import { countsTowardCareerRecord, displaySeasonNumber } from './seasonDisplay';
 import type { PlayerRole, SeasonRecord, SquadStatus } from './types';
 
@@ -8,6 +14,7 @@ const ANCHOR_STRENGTH = 91;
 const ANCHOR_RATIO = 0.9;
 
 export const TOP_LEAGUES = new Set(['Premier League', 'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1']);
+export const SEMI_EURO_LEAGUES = new Set(['Primeira Liga', 'Eredivisie', 'Super Lig']);
 
 /**
  * How much a league's goals-per-game counts toward market value.
@@ -15,15 +22,35 @@ export const TOP_LEAGUES = new Set(['Premier League', 'La Liga', 'Serie A', 'Bun
  */
 export function leagueValueWeight(league: string): number {
   if (TOP_LEAGUES.has(league)) return 1;
+  if (SEMI_EURO_LEAGUES.has(league)) return 0.55;
   if (league === 'Saudi Pro League') return 0.2;
   if (SECOND_DIVISIONS.has(league)) return 0.4;
   if (league === 'Liga MX') return 0.32;
-  if (league === 'MLS') return 0.22;
+  if (league === 'MLS') return 0.38;
   return 0.3;
+}
+
+/**
+ * How much a league's goals-per-game counts toward transfer-offer bands.
+ * A 0.81 in the Saudi League is not treated like a 0.81 at Madrid.
+ */
+export function leagueOfferWeight(league: string): number {
+  if (TOP_LEAGUES.has(league)) return 1;
+  if (SEMI_EURO_LEAGUES.has(league) && league !== 'Super Lig') return 0.72;
+  if (league === 'Super Lig') return 0.62;
+  if (league === 'Saudi Pro League') return 0.7;
+  if (league === 'Liga MX') return 0.58;
+  if (league === 'MLS') return 0.52;
+  if (SECOND_DIVISIONS.has(league)) return 0.65;
+  return 0.55;
 }
 
 export function leagueAdjustedRatio(ratio: number, league: string): number {
   return ratio * leagueValueWeight(league);
+}
+
+export function leagueAdjustedOfferRatio(ratio: number, league: string): number {
+  return ratio * leagueOfferWeight(league);
 }
 
 /**
@@ -53,14 +80,18 @@ export interface MarketValueParams {
 
 export const DEFAULT_CONTRACT_YEARS = 5;
 /** Opening Rising-star deal. European under-18s cannot sign longer than this. */
-export const FIRST_CONTRACT_YEARS = 2;
-/** Academy / reserve path stays on a shorter deal than the first-team contract. */
+export const FIRST_CONTRACT_YEARS = 3;
+/** Reserve-role offers are shorter than a full first-team deal. */
 export const RESERVE_CONTRACT_YEARS = 2;
 /** Floor used when a club's starter band is tiny. */
 export const RESERVE_WEEKLY_WAGE = 500;
-/** Reserve / impact deals pay this fraction of the destination's starter band. */
+/** Championship / Segunda starters sit well above the €500 reserve floor. */
+export const SECOND_DIVISION_STARTER_FLOOR = 8_000;
+/** Second-division sides track this share of the parent league's cheapest listed top. */
+const SECOND_DIVISION_PARENT_FACTOR = 0.28;
+/** Reserve deals pay this fraction of the destination's listed average wage. */
 export const RESERVE_WAGE_FACTOR = 0.2;
-/** Rising-star deals pay this fraction of the club's starter (maximum) wage. */
+/** Rising-star first contracts pay this fraction of the club's squad-average wage. */
 export const RISING_STAR_WAGE_FACTOR = 0.1;
 /** A bid below this share of the asking fee is too cheap to accept. */
 export const MIN_ACCEPTED_FEE_RATIO = 0.8;
@@ -119,7 +150,7 @@ export function clubTransferBudget(club: Club): number {
   if (SAUDI_GIANT_IDS.has(club.id)) return 180_000_000;
   const league = club.league;
   if (league === 'MLS') return club.tier <= 3 ? 12_000_000 : 6_000_000;
-  if (league === 'Eredivisie' || league === 'Primeira Liga' || league === 'Super Lig') {
+  if (SEMI_EURO_LEAGUES.has(league)) {
     if (club.tier <= 2) return 22_000_000;
     if (club.tier === 3) return 10_000_000;
     if (club.tier === 4) return 5_000_000;
@@ -128,8 +159,8 @@ export function clubTransferBudget(club: Club): number {
   if (league === 'Liga MX') return club.tier <= 3 ? 10_000_000 : 4_000_000;
   if (league === 'Saudi Pro League') return club.tier <= 2 ? 70_000_000 : 12_000_000;
   if (SECOND_DIVISIONS.has(league)) {
-    if (league === 'Championship') return club.tier === 4 ? 12_000_000 : 5_000_000;
-    return club.tier === 4 ? 5_000_000 : 2_000_000;
+    if (league === 'Championship') return 12_000_000;
+    return 5_000_000;
   }
   if (league === 'Premier League') {
     if (club.tier === 1) return 130_000_000;
@@ -245,13 +276,38 @@ export function youngDivisionStarFloor(params: {
     divisionGoals += season.goals;
     if (season.topGoalscorer) starred = true;
   }
-  if (!starred && divisionGoals < 40) return 0;
+  const mlsFloor = params.league === 'MLS' && divisionGoals >= 20;
+  if (!starred && !mlsFloor && divisionGoals < 40) return 0;
   let base = 8_000_000;
   if (TOP_LEAGUES.has(params.league)) base = 80_000_000;
   else if (SECOND_DIVISIONS.has(params.league)) base = 36_000_000;
   else if (params.league === 'Saudi Pro League') base = 10_000_000;
-  else if (params.league === 'Liga MX' || params.league === 'MLS') base = 14_000_000;
+  else if (params.league === 'Liga MX') base = 14_000_000;
+  else if (params.league === 'MLS') base = 8_000_000 + Math.max(0, divisionGoals - 20) * 250_000;
   return Math.max(100_000, Math.round((base * ageValueFactor(params.age)) / 100_000) * 100_000);
+}
+
+/** A 17-year-old scoring in a top division is not a €200k youth. */
+export function youngTopFlightSeasonFloor(params: {
+  age: number;
+  seasons: SeasonRecord[];
+}): number {
+  if (params.age > 19) return 0;
+  let best = 0;
+  for (const season of params.seasons) {
+    if (!countsTowardCareerRecord(season.seasonNumber, season.role)) continue;
+    const league = seasonLeague(season);
+    const top = TOP_LEAGUES.has(league);
+    const semi = SEMI_EURO_LEAGUES.has(league);
+    if (!top && !semi) continue;
+    if (season.goals < (top ? 6 : 10)) continue;
+    const raw = (top
+      ? 6_000_000 + season.goals * 1_400_000
+      : 5_000_000 + season.goals * 800_000) * ageValueFactor(params.age);
+    best = Math.max(best, raw);
+  }
+  if (best <= 0) return 0;
+  return Math.max(100_000, Math.round(best / 100_000) * 100_000);
 }
 
 export function playerMarketValue(params: MarketValueParams): number {
@@ -352,9 +408,14 @@ export function playerMarketValueFromSeasons(params: {
   const { age, fallbackClub } = params;
   let careerGoals = params.careerGoals;
   let careerGames = params.careerGames;
+  const lastCounted = [...params.seasons]
+    .reverse()
+    .find((season) => countsTowardCareerRecord(season.seasonNumber, season.role) && season.gamesPlayed > 0);
   const seasons = params.seasons.filter((season) => {
     if (!countsTowardCareerRecord(season.seasonNumber, season.role)) return true;
     if (season.gamesPlayed >= VALUE_FORM_MIN_GAMES) return true;
+    // The season just finished still counts, even at 8–14 games.
+    if (season === lastCounted && season.gamesPlayed >= 6) return true;
     careerGoals -= season.goals;
     careerGames -= season.gamesPlayed;
     return false;
@@ -382,7 +443,10 @@ export function playerMarketValueFromSeasons(params: {
   const base = valueFromScale(age, ratio, careerGoals, scale, careerGames, weightedGoals);
   const poor = consecutivePoorFactor(poorSeasons);
   const lastLeague = lastSeasonLeague(seasons) ?? fallbackClub.league;
-  const floor = youngDivisionStarFloor({ age, league: lastLeague, seasons });
+  const floor = Math.max(
+    youngDivisionStarFloor({ age, league: lastLeague, seasons }),
+    youngTopFlightSeasonFloor({ age, seasons }),
+  );
   const raw = Math.max(floor, base * poor);
   const capped = Math.min(raw, firstTopFlightValueCap(seasons) ?? raw);
   return Math.max(100_000, Math.round(capped / 100_000) * 100_000);
@@ -453,6 +517,117 @@ function valueFromScale(
  * Weekly wage. Premier League clubs pay a high English band no matter the
  * club's size. Saudi clubs pay like a top European side; MLS stays below that.
  */
+function roundWeeklyWage(amount: number, floor = RESERVE_WEEKLY_WAGE): number {
+  return Math.max(floor, Math.round(amount / 500) * 500);
+}
+
+function clubLeagueOf(clubId: string): string | undefined {
+  return getClub(clubId)?.league;
+}
+
+/**
+ * Listed starter wage is the 1.0 goals-per-game rate.
+ * A 0.66 career ratio is offered 66% of that club's top wage; 1.0 or higher is the full band.
+ */
+export function wageRatioScale(ratio: number | null | undefined): number {
+  if (ratio == null || Number.isNaN(ratio)) return 1;
+  return Math.min(1, Math.max(0, ratio));
+}
+
+/**
+ * Combined goals/game across the last `take` counted seasons.
+ * Used as the second wage discount after last-season ratio.
+ */
+export function recentAggregateRatio(seasons: SeasonRecord[], take = 5): number | null {
+  const counted = seasons.filter(
+    (season) => countsTowardCareerRecord(season.seasonNumber, season.role) && season.gamesPlayed > 0,
+  );
+  const slice = counted.slice(-Math.max(1, take));
+  const games = slice.reduce((n, season) => n + season.gamesPlayed, 0);
+  const goals = slice.reduce((n, season) => n + season.goals, 0);
+  if (games <= 0) return null;
+  return goals / games;
+}
+
+/** Counted seasons needed before last-five aggregate can stand in for a career. */
+export const WAGE_AGGREGATE_SEASONS = 5;
+
+/**
+ * Short-career pay: one hot year is not five years of listed form.
+ * 1 season 50%, then 60 / 70 / 80, and 100% once five counted seasons exist.
+ */
+export function wageCareerMaturityScale(countedSeasonsCompleted: number): number {
+  const n = Math.max(0, Math.floor(countedSeasonsCompleted));
+  if (n >= WAGE_AGGREGATE_SEASONS) return 1;
+  if (n === 4) return 0.8;
+  if (n === 3) return 0.7;
+  if (n === 2) return 0.6;
+  if (n === 1) return 0.5;
+  return 0.5;
+}
+
+/**
+ * Listed max wage is the 1.0 last-season / 1.0 last-five-aggregate rate.
+ * After five counted seasons, offers pay last-season × that five-year
+ * aggregate (0.91 last and 0.56 aggregate is 91% × 56% of the listed top).
+ * With fewer than five seasons the aggregate is just the same hot year, so
+ * last-season ratio is scaled by career maturity instead.
+ */
+export function wageOfferScale(
+  lastSeasonRatio: number | null | undefined,
+  countedSeasonsCompleted?: number,
+  aggregateRatio?: number | null,
+): number {
+  const last = wageRatioScale(lastSeasonRatio);
+  const seasons = Math.max(0, Math.floor(countedSeasonsCompleted ?? 0));
+  if (seasons >= WAGE_AGGREGATE_SEASONS) {
+    if (aggregateRatio == null) return last * last;
+    const aggregate = wageRatioScale(aggregateRatio);
+    if (aggregate <= 0) return last * 0.5;
+    return last * aggregate;
+  }
+  return last * wageCareerMaturityScale(seasons);
+}
+
+export function countedSeasonsCompleted(seasons: SeasonRecord[]): number {
+  return seasons.filter((season) => countsTowardCareerRecord(season.seasonNumber, season.role)).length;
+}
+
+/** Scale a club's listed wage by goals-per-game, capped at 1.0. */
+export function weeklyWageForRatio(
+  club: Club,
+  marketValue: number,
+  ratio: number | null | undefined,
+  status: SquadStatus,
+  playingLeague?: string | null,
+): number {
+  const top = weeklyWageForSquadStatus(club, marketValue, status, playingLeague);
+  if (status !== 'starter') return top;
+  const league = playingLeague ?? club.league;
+  const floor = SECOND_DIVISIONS.has(league ?? '') ? SECOND_DIVISION_STARTER_FLOOR : RESERVE_WEEKLY_WAGE;
+  return roundWeeklyWage(top * wageRatioScale(ratio), floor);
+}
+
+/** Incoming transfer / loan offer: last-season × last-five aggregate of the listed 1.0 wage. */
+export function weeklyWageForTransferOffer(
+  club: Club,
+  marketValue: number,
+  lastSeasonRatio: number | null | undefined,
+  countedSeasonsCompleted: number,
+  status: SquadStatus,
+  playingLeague?: string | null,
+  aggregateRatio?: number | null,
+): number {
+  const top = weeklyWageForSquadStatus(club, marketValue, status, playingLeague);
+  if (status !== 'starter') return top;
+  const league = playingLeague ?? club.league;
+  const floor = SECOND_DIVISIONS.has(league ?? '') ? SECOND_DIVISION_STARTER_FLOOR : RESERVE_WEEKLY_WAGE;
+  return roundWeeklyWage(
+    top * wageOfferScale(lastSeasonRatio, countedSeasonsCompleted, aggregateRatio),
+    floor,
+  );
+}
+
 /** Starter, Rising star, and reserve wages so transfer offers are not all the same band. */
 export function weeklyWageForSquadStatus(
   club: Club,
@@ -460,18 +635,70 @@ export function weeklyWageForSquadStatus(
   status: SquadStatus,
   playingLeague?: string | null,
 ): number {
+  const league = playingLeague ?? club.league;
+  if (status === 'rising-star' && usesPublishedWages(league)) {
+    const average = averageWageForClubId(club.id, league, clubLeagueOf);
+    if (average != null) {
+      return roundWeeklyWage(average * RISING_STAR_WAGE_FACTOR);
+    }
+  }
+  if (status === 'reserve' && usesPublishedWages(league)) {
+    const average = averageWageForClubId(club.id, league, clubLeagueOf);
+    if (average != null) {
+      return roundWeeklyWage(average * RESERVE_WAGE_FACTOR);
+    }
+  }
   const full = weeklyWageForClub(club, marketValue, playingLeague);
   if (status === 'reserve') {
-    return Math.max(RESERVE_WEEKLY_WAGE, Math.round((full * RESERVE_WAGE_FACTOR) / 500) * 500);
+    return roundWeeklyWage(full * RESERVE_WAGE_FACTOR);
   }
   if (status === 'rising-star' || status === 'impact') {
-    return Math.max(RESERVE_WEEKLY_WAGE, Math.round((full * RISING_STAR_WAGE_FACTOR) / 500) * 500);
+    return roundWeeklyWage(full * RISING_STAR_WAGE_FACTOR);
   }
   return full;
 }
 
+/**
+ * Season 1 place-pick wages. Starter is the club's average weekly wage, not
+ * the listed maximum used later for 1.0-ratio renewals and transfers.
+ */
+export function openingWeeklyWageForSquadStatus(
+  club: Club,
+  marketValue: number,
+  status: SquadStatus,
+  playingLeague?: string | null,
+): number {
+  if (status === 'starter') {
+    const league = playingLeague ?? club.league;
+    const average = averageWageForClubId(club.id, league, clubLeagueOf);
+    if (average != null) {
+      const floor = SECOND_DIVISIONS.has(league ?? '')
+        ? SECOND_DIVISION_STARTER_FLOOR
+        : club.tier >= 5
+          ? 500
+          : club.tier >= 4
+            ? 800
+            : 1_200;
+      return roundWeeklyWage(average, floor);
+    }
+  }
+  return weeklyWageForSquadStatus(club, marketValue, status, playingLeague);
+}
+
 export function weeklyWageForClub(club: Club, marketValue: number, playingLeague?: string | null): number {
   const league = playingLeague ?? club.league;
+  if (SECOND_DIVISIONS.has(league)) {
+    const t = (clampStrength(club.strength) - STRENGTH_FLOOR) / (STRENGTH_CEILING - STRENGTH_FLOOR);
+    const parent = promotionTarget(league);
+    const parentCheapest = parent ? cheapestListedTopWage(parent, clubLeagueOf) : null;
+    const base = Math.max(12_000, (parentCheapest ?? 40_000) * SECOND_DIVISION_PARENT_FACTOR);
+    const wage = base * (0.75 + 0.4 * t);
+    return Math.max(SECOND_DIVISION_STARTER_FLOOR, Math.round(wage / 500) * 500);
+  }
+  if (usesPublishedWages(league)) {
+    const listed = starterWageForClubId(club.id, league, clubLeagueOf);
+    if (listed != null) return roundWeeklyWage(listed, club.tier >= 5 ? 500 : club.tier >= 4 ? 800 : 1_200);
+  }
   const t = (clampStrength(club.strength) - 52) / 42;
   if (league === 'Premier League') {
     const plBase: Record<ClubTier, number> = {
@@ -494,10 +721,21 @@ export function weeklyWageForClub(club: Club, marketValue: number, playingLeague
   };
   let wage = tierBase[club.tier] * (0.7 + 0.6 * t);
   if (club.country === 'Saudi Arabia' || league === 'Saudi Pro League') wage *= 1.2;
-  if (league === 'MLS') wage *= 0.5;
+  if (league === 'MLS') {
+    const mlsBase: Record<ClubTier, number> = {
+      1: 28_000,
+      2: 22_000,
+      3: 16_000,
+      4: 10_000,
+      5: 6_000,
+    };
+    wage = mlsBase[club.tier] * (0.85 + 0.35 * t);
+  }
   const prestigeRate = club.tier === 1 ? 0.00016 : club.tier === 2 ? 0.00004 : 0.000012;
   wage += marketValue * prestigeRate;
-  const floor = club.tier >= 5 ? 500 : club.tier >= 4 ? 800 : 1_200;
+  const floor = league === 'MLS'
+    ? (club.tier >= 4 ? 4_000 : 8_000)
+    : club.tier >= 5 ? 500 : club.tier >= 4 ? 800 : 1_200;
   return Math.max(floor, Math.round(wage / 500) * 500);
 }
 

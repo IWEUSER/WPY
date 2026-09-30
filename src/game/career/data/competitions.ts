@@ -1,4 +1,5 @@
 import type { Club, ClubTier } from './clubs';
+import { leagueDisplayName } from './leagueFormat';
 import { confederationForCountry as confederationForNationCountry } from './nations';
 
 /**
@@ -32,30 +33,30 @@ export interface Competition {
 }
 
 export function domesticLeagueCompetition(club: Club): Competition {
-  return { id: `league:${slug(club.league)}`, name: club.league, kind: 'domestic-league' };
+  return { id: `league:${slug(club.league)}`, name: leagueDisplayName(club.league), kind: 'domestic-league' };
 }
 
 export type ContinentalCupId = 'ucl' | 'uel' | 'uecl' | 'acle' | 'leagues-cup';
 
 export const CONTINENTAL_CUPS: Record<ContinentalCupId, Competition> = {
-  ucl: { id: 'ucl', name: 'Champions League', kind: 'continental-cup', confederation: 'UEFA' },
-  uel: { id: 'uel', name: 'Europa League', kind: 'continental-cup', confederation: 'UEFA' },
-  uecl: { id: 'uecl', name: 'Conference League', kind: 'continental-cup', confederation: 'UEFA' },
+  ucl: { id: 'ucl', name: 'European Cup', kind: 'continental-cup', confederation: 'UEFA' },
+  uel: { id: 'uel', name: 'European Trophy', kind: 'continental-cup', confederation: 'UEFA' },
+  uecl: { id: 'uecl', name: 'European Challenge', kind: 'continental-cup', confederation: 'UEFA' },
   acle: {
     id: 'acle',
-    name: 'AFC Champions League Elite',
+    name: 'Asian Club Cup',
     kind: 'continental-cup',
     confederation: 'AFC',
   },
   'leagues-cup': {
     id: 'leagues-cup',
-    name: 'Leagues Cup',
+    name: 'North American Cup',
     kind: 'continental-cup',
     confederation: 'CONCACAF',
   },
 };
 
-export const SUPER_CUP: Competition = { id: 'super-cup', name: 'Super Cup', kind: 'super-cup', confederation: 'UEFA' };
+export const SUPER_CUP: Competition = { id: 'super-cup', name: 'European Super Cup', kind: 'super-cup', confederation: 'UEFA' };
 
 export type DomesticCupId =
   | 'fa-cup'
@@ -70,15 +71,15 @@ export type DomesticCupId =
   | 'turkish-cup';
 
 export const DOMESTIC_CUPS: Record<DomesticCupId, Competition> = {
-  'fa-cup': { id: 'fa-cup', name: 'FA Cup', kind: 'domestic-cup', country: 'England' },
-  'copa-del-rey': { id: 'copa-del-rey', name: 'Copa del Rey', kind: 'domestic-cup', country: 'Spain' },
-  'coppa-italia': { id: 'coppa-italia', name: 'Coppa Italia', kind: 'domestic-cup', country: 'Italy' },
-  'dfb-pokal': { id: 'dfb-pokal', name: 'DFB-Pokal', kind: 'domestic-cup', country: 'Germany' },
-  'coupe-de-france': { id: 'coupe-de-france', name: 'Coupe de France', kind: 'domestic-cup', country: 'France' },
-  'kings-cup': { id: 'kings-cup', name: 'King Cup', kind: 'domestic-cup', country: 'Saudi Arabia' },
-  'us-open-cup': { id: 'us-open-cup', name: 'US Open Cup', kind: 'domestic-cup', country: 'United States' },
-  'taca-de-portugal': { id: 'taca-de-portugal', name: 'Taça de Portugal', kind: 'domestic-cup', country: 'Portugal' },
-  'knvb-beker': { id: 'knvb-beker', name: 'KNVB Beker', kind: 'domestic-cup', country: 'Netherlands' },
+  'fa-cup': { id: 'fa-cup', name: 'English Cup', kind: 'domestic-cup', country: 'England' },
+  'copa-del-rey': { id: 'copa-del-rey', name: 'Spanish Cup', kind: 'domestic-cup', country: 'Spain' },
+  'coppa-italia': { id: 'coppa-italia', name: 'Italian Cup', kind: 'domestic-cup', country: 'Italy' },
+  'dfb-pokal': { id: 'dfb-pokal', name: 'German Cup', kind: 'domestic-cup', country: 'Germany' },
+  'coupe-de-france': { id: 'coupe-de-france', name: 'French Cup', kind: 'domestic-cup', country: 'France' },
+  'kings-cup': { id: 'kings-cup', name: 'Saudi Cup', kind: 'domestic-cup', country: 'Saudi Arabia' },
+  'us-open-cup': { id: 'us-open-cup', name: 'American Cup', kind: 'domestic-cup', country: 'United States' },
+  'taca-de-portugal': { id: 'taca-de-portugal', name: 'Portuguese Cup', kind: 'domestic-cup', country: 'Portugal' },
+  'knvb-beker': { id: 'knvb-beker', name: 'Dutch Cup', kind: 'domestic-cup', country: 'Netherlands' },
   'turkish-cup': { id: 'turkish-cup', name: 'Turkish Cup', kind: 'domestic-cup', country: 'Turkey' },
 };
 
@@ -146,21 +147,21 @@ export type InternationalTournamentId =
   | 'continental-championship';
 
 export const INTERNATIONAL_TOURNAMENTS: Record<InternationalTournamentId, Competition> = {
-  'world-cup': { id: 'world-cup', name: 'World Cup', kind: 'international-tournament' },
-  'nations-league': { id: 'nations-league', name: 'Nations League', kind: 'international-tournament' },
-  euro: { id: 'euro', name: 'European Championship', kind: 'international-tournament', confederation: 'UEFA' },
+  'world-cup': { id: 'world-cup', name: 'World Championship', kind: 'international-tournament' },
+  'nations-league': { id: 'nations-league', name: 'Nations Cup', kind: 'international-tournament' },
+  euro: { id: 'euro', name: 'European Nations Cup', kind: 'international-tournament', confederation: 'UEFA' },
   'copa-america': {
     id: 'copa-america',
-    name: 'Copa América',
+    name: 'South American Championship',
     kind: 'international-tournament',
     confederation: 'CONMEBOL',
   },
-  'gold-cup': { id: 'gold-cup', name: 'Gold Cup', kind: 'international-tournament', confederation: 'CONCACAF' },
-  afcon: { id: 'afcon', name: 'Africa Cup of Nations', kind: 'international-tournament', confederation: 'CAF' },
-  'asian-cup': { id: 'asian-cup', name: 'AFC Asian Cup', kind: 'international-tournament', confederation: 'AFC' },
+  'gold-cup': { id: 'gold-cup', name: 'North American Championship', kind: 'international-tournament', confederation: 'CONCACAF' },
+  afcon: { id: 'afcon', name: 'African Championship', kind: 'international-tournament', confederation: 'CAF' },
+  'asian-cup': { id: 'asian-cup', name: 'Asian Championship', kind: 'international-tournament', confederation: 'AFC' },
   'ofc-nations-cup': {
     id: 'ofc-nations-cup',
-    name: 'OFC Nations Cup',
+    name: 'Oceania Championship',
     kind: 'international-tournament',
     confederation: 'OFC',
   },
@@ -222,6 +223,27 @@ export type InternationalCampaignPhase =
   | 'qualifiers';
 
 export const QUALIFIER_GAMES_PER_SEASON = 5;
+/** CONMEBOL World Cup qualifying is a 10-nation home-and-away league (9+9). */
+export const CONMEBOL_WCQ_GAMES_PER_SEASON = 9;
+export const CONMEBOL_WCQ_TOTAL_GAMES = CONMEBOL_WCQ_GAMES_PER_SEASON * 2;
+export const CONMEBOL_WCQ_QUALIFYING_PLACES = 6;
+
+export function qualifierGamesForConfederation(
+  confederation?: Confederation | null,
+  tournament?: InternationalTournamentId | null,
+): number {
+  if (tournament === 'world-cup' && confederation === 'CONMEBOL') {
+    return CONMEBOL_WCQ_GAMES_PER_SEASON;
+  }
+  return QUALIFIER_GAMES_PER_SEASON;
+}
+
+export function isConmebolWorldCupQualifying(
+  tournament?: InternationalTournamentId | null,
+  confederation?: Confederation | null,
+): boolean {
+  return tournament === 'world-cup' && confederation === 'CONMEBOL';
+}
 
 export interface InternationalCampaign {
   tournament: InternationalTournamentId | null;
@@ -242,13 +264,17 @@ export function internationalCampaignForSeason(
     : 'continental-championship';
   const cycle = (seasonNumber - 1) % 4;
   if (cycle === 0) {
-    return { tournament: 'world-cup', phase: 'qualifiers', qualifierGames: QUALIFIER_GAMES_PER_SEASON };
+    return {
+      tournament: 'world-cup',
+      phase: 'qualifiers',
+      qualifierGames: qualifierGamesForConfederation(confederation, 'world-cup'),
+    };
   }
   if (cycle === 1) {
     return {
       tournament: 'world-cup',
       phase: 'qualifiers-and-tournament',
-      qualifierGames: QUALIFIER_GAMES_PER_SEASON,
+      qualifierGames: qualifierGamesForConfederation(confederation, 'world-cup'),
     };
   }
   if (cycle === 2) {

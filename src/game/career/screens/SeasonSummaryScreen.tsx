@@ -10,6 +10,7 @@ import { countLoanSpells, requiredGoalRatio, resolveSeasonTransition } from '../
 import { goalsLabel, inputWithoutSeason, seasonLegacyHighlights } from '../legacyRecords';
 import { useCareerStore } from '../store';
 import { DATA_CARD, DATA_INSET, DATA_TILE } from './dataUi';
+import { RECORD_KIND_CARD, RECORD_KIND_LABEL, RECORD_KIND_MUTED, colorKindForDef } from './recordColors';
 
 export default function SeasonSummaryScreen() {
   const clubId = useCareerStore((s) => s.clubId);
@@ -69,13 +70,13 @@ export default function SeasonSummaryScreen() {
   const honours: string[] = [];
   if (seasonSim?.honours.leagueChampion) {
     honours.push(
-      `Won ${clubLeague === 'MLS' || club.league === 'MLS' ? 'MLS Cup' : leagueDisplayName(clubLeague ?? club.league)}`,
+      `Won ${clubLeague === 'MLS' || club.league === 'MLS' ? 'American League Cup' : leagueDisplayName(clubLeague ?? club.league)}`,
     );
   }
   if (seasonSim?.honours.continentalChampion) {
     honours.push(`Won the ${CONTINENTAL_CUPS[seasonSim.honours.continentalChampion].name}`);
   }
-  if (seasonSim?.honours.superCup) honours.push('Won the Super Cup');
+  if (seasonSim?.honours.superCup) honours.push('Won the European Super Cup');
   if (seasonSim?.honours.domesticSuperCup) honours.push(`Won the ${seasonSim.honours.domesticSuperCup}`);
   if (seasonSim?.honours.internationalChampion) {
     honours.push(`Won the ${INTERNATIONAL_TOURNAMENTS[seasonSim.honours.internationalChampion].name}`);
@@ -121,7 +122,11 @@ export default function SeasonSummaryScreen() {
         : null;
   const clubIntlOutcome = (() => {
     if (seasonSim?.honours.continentalChampion) return 'Champions';
-    if (europe) return competitionStageLabel(europe.stage);
+    if (europe) {
+      return competitionStageLabel(europe.stage, {
+        leaguePhase: europe.cup === 'ucl' || europe.cup === 'uel' || europe.cup === 'uecl',
+      });
+    }
     if (seasonSim?.leaguesCupStage && seasonSim.leaguesCupStage !== 'not-entered') {
       return competitionStageLabel(seasonSim.leaguesCupStage);
     }
@@ -263,7 +268,7 @@ export default function SeasonSummaryScreen() {
                 <p className="mt-0.5 text-xs text-white/50">
                   {risingKept
                     ? `Retained for Season ${(publicSeason ?? 1) + 1}`
-                    : 'Below 0.33 — Reserve next season'}
+                    : 'Below 0.33 — a Season 2 loan is available'}
                 </p>
               </div>
               <StatusMark ok={risingKept} />
@@ -271,7 +276,7 @@ export default function SeasonSummaryScreen() {
           )}
           {!risingKept && showRisingStarTrack && (
             <p className="mt-3 text-xs text-white/55">
-              You can stay as a reserve team player, or take a loan or transfer if offers come through when you continue.
+              Stay as a Rising star, or take a loan. A transfer is not required after Season 1.
             </p>
           )}
         </div>
@@ -303,22 +308,26 @@ export default function SeasonSummaryScreen() {
 
       {legacyHighlights.length > 0 && (
         <div className="flex w-full max-w-sm flex-col gap-2">
-          {legacyHighlights.map((item) => (
-            <div
-              key={`${item.kind}-${item.title}-${item.subtitle}`}
-              className="rounded-2xl border border-amber-200/25 bg-amber-400/10 px-4 py-3 text-left text-sm text-amber-100"
-            >
-              <p className="text-xs uppercase tracking-wide text-amber-200/70">
-                {item.kind === 'season' ? 'Season record' : 'All-time top 10'}
-              </p>
-              <p className="mt-1 font-semibold">
-                {name} · {item.rankLabel} · {item.title}
-              </p>
-              <p className="mt-1 text-xs text-white/55">
-                {item.subtitle} · {goalsLabel(item.playerGoals)}
-              </p>
-            </div>
-          ))}
+          {legacyHighlights.map((item) => {
+            const kind = colorKindForDef(item);
+            return (
+              <div
+                key={`${item.kind}-${item.title}-${item.subtitle}`}
+                className={`rounded-2xl border px-4 py-3 text-left text-sm ${RECORD_KIND_CARD[kind]}`}
+              >
+                <p className={`text-xs uppercase tracking-wide ${RECORD_KIND_MUTED[kind]}`}>
+                  {item.kind === 'season' ? 'Season record' : 'All-time top 10'}
+                  {` · ${RECORD_KIND_LABEL[kind]}`}
+                </p>
+                <p className="mt-1 font-semibold">
+                  {name} · {item.rankLabel} · {item.title}
+                </p>
+                <p className="mt-1 text-xs text-white/55">
+                  {item.subtitle} · {goalsLabel(item.playerGoals)}
+                </p>
+              </div>
+            );
+          })}
         </div>
       )}
 

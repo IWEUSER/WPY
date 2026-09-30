@@ -6,6 +6,8 @@ import TrialScreen from './screens/TrialScreen';
 import ClubOfferScreen from './screens/ClubOfferScreen';
 import NationalityScreen from './screens/NationalityScreen';
 import PlayerNameScreen from './screens/PlayerNameScreen';
+import OpeningRoleScreen from './screens/OpeningRoleScreen';
+import SeasonPaywallScreen from './screens/SeasonPaywallScreen';
 import CareerHub from './screens/CareerHub';
 import CareerRecordScreen from './screens/CareerRecordScreen';
 import ProfileScreen from './screens/ProfileScreen';
@@ -17,10 +19,20 @@ import TransferChoiceScreen from './screens/TransferChoiceScreen';
 import MatchResultScreen from './screens/MatchResultScreen';
 import OpeningBriefScreen from './screens/OpeningBriefScreen';
 import OpeningStatusScreen from './screens/OpeningStatusScreen';
+import CareerBeatScreen from './screens/CareerBeatScreen';
+import GuidedFirstChanceScreen from './screens/GuidedFirstChanceScreen';
 import { useCareerStore } from './store';
 import { applyCareerLayoutPreview } from './previewCareerLayout';
+import { allowLayoutPreview } from '../previewTools';
+import { parsePracticeChanceId, type PracticeChanceId } from '../shooting/chanceSetup';
 
-if (import.meta.env.DEV) {
+function practiceChanceFromQuery(): PracticeChanceId {
+  if (!allowLayoutPreview()) return 'random';
+  const q = new URLSearchParams(window.location.search);
+  return parsePracticeChanceId(q.get('flight') ?? q.get('kind') ?? q.get('practice')) ?? 'random';
+}
+
+if (allowLayoutPreview()) {
   (window as unknown as { __careerStore: typeof useCareerStore }).__careerStore = useCareerStore;
   const applyPreview = () => {
     if (new URLSearchParams(window.location.search).has('preview-career')) {
@@ -34,8 +46,9 @@ if (import.meta.env.DEV) {
 export default function CareerApp() {
   const [hydrated, setHydrated] = useState(() => useCareerStore.persist.hasHydrated());
   const [practicing, setPracticing] = useState(
-    () => import.meta.env.DEV && new URLSearchParams(window.location.search).has('practice'),
+    () => allowLayoutPreview() && new URLSearchParams(window.location.search).has('practice'),
   );
+  const [practiceChance, setPracticeChance] = useState<PracticeChanceId>(practiceChanceFromQuery);
   useEffect(() => {
     const unsub = useCareerStore.persist.onFinishHydration(() => setHydrated(true));
     if (useCareerStore.persist.hasHydrated()) setHydrated(true);
@@ -51,6 +64,8 @@ export default function CareerApp() {
   const pendingTransfer = useCareerStore((s) => s.pendingTransfer);
   const clubId = useCareerStore((s) => s.clubId);
   const returnToMenu = useCareerStore((s) => s.returnToMenu);
+  const pendingBeats = useCareerStore((s) => s.pendingBeats);
+  const guidedChanceSeen = useCareerStore((s) => s.guidedChanceSeen);
 
   if (!hydrated) {
     return (
@@ -63,7 +78,10 @@ export default function CareerApp() {
   if (practicing) {
     return (
       <div className="relative h-full w-full">
-        <ShootingGame />
+        <ShootingGame
+          practiceChance={practiceChance}
+          onPracticeChanceChange={setPracticeChance}
+        />
         <button
           type="button"
           onClick={() => setPracticing(false)}
@@ -85,6 +103,19 @@ export default function CareerApp() {
     return <PlayerNameScreen />;
   }
 
+  if (phase === 'match-result' && lastMatchResult) {
+    return <MatchResultScreen />;
+  }
+
+  const nextBeat = pendingBeats?.[0];
+  if (nextBeat && phase !== 'menu' && phase !== 'nationality-choice' && phase !== 'player-name' && phase !== 'club-choice' && phase !== 'opening-role' && phase !== 'season-paywall') {
+    return <CareerBeatScreen beat={nextBeat} />;
+  }
+
+  if (!guidedChanceSeen && phase === 'match' && (liveMatch || openingCampaign)) {
+    return <GuidedFirstChanceScreen />;
+  }
+
   switch (phase) {
     case 'trial':
       return <TrialScreen />;
@@ -98,6 +129,10 @@ export default function CareerApp() {
       return <NationalityScreen />;
     case 'player-name':
       return <PlayerNameScreen />;
+    case 'opening-role':
+      return <OpeningRoleScreen />;
+    case 'season-paywall':
+      return <SeasonPaywallScreen />;
     case 'match':
       if (!liveMatch && !openingCampaign) {
         return <CareerHub onOpenMenu={returnToMenu} />;
@@ -133,6 +168,13 @@ export default function CareerApp() {
     case 'career-end':
       return <CareerEndScreen />;
     default:
-      return <HomeScreen onPractice={() => setPracticing(true)} />;
+      return (
+        <HomeScreen
+          onPractice={(chance) => {
+            setPracticeChance(chance);
+            setPracticing(true);
+          }}
+        />
+      );
   }
 }

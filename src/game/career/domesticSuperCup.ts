@@ -1,31 +1,32 @@
 import { getClub, SECOND_DIVISIONS, clubsInCountry, clubsInLeague, type Club } from './data/clubs';
+import { leagueDisplayName } from './data/leagueFormat';
 
 const NAMED_SUPER_CUPS: Record<string, string> = {
-  England: 'Community Shield',
-  Spain: 'Supercopa de España',
-  Italy: 'Supercoppa Italiana',
-  Germany: 'DFL-Supercup',
-  France: 'Trophée des Champions',
-  Portugal: 'Supertaça',
-  Netherlands: 'Johan Cruyff Shield',
+  England: 'English Super Cup',
+  Spain: 'Spanish Super Cup',
+  Italy: 'Italian Super Cup',
+  Germany: 'German Super Cup',
+  France: 'French Super Cup',
+  Portugal: 'Portuguese Super Cup',
+  Netherlands: 'Dutch Super Cup',
   Belgium: 'Belgian Super Cup',
   Turkey: 'Turkish Super Cup',
-  Scotland: 'Scottish League Cup',
-  Brazil: 'Supercopa do Brasil',
-  Argentina: 'Supercopa Argentina',
-  Mexico: 'Campeón de Campeones',
+  Scotland: 'Scottish Super Cup',
+  Brazil: 'Brazilian Super Cup',
+  Argentina: 'Argentine Super Cup',
+  Mexico: 'Mexican Super Cup',
   Japan: 'Japanese Super Cup',
   'South Korea': 'Korean Super Cup',
-  Australia: 'A-League Super Cup',
-  'United States': 'MLS Super Cup',
-  Canada: 'MLS Super Cup',
+  Australia: 'Australian Super Cup',
+  'United States': 'American Super Cup',
+  Canada: 'American Super Cup',
 };
 
 /** Saudi already has its four-team Super Cup. Do not schedule a second one. */
 export function domesticSuperCupName(country: string, league?: string | null): string | null {
   if (league === 'Saudi Pro League') return null;
-  if (league === 'MLS' || country === 'United States' || country === 'Canada') return 'MLS Super Cup';
-  return NAMED_SUPER_CUPS[country] ?? (league ? `${league} Super Cup` : `${country} Super Cup`);
+  if (league === 'MLS' || country === 'United States' || country === 'Canada') return 'American Super Cup';
+  return NAMED_SUPER_CUPS[country] ?? (league ? `${leagueDisplayName(league)} Super Cup` : `${country} Super Cup`);
 }
 
 export function planDomesticSuperCup(params: {

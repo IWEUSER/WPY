@@ -3,7 +3,7 @@ import type { Confederation, InternationalTournamentId } from './data/competitio
 import { clubsInCountry, SECOND_DIVISIONS, type ClubTier } from './data/clubs';
 import { fifaRank } from './data/fifaRankings';
 import { NATIONS, getNation, type Nation } from './data/nations';
-import { TOP_LEAGUES, VALUE_FORM_MIN_GAMES } from './playerValue';
+import { SEMI_EURO_LEAGUES, TOP_LEAGUES } from './playerValue';
 import type { AvailabilityState, InternationalSeasonRecord, SeasonRecord, SquadStatus } from './types';
 
 export type { Nation };
@@ -94,20 +94,29 @@ export const TOP_NATION_SELECTION_RATIO = 0.66;
 
 /**
  * Call-ups follow the league, not the club. Second divisions are never
- * selected. Top-20 nations also need a big-five league — a 0.66 ratio at
- * Benfica or Ajax is not enough for Spain.
+ * selected. Top-20 nations take any big-five top-division club, or a
+ * Strong club in Holland, Portugal, or Turkey.
  */
-export function leagueEligibleForNationalTeam(league: string | null | undefined, nationId?: string | null): boolean {
+export function leagueEligibleForNationalTeam(
+  league: string | null | undefined,
+  nationId?: string | null,
+  clubTier?: ClubTier | null,
+): boolean {
   if (!league) return false;
   if (SECOND_DIVISIONS.has(league)) return false;
   const rank = nationId ? fifaRank(nationId) : 99;
-  if (rank <= 20) return TOP_LEAGUES.has(league);
+  if (rank <= 20) {
+    if (TOP_LEAGUES.has(league)) return true;
+    return SEMI_EURO_LEAGUES.has(league) && clubTier != null && clubTier <= 2;
+  }
   return true;
 }
 
 export function callUpLeagueRequirement(nationId: string): string {
   const rank = fifaRank(nationId);
-  if (rank <= 20) return 'the Premier League, La Liga, Serie A, Bundesliga or Ligue 1';
+  if (rank <= 20) {
+    return 'a top-division English, Spanish, Italian, German or French club, or a strong club in the Dutch League, Portuguese League or Turkish League';
+  }
   return 'a top division';
 }
 
@@ -141,18 +150,43 @@ export function clubEligibleForNationalTeam(
   nationId?: string | null,
   league?: string | null,
 ): boolean {
-  if (league) return leagueEligibleForNationalTeam(league, nationId);
+  if (league) return leagueEligibleForNationalTeam(league, nationId, clubTier);
   return clubTier <= maxClubTierForNation(nationId);
 }
 
 /** Public Season 1 has no international call-ups until after this week. */
 export const SEASON_1_CALL_UP_MIN_WEEK = 20;
 
+/** League appearances in the call-up season before a nation will make a first call-up. */
+export const CALL_UP_MIN_LEAGUE_GAMES = 20;
+
+/** Career league appearances across seasons (transfer sample, not the first-cap wait). */
+export function careerLeagueAppearances(
+  seasons: Array<{ leagueGames?: number } | null | undefined> | null | undefined,
+): number {
+  return (seasons ?? []).reduce((n, season) => n + (season?.leagueGames ?? 0), 0);
+}
+
+export function playerHasBeenCapped(params: {
+  caps?: number | null;
+  seasons?: Array<{ international?: { qualifyingGames?: number; finalsGames?: number } | null }> | null;
+}): boolean {
+  if ((params.caps ?? 0) > 0) return true;
+  return (params.seasons ?? []).some((season) => {
+    const intl = season.international;
+    return (intl?.qualifyingGames ?? 0) + (intl?.finalsGames ?? 0) > 0;
+  });
+}
+
 /**
  * Call-up uses the ratio passed in (career until this season has a real
  * sample, then this season). Only first-team starters are called.
  * League decides eligibility, not the club: second divisions are out,
- * and top nations need a big-five league. Season 1 waits until after week 20.
+ * and top nations need a big-five club or a Strong Dutch/Portuguese/
+ * Turkish side. The 20-league-game wait is only for the first-ever cap
+ * and must be earned in the season they are called up — 19 last year
+ * plus 1 this year is not enough. Already-capped players skip the wait.
+ * Re-check the ratio before every window.
  */
 export function isSelectedForNationalTeam(params: {
   clubTier: ClubTier;
@@ -162,9 +196,12 @@ export function isSelectedForNationalTeam(params: {
   calendarWeek?: number;
   squadStatus?: SquadStatus | null;
   league?: string | null;
+  leagueGames?: number;
+  hasBeenCapped?: boolean;
 }): boolean {
   if (!params.nationId) return false;
   if ((params.squadStatus ?? 'starter') !== 'starter') return false;
+  if (!params.hasBeenCapped && (params.leagueGames ?? 0) < CALL_UP_MIN_LEAGUE_GAMES) return false;
   if (params.publicSeason === 1 && (params.calendarWeek ?? 0) <= SEASON_1_CALL_UP_MIN_WEEK) {
     return false;
   }
@@ -179,22 +216,23 @@ export function seasonRatioForSelection(season: { goals: number; gamesPlayed: nu
 }
 
 /**
- * Until this season has VALUE_FORM_MIN_GAMES, take the better of this
- * season and prior career so a new campaign with a 1.13 career ratio is
- * selected once Season 1 call-ups open (after week 20), a hot start can
- * still earn a call-up, and a 13-game blank cannot wipe the career figure.
- * After 15 games, this season decides.
+ * Until this season has CALL_UP_MIN_LEAGUE_GAMES, take the better of this
+ * season and prior career. After 20 league games, this season decides so a
+ * later slump drops the player even if they were already called up.
  */
 export function callUpRatio(params: {
-  season?: { goals: number; gamesPlayed: number } | null;
+  season?: { goals: number; gamesPlayed: number; leagueGames?: number } | null;
   careerGoals: number;
   careerGames: number;
 }): number {
-  const gp = params.season?.gamesPlayed ?? 0;
+  const gp = params.season?.leagueGames ?? params.season?.gamesPlayed ?? 0;
   const goals = params.season?.goals ?? 0;
-  const seasonRatio = gp > 0 ? goals / gp : 0;
-  if (gp >= VALUE_FORM_MIN_GAMES) return seasonRatio;
-  const priorGames = Math.max(0, params.careerGames - gp);
+  const seasonRatio = (params.season?.gamesPlayed ?? 0) > 0
+    ? goals / (params.season?.gamesPlayed ?? 1)
+    : 0;
+  if (gp >= CALL_UP_MIN_LEAGUE_GAMES) return seasonRatio;
+  const played = params.season?.gamesPlayed ?? 0;
+  const priorGames = Math.max(0, params.careerGames - played);
   const priorGoals = Math.max(0, params.careerGoals - goals);
   const priorRatio = priorGames > 0 ? priorGoals / priorGames : 0;
   return Math.max(seasonRatio, priorRatio);

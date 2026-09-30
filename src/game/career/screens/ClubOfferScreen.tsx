@@ -1,4 +1,5 @@
 import { getClub, TIER_LABEL } from '../data/clubs';
+import { leagueDisplayName } from '../data/leagueFormat';
 import { FIRST_CONTRACT_YEARS, formatWeeklyWage, playerMarketValue, weeklyWageForSquadStatus } from '../playerValue';
 import { CLUB_TRIAL_GAMES, trialRatioRequired } from '../trial';
 import { openingSquadStatus } from '../squadStatus';
@@ -33,7 +34,7 @@ export default function ClubOfferScreen() {
         </h1>
         <p className="mt-2 text-sm text-white/60">
           {fromOpeningTrial && club
-            ? `Ratio ${ratio.toFixed(2)} / ${required.toFixed(2)} required. You hit it — Season 1 starts as a Rising star on a ${FIRST_CONTRACT_YEARS}-year deal at 10% of ${club.name}'s top wage (${formatWeeklyWage(risingWage(club))}).`
+            ? `Ratio ${ratio.toFixed(2)} / ${required.toFixed(2)} required. You hit it — Season 1 starts as a Rising star on a ${FIRST_CONTRACT_YEARS}-year deal at 10% of ${club.name}'s average wage (${formatWeeklyWage(risingWage(club))}).`
             : goals >= 9
               ? "Scouts from Europe's biggest clubs were watching. Pick your future."
               : goals >= 7
@@ -58,7 +59,7 @@ export default function ClubOfferScreen() {
             <div className="flex-1">
               <p className="font-bold">{offerClub.name}</p>
               <p className="text-xs text-white/50">
-                {offerClub.country} · {offerClub.league}
+                {offerClub.country} · {leagueDisplayName(offerClub.league)}
               </p>
               <p className="mt-1 text-xs text-white/70">
                 {FIRST_CONTRACT_YEARS}-year Rising star · {formatWeeklyWage(risingWage(offerClub))}

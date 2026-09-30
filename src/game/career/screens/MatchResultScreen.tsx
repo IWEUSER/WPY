@@ -1,35 +1,44 @@
-import { playerGoalsLine } from '../matchBriefing';
+import { playerGoalsLine, sitOutRecapLine } from '../matchBriefing';
 import { useCareerStore } from '../store';
+import { HonourArt } from './HonourArt';
 
 export default function MatchResultScreen() {
   const result = useCareerStore((s) => s.lastMatchResult);
   const acknowledgeMatchResult = useCareerStore((s) => s.acknowledgeMatchResult);
+  const seenBeatKinds = useCareerStore((s) => s.seenBeatKinds);
 
   if (!result) return null;
 
   const celebrate = result.isFinal && result.won && result.trophyName;
+  const firstTitle = Boolean(celebrate && !(seenBeatKinds ?? []).includes('first-title'));
   const headline = result.headline ?? result.summary;
   const playerLine =
     result.playerGoals != null && result.chances != null
       ? playerGoalsLine(result.playerGoals, result.chances)
       : null;
+  const sitOutLine = sitOutRecapLine(result.sitOutReason);
 
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-6 overflow-y-auto px-6 py-[max(1.5rem,env(safe-area-inset-top))] text-center text-white">
       {celebrate ? (
         <div className="w-full max-w-sm rounded-3xl bg-gradient-to-b from-amber-300/30 via-emerald-400/15 to-transparent px-5 py-8 shadow-lg shadow-amber-400/20">
-          <p className="text-xs uppercase tracking-[0.3em] text-amber-200">Champions</p>
+          <p className="text-xs uppercase tracking-[0.3em] text-amber-200">{firstTitle ? 'First title' : 'Champions'}</p>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-amber-100">You won the {result.trophyName}</h1>
+          <HonourArt name={result.trophyName} caption="Trophy" />
           <p className="mt-4 text-lg font-semibold text-white/90">{headline}</p>
           {playerLine && <p className="mt-2 text-sm text-white/70">{playerLine}</p>}
-          {result.sitOutReason && (
+          {sitOutLine && (
             <p className="mt-2 text-sm font-semibold text-amber-200">
-              You did not play — {result.sitOutReason}
+              {sitOutLine}
             </p>
           )}
           {result.aggregateLine && <p className="mt-2 text-sm font-semibold text-emerald-200">{result.aggregateLine}</p>}
           {result.nextLine && <p className="mt-2 text-sm text-white/70">{result.nextLine}</p>}
-          <p className="mt-3 text-sm text-amber-100/80">A night to remember. The dressing room is bouncing.</p>
+          <p className="mt-3 text-sm text-amber-100/80">
+            {firstTitle
+              ? 'The first one is the one you remember. The dressing room will never be this new again.'
+              : 'A night to remember. The dressing room is bouncing.'}
+          </p>
         </div>
       ) : (
         <div className="w-full max-w-sm rounded-3xl bg-white/5 px-5 py-8">
@@ -38,9 +47,9 @@ export default function MatchResultScreen() {
           </p>
           <h1 className="mt-2 text-2xl font-extrabold">{headline}</h1>
           {playerLine && <p className="mt-3 text-sm text-white/70">{playerLine}</p>}
-          {result.sitOutReason && (
+          {sitOutLine && (
             <p className="mt-2 text-sm font-semibold text-amber-200">
-              You did not play — {result.sitOutReason}
+              {sitOutLine}
             </p>
           )}
           {result.aggregateLine && <p className="mt-2 text-sm font-semibold text-emerald-200">{result.aggregateLine}</p>}
