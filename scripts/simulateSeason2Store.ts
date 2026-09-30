@@ -563,7 +563,7 @@ if (!loanClubId) {
       console.error('The first loan must pay the destination starter wage from the offer');
       process.exitCode = 1;
     }
-    if (dest && SECOND_DIVISIONS.has(dest.league) && offeredWage < SECOND_DIVISION_STARTER_FLOOR) {
+    if (dest && SECOND_DIVISIONS.has(dest.league) && (loaned.squadStatus === 'starter') && offeredWage < SECOND_DIVISION_STARTER_FLOOR) {
       console.error('a second-division loan starter must sit above the €500 reserve floor');
       process.exitCode = 1;
     }

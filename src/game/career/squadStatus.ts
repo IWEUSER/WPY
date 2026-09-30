@@ -389,11 +389,32 @@ export function isLowerDivisionLoan(
   return leagueValueWeight(fromClub.league) + 1e-9 < leagueValueWeight(toClub.league);
 }
 
+/** Destination is a weaker pyramid step: second division from a top flight, or a worse tier. */
+export function isStepDownClub(
+  origin: Club | null | undefined,
+  dest: Club | null | undefined,
+): boolean {
+  if (!origin || !dest) return false;
+  if (SECOND_DIVISIONS.has(dest.league) && !SECOND_DIVISIONS.has(origin.league)) return true;
+  return dest.tier > origin.tier;
+}
+
+/** Same league, or the same transfer band, and not a step down. */
+export function isPeerClub(
+  origin: Club | null | undefined,
+  dest: Club | null | undefined,
+): boolean {
+  if (!origin || !dest) return false;
+  if (isStepDownClub(origin, dest)) return false;
+  return dest.league === origin.league || dest.tier === origin.tier;
+}
+
 /**
- * Playing time after a move. Loans are first-team football.
- * Permanent moves use last-season ratio against the destination bar:
- * starter if you meet it, Rising star if you hold 0.33, otherwise reserve.
- * Without a ratio, a step up still starts as reserve.
+ * Playing time after a move. Same-level loans are Rising star, not Starter.
+ * A step-down loan is still Starter. Permanent moves use last-season ratio
+ * against the destination bar: starter if you meet it, Rising star if you
+ * hold 0.33, otherwise reserve. Without a ratio, a step up still starts as
+ * reserve.
  */
 export function squadRoleRatioGuide(status: SquadStatus, clubBar: number): {
   keepLabel: string;
@@ -453,7 +474,10 @@ export function squadStatusOnArrival(params: {
     }
     return 'starter';
   }
-  if (params.move === 'loan') return 'starter';
+  if (params.move === 'loan') {
+    if (isPeerClub(params.fromClub, params.toClub)) return 'rising-star';
+    return 'starter';
+  }
   if (params.move === 'promotion') return 'rising-star';
   const allowRisingStar = params.allowRisingStar !== false;
   if (params.toClub && params.playerRatio != null) {

@@ -1590,6 +1590,8 @@ export function applyCareerLayoutPreview(): void {
                 ? [awardBeat('League top goalscorer', 'Alex Rivera', 'Won the Spanish League golden boot with 24 league goals.')]
               : preview === 'beat-award-wc'
                 ? [awardBeat('World Championship top goalscorer', 'Alex Rivera', 'The golden boot: most goals at the World Championship.')]
+              : preview === 'beat-award-pott'
+                ? [awardBeat('World Championship Player of the Tournament', 'Alex Rivera', 'The golden ball: player of the World Championship.')]
               : preview === 'beat-title-ucl'
                 ? [titleBeat('European Cup')]
               : preview === 'beat-retire'

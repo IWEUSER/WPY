@@ -3026,7 +3026,15 @@ if (barca && hilal && lafc) {
           console.error('World Championship top goalscorer must show the golden boot');
           process.exitCode = 1;
         }
-        if (honourArtKind('European Cup') !== 'european-cup' || honourArtKind('English League') !== 'league-trophy') {
+        if (honourArtKind('World Championship Player of the Tournament') !== 'golden-ball') {
+          console.error('World Championship Player of the Tournament must show the golden ball stem trophy');
+          process.exitCode = 1;
+        }
+        if (honourArtKind('World Player of the Year') !== 'ballon-dor') {
+          console.error('World Player of the Year must show the Ballon d’Or');
+          process.exitCode = 1;
+        }
+        if (honourArtKind('European Cup') !== 'european-cup' || honourArtKind('English League') !== 'english-league') {
           console.error('title screens must map European Cup and league titles to trophy art');
           process.exitCode = 1;
         }
@@ -3890,12 +3898,27 @@ if (barca && hilal && lafc) {
   }
   const freeEliteForm = offerTierFromStanding({
     ratio: 0.72,
-    careerRatio: 0.65,
+    careerRatio: 0.72,
     marketValue: 144_000_000,
     fee: 0,
   });
   if (freeEliteForm > 1) {
     console.error('a 0.72 last season on a free transfer should attract Elite clubs');
+    process.exitCode = 1;
+  }
+  const chelseaForm = offerTierFromStanding({
+    ratio: 0.61,
+    careerRatio: 0.56,
+    aggregateRatio: 0.56,
+    marketValue: 55_000_000,
+    fee: 1,
+    internationalsPlayed: 12,
+    nationId: 'england',
+    leagueGames: 60,
+  });
+  console.log('Chelsea 0.61/0.56 elite gate', chelseaForm);
+  if (chelseaForm === 1) {
+    console.error('0.61 last season and 0.56 aggregate must not attract Elite clubs, even with caps');
     process.exitCode = 1;
   }
   const city = getClub('man-city');
@@ -3954,17 +3977,17 @@ if (barca && hilal && lafc) {
       process.exitCode = 1;
     }
     const s2OutOfContract = resolveSeasonTransition({
-      season: { ...dummySeason, seasonNumber: 2, clubId: 'man-city', league: 'Premier League', role: 'first-team', goals: 23, gamesPlayed: 32 },
+      season: { ...dummySeason, seasonNumber: 2, clubId: 'man-city', league: 'Premier League', role: 'first-team', goals: 23, gamesPlayed: 32, leagueGoals: 23, leagueGames: 32 },
       role: 'first-team',
       clubId: 'man-city',
       parentClubId: 'man-city',
       seasonsAtCurrentClub: 1,
       age: 18,
-      careerGoals: 33,
+      careerGoals: 38,
       careerGames: 51,
       nationality: 'england',
       loansUsed: 0,
-      seasonHistory: [{ ...dummySeason, seasonNumber: 1, clubId: 'man-city', league: 'Premier League', role: 'first-team', goals: 10, gamesPlayed: 19 }],
+      seasonHistory: [{ ...dummySeason, seasonNumber: 1, clubId: 'man-city', league: 'Premier League', role: 'first-team', goals: 15, gamesPlayed: 19, leagueGoals: 15, leagueGames: 19 }],
       contractYearsRemaining: 0,
       careerStart: 'favourite-first-team',
       squadStatus: 'rising-star',
@@ -4299,9 +4322,10 @@ if (loanMiss.immediate?.role === 'reserve' || loanOffers !== LOAN_OFFER_COUNT ||
   }
   if (nextLoans.some((o) => {
     const dest = getClub(o.clubId);
-    return !dest || o.weeklyWage !== weeklyWageForTransferOffer(dest, missValue, 10 / 24, 1, 'starter', dest.league);
+    const status = o.squadStatus ?? 'starter';
+    return !dest || o.weeklyWage !== weeklyWageForTransferOffer(dest, missValue, 10 / 24, 1, status, dest.league);
   })) {
-    console.error('loan offers must pay the destination starter wage');
+    console.error('loan offers must pay the destination wage for the listed role');
     process.exitCode = 1;
   }
   const reservePerms = perms.filter((o) => o.squadStatus === 'reserve');
@@ -4586,6 +4610,181 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
       || lutonS1Loans.some((o) => getClub(o.clubId)?.league !== 'Championship' || (getClub(o.clubId)?.tier ?? 1) <= 2)
     ) {
       console.error('Season 1 Luton 0.2 loan offers must stay Championship, not Strong Portugal');
+      process.exitCode = 1;
+    }
+    if (lutonS1Loans.some((o) => o.squadStatus !== 'rising-star')) {
+      console.error('Championship-to-Championship loans must be Rising star, not Starter');
+      process.exitCode = 1;
+    }
+
+    const lutonS2 = resolveSeasonTransition({
+      season: {
+        ...dummySeason,
+        seasonNumber: 2,
+        clubId: 'luton',
+        goals: 15,
+        gamesPlayed: 30,
+        leagueGoals: 15,
+        leagueGames: 30,
+        league: 'Championship',
+        squadStatus: 'rising-star',
+      },
+      role: 'first-team',
+      clubId: 'luton',
+      parentClubId: 'luton',
+      seasonsAtCurrentClub: 1,
+      age: 18,
+      careerGoals: 21,
+      careerGames: 60,
+      nationality: 'england',
+      loansUsed: 0,
+      contractYearsRemaining: 2,
+      careerStart: 'favourite-first-team',
+      squadStatus: 'rising-star',
+      clubLeague: 'Championship',
+      seasonHistory: [{
+        ...dummySeason,
+        seasonNumber: 1,
+        clubId: 'luton',
+        goals: 6,
+        gamesPlayed: 30,
+        leagueGoals: 6,
+        leagueGames: 30,
+        league: 'Championship',
+        squadStatus: 'rising-star',
+      }],
+    });
+    const lutonS2Stay = lutonS2.pendingTransfer?.stay?.squadStatus;
+    const lutonS2Champ = (lutonS2.pendingTransfer?.offers ?? []).filter(
+      (o) => o.move === 'permanent' && !o.renewal && getClub(o.clubId)?.league === 'Championship',
+    );
+    const lutonS2Renewal = (lutonS2.pendingTransfer?.offers ?? []).find((o) => o.renewal && o.clubId === 'luton');
+    console.log(
+      'Luton S2 0.5',
+      lutonS2.headline,
+      'stay',
+      lutonS2Stay,
+      'renewal',
+      lutonS2Renewal?.squadStatus,
+      'champ roles',
+      lutonS2Champ.map((o) => o.squadStatus),
+    );
+    if (lutonS2Stay !== 'reserve') {
+      console.error('Season 2 Rising star at 0.5 must demote to Reserve if they stay');
+      process.exitCode = 1;
+    }
+    if (!lutonS2Renewal || lutonS2Renewal.squadStatus !== 'reserve') {
+      console.error('Season 2 Luton at 0.5 must table a Reserve renewal');
+      process.exitCode = 1;
+    }
+    if (lutonS2Champ.length > 0 && lutonS2Champ.some((o) => o.squadStatus !== 'reserve')) {
+      console.error('Championship transfer offers after a Reserve renewal must also be Reserve');
+      process.exitCode = 1;
+    }
+
+    const chelsea = getClub('chelsea')!;
+    const chelseaBar = chelsea.firstTeamGoalRatio;
+    const chelseaS1 = resolveSeasonTransition({
+      season: {
+        ...dummySeason,
+        seasonNumber: 3,
+        clubId: 'chelsea',
+        goals: 23,
+        gamesPlayed: 38,
+        leagueGoals: 23,
+        leagueGames: 38,
+        league: 'Premier League',
+        squadStatus: 'starter',
+      },
+      role: 'first-team',
+      clubId: 'chelsea',
+      parentClubId: 'chelsea',
+      seasonsAtCurrentClub: 0,
+      age: 19,
+      careerGoals: 44,
+      careerGames: 98,
+      nationality: 'england',
+      loansUsed: 0,
+      contractYearsRemaining: 4,
+      careerStart: 'favourite-first-team',
+      squadStatus: 'starter',
+      clubLeague: 'Premier League',
+      seasonHistory: [
+        {
+          ...dummySeason,
+          seasonNumber: 1,
+          clubId: 'luton',
+          goals: 6,
+          gamesPlayed: 30,
+          leagueGoals: 6,
+          leagueGames: 30,
+          league: 'Championship',
+        },
+        {
+          ...dummySeason,
+          seasonNumber: 2,
+          clubId: 'luton',
+          goals: 15,
+          gamesPlayed: 30,
+          leagueGoals: 15,
+          leagueGames: 30,
+          league: 'Championship',
+        },
+      ],
+    });
+    const chelseaS1Elite = (chelseaS1.pendingTransfer?.offers ?? []).filter(
+      (o) => o.move === 'permanent' && !o.renewal && (getClub(o.clubId)?.tier ?? 5) === 1,
+    );
+    console.log(
+      'Chelsea first year 0.61 vs',
+      chelseaBar,
+      chelseaS1.headline,
+      'stay',
+      chelseaS1.pendingTransfer?.stay?.squadStatus,
+      'forced',
+      chelseaS1.pendingTransfer?.allowDecline,
+      'elite bids',
+      chelseaS1Elite.length,
+    );
+    if (!chelseaS1.pendingTransfer?.allowDecline || chelseaS1.pendingTransfer?.stay?.squadStatus !== 'reserve') {
+      console.error('first season at a new club under the bar must demote to Reserve, not force a loan');
+      process.exitCode = 1;
+    }
+    if (chelseaS1Elite.length > 0) {
+      console.error('0.61 at West London with a lower aggregate must not draw Elite transfer offers');
+      process.exitCode = 1;
+    }
+
+    const chelseaS2 = resolveSeasonTransition({
+      season: {
+        ...dummySeason,
+        seasonNumber: 4,
+        clubId: 'chelsea',
+        goals: 23,
+        gamesPlayed: 38,
+        leagueGoals: 23,
+        leagueGames: 38,
+        league: 'Premier League',
+        squadStatus: 'reserve',
+      },
+      role: 'first-team',
+      clubId: 'chelsea',
+      parentClubId: 'chelsea',
+      seasonsAtCurrentClub: 1,
+      age: 20,
+      careerGoals: 67,
+      careerGames: 136,
+      nationality: 'england',
+      loansUsed: 0,
+      contractYearsRemaining: 3,
+      careerStart: 'favourite-first-team',
+      squadStatus: 'reserve',
+      clubLeague: 'Premier League',
+    });
+    const chelseaS2Loans = (chelseaS2.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan');
+    console.log('Chelsea second miss', chelseaS2.headline, 'stay', Boolean(chelseaS2.pendingTransfer?.stay), 'loans', chelseaS2Loans.length);
+    if (chelseaS2.pendingTransfer?.stay || chelseaS2.pendingTransfer?.allowDecline || chelseaS2Loans.length === 0) {
+      console.error('second season at a new club still under the bar must require a loan');
       process.exitCode = 1;
     }
 

@@ -2454,7 +2454,15 @@ export const useCareerStore = create<CareerStore>()(
               }) === 1,
             });
           const arrivalStatus: SquadStatus = takeLoan
-            ? 'starter'
+            ? (offer?.squadStatus ?? squadStatusOnArrival({
+                fromClub: getClub(state.clubId),
+                toClub: nextClub,
+                move: 'loan',
+                nextIfStay,
+                playerRatio: state.currentSeason && state.currentSeason.gamesPlayed > 0
+                  ? state.currentSeason.goals / state.currentSeason.gamesPlayed
+                  : undefined,
+              }))
             : renewing
               ? nextIfStay
               : (offer?.squadStatus ?? squadStatusOnArrival({
