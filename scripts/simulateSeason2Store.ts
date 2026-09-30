@@ -7,7 +7,7 @@
 import { useCareerStore } from '../src/game/career/store';
 import { getClub, leagueMatchWeeks, SECOND_DIVISIONS } from '../src/game/career/data/clubs';
 import { currentCalendarWeek } from '../src/game/career/calendar';
-import { FIRST_CONTRACT_YEARS, playerMarketValue, playerMarketValueFromSeasons, SECOND_DIVISION_STARTER_FLOOR, weeklyWageForSquadStatus, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
+import { FIRST_CONTRACT_YEARS, openingWeeklyWageForSquadStatus, playerMarketValue, playerMarketValueFromSeasons, SECOND_DIVISION_STARTER_FLOOR, weeklyWageForSquadStatus, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import type { ShotResult } from '../src/game/shooting/types';
 
 function fakeShot(scored: boolean): ShotResult {
@@ -760,9 +760,22 @@ store.getState().confirmPlayerName('Ian Test');
 store.getState().confirmOpeningRole('starter');
 {
   const s = store.getState();
-  console.log('favourite starter pick', s.phase, s.squadStatus, s.openingSquadPick);
+  const club = getClub('liverpool');
+  const expected = club
+    ? openingWeeklyWageForSquadStatus(
+        club,
+        playerMarketValue({ age: s.age, ratio: 0.3, careerGoals: 0, club }),
+        'starter',
+      )
+    : 0;
+  const listed = club ? weeklyWageForSquadStatus(club, playerMarketValue({ age: s.age, ratio: 0.3, careerGoals: 0, club }), 'starter') : 0;
+  console.log('favourite starter pick', s.phase, s.squadStatus, s.openingSquadPick, s.weeklyWage, expected, listed);
   if (s.phase !== 'hub' || s.squadStatus !== 'starter' || s.openingSquadPick !== 'starter') {
     console.error('the Season 1 place screen must be able to start as a Starter');
+    process.exitCode = 1;
+  }
+  if (s.weeklyWage !== expected || s.weeklyWage >= listed) {
+    console.error('pick-your-club Starter must sign at the club average, not the listed maximum');
     process.exitCode = 1;
   }
 }

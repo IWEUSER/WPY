@@ -19,7 +19,7 @@ import {
   playerMarketValueFromSeasons,
   RESERVE_CONTRACT_YEARS,
   seasonalSponsorship,
-  weeklyWageForSquadStatus,
+  openingWeeklyWageForSquadStatus,
   YOUTH_LOAN_YEARS,
 } from './playerValue';
 import { evaluatePlayerOfTheYear, evaluateTopGoalscorer } from './domesticAwards';
@@ -895,7 +895,7 @@ function beginSignedCareer(
   const dealYears = role === 'reserve' ? RESERVE_CONTRACT_YEARS : FIRST_CONTRACT_YEARS;
   const squadStatus = resolveOpeningSquadStatus(role, openingPick);
   const weeklyWage = club
-    ? weeklyWageForSquadStatus(
+    ? openingWeeklyWageForSquadStatus(
         club,
         playerMarketValue({ age, ratio: 0.3, careerGoals: 0, club }),
         squadStatus,

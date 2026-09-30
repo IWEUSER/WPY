@@ -1,4 +1,7 @@
+import { STARTING_AGE } from '../constants';
+import { getClub } from '../data/clubs';
 import { OPENING_ROLE_CARDS, OPENING_ROLE_EYEBROW, OPENING_ROLE_LEAD, OPENING_ROLE_TITLE } from '../openingRoleCopy';
+import { formatWeeklyWage, openingWeeklyWageForSquadStatus, playerMarketValue } from '../playerValue';
 import type { OpeningSquadPick } from '../squadStatus';
 import { useCareerStore } from '../store';
 
@@ -6,6 +9,16 @@ export default function OpeningRoleScreen() {
   const confirmOpeningRole = useCareerStore((s) => s.confirmOpeningRole);
   const backFromSetup = useCareerStore((s) => s.backFromSetup);
   const playerName = useCareerStore((s) => s.playerName);
+  const clubId = useCareerStore((s) => s.clubId);
+  const club = clubId ? getClub(clubId) : undefined;
+  const wageFor = (status: OpeningSquadPick) => {
+    if (!club) return null;
+    return openingWeeklyWageForSquadStatus(
+      club,
+      playerMarketValue({ age: STARTING_AGE + 1, ratio: 0.3, careerGoals: 0, club }),
+      status,
+    );
+  };
 
   return (
     <div className="flex h-full w-full flex-col items-center gap-5 overflow-y-auto px-6 py-[max(1.5rem,env(safe-area-inset-top))] pb-[max(2rem,env(safe-area-inset-bottom))] text-center text-white">
@@ -26,17 +39,23 @@ export default function OpeningRoleScreen() {
       </div>
 
       <div className="flex w-full max-w-sm flex-col gap-3 text-left">
-        {OPENING_ROLE_CARDS.map((card) => (
-          <button
-            key={card.id}
-            type="button"
-            onClick={() => confirmOpeningRole(card.id as OpeningSquadPick)}
-            className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3.5 text-left transition active:scale-[0.98]"
-          >
-            <p className="text-sm font-bold text-white">{card.title}</p>
-            <p className="mt-1.5 text-xs leading-relaxed text-white/60">{card.body}</p>
-          </button>
-        ))}
+        {OPENING_ROLE_CARDS.map((card) => {
+          const wage = wageFor(card.id as OpeningSquadPick);
+          return (
+            <button
+              key={card.id}
+              type="button"
+              onClick={() => confirmOpeningRole(card.id as OpeningSquadPick)}
+              className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3.5 text-left transition active:scale-[0.98]"
+            >
+              <p className="text-sm font-bold text-white">{card.title}</p>
+              <p className="mt-1.5 text-xs leading-relaxed text-white/60">{card.body}</p>
+              {wage != null && (
+                <p className="mt-2 text-xs font-semibold text-emerald-200/85">{formatWeeklyWage(wage)}</p>
+              )}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

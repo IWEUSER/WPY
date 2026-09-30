@@ -14,7 +14,7 @@ import {
 import { assignClubTier, clubQualityLabel, CLUBS, clubsForSeason, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, leagueMatchWeeks, playableClubsGroupedByLeague, SECOND_DIVISIONS, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
 import { leagueDisplayName, playoffGamesFromOpening, playoffOpeningForPosition } from '../src/game/career/data/leagueFormat';
 import { confederationDisplayName } from '../src/game/career/data/displayNames';
-import { clubTransferBudget, consecutivePoorFactor, contractValueFactor, DEFAULT_CONTRACT_YEARS, ELITE_TRANSFER_VALUE_FLOOR, FIRST_CONTRACT_YEARS, firstTopFlightValueCap, formAdjustedRatio, isSeason1ValueLocked, leagueAdjustedOfferRatio, leagueValueWeight, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, MIN_ACCEPTED_FEE_RATIO, newContractYears, playerMarketValue, playerMarketValueFromSeasons, recentAggregateRatio, RESERVE_CONTRACT_YEARS, RESERVE_WAGE_FACTOR, RESERVE_WEEKLY_WAGE, SECOND_DIVISION_STARTER_FLOOR, seasonalSponsorship, tierForMarketValue, TOP_LEAGUES, transferFeeFromValue, wageCareerMaturityScale, wageOfferScale, weeklyWageForClub, weeklyWageForRatio, weeklyWageForSquadStatus, weeklyWageForTransferOffer, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
+import { clubTransferBudget, consecutivePoorFactor, contractValueFactor, DEFAULT_CONTRACT_YEARS, ELITE_TRANSFER_VALUE_FLOOR, FIRST_CONTRACT_YEARS, firstTopFlightValueCap, formAdjustedRatio, isSeason1ValueLocked, leagueAdjustedOfferRatio, leagueValueWeight, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, MIN_ACCEPTED_FEE_RATIO, newContractYears, openingWeeklyWageForSquadStatus, playerMarketValue, playerMarketValueFromSeasons, recentAggregateRatio, RESERVE_CONTRACT_YEARS, RESERVE_WAGE_FACTOR, RESERVE_WEEKLY_WAGE, SECOND_DIVISION_STARTER_FLOOR, seasonalSponsorship, tierForMarketValue, TOP_LEAGUES, transferFeeFromValue, wageCareerMaturityScale, wageOfferScale, weeklyWageForClub, weeklyWageForRatio, weeklyWageForSquadStatus, weeklyWageForTransferOffer, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { nationKit } from '../src/game/career/data/nationColours';
 import { reserveStadium, resolveCareerStadium, resolveMatchStadium, trialStadium } from '../src/game/career/matchVenue';
@@ -86,6 +86,7 @@ import { isHomeLeagueNation, isSaudiTrialClub, nationUsesMlsLower, pickGeographi
 import { nextYouthKnockoutRound, pickYouthGroupOpponents, pickYouthKnockoutOpponent, youthMaxGames } from '../src/game/career/youthTournament';
 import { chancesForSquadStatus, consecutiveScoringAsImpact, consecutiveScoringGames, describeSquadStatus, IMPACT_CHANCES, IMPACT_STREAK, isContinentalClubFixture, isLowerDivisionLoan, isSquadRotationSitOut, isToughMinutesFixture, nextSquadStatusAfterSeason, openingSquadStatus, promoteSquadStatusDuringSeason, reservePrioritisesContinental, reserveSitsChampionsLeague, RISING_STAR_DOMESTIC_CUP_GAMES, RISING_STAR_MIN_RATIO, ROLE_REVIEW_WEEK, seasonOverridesRatioBar, shouldSitLeagueFixture, shouldSitToughFixture, squadStatusOnArrival, STARTER_STREAK, youthRolesAllowed } from '../src/game/career/squadStatus';
 import { OPENING_ROLE_CARDS } from '../src/game/career/openingRoleCopy';
+import { honourArtKind } from '../src/game/career/honourArt';
 import { needsSeasonTwoPaywall, SEASON_PAYWALL_LEAD, SEASON_PAYWALL_POINTS } from '../src/game/career/seasonPaywall';
 import { clubAllowedByLeagueSample, consecutiveLoanSpells, ELITE_OFFER_MIN_LEAGUE_GAMES, LOAN_OFFER_COUNT, SAUDI_OFFER_MIN_AGE, SECOND_DIVISION_BEST_OFFER_TIER, STRONG_OFFER_MIN_LEAGUE_GAMES, TRANSFER_MARKET_CAP, TRANSFER_OFFER_COUNT, offerFormRatio, offerRatioPreferringLastSeason, offerTierFromStanding, pickLoanClubsForMiss, pickLoanClubsFromOrigin, pickPermanentClubs, requiredGoalRatio, resolveSeasonTransition, seasonStandingRatio, sellingClubAcceptsOffer, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, trialFailTransferPending, tierEarnedByRatio, tierForRatio } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
@@ -2998,6 +2999,38 @@ if (barca && hilal && lafc) {
     if (!starter || /every game/.test(starter.body) || /rotation sit-out/.test(starter.body)) {
       console.error('Starter on the place screen must stay high-level, not list every-game minutes');
       process.exitCode = 1;
+    }
+    {
+      const city = getClub('man-city');
+      if (!city) {
+        console.error('man-city must exist for the opening Starter wage lock-in');
+        process.exitCode = 1;
+      } else {
+        const listed = weeklyWageForSquadStatus(city, 0, 'starter');
+        const opening = openingWeeklyWageForSquadStatus(city, 0, 'starter');
+        const rising = openingWeeklyWageForSquadStatus(city, 0, 'rising-star');
+        console.log('City opening wages', { listed, opening, rising });
+        if (opening === listed || opening >= listed) {
+          console.error('pick-your-club Starter must pay the club average, not the listed maximum');
+          process.exitCode = 1;
+        }
+        if (opening < 170_000 || opening > 180_000) {
+          console.error(`City Starter opening wage should sit on the published average, got ${opening}`);
+          process.exitCode = 1;
+        }
+        if (rising >= opening) {
+          console.error('Rising star opening wage must stay below the Starter average');
+          process.exitCode = 1;
+        }
+        if (honourArtKind('World Championship top goalscorer') !== 'golden-boot') {
+          console.error('World Championship top goalscorer must show the golden boot');
+          process.exitCode = 1;
+        }
+        if (honourArtKind('European Cup') !== 'european-cup' || honourArtKind('English League') !== 'league-trophy') {
+          console.error('title screens must map European Cup and league titles to trophy art');
+          process.exitCode = 1;
+        }
+      }
     }
     if (!/young player/.test(rising?.body ?? '') || !/starting XI/.test(impact?.body ?? '') || !/Trusted/.test(starter?.body ?? '')) {
       console.error('each place option must still explain what the role means');

@@ -658,6 +658,33 @@ export function weeklyWageForSquadStatus(
   return full;
 }
 
+/**
+ * Season 1 place-pick wages. Starter is the club's average weekly wage, not
+ * the listed maximum used later for 1.0-ratio renewals and transfers.
+ */
+export function openingWeeklyWageForSquadStatus(
+  club: Club,
+  marketValue: number,
+  status: SquadStatus,
+  playingLeague?: string | null,
+): number {
+  if (status === 'starter') {
+    const league = playingLeague ?? club.league;
+    const average = averageWageForClubId(club.id, league, clubLeagueOf);
+    if (average != null) {
+      const floor = SECOND_DIVISIONS.has(league ?? '')
+        ? SECOND_DIVISION_STARTER_FLOOR
+        : club.tier >= 5
+          ? 500
+          : club.tier >= 4
+            ? 800
+            : 1_200;
+      return roundWeeklyWage(average, floor);
+    }
+  }
+  return weeklyWageForSquadStatus(club, marketValue, status, playingLeague);
+}
+
 export function weeklyWageForClub(club: Club, marketValue: number, playingLeague?: string | null): number {
   const league = playingLeague ?? club.league;
   if (SECOND_DIVISIONS.has(league)) {
