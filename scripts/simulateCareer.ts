@@ -22,7 +22,7 @@ import { crowdSwatch, kitFromColor, kitFromScheme, luminance } from '../src/game
 import { AFRICA_SKIN_TONES, createPitchView, idleKeeperPose, MAX_SHOT_DISTANCE_M, MIN_SHOT_DISTANCE_M, PLAYER_SKIN_TONES, pickPlayerLook, pickPlayerSkin, SHORTS_HALF_H, THIGH_SHARE } from '../src/game/shooting/render';
 import { appearanceRegionForNation, HAIR_SWATCHES, isBlackHair, isBlondeHair, isFairSkin, SKIN_SWATCHES } from '../src/game/shooting/appearance';
 import { practiceChanceOptions, PRACTICE_CHANCES, rollChanceSetup } from '../src/game/shooting/chanceSetup';
-import { applyMatchResult, availabilityDropsApply, createAvailability } from '../src/game/career/availabilityEngine';
+import { applyMatchResult, availabilityDropsApply, createAvailability, describeAvailability } from '../src/game/career/availabilityEngine';
 import { useCareerStore } from '../src/game/career/store';
 import { standBottomY, crowdCellSize, pitchQualityFromStrength, stadiumLayout, stadiumRoofBand } from '../src/game/shooting/stadium';
 import {
@@ -8930,8 +8930,13 @@ console.log('\n--- Club cups, paced tables, transfers, injuries, and elite score
     console.error('an open-play goal must reset the drop window');
     process.exitCode = 1;
   }
-  if (availabilityDropsApply('rising-star') || availabilityDropsApply('impact') || !availabilityDropsApply('starter') || !availabilityDropsApply('reserve')) {
-    console.error('Rising star and Impact must be exempt from the drop window; Starter and Reserve keep it');
+  if (
+    !availabilityDropsApply('rising-star')
+    || !availabilityDropsApply('impact')
+    || !availabilityDropsApply('starter')
+    || !availabilityDropsApply('reserve')
+  ) {
+    console.error('Rising star and Impact must use the same drop window as Starter and Reserve');
     process.exitCode = 1;
   }
   const youthBlanks = applyMatchResult(
@@ -8946,8 +8951,26 @@ console.log('\n--- Club cups, paced tables, transfers, injuries, and elite score
     1,
     'impact',
   );
-  if (youthBlanks.bannedGamesRemaining !== 0 || youthBlanks.windowFails !== 0 || impactBlanks.bannedGamesRemaining !== 0) {
-    console.error('three blanks as Rising star or Impact must not drop the player');
+  if (youthBlanks.bannedGamesRemaining !== 1 || youthBlanks.phase !== 1 || impactBlanks.bannedGamesRemaining !== 1) {
+    console.error('three blanks as Rising star or Impact must drop the player for one game');
+    process.exitCode = 1;
+  }
+  const twoCityBlanks = applyMatchResult(
+    applyMatchResult(createAvailability(), false, 1, 'rising-star'),
+    false,
+    1,
+    'rising-star',
+  );
+  if (
+    twoCityBlanks.bannedGamesRemaining !== 0
+    || twoCityBlanks.windowFails !== 2
+    || !/score within 1 game/i.test(describeAvailability(twoCityBlanks, 'rising-star'))
+  ) {
+    console.error('two blanks as a Rising star must warn that the next miss drops the player');
+    process.exitCode = 1;
+  }
+  if (!/dropped from the squad/i.test(describeAvailability(youthBlanks, 'rising-star'))) {
+    console.error('a dropped Rising star must show the dropped-from-the-squad line');
     process.exitCode = 1;
   }
 

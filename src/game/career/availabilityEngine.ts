@@ -13,14 +13,13 @@ import type { AvailabilityState, SquadStatus } from './types';
  * allowance - there is no partial credit, but there is also no permanent
  * penalty: one goal wipes the slate clean.
  *
- * Rising star and Impact already get one or two looks, rotation sit-outs,
- * and 0-chance fixtures. Dropping them on top of that produces weeks with
- * no games, so the window never runs for those roles.
+ * This window runs for every squad role, including Rising star and Impact.
+ * Rotation sit-outs and 0-chance fixtures still do not count as misses.
  */
 
-/** Drop windows only run for Starter and Reserve. */
-export function availabilityDropsApply(status: SquadStatus | null | undefined): boolean {
-  return status !== 'rising-star' && status !== 'impact';
+/** Drop windows run for every squad role, including Rising star and Impact. */
+export function availabilityDropsApply(_status?: SquadStatus | null): boolean {
+  return true;
 }
 
 export function allowanceForPhase(phase: number): number {

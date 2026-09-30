@@ -3,7 +3,7 @@ import { clubKit } from '../data/clubKits';
 import { getClub, leagueMatchWeeks } from '../data/clubs';
 import { conferenceLabel, leagueDisplayName, mlsConferenceOf } from '../data/leagueFormat';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
-import { availabilityDropsApply, describeAvailability, isAvailable } from '../availabilityEngine';
+import { describeAvailability, isAvailable } from '../availabilityEngine';
 import { describeInjury } from '../injury';
 import {
   chancesForSquadStatus,
@@ -120,8 +120,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
     ),
   );
   const noChance = chancesForSquadStatus(squadStatus, nextFixture?.playerChances ?? 1) <= 0;
-  const dropApplies = availabilityDropsApply(squadStatus);
-  const available = (dropApplies ? isAvailable(squadAvailability) : true) && !injured && !rotatedOut && !noChance;
+  const available = isAvailable(squadAvailability) && !injured && !rotatedOut && !noChance;
   const briefing = nextFixture
     ? nextMatchBriefing(nextFixture, seasonSimWithGroup, {
         playerNationName: nation?.name,

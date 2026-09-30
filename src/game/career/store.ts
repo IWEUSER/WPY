@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { applyMatchResult, availabilityDropsApply, createAvailability, isAvailable, serveBannedGame } from './availabilityEngine';
+import { applyMatchResult, createAvailability, isAvailable, serveBannedGame } from './availabilityEngine';
 import { rollInjuryAbsence, sitOutGamesAfterPlayedMatch } from './injury';
 import { clubSeasonTotals, recordClubAppearanceStats } from './seasonStats';
 import { FORM_WINDOW_GAMES, RETIREMENT_AGE, SEASON_LENGTH, STARTING_AGE } from './constants';
@@ -1239,11 +1239,6 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
     }
 
     const isInternational = fixture.kind === 'international';
-    const liveStatus = state.squadStatus ?? defaultSquadStatus(state.role);
-    if (!availabilityDropsApply(liveStatus)) {
-      availability = createAvailability();
-      if (nationalTeam) nationalTeam = { ...nationalTeam, availability: createAvailability() };
-    }
     const squad = isInternational ? nationalTeam?.availability : availability;
     if (injuryGamesRemaining > 0) {
       const resolution = resolveFixture(sim, fixture, club, 0, Math.random, { playerParticipated: false });
@@ -1303,7 +1298,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
       if (isFinalFixture(fixture)) return sitOutFinalResult();
       return sitOutHub();
     }
-    if (squad && !isAvailable(squad) && availabilityDropsApply(liveStatus)) {
+    if (squad && !isAvailable(squad)) {
       const resolution = resolveFixture(sim, fixture, club, 0, Math.random, { playerParticipated: false });
       sim = { ...resolution.sim, fixtureIndex: sim.fixtureIndex + 1 };
       const record: MatchRecord = { matchNumber: season.matches.length + 1, played: false, scored: null };
@@ -1492,10 +1487,6 @@ function finishResolvedLiveMatch(
   let availability = state.availability;
   let nationalTeam = state.nationalTeam;
   const liveStatus = state.squadStatus ?? defaultSquadStatus(state.role);
-  if (!availabilityDropsApply(liveStatus)) {
-    availability = createAvailability();
-    if (nationalTeam) nationalTeam = { ...nationalTeam, availability: createAvailability() };
-  }
   if (isInternational && nationalTeam) {
     nationalTeam = {
       ...recordInternationalAppearance(
