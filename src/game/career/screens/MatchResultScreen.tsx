@@ -1,34 +1,22 @@
-import { portraitForTrophyName } from '../careerBeat';
-import { getClub } from '../data/clubs';
-import { getNation } from '../international';
 import { playerGoalsLine, sitOutRecapLine } from '../matchBriefing';
 import { useCareerStore } from '../store';
-import { PlayerKitPortrait } from './PlayerKitPortrait';
+import { HonourArt } from './HonourArt';
 
 export default function MatchResultScreen() {
   const result = useCareerStore((s) => s.lastMatchResult);
   const acknowledgeMatchResult = useCareerStore((s) => s.acknowledgeMatchResult);
   const seenBeatKinds = useCareerStore((s) => s.seenBeatKinds);
-  const playerName = useCareerStore((s) => s.playerName);
-  const clubId = useCareerStore((s) => s.clubId);
-  const nationality = useCareerStore((s) => s.nationality);
-  const playerSkin = useCareerStore((s) => s.playerSkin);
-  const playerHair = useCareerStore((s) => s.playerHair);
 
   if (!result) return null;
 
   const celebrate = result.isFinal && result.won && result.trophyName;
   const firstTitle = Boolean(celebrate && !(seenBeatKinds ?? []).includes('first-title'));
-  const portrait = portraitForTrophyName(result.trophyName);
   const headline = result.headline ?? result.summary;
   const playerLine =
     result.playerGoals != null && result.chances != null
       ? playerGoalsLine(result.playerGoals, result.chances)
       : null;
   const sitOutLine = sitOutRecapLine(result.sitOutReason);
-  const club = clubId ? getClub(clubId) : undefined;
-  const nation = nationality ? getNation(nationality) : undefined;
-  const look = playerSkin && playerHair ? { skin: playerSkin, hair: playerHair } : null;
 
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-6 overflow-y-auto px-6 py-[max(1.5rem,env(safe-area-inset-top))] text-center text-white">
@@ -36,12 +24,7 @@ export default function MatchResultScreen() {
         <div className="w-full max-w-sm rounded-3xl bg-gradient-to-b from-amber-300/30 via-emerald-400/15 to-transparent px-5 py-8 shadow-lg shadow-amber-400/20">
           <p className="text-xs uppercase tracking-[0.3em] text-amber-200">{firstTitle ? 'First title' : 'Champions'}</p>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-amber-100">You won the {result.trophyName}</h1>
-          <PlayerKitPortrait
-            name={playerName?.trim() || 'You'}
-            club={portrait === 'club' ? club : undefined}
-            nation={portrait === 'nation' ? nation : undefined}
-            look={look}
-          />
+          <HonourArt name={result.trophyName} caption="Trophy" />
           <p className="mt-4 text-lg font-semibold text-white/90">{headline}</p>
           {playerLine && <p className="mt-2 text-sm text-white/70">{playerLine}</p>}
           {sitOutLine && (

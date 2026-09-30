@@ -14,6 +14,8 @@ export interface CareerBeat {
   headline: string;
   copy: string;
   portrait: 'club' | 'nation' | 'both';
+  /** Trophy or award name used to pick the honour illustration. */
+  honourName?: string;
 }
 
 const INTERNATIONAL_TROPHY_NAMES = new Set(
@@ -57,6 +59,7 @@ export function titleBeat(trophyName: string, opts?: { first?: boolean }): Caree
       ? 'The first one is the one you remember. The dressing room will never be this new again.'
       : 'Another night that stays. The dressing room is bouncing.',
     portrait: portraitForTrophyName(trophyName),
+    honourName: trophyName,
   };
 }
 
@@ -95,6 +98,7 @@ export function awardBeat(awardName: string, playerName: string, reason?: string
     copy: reason?.trim()
       || 'A personal honour written into the season. The table is one thing; this is yours.',
     portrait: world ? 'both' : NATION_AWARD.test(awardName) ? 'nation' : 'club',
+    honourName: awardName,
   };
 }
 

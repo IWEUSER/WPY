@@ -33,7 +33,7 @@ export default defineConfig({
       workbox: {
         // Precache the app shell so it launches instantly (and works offline)
         // once installed to a home screen.
-        globPatterns: ['**/*.{js,css,html,png,svg,ico}'],
+        globPatterns: ['**/*.{js,css,html,png,svg,jpg,ico}'],
         skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true,
