@@ -389,12 +389,13 @@ export function isLowerDivisionLoan(
   return leagueValueWeight(fromClub.league) + 1e-9 < leagueValueWeight(toClub.league);
 }
 
-/** Destination is a weaker pyramid step: second division from a top flight, or a worse tier. */
+/** Destination is a weaker pyramid step: second division from a top flight, or a worse tier in a different league. Same league is never a step down. */
 export function isStepDownClub(
   origin: Club | null | undefined,
   dest: Club | null | undefined,
 ): boolean {
   if (!origin || !dest) return false;
+  if (origin.league === dest.league) return false;
   if (SECOND_DIVISIONS.has(dest.league) && !SECOND_DIVISIONS.has(origin.league)) return true;
   return dest.tier > origin.tier;
 }
@@ -405,8 +406,9 @@ export function isPeerClub(
   dest: Club | null | undefined,
 ): boolean {
   if (!origin || !dest) return false;
+  if (origin.league === dest.league) return true;
   if (isStepDownClub(origin, dest)) return false;
-  return dest.league === origin.league || dest.tier === origin.tier;
+  return dest.tier === origin.tier;
 }
 
 /**

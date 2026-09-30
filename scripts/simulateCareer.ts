@@ -6545,6 +6545,10 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
       console.error('Arsenal 0.0 loan wages must not copy the current 154k salary');
       process.exitCode = 1;
     }
+    if (arsenalBlankLoans.some((o) => getClub(o.clubId)?.league === 'Premier League' && o.squadStatus !== 'rising-star')) {
+      console.error('same-league loans must be Rising star, not Starter');
+      process.exitCode = 1;
+    }
     if (arsenalPerms.some((o) => (getClub(o.clubId)?.tier ?? 5) === 1)) {
       console.error('a season that has not earned the Elite ratio must not draw Elite transfer offers');
       process.exitCode = 1;
