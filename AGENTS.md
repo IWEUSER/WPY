@@ -2,13 +2,9 @@
 
 ## Working branch
 
-Ian iterates on one unreleased stack. Do not start a new branch off `main` for follow-ups.
+Live `main` is the current game. Open new follow-up branches off `main`. Do not keep adding to `cursor/chance-atmosphere-haptics-a634`.
 
-- Latest in-progress branch: `cursor/chance-atmosphere-haptics-a634` (PR #30).
-- Preview: https://wpy-git-cursor-chance-atmosphere-haptics-a634-iweusers-projects.vercel.app
-- Live `main` is only the last shipped PWA. Career follow-ups belong on the stack above until Ian says ship or merge.
-- Continue that branch. Commit and push there. Do not open a parallel career PR from `main` or from older branches such as `cursor/trials-intl-records-wages-a634`.
-- Keep prior requests on that stack. A later follow-up does not replace an earlier rule.
+- Keep prior requests. A later follow-up does not replace an earlier rule.
 
 ## Shipping to live
 
