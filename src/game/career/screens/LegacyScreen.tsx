@@ -68,7 +68,7 @@ export default function LegacyScreen() {
       <div className="mt-3 flex flex-wrap gap-1.5 text-[10px] font-semibold uppercase tracking-wide">
         <span className={`rounded-full px-2 py-1 ${RECORD_KIND_BADGE.club}`}>Club</span>
         <span className={`rounded-full px-2 py-1 ${RECORD_KIND_BADGE.internal}`}>Domestic</span>
-        <span className={`rounded-full px-2 py-1 ${RECORD_KIND_BADGE.tournament}`}>Club tournament</span>
+        <span className={`rounded-full px-2 py-1 ${RECORD_KIND_BADGE.tournament}`}>Tournament</span>
         <span className={`rounded-full px-2 py-1 ${RECORD_KIND_BADGE.international}`}>International</span>
       </div>
 

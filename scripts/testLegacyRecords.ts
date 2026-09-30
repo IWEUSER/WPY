@@ -272,8 +272,8 @@ assert(
   'club UCL season records live on the club-tournament board',
 );
 assert(
-  !participatedLegacyBoards(withUcl).some((def) => def.id === 'continental:season:ucl'),
-  'generic single-season UCL must not duplicate the club board',
+  participatedLegacyBoards(withUcl).some((def) => def.id === 'continental:season:ucl'),
+  'competition-wide European Cup season board sits beside the club board',
 );
 assert(
   participatedLegacyBoards(withUcl).some((def) => def.id === 'continental:career:ucl'),
@@ -304,10 +304,10 @@ assert(
   `Madrid club-tournament must ignore Copa del Rey goals, got ${playerGoalsForBoard(madridClubUcl, madridInput)}`,
 );
 assert(
-  !participatedLegacyBoards(madridInput).some((def) => def.id === 'continental:season:ucl'),
-  'Real Madrid must not show a second generic single-season Champions League board',
+  participatedLegacyBoards(madridInput).some((def) => def.id === 'continental:season:ucl'),
+  'Real Madrid still shows the competition-wide European Cup season board',
 );
-assert(recordColorKind(madridClubUcl) === 'tournament', 'club UCL boards are tournament-coloured');
+assert(recordColorKind(madridClubUcl) === 'club', 'club UCL boards are club-coloured');
 assert(recordColorKind(plSeason) === 'internal', 'league boards are domestic-coloured');
 assert(!participated.some((def) => def.id.includes('la-liga')), 'unplayed leagues must stay hidden');
 assert(!participated.some((def) => def.id.includes('world-cup')), 'unplayed tournaments must stay hidden');
@@ -333,8 +333,43 @@ const identity = identityLegacyBoards({
 assert(identity.some((board) => board.def.id === 'league:career:premier-league'), 'identity shows sourced top-10 ranks');
 assert(identity.every((board) => board.reveal === 'top10'), 'identity legacy box is top 10 only');
 assert(
-  identity.every((board) => board.def.span !== 'season' || board.rank === 1),
-  'single-season and single-tournament records only list 1st',
+  identity.every((board) => board.def.span !== 'season' || board.rank === 1 || board.def.id.startsWith('continental:')),
+  'club single-season records only list 1st; tournament season boards may list a top 10',
+);
+
+const cityUclIdentity = identityLegacyBoards({
+  seasons: [
+    season({
+      clubId: 'man-city',
+      league: 'Premier League',
+      leagueGoals: 47,
+      leagueGames: 38,
+      continentalStats: [{ cup: 'ucl', games: 13, goals: 15 }],
+    }),
+  ],
+  nationalTeam: null,
+});
+assert(
+  cityUclIdentity.some((board) => board.def.id === 'club-tournament:season:man-city' && board.rank === 1 && board.playerGoals === 15),
+  'City club European Cup season record stays on the identity list',
+);
+assert(
+  cityUclIdentity.some(
+    (board) =>
+      board.def.id === 'continental:season:ucl'
+      && board.def.title === 'European Cup'
+      && board.playerGoals === 15
+      && board.reveal === 'top10',
+  ),
+  'identity must also list the competition-wide European Cup season line',
+);
+assert(
+  recordColorKind(cityUclIdentity.find((board) => board.def.id === 'club-tournament:season:man-city')!.def) === 'club',
+  'Manchester Civic tournament boards stay club-coloured',
+);
+assert(
+  recordColorKind(cityUclIdentity.find((board) => board.def.id === 'continental:season:ucl')!.def) === 'tournament',
+  'European Cup competition boards use tournament colour',
 );
 
 const hiddenCups = participatedLegacyBoards({
