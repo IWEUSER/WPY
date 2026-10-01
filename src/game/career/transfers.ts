@@ -10,6 +10,7 @@ import {
   DEFAULT_CONTRACT_YEARS,
   FIRST_CONTRACT_YEARS,
   RESERVE_CONTRACT_YEARS,
+  RESERVE_WEEKLY_WAGE,
   ELITE_TRANSFER_VALUE_FLOOR,
   formAdjustedRatio,
   leagueValueWeight,
@@ -1227,7 +1228,22 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       ...extra,
     };
     if (stay.weeklyWage == null) {
-      stay.weeklyWage = params.weeklyWage;
+      const nextStatus = stay.squadStatus ?? currentStatus;
+      const currentPay = params.weeklyWage ?? 0;
+      if (nextStatus === 'starter' && (currentStatus !== 'starter' || currentPay <= RESERVE_WEEKLY_WAGE)) {
+        const starterWage = weeklyWageForTransferOffer(
+          club,
+          value,
+          ratio,
+          seasonsDone,
+          'starter',
+          nextLeague,
+          recentAggregateRatio(seasons),
+        );
+        stay.weeklyWage = Math.max(currentPay, starterWage);
+      } else {
+        stay.weeklyWage = params.weeklyWage;
+      }
     }
     return stay;
   };

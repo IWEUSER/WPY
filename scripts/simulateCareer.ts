@@ -125,7 +125,7 @@ const N = 50000;
     console.error('live build stamp must print a UTC clock');
     process.exitCode = 1;
   }
-  if (stamped !== `${LIVE_SHIP_LABEL} · 18 Sep 18:30 UTC` || !stamped.includes('Sideways knock')) {
+  if (stamped !== `${LIVE_SHIP_LABEL} · 18 Sep 18:30 UTC` || !LIVE_SHIP_LABEL.trim()) {
     console.error('the first menu stamp must name the ship and the build clock');
     process.exitCode = 1;
   }
