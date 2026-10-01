@@ -2,7 +2,7 @@
 
 ## Working branch
 
-Live `main` is the current game. Open new follow-up branches off `main`. Do not keep adding to `cursor/chance-atmosphere-haptics-a634`.
+Live `main` is the current game. Open new follow-up branches off `main`. Do not keep adding to merged ships.
 
 - Keep prior requests. A later follow-up does not replace an earlier rule.
 
