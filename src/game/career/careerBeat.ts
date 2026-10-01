@@ -195,6 +195,9 @@ export function enqueueLeagueTitleBeat(
 ): CareerBeat[] {
   if (!honours?.leagueChampion || !club) return pending ?? [];
   const name = leagueTrophyLabel(club, league);
+  if ((pending ?? []).some((item) => (item.kind === 'title' || item.kind === 'first-title') && item.honourName === name)) {
+    return pending ?? [];
+  }
   const first =
     !careerHadTrophies(seasonHistory)
     && !(seen ?? []).includes('first-title')

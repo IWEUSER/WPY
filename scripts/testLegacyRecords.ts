@@ -332,9 +332,25 @@ const identity = identityLegacyBoards({
 });
 assert(identity.some((board) => board.def.id === 'league:career:premier-league'), 'identity shows sourced top-10 ranks');
 assert(identity.every((board) => board.reveal === 'top10'), 'identity legacy box is top 10 only');
+const madrid45 = identityLegacyBoards({
+  seasons: [
+    season({
+      clubId: 'real-madrid',
+      league: 'La Liga',
+      leagueGoals: 45,
+      leagueGames: 38,
+      continentalStats: [{ cup: 'ucl', games: 13, goals: 12 }],
+    }),
+  ],
+  nationalTeam: null,
+});
 assert(
-  identity.every((board) => board.def.span !== 'season' || board.rank === 1 || board.def.id.startsWith('continental:')),
-  'club single-season records only list 1st; tournament season boards may list a top 10',
+  madrid45.some((board) => board.def.id === 'club-league:season:real-madrid' && board.reveal === 'top10' && board.playerGoals === 45),
+  'Career / identity must list a Madrid 45-goal league season in the top 10',
+);
+assert(
+  madrid45.some((board) => board.def.id === 'club-tournament:season:real-madrid' && board.reveal === 'top10'),
+  'Career / identity must list a Madrid tournament-season top 10',
 );
 
 const cityUclIdentity = identityLegacyBoards({

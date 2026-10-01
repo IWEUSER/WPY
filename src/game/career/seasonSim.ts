@@ -580,6 +580,33 @@ export function canWinLeague(sim: SeasonSimState, clubId: string): boolean {
   return (sim.leagueTable.find((r) => r.clubId === clubId)?.position ?? 0) === 1;
 }
 
+/** True when the fixture just consumed was the last remaining league match. */
+export function isLastRemainingLeagueFixture(
+  calendar: SeasonCalendar,
+  sim: SeasonSimState,
+  justPlayed: CalendarFixture,
+): boolean {
+  if (justPlayed.kind !== 'league') return false;
+  if (sim.playoffStage != null) return false;
+  for (let i = sim.fixtureIndex; i < calendar.fixtures.length; i++) {
+    const fixture = calendar.fixtures[i];
+    if (fixture.kind === 'league' && !shouldSkipFixture(fixture, sim)) return false;
+  }
+  return true;
+}
+
+/** Celebrate the league title after the last league game (or MLS Cup), not after leftover cups. */
+export function shouldCelebrateLeagueTitle(
+  calendar: SeasonCalendar,
+  sim: SeasonSimState,
+  clubId: string,
+  justPlayed: CalendarFixture,
+): boolean {
+  if (!canWinLeague(sim, clubId)) return false;
+  if (justPlayed.kind === 'playoff' && justPlayed.playoffRound === 'mls-cup') return true;
+  return isLastRemainingLeagueFixture(calendar, sim, justPlayed);
+}
+
 function nationAsOpponent(id: string) {
   const n = getNation(id);
   if (!n) return { id, name: nationLabel(id), confederation: 'UEFA' as const };

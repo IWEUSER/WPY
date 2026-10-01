@@ -27,7 +27,7 @@ import { evaluateClubPlayerOfTheTournament, evaluateContinentalTopGoalscorer } f
 import { evaluateInternationalTournamentAwards } from './internationalAwards';
 import { countsTowardCareerRecord, displaySeasonNumber } from './seasonDisplay';
 import { needsSeasonTwoPaywall } from './seasonPaywall';
-import { trophyLabels } from './honoursDisplay';
+import { leagueTrophyLabel, trophyLabels } from './honoursDisplay';
 import {
   enqueueEndOfSeasonBeats,
   enqueueLeagueTitleBeat,
@@ -56,6 +56,7 @@ import { buildSeasonStandings, type ClubMatchResult } from './matchEngine';
 import { isFinalFixture, isInternationalTournamentFixture, currentCalendarWeek, type CalendarFixture, type SeasonCalendar } from './calendar';
 import {
   canWinLeague,
+  shouldCelebrateLeagueTitle,
   ensureInternationalGroup,
   hydrateSeason,
   repairChampionsLeagueSeason,
@@ -448,6 +449,7 @@ function recapFromResolution(opts: {
   isFinal: boolean;
   trophyName: string | null;
   afterPhase: LastMatchResult['afterPhase'];
+  won?: boolean;
 }): { lastMatchSummary: string; lastMatchResult: LastMatchResult } {
   const playerLine =
     opts.chances != null && opts.playerGoals != null
@@ -472,7 +474,7 @@ function recapFromResolution(opts: {
       summary,
       headline: opts.headline,
       isFinal: opts.isFinal,
-      won: opts.result.outcome === 'win',
+      won: opts.won ?? opts.result.outcome === 'win',
       trophyName: opts.trophyName,
       afterPhase: opts.afterPhase,
       playerGoals: opts.playerGoals ?? null,
@@ -1070,6 +1072,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
     recapSim: SeasonSimState,
     recapCalendar: SeasonCalendar,
   ) => {
+    const titleCelebrate = shouldCelebrateLeagueTitle(recapCalendar, recapSim, state.clubId!, fixture);
     const recap = recapFromResolution({
       headline: resolution.summary,
       result: resolution.result,
@@ -1078,9 +1081,12 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
       sim: recapSim,
       extra,
       nationName,
-      isFinal,
-      trophyName: trophyNameForFixture(fixture, recapSim.internationalTournament),
+      isFinal: isFinal || titleCelebrate,
+      trophyName:
+        trophyNameForFixture(fixture, recapSim.internationalTournament)
+        ?? (titleCelebrate ? leagueTrophyLabel(club, state.clubLeague) : null),
       afterPhase,
+      won: titleCelebrate ? true : undefined,
     });
     lastMatchSummary = recap.lastMatchSummary;
     lastMatchResult = recap.lastMatchResult;
@@ -1089,7 +1095,11 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
   const sitOutFinalResult = (): Partial<CareerState> => {
     calendar = syncSeasonCalendars(calendar!, sim!, state.clubId, state.clubLeague);
     const complete = sim!.fixtureIndex >= calendar.fixtures.length;
-    const withHonours = complete
+    const justPlayed = calendar.fixtures[Math.max(0, sim!.fixtureIndex - 1)];
+    const titleCelebrate = justPlayed
+      ? shouldCelebrateLeagueTitle(calendar, sim!, state.clubId!, justPlayed)
+      : false;
+    const withHonours = complete || titleCelebrate
       ? { ...sim!, honours: { ...sim!.honours, leagueChampion: canWinLeague(sim!, state.clubId!) } }
       : sim!;
     const awarded = complete
@@ -1122,7 +1132,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
       liveMatch: null,
       phase: 'match-result',
       wpyResult: awarded.wpyResult,
-      pendingBeats: complete
+      pendingBeats: complete || titleCelebrate
         ? enqueueLeagueTitleBeat(
           state.pendingBeats,
           state.seenBeatKinds,
@@ -1265,7 +1275,9 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
         calendar,
       );
       injuryGamesRemaining -= 1;
-      if (isFinalFixture(fixture)) return sitOutFinalResult();
+      if (isFinalFixture(fixture) || shouldCelebrateLeagueTitle(calendar, sim, state.clubId, fixture)) {
+        return sitOutFinalResult();
+      }
       return sitOutHub();
     }
     const rotatedOut = isSquadRotationSitOut(
@@ -1296,7 +1308,9 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
         sim,
         calendar,
       );
-      if (isFinalFixture(fixture)) return sitOutFinalResult();
+      if (isFinalFixture(fixture) || shouldCelebrateLeagueTitle(calendar, sim, state.clubId, fixture)) {
+        return sitOutFinalResult();
+      }
       return sitOutHub();
     }
     if (squad && !isAvailable(squad)) {
@@ -1320,7 +1334,9 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
       } else {
         availability = serveBannedGame(availability);
       }
-      if (isFinalFixture(fixture)) return sitOutFinalResult();
+      if (isFinalFixture(fixture) || shouldCelebrateLeagueTitle(calendar, sim, state.clubId, fixture)) {
+        return sitOutFinalResult();
+      }
       return sitOutHub();
     }
 
@@ -1366,7 +1382,9 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
           ),
         };
       }
-      if (isFinalFixture(fixture)) return sitOutFinalResult();
+      if (isFinalFixture(fixture) || shouldCelebrateLeagueTitle(calendar, sim, state.clubId, fixture)) {
+        return sitOutFinalResult();
+      }
       return sitOutHub();
     }
 
@@ -1544,7 +1562,8 @@ function finishResolvedLiveMatch(
     },
   );
   const complete = nextSim.fixtureIndex >= nextCalendar.fixtures.length;
-  const withHonours = complete
+  const titleCelebrate = shouldCelebrateLeagueTitle(nextCalendar, selectedSim, state.clubId, fixture);
+  const withHonours = complete || titleCelebrate
     ? { ...selectedSim, honours: { ...selectedSim.honours, leagueChampion: canWinLeague(selectedSim, state.clubId) } }
     : selectedSim;
   const remainingAfter = remainingPlayableCount(nextCalendar, withHonours);
@@ -1570,9 +1589,12 @@ function finishResolvedLiveMatch(
     playerGoals: historyGoals,
     chances: live.chancesTotal + (live.penaltyKick ? 1 : 0),
     nationName: state.nationality ? getNation(state.nationality)?.name : undefined,
-    isFinal: isFinalFixture(fixture),
-    trophyName: trophyNameForFixture(fixture, sim.internationalTournament),
+    isFinal: isFinalFixture(fixture) || titleCelebrate,
+    trophyName:
+      trophyNameForFixture(fixture, sim.internationalTournament)
+      ?? (titleCelebrate ? leagueTrophyLabel(club, state.clubLeague) : null),
     afterPhase,
+    won: titleCelebrate ? true : undefined,
   });
 
   const reviewed = complete
@@ -1583,7 +1605,7 @@ function finishResolvedLiveMatch(
       );
 
   let pendingBeats = state.pendingBeats ?? [];
-  if (complete) {
+  if (complete || titleCelebrate) {
     pendingBeats = enqueueLeagueTitleBeat(
       pendingBeats,
       state.seenBeatKinds,
@@ -1611,7 +1633,7 @@ function finishResolvedLiveMatch(
     careerEarnings: paid.careerEarnings,
     injuryGamesRemaining,
     pendingBeats,
-    phase: recap.lastMatchResult.isFinal ? 'match-result' : afterPhase,
+    phase: recap.lastMatchResult.isFinal || titleCelebrate ? 'match-result' : afterPhase,
     wpyResult: awarded.wpyResult,
   };
 }

@@ -93,23 +93,21 @@ export const MAX_CLUB_TIER_FOR_SELECTION: ClubTier = 3;
 export const TOP_NATION_SELECTION_RATIO = 0.66;
 
 /**
- * Call-ups follow the league, not the club. Second divisions are never
- * selected. Top-20 nations take any big-five top-division club, or a
- * Strong club in Holland, Portugal, or Turkey.
+ * Call-ups follow the league only for FIFA top-20 nations. Those sides
+ * take any big-five top-division club, or a Strong club in Holland,
+ * Portugal, or Turkey. Nations outside the top 20 have no club-level bar.
  */
 export function leagueEligibleForNationalTeam(
   league: string | null | undefined,
   nationId?: string | null,
   clubTier?: ClubTier | null,
 ): boolean {
+  const rank = nationId ? fifaRank(nationId) : 99;
+  if (rank > 20) return true;
   if (!league) return false;
   if (SECOND_DIVISIONS.has(league)) return false;
-  const rank = nationId ? fifaRank(nationId) : 99;
-  if (rank <= 20) {
-    if (TOP_LEAGUES.has(league)) return true;
-    return SEMI_EURO_LEAGUES.has(league) && clubTier != null && clubTier <= 2;
-  }
-  return true;
+  if (TOP_LEAGUES.has(league)) return true;
+  return SEMI_EURO_LEAGUES.has(league) && clubTier != null && clubTier <= 2;
 }
 
 export function callUpLeagueRequirement(nationId: string): string {
@@ -117,7 +115,7 @@ export function callUpLeagueRequirement(nationId: string): string {
   if (rank <= 20) {
     return 'a top-division English, Spanish, Italian, German or French club, or a strong club in the Dutch League, Portuguese League or Turkish League';
   }
-  return 'a top division';
+  return 'any club';
 }
 
 /**
@@ -150,6 +148,8 @@ export function clubEligibleForNationalTeam(
   nationId?: string | null,
   league?: string | null,
 ): boolean {
+  const rank = nationId ? fifaRank(nationId) : 99;
+  if (rank > 20) return true;
   if (league) return leagueEligibleForNationalTeam(league, nationId, clubTier);
   return clubTier <= maxClubTierForNation(nationId);
 }
@@ -181,12 +181,12 @@ export function playerHasBeenCapped(params: {
 /**
  * Call-up uses the ratio passed in (career until this season has a real
  * sample, then this season). Only first-team starters are called.
- * League decides eligibility, not the club: second divisions are out,
- * and top nations need a big-five club or a Strong Dutch/Portuguese/
- * Turkish side. The 20-league-game wait is only for the first-ever cap
- * and must be earned in the season they are called up — 19 last year
- * plus 1 this year is not enough. Already-capped players skip the wait.
- * Re-check the ratio before every window.
+ * FIFA top-20 nations still need a big-five club or a Strong Dutch/
+ * Portuguese/Turkish side. Nations outside the top 20 have no club-level
+ * bar. The 20-league-game wait is only for the first-ever cap and must
+ * be earned in the season they are called up — 19 last year plus 1 this
+ * year is not enough. Already-capped players skip the wait. Re-check
+ * the ratio before every window.
  */
 export function isSelectedForNationalTeam(params: {
   clubTier: ClubTier;

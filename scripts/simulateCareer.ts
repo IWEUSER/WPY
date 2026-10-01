@@ -56,7 +56,7 @@ import { championsLeagueField, leaguePhaseOpponents, pickSuperCupOpponent, seedC
 import { settleDrawOnPenalties } from '../src/game/career/penalties';
 import { planDomesticSuperCup } from '../src/game/career/domesticSuperCup';
 import { firstLegStakeLine, formatNextLine, nextMatchBriefing, sitOutRecapLine } from '../src/game/career/matchBriefing';
-import { applyInternationalResult, canWinLeague, continentalAggregateLine, ensureInternationalGroup, fixtureTitle, hydrateSeason, internationalStageWhenSelected, leagueFixtureIsHome, leagueOpponentQueue, liveMatchBoardLine, liveMatchScoreSeed, mulberry32, nextActionableFixture, nextPlayableFixture, pickDomesticCupOpponent, pickTitleRival, remainingPlayableCount, repairChampionsLeagueSeason, repairDomesticCupDraw, repairUclFinalOpponent, resolveFixture, shouldSimulateNationQualifier, shouldSkipFixture, syncContinentalKnockoutCalendar, type SeasonSimState } from '../src/game/career/seasonSim';
+import { applyInternationalResult, canWinLeague, continentalAggregateLine, ensureInternationalGroup, fixtureTitle, hydrateSeason, internationalStageWhenSelected, isLastRemainingLeagueFixture, leagueFixtureIsHome, leagueOpponentQueue, liveMatchBoardLine, liveMatchScoreSeed, mulberry32, nextActionableFixture, nextPlayableFixture, pickDomesticCupOpponent, pickTitleRival, remainingPlayableCount, repairChampionsLeagueSeason, repairDomesticCupDraw, repairUclFinalOpponent, resolveFixture, shouldCelebrateLeagueTitle, shouldSimulateNationQualifier, shouldSkipFixture, syncContinentalKnockoutCalendar, type SeasonSimState } from '../src/game/career/seasonSim';
 import { applyPlayerGroupResult, createGroupState, nationCanProgressKnockout, nationCanWinMajor, simulateNpcRoundAfterPlayerMatch } from '../src/game/career/internationalTable';
 import {
   applyTrialMatch,
@@ -88,7 +88,7 @@ import { chancesForSquadStatus, consecutiveScoringAsImpact, consecutiveScoringGa
 import { OPENING_ROLE_CARDS } from '../src/game/career/openingRoleCopy';
 import { honourArtKind } from '../src/game/career/honourArt';
 import { needsSeasonTwoPaywall, SEASON_PAYWALL_LEAD, SEASON_PAYWALL_POINTS } from '../src/game/career/seasonPaywall';
-import { clubAllowedByLeagueSample, consecutiveLoanSpells, ELITE_OFFER_MIN_LEAGUE_GAMES, LOAN_OFFER_COUNT, SAUDI_OFFER_MIN_AGE, SECOND_DIVISION_BEST_OFFER_TIER, STRONG_OFFER_MIN_LEAGUE_GAMES, TRANSFER_MARKET_CAP, TRANSFER_OFFER_COUNT, offerFormRatio, offerRatioPreferringLastSeason, offerTierFromStanding, pickLoanClubsForMiss, pickLoanClubsFromOrigin, pickPermanentClubs, requiredGoalRatio, resolveSeasonTransition, seasonStandingRatio, sellingClubAcceptsOffer, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, trialFailTransferPending, tierEarnedByRatio, tierForRatio } from '../src/game/career/transfers';
+import { clubAllowedByLeagueSample, consecutiveLoanSpells, ELITE_OFFER_MIN_LEAGUE_GAMES, isSaudiClub, listedTransferFee, LOAN_OFFER_COUNT, SAUDI_OFFER_MIN_AGE, SECOND_DIVISION_BEST_OFFER_TIER, STRONG_OFFER_MIN_LEAGUE_GAMES, TRANSFER_MARKET_CAP, TRANSFER_OFFER_COUNT, offerFormRatio, offerRatioPreferringLastSeason, offerTierFromStanding, pickLoanClubsForMiss, pickLoanClubsFromOrigin, pickPermanentClubs, requiredGoalRatio, resolveSeasonTransition, seasonStandingRatio, sellingClubAcceptsOffer, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, trialFailTransferPending, tierEarnedByRatio, tierForRatio } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
 import { internationalCampaignForSeason } from '../src/game/career/data/competitions';
 import { continentalLabel } from '../src/game/career/seasonStats';
@@ -885,8 +885,8 @@ const albaniaLuton = isSelectedForNationalTeam({ clubTier: 5, careerGoalRatio: 0
 const albaniaAjax = isSelectedForNationalTeam({ clubTier: 2, careerGoalRatio: 0.4, nationId: 'albania', league: 'Eredivisie', leagueGames: CALL_UP_MIN_LEAGUE_GAMES });
 const albaniaMiss = isSelectedForNationalTeam({ clubTier: 5, careerGoalRatio: 0.39, nationId: 'albania', league: 'Eredivisie', leagueGames: CALL_UP_MIN_LEAGUE_GAMES });
 console.log('Albania Championship', albaniaLuton, 'Albania Ajax', albaniaAjax, 'Albania 0.39', albaniaMiss);
-if (albaniaLuton || !albaniaAjax || albaniaMiss || leagueEligibleForNationalTeam('Championship', 'albania') || !leagueEligibleForNationalTeam('Premier League', 'spain')) {
-  console.error('second divisions must never get a call-up; weaker nations can pick from any top flight');
+if (!albaniaLuton || !albaniaAjax || albaniaMiss || !leagueEligibleForNationalTeam('Championship', 'albania') || !leagueEligibleForNationalTeam('Premier League', 'spain')) {
+  console.error('nations outside FIFA top 20 have no club-level call-up bar; top-20 still need a qualifying league');
   process.exitCode = 1;
 }
 
@@ -2767,7 +2767,7 @@ if (barca && hilal && lafc) {
   }
   if (paidPerm.some((o) => {
     const dest = getClub(o.clubId);
-    return dest != null && o.fee > clubTransferBudget(dest) + 1;
+    return dest != null && !isSaudiClub(dest) && o.fee > clubTransferBudget(dest) + 1;
   })) {
     console.error('no club may bid above its transfer budget');
     process.exitCode = 1;
@@ -4509,23 +4509,23 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
     console.error('same-division loans are only allowed when the player already matches that club’s first-team bar');
     process.exitCode = 1;
   }
-  if (splitEngland < 2 || splitLoans.length !== LOAN_OFFER_COUNT) {
-    console.error('two of three loans should come from the player’s nation when that league exists');
+  if (splitFrance < 2 || splitLoans.length !== LOAN_OFFER_COUNT) {
+    console.error('a below-division miss must loan to the current club’s lower level, not nationality geography');
     process.exitCode = 1;
   }
 
   const brazilLoans = pickLoanClubsForMiss(0, 'brazil', LOAN_OFFER_COUNT, ['toulouse'], 'toulouse');
-  const brazilGeo = brazilLoans.filter((c) => c.country === 'Spain' || c.country === 'Portugal').length;
-  console.log('loan split Brazil at Toulouse', brazilGeo, brazilLoans.map((c) => c.country));
-  if (brazilLoans.length !== LOAN_OFFER_COUNT || brazilGeo < 2) {
-    console.error('when nationality has no league, two of three loans must use trial geography (Brazil → Spain/Portugal)');
+  const brazilFrance = brazilLoans.filter((c) => c.country === 'France').length;
+  console.log('loan split Brazil at Toulouse', brazilFrance, brazilLoans.map((c) => c.country));
+  if (brazilLoans.length !== LOAN_OFFER_COUNT || brazilFrance < 2) {
+    console.error('below-division loans follow the current club country, not Brazil → Spain/Portugal');
     process.exitCode = 1;
   }
   const irelandLoans = pickLoanClubsForMiss(0, 'republic-of-ireland', LOAN_OFFER_COUNT, ['toulouse'], 'toulouse');
-  const irelandEngland = irelandLoans.filter((c) => c.country === 'England').length;
-  console.log('loan split Ireland at Toulouse', irelandEngland, irelandLoans.map((c) => c.country));
-  if (irelandLoans.length !== LOAN_OFFER_COUNT || irelandEngland < 2) {
-    console.error('Ireland has no playable league — two of three loans must come from England');
+  const irelandFrance = irelandLoans.filter((c) => c.country === 'France').length;
+  console.log('loan split Ireland at Toulouse', irelandFrance, irelandLoans.map((c) => c.country));
+  if (irelandLoans.length !== LOAN_OFFER_COUNT || irelandFrance < 2) {
+    console.error('Ireland at Toulouse must loan to French lower-level clubs, not England');
     process.exitCode = 1;
   }
 
@@ -4596,12 +4596,9 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
     }
     if (
       leicesterLoans.length !== LOAN_OFFER_COUNT
-      || leicesterLoans.some((c) => {
-        const weight = leagueValueWeight(c.league);
-        return TOP_LEAGUES.has(c.league) || SECOND_DIVISIONS.has(c.league) || c.tier <= 2 || weight + 1e-9 < leagueValueWeight('MLS');
-      })
+      || leicesterLoans.some((c) => c.league === 'MLS' || TOP_LEAGUES.has(c.league) || c.tier <= 2)
     ) {
-      console.error('a 0.33+ Championship rising star must loan to Medium/Lower clubs in a weaker league, not Strong Portugal');
+      console.error('a 0.33+ Championship rising star must loan to weaker leagues, never MLS as the floor');
       process.exitCode = 1;
     }
 
@@ -5393,8 +5390,8 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
     }
     const midBids = pickPermanentClubs(2, fee64, [], 'netherlands', false, 'Eredivisie', fee64, 22);
     console.log('€64m medium-club budgets', ajax && clubTransferBudget(ajax), lafc && clubTransferBudget(lafc), midBids.map((c) => `${c.id}:${c.league}:${clubTransferBudget(c)}`));
-    if (midBids.some((c) => c.league === 'Eredivisie' || c.league === 'MLS')) {
-      console.error('€64m bids must not come from Ajax-level Eredivisie or MLS clubs');
+    if (midBids.some((c) => c.league === 'MLS')) {
+      console.error('€64m bids must not come from MLS');
       process.exitCode = 1;
     }
   }
@@ -9958,8 +9955,13 @@ console.log('\n--- Concurrent career save slots ---');
   const palaceBand = clubQualityLabel(getClub('crystal-palace')!);
   const leicesterBand = clubQualityLabel(getClub('leicester')!);
   console.log('quality labels', palaceBand, leicesterBand);
-  if (palaceBand === leicesterBand || !/championship/i.test(leicesterBand) || /championship/i.test(palaceBand)) {
-    console.error('Championship clubs must not share the Premier League Medium/Strong transfer label');
+  if (
+    palaceBand !== TIER_LABEL[getClub('crystal-palace')!.tier]
+    || leicesterBand !== TIER_LABEL[getClub('leicester')!.tier]
+    || /championship/i.test(leicesterBand)
+    || /championship/i.test(palaceBand)
+  ) {
+    console.error('transfer offers must show the tier name, not the second-division label');
     process.exitCode = 1;
   }
   if (depadded.games !== 36 || depadded.goals !== 11) {
@@ -10686,6 +10688,204 @@ console.log('\n--- Concurrent career save slots ---');
   console.log('City 0.00 S1 perm tiers', cityBlankTiers, cityBlankPerms.map((o) => `${o.clubId}:${getClub(o.clubId)?.tier}`));
   if (cityBlankTiers.length > 1) {
     console.error('a 0.00 City window must not mix Medium and Lower clubs');
+    process.exitCode = 1;
+  }
+}
+
+{
+  const mersey = resolveSeasonTransition({
+    season: {
+      ...dummySeason,
+      seasonNumber: 1,
+      clubId: 'liverpool',
+      goals: 8,
+      gamesPlayed: 34,
+      leagueGoals: 8,
+      leagueGames: 34,
+      league: 'Premier League',
+      squadStatus: 'starter',
+    },
+    role: 'first-team',
+    clubId: 'liverpool',
+    parentClubId: 'liverpool',
+    seasonsAtCurrentClub: 0,
+    age: 18,
+    careerGoals: 8,
+    careerGames: 34,
+    nationality: 'england',
+    loansUsed: 0,
+    contractYearsRemaining: FIRST_CONTRACT_YEARS,
+    careerStart: 'favourite-first-team',
+    squadStatus: 'starter',
+    clubLeague: 'Premier League',
+    weeklyWage: 40_000,
+  });
+  const merseyPerms = (mersey.pendingTransfer?.offers ?? []).filter((o) => o.move === 'permanent' && !o.renewal);
+  const merseyMls = merseyPerms.filter((o) => getClub(o.clubId)?.league === 'MLS');
+  const merseyLabels = merseyPerms.map((o) => clubQualityLabel(getClub(o.clubId)!));
+  console.log('Merseyside 0.24 perms', merseyPerms.map((o) => `${o.clubId}:${getClub(o.clubId)?.country}:${getClub(o.clubId)?.league}:${clubQualityLabel(getClub(o.clubId)!)}`));
+  if (merseyMls.length > 0) {
+    console.error('lower-level windows must follow the current club geography — never MLS as the floor');
+    process.exitCode = 1;
+  }
+  if (merseyLabels.some((label) => /championship|liga 2|serie b|bundesliga|ligue 2/i.test(label))) {
+    console.error('every transfer offer must show the tier, not the division name');
+    process.exitCode = 1;
+  }
+
+  const s2Low = resolveSeasonTransition({
+    season: {
+      ...dummySeason,
+      seasonNumber: 2,
+      clubId: 'liverpool',
+      goals: 4,
+      gamesPlayed: 38,
+      leagueGoals: 4,
+      leagueGames: 38,
+      league: 'Premier League',
+      squadStatus: 'starter',
+    },
+    role: 'first-team',
+    clubId: 'liverpool',
+    parentClubId: 'liverpool',
+    seasonsAtCurrentClub: 1,
+    age: 19,
+    careerGoals: 12,
+    careerGames: 72,
+    nationality: 'england',
+    loansUsed: 0,
+    contractYearsRemaining: 2,
+    careerStart: 'favourite-first-team',
+    squadStatus: 'starter',
+    clubLeague: 'Premier League',
+    weeklyWage: 40_000,
+  });
+  const s2Loans = (s2Low.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan');
+  const s2Perms = (s2Low.pendingTransfer?.offers ?? []).filter((o) => o.move === 'permanent' && !o.renewal);
+  const s2EnglishLoans = s2Loans.filter((o) => getClub(o.clubId)?.country === 'England' && SECOND_DIVISIONS.has(getClub(o.clubId)?.league ?? ''));
+  const s2EnglishPerms = s2Perms.filter((o) => getClub(o.clubId)?.country === 'England');
+  console.log('S2 0.1 loans', s2Loans.map((o) => `${o.clubId}:${getClub(o.clubId)?.country}:${getClub(o.clubId)?.league}`));
+  console.log('S2 0.1 perms', s2Perms.map((o) => `${o.clubId}:${getClub(o.clubId)?.country}:${getClub(o.clubId)?.league}`));
+  if (s2Loans.length !== LOAN_OFFER_COUNT || s2EnglishLoans.length !== LOAN_OFFER_COUNT) {
+    console.error('a 0.1 Liverpool miss must loan to lower-level English clubs');
+    process.exitCode = 1;
+  }
+  if (s2Perms.length !== TRANSFER_OFFER_COUNT || s2EnglishPerms.length < 3 || s2EnglishPerms.length > 3) {
+    console.error('six lower-level transfers from England must be half English');
+    process.exitCode = 1;
+  }
+  if (s2Perms.some((o) => getClub(o.clubId)?.league === 'MLS') || s2Loans.some((o) => getClub(o.clubId)?.league === 'MLS')) {
+    console.error('English lower-level windows must not use MLS');
+    process.exitCode = 1;
+  }
+
+  const albaniaS3 = resolveSeasonTransition({
+    season: {
+      ...dummySeason,
+      seasonNumber: 3,
+      clubId: 'liverpool',
+      goals: 4,
+      gamesPlayed: 38,
+      leagueGoals: 4,
+      leagueGames: 38,
+      league: 'Premier League',
+      squadStatus: 'starter',
+    },
+    role: 'first-team',
+    clubId: 'liverpool',
+    parentClubId: 'liverpool',
+    seasonsAtCurrentClub: 2,
+    age: 19,
+    careerGoals: 16,
+    careerGames: 110,
+    nationality: 'albania',
+    loansUsed: 0,
+    contractYearsRemaining: 2,
+    careerStart: 'favourite-first-team',
+    squadStatus: 'starter',
+    clubLeague: 'Premier League',
+    weeklyWage: 40_000,
+  });
+  const albaniaPerms = (albaniaS3.pendingTransfer?.offers ?? []).filter((o) => o.move === 'permanent' && !o.renewal);
+  const albaniaEngland = albaniaPerms.filter((o) => getClub(o.clubId)?.country === 'England').length;
+  const albaniaGeo = albaniaPerms.filter((o) => {
+    const country = getClub(o.clubId)?.country;
+    return country === 'Germany' || country === 'Netherlands' || country === 'Italy';
+  }).length;
+  console.log('Albania S3 perms', albaniaPerms.map((o) => `${o.clubId}:${getClub(o.clubId)?.country}`), 'EN', albaniaEngland, 'geo', albaniaGeo);
+  if (albaniaPerms.length !== TRANSFER_OFFER_COUNT || albaniaEngland < 3 || albaniaGeo < 2) {
+    console.error('Albania at an English club must split transfers between England and Albania geography');
+    process.exitCode = 1;
+  }
+
+  const ferrol = getClub('racing-ferrol')!;
+  const ferrolOpen = openingWeeklyWageForSquadStatus(ferrol, 0, 'starter');
+  const ferrolRenew = resolveSeasonTransition({
+    season: {
+      ...dummySeason,
+      seasonNumber: 1,
+      clubId: 'racing-ferrol',
+      goals: 16,
+      gamesPlayed: 38,
+      leagueGoals: 16,
+      leagueGames: 38,
+      league: 'La Liga 2',
+      squadStatus: 'starter',
+    },
+    role: 'first-team',
+    clubId: 'racing-ferrol',
+    parentClubId: 'racing-ferrol',
+    seasonsAtCurrentClub: 0,
+    age: 18,
+    careerGoals: 16,
+    careerGames: 38,
+    nationality: 'spain',
+    loansUsed: 0,
+    contractYearsRemaining: FIRST_CONTRACT_YEARS,
+    careerStart: 'pick-club',
+    squadStatus: 'starter',
+    clubLeague: 'La Liga 2',
+    weeklyWage: ferrolOpen,
+  });
+  const ferrolOffer = (ferrolRenew.pendingTransfer?.offers ?? []).find((o) => o.renewal && o.clubId === 'racing-ferrol');
+  console.log('Ferrol opening/renewal', ferrolOpen, ferrolOffer?.weeklyWage, ferrolRenew.pendingTransfer?.stay?.squadStatus);
+  if (!ferrolOffer || ferrolOffer.weeklyWage < ferrolOpen) {
+    console.error('a Ferrol starter renewal must not drop below the opening wage unless the role is Reserve');
+    process.exitCode = 1;
+  }
+
+  const madridValue = 333_000_000;
+  const madridFee = transferFeeFromValue(madridValue, 4);
+  const saudiClub = getClub('al-hilal')!;
+  const saudiFee = listedTransferFee(saudiClub, madridFee, madridValue);
+  console.log('Saudi listed fee', saudiFee, 'asking', madridFee, 'value', madridValue);
+  if (saudiFee + 1e-6 < madridValue) {
+    console.error('a shown Saudi offer must be at or above the transfer value');
+    process.exitCode = 1;
+  }
+  const saudiWindow = pickPermanentClubs(1, madridFee, ['real-madrid'], 'spain', false, 'La Liga', madridValue, 24, 38);
+  const saudiBid = saudiWindow.find((club) => club.league === 'Saudi Pro League' || club.country === 'Saudi Arabia');
+  if (saudiBid && listedTransferFee(saudiBid, madridFee, madridValue) + 1e-6 < madridValue) {
+    console.error('if a Saudi club is listed the fee must meet the transfer value');
+    process.exitCode = 1;
+  }
+
+  const lastLeague = { week: 38, kind: 'league' as const, isDecisive: false, opponentId: 'sevilla' };
+  const leftoverCup = { week: 39, kind: 'domestic-cup' as const, isDecisive: false, domesticCupStage: 'semi-final' as const };
+  const titleCalendar = { fixtures: [lastLeague, leftoverCup], totalWeeks: 39 } as import('../src/game/career/calendar').SeasonCalendar;
+  const titleSim = {
+    fixtureIndex: 1,
+    playoffStage: null,
+    honours: { leagueChampion: false, continentalChampion: null, superCup: false, domesticSuperCup: null, internationalChampion: null, domesticCup: null },
+    leagueTable: [{ clubId: 'real-madrid', position: 1, played: 38, won: 28, drawn: 6, lost: 4, goalsFor: 80, goalsAgainst: 30, points: 90 }],
+  } as unknown as SeasonSimState;
+  if (!isLastRemainingLeagueFixture(titleCalendar, titleSim, lastLeague) || !shouldCelebrateLeagueTitle(titleCalendar, titleSim, 'real-madrid', lastLeague)) {
+    console.error('the last league game must celebrate a title even when cup fixtures remain');
+    process.exitCode = 1;
+  }
+  const earlySim = { ...titleSim, fixtureIndex: 0 };
+  if (shouldCelebrateLeagueTitle(titleCalendar, earlySim, 'real-madrid', lastLeague)) {
+    console.error('must not celebrate the league before the final league fixture is consumed');
     process.exitCode = 1;
   }
 }
