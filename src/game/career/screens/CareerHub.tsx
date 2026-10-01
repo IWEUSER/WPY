@@ -3,37 +3,38 @@ import { clubKit } from '../data/clubKits';
 import { getClub, leagueMatchWeeks } from '../data/clubs';
 import { conferenceLabel, leagueDisplayName, mlsConferenceOf } from '../data/leagueFormat';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
-import { describeAvailability, isAvailable } from '../availabilityEngine';
+import { describeAvailability, isAvailable, nextMissDrops } from '../availabilityEngine';
 import { describeInjury } from '../injury';
 import {
   chancesForSquadStatus,
   completedFixtureKindCount,
   completedLeagueFixtureCount,
   describeRotationSitOut,
+  formHighlightIndexes,
   isSquadRotationSitOut,
   isToughMinutesFixture,
+  promotionStreakForStatus,
   SQUAD_STATUS_LABEL,
   squadRoleRatioGuide,
 } from '../squadStatus';
 import { displaySeasonLabel, displaySeasonNumber } from '../seasonDisplay';
-import { clubEligibleForNationalTeam, callUpLeagueRequirement, CALL_UP_MIN_LEAGUE_GAMES, callUpRatio, getNation, isSelectedForNationalTeam, SEASON_1_CALL_UP_MIN_WEEK, selectionRatioForNation } from '../international';
+import { clubEligibleForNationalTeam, CALL_UP_MIN_LEAGUE_GAMES, callUpRatio, getNation, isSelectedForNationalTeam, SEASON_1_CALL_UP_MIN_WEEK, selectionRatioForNation } from '../international';
 import { formatEuros, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
-import { rankLeagueTable, type SeasonStandings } from '../matchEngine';
-import { conferenceTable, ensureInternationalGroup, fixtureTitle, internationalRoundLabel, nextActionableFixture, type SeasonSimState } from '../seasonSim';
+import { ensureInternationalGroup, fixtureTitle, internationalRoundLabel, nextActionableFixture, type SeasonSimState } from '../seasonSim';
 import { nextMatchBriefing, playerGoalsLine, sitOutRecapLine } from '../matchBriefing';
-import { groupPosition, sortGroupTable } from '../internationalTable';
 import { requiredGoalRatio } from '../transfers';
-import { competitionStageLabel } from '../honoursDisplay';
 import { saveNeedsRebuild } from '../rulesStamp';
 import { useCareerStore } from '../store';
 import { DATA_CARD, DATA_INSET } from './dataUi';
-import type { LastMatchResult, SquadStatus } from '../types';
+import type { LastMatchResult, MatchRecord, SquadStatus } from '../types';
 
 const ROLE_LABEL: Record<string, string> = {
   reserve: 'Reserve Team',
   'first-team': 'First Team',
   loan: 'On Loan',
 };
+
+const HUB_NAV_BTN = 'rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white/70';
 
 export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const age = useCareerStore((s) => s.age);
@@ -46,7 +47,6 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const seasonCalendar = useCareerStore((s) => s.seasonCalendar);
   const availability = useCareerStore((s) => s.availability);
   const nationality = useCareerStore((s) => s.nationality);
-  const seasonStandings = useCareerStore((s) => s.seasonStandings);
   const seasonSim = useCareerStore((s) => s.seasonSim);
   const lastMatchSummary = useCareerStore((s) => s.lastMatchSummary);
   const lastMatchResult = useCareerStore((s) => s.lastMatchResult);
@@ -63,6 +63,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const rulesStamp = useCareerStore((s) => s.rulesStamp);
   const advance = useCareerStore((s) => s.advance);
   const openCareerRecord = useCareerStore((s) => s.openCareerRecord);
+  const openTables = useCareerStore((s) => s.openTables);
   const openProfile = useCareerStore((s) => s.openProfile);
   const rebuildThisSeason = useCareerStore((s) => s.rebuildThisSeason);
 
@@ -159,25 +160,20 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
   const transferFee = transferFeeFromValue(marketValue, feeYears);
 
   return (
-    <div className="flex h-full w-full flex-col overflow-y-auto px-5 py-[max(1.25rem,env(safe-area-inset-top))] pb-10 text-white">
-      <div className="mb-4 flex items-center justify-between">
+    <div className="flex h-full w-full flex-col overflow-y-auto px-5 py-[max(1rem,env(safe-area-inset-top))] pb-8 text-white">
+      <div className="mb-2 flex items-center justify-between">
         <button type="button" onClick={onOpenMenu} className="text-xs text-white/40 underline underline-offset-2">
           Menu
         </button>
         <div className="flex items-center gap-2">
           <div className="flex items-center rounded-full bg-black/30 p-0.5 ring-1 ring-white/10">
-            <button
-              type="button"
-              onClick={openCareerRecord}
-              className="rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white/70"
-            >
+            <button type="button" onClick={openCareerRecord} className={HUB_NAV_BTN}>
               Career
             </button>
-            <button
-              type="button"
-              onClick={openProfile}
-              className="rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-200"
-            >
+            <button type="button" onClick={openTables} className={HUB_NAV_BTN}>
+              Tables
+            </button>
+            <button type="button" onClick={openProfile} className={HUB_NAV_BTN}>
               Profile
             </button>
           </div>
@@ -186,32 +182,32 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
       </div>
 
       <div className={DATA_CARD} style={{ borderLeft: `4px solid ${kit.primary}` }}>
-        <p className="text-xs uppercase tracking-wide text-white/40">
+        <p className="text-[10px] uppercase tracking-wide text-white/40">
           {displaySeasonLabel(seasonNumber, { role, careerStart })} · {ROLE_LABEL[role]}
           {` · Week ${week} of ${totalWeeks}`}
         </p>
-        <h1 className="font-display text-2xl font-bold">{club.name}</h1>
-        <p className="text-xs text-white/50">
+        <h1 className="font-display text-xl font-bold leading-tight">{club.name}</h1>
+        <p className="text-[11px] text-white/50">
           {club.country} · {leagueDisplayName(clubLeague ?? club.league)}
           {mlsConferenceOf(club.id) ? ` · ${conferenceLabel(mlsConferenceOf(club.id))}` : ''}
+          {nation ? ` · ${nation.name}` : ''}
         </p>
-        <div className={`mt-2 inline-flex ${DATA_INSET} px-3 py-1.5`}>
+        <div className={`mt-1.5 inline-flex ${DATA_INSET} px-2.5 py-1`}>
           <span className="text-sm font-semibold">
             {role === 'reserve' ? ROLE_LABEL.reserve : SQUAD_STATUS_LABEL[squadStatus]}
           </span>
         </div>
-        {nation && <p className="mt-2 text-xs text-white/50">International: {nation.name}</p>}
-        {parentClub && <p className="mt-1 text-xs text-white/40">On loan from {parentClub.name}</p>}
+        {parentClub && <p className="mt-1 text-[11px] text-white/40">On loan from {parentClub.name}</p>}
         {role !== 'reserve' && (
-          <p className="mt-1 text-xs text-white/50">
+          <p className="mt-1 text-[11px] text-white/50">
             Market value {formatEuros(marketValue)}
             {` · Transfer fee ${transferFee <= 0 ? 'Free' : formatEuros(transferFee)}`}
           </p>
         )}
         {seasonSponsorship > 0 && (
-          <p className="mt-1 text-xs text-white/50">Sponsorship {formatEuros(seasonSponsorship)} this season</p>
+          <p className="mt-1 text-[11px] text-white/50">Sponsorship {formatEuros(seasonSponsorship)} this season</p>
         )}
-        <p className="mt-1 text-xs text-white/50">
+        <p className="mt-1 text-[11px] text-white/50">
           Contract {contractYearsRemaining} year{contractYearsRemaining === 1 ? '' : 's'} left
           {contractYearsRemaining <= 1 ? ' · expiring' : ''}
         </p>
@@ -224,7 +220,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         seasonSim,
         rulesStamp,
       }) && (
-        <div className={`mt-4 ${DATA_CARD} border-amber-400/40`}>
+        <div className={`mt-3 ${DATA_CARD} border-amber-400/40`}>
           <p className="text-xs uppercase tracking-wide text-amber-300/80">Career rules updated</p>
           <p className="mt-1 text-sm text-white/70">
             New leagues and cup calendars are in. Rebuild this season to apply them. Your club, role, and stats stay.
@@ -240,9 +236,9 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
       )}
 
       {briefing && (
-        <div className={`mt-3 ${DATA_CARD} p-3`}>
-          <p className="text-xs uppercase tracking-wide text-white/40">Next match</p>
-          <h2 className="mt-0.5 font-display text-lg font-bold leading-tight">{briefing.opponent}</h2>
+        <div className={`mt-2 ${DATA_CARD} p-3`}>
+          <p className="text-[10px] uppercase tracking-wide text-white/40">Next match</p>
+          <h2 className="mt-0.5 font-display text-base font-bold leading-tight">{briefing.opponent}</h2>
           <p className="mt-0.5 text-sm text-white/70">
             {[briefing.venue, briefing.competition].filter(Boolean).join(' · ')}
           </p>
@@ -259,10 +255,18 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         </div>
       )}
 
+      <RecentForm
+        matches={season.matches}
+        squadStatus={role === 'reserve' ? 'reserve' : squadStatus}
+        openedAs={season.openedSquadStatus}
+        dropWindowFails={availability.windowFails}
+        nextMissDrops={nextMissDrops(availability, squadStatus)}
+      />
+
       <button
         type="button"
         onClick={advance}
-        className="mt-3 w-full rounded-2xl bg-emerald-500 px-6 py-3.5 text-lg font-bold text-black shadow-lg shadow-emerald-500/20 transition active:scale-[0.98]"
+        className="mt-2 w-full rounded-2xl bg-emerald-500 px-6 py-3 text-lg font-bold text-black shadow-lg shadow-emerald-500/20 transition active:scale-[0.98]"
       >
         {available ? (nextFixture ? 'Play Next Match' : 'End of season') : 'Continue'}
         {!briefing && nextFixture ? (
@@ -280,7 +284,7 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
 
       {!briefing && (
         <div
-          className={`mt-3 rounded-xl px-4 py-3 text-sm font-semibold ${
+          className={`mt-2 rounded-xl px-4 py-3 text-sm font-semibold ${
             available ? 'bg-emerald-500/15 text-emerald-300' : 'bg-red-500/15 text-red-300'
           }`}
         >
@@ -292,27 +296,10 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
         <LastMatchRecap result={lastMatchResult} fallback={lastMatchSummary} />
       )}
 
-      {week > 0 && (
-        <div className={`mt-3 ${DATA_INSET}`}>
-          <div className="flex items-baseline justify-between">
-            <span className="text-xs uppercase tracking-wide text-white/40">Season week</span>
-            <span className="text-sm font-bold">
-              {week} / {totalWeeks}
-            </span>
-          </div>
-          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-            <div
-              className="h-full rounded-full bg-emerald-400"
-              style={{ width: `${Math.min(100, (week / Math.max(1, totalWeeks)) * 100)}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      <div className="mt-5 flex flex-col gap-5">
+      <div className="mt-3 flex flex-col gap-3">
         <div className={DATA_CARD}>
           <div className="mb-2 flex items-baseline justify-between">
-            <span className="text-xs uppercase tracking-wide text-white/40">Season ratio</span>
+            <span className="text-xs uppercase tracking-wide text-white/40">Club Season ratio</span>
             <span className="text-sm font-bold">
               {goals} goal{goals === 1 ? '' : 's'} / {played} played
             </span>
@@ -324,10 +311,8 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
             />
           </div>
           <p className="mt-2 text-xs text-white/50">
-            Currently {ratio.toFixed(2)} goals/game
-            {onLoan && parentClub
-              ? ` · ${threshold.toFixed(2)} to return to ${parentClub.name}'s first team`
-              : ''}
+            {ratio.toFixed(2)} / {threshold.toFixed(2)} required
+            {onLoan && parentClub ? ` to return to ${parentClub.name}` : ''}
           </p>
           {(() => {
             const guide = squadRoleRatioGuide(
@@ -335,16 +320,15 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
               onLoan && parentClub ? parentClub.firstTeamGoalRatio : club.firstTeamGoalRatio,
             );
             return (
-              <div className="mt-2 space-y-1 text-xs text-white/55">
-                <p>
-                  {guide.keepLabel}: {guide.keepHint ?? `${guide.keepRatio.toFixed(2)} to keep this role`}
-                </p>
+              <p className="mt-2 text-xs text-white/55">
+                {guide.keepLabel}: {guide.keepHint ?? `${guide.keepRatio.toFixed(2)} to keep this role`}
                 {guide.nextLabel && (
-                  <p>
+                  <>
+                    {' · '}
                     {guide.nextLabel}: {guide.nextHint ?? (guide.nextRatio != null ? `${guide.nextRatio.toFixed(2)} to move up` : 'move up')}
-                  </p>
+                  </>
                 )}
-              </div>
+              </p>
             );
           })()}
         </div>
@@ -356,93 +340,17 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
             clubTier={club.tier}
             league={clubLeague ?? club.league}
             careerRatio={callUpRatio({ season, careerGoals, careerGames })}
-            careerToDateRatio={careerGames > 0 ? careerGoals / careerGames : 0}
             leagueGames={seasonLeagueGames}
-            lastSeasonRatio={
-              seasonHistory.length > 0 && seasonHistory[seasonHistory.length - 1]!.gamesPlayed > 0
-                ? seasonHistory[seasonHistory.length - 1]!.goals / seasonHistory[seasonHistory.length - 1]!.gamesPlayed
-                : null
-            }
             sim={seasonSimWithGroup}
             caps={nationalTeam?.caps ?? 0}
             intlGoals={nationalTeam?.goals ?? 0}
             dropped={Boolean(nationalTeam && !isAvailable(nationalTeam.availability))}
             selected={Boolean(seasonSimWithGroup?.internationalSelected)}
-            includeTable={false}
             publicSeason={publicSeasonNumber}
             calendarWeek={week}
             squadStatus={squadStatus}
           />
         )}
-
-        <details className={DATA_CARD}>
-          <summary className="cursor-pointer list-none text-sm font-semibold text-white/85 [&::-webkit-details-marker]:hidden">
-            Tables
-            <span className="mt-0.5 block text-xs font-medium text-white/40">League, Europe, internationals</span>
-          </summary>
-          <div className="mt-4 flex flex-col gap-5">
-            {seasonStandings && (
-              <StandingsCard
-                standings={seasonStandings}
-                clubId={club.id}
-                cupName={seasonSim?.domesticCup ? DOMESTIC_CUPS[seasonSim.domesticCup]?.name ?? null : null}
-                cupStage={seasonSim?.domesticCupStage ?? null}
-                sim={seasonSimWithGroup}
-                nested
-              />
-            )}
-            {seasonSimWithGroup && (
-              <LeagueTableCard
-                table={seasonSimWithGroup.leagueTable}
-                clubId={club.id}
-                leagueName={leagueDisplayName(clubLeague ?? club.league)}
-              />
-            )}
-            {seasonSimWithGroup && (
-              <EuropeanTableCard
-                table={seasonSimWithGroup.europeanTable ?? []}
-                clubId={club.id}
-                standing={seasonSimWithGroup.europeanStanding}
-                remainingOpponents={(seasonCalendar?.fixtures ?? [])
-                  .map((fixture, index) => ({ fixture, index }))
-                  .filter(({ fixture, index }) =>
-                    fixture.kind === 'continental-group'
-                    && index >= (seasonSimWithGroup.fixtureIndex ?? 0)
-                    && Boolean(fixture.opponentLabel),
-                  )
-                  .map(({ fixture }) => fixture.opponentLabel!)}
-              />
-            )}
-            {nation && role !== 'reserve' && seasonSimWithGroup?.internationalGroup && (
-              <InternationalCard
-                nationId={nationality!}
-                nationName={nation.name}
-                clubTier={club.tier}
-                league={clubLeague ?? club.league}
-                careerRatio={callUpRatio({ season, careerGoals, careerGames })}
-                careerToDateRatio={careerGames > 0 ? careerGoals / careerGames : 0}
-                lastSeasonRatio={
-                  seasonHistory.length > 0 && seasonHistory[seasonHistory.length - 1]!.gamesPlayed > 0
-                    ? seasonHistory[seasonHistory.length - 1]!.goals / seasonHistory[seasonHistory.length - 1]!.gamesPlayed
-                    : null
-                }
-                leagueGames={seasonLeagueGames}
-                sim={seasonSimWithGroup}
-                caps={nationalTeam?.caps ?? 0}
-                intlGoals={nationalTeam?.goals ?? 0}
-                dropped={Boolean(nationalTeam && !isAvailable(nationalTeam.availability))}
-                selected={Boolean(seasonSimWithGroup?.internationalSelected)}
-                includeTable
-                tableOnly
-                publicSeason={publicSeasonNumber}
-                calendarWeek={week}
-                squadStatus={squadStatus}
-              />
-            )}
-          </div>
-        </details>
-
-        <RecentForm matches={season.matches} />
       </div>
     </div>
   );
@@ -465,8 +373,8 @@ function LastMatchRecap({
   const sitOutLine = sitOutRecapLine(result?.sitOutReason);
 
   return (
-    <div className={`mt-3 ${DATA_INSET}`}>
-      <p className="text-xs uppercase tracking-wide text-white/40">Last match</p>
+    <div className={`mt-2 ${DATA_INSET}`}>
+      <p className="text-[10px] uppercase tracking-wide text-white/40">Last match</p>
       <p className="mt-1 text-sm font-semibold text-white/90">{headline}</p>
       {structured && playerLine && <p className="mt-1 text-sm text-white/70">{playerLine}</p>}
       {sitOutLine && (
@@ -483,243 +391,18 @@ function LastMatchRecap({
   );
 }
 
-function StandingsCard({
-  standings,
-  clubId,
-  cupName,
-  cupStage,
-  sim,
-  nested = false,
-}: {
-  standings: SeasonStandings;
-  clubId: string;
-  cupName: string | null;
-  cupStage: string | null;
-  sim: SeasonSimState | null;
-  nested?: boolean;
-}) {
-  const conference = conferenceTable(standings.league, clubId);
-  const inMls = Boolean(mlsConferenceOf(clubId));
-  const conferenceRow = inMls ? conference.find((r) => r.clubId === clubId) : undefined;
-  const overall = standings.league.find((r) => r.clubId === clubId);
-  const us = conferenceRow ?? overall;
-  const europe = standings.europeanStanding;
-  const competitions: { name: string; stage: string }[] = [];
-  if (europe) {
-    competitions.push({
-      name: CONTINENTAL_CUPS[europe.cup]?.name ?? europe.cup,
-      stage: competitionStageLabel(europe.stage, {
-        leaguePhase: europe.cup === 'ucl' || europe.cup === 'uel' || europe.cup === 'uecl',
-      }),
-    });
-  } else if (sim?.leaguesCupStage && sim.leaguesCupStage !== 'not-entered') {
-    competitions.push({
-      name: CONTINENTAL_CUPS['leagues-cup'].name,
-      stage: competitionStageLabel(sim.leaguesCupStage),
-    });
-  }
-  if (cupName && cupStage && cupStage !== 'not-entered' && !competitions.some((c) => c.name === cupName)) {
-    competitions.push({
-      name: cupName,
-      stage: competitionStageLabel(cupStage),
-    });
-  }
-  const intlName = sim?.internationalTournament
-    ? INTERNATIONAL_TOURNAMENTS[sim.internationalTournament]?.name
-    : null;
-  if (intlName && sim?.internationalSelected && sim.internationalStage && sim.internationalStage !== 'not-selected') {
-    competitions.push({
-      name: intlName,
-      stage: competitionStageLabel(sim.internationalReached ?? sim.internationalStage),
-    });
-  }
-
-  return (
-    <div className={nested ? '' : DATA_CARD}>
-      <p className="text-xs uppercase tracking-wide text-white/40">Standings</p>
-      <div className="mt-2 grid grid-cols-2 gap-3">
-        <div>
-          <p className="text-2xl font-extrabold">{us && us.played > 0 ? `${us.position}` : '—'}</p>
-          <p className="text-[10px] uppercase tracking-wide text-white/40">
-            {inMls ? conferenceLabel(mlsConferenceOf(clubId)) : 'League position'}
-          </p>
-          {inMls && overall && overall.played > 0 && (
-            <p className="mt-1 text-xs text-white/50">
-              {overall.position}{ordinal(overall.position)} overall
-            </p>
-          )}
-          {us && (
-            <p className="mt-1 text-xs text-white/50">
-              {us.points} pts · {us.played} played
-            </p>
-          )}
-        </div>
-        <div className="space-y-3">
-          {competitions.length === 0 ? (
-            <div>
-              <p className="text-sm font-semibold leading-tight">Cup</p>
-              <p className="mt-0.5 text-[10px] uppercase tracking-wide text-white/40">—</p>
-            </div>
-          ) : (
-            competitions.map((comp) => (
-              <div key={comp.name}>
-                <p className="text-sm font-semibold leading-tight">{comp.name}</p>
-                <p className="mt-0.5 text-[10px] uppercase tracking-wide text-white/40">{comp.stage}</p>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function LeagueTableRows({
-  table,
-  clubId,
-}: {
-  table: SeasonSimState['leagueTable'];
-  clubId: string;
-}) {
-  const rows = rankLeagueTable(table ?? []).filter((row) => row.played > 0);
-  if (rows.length === 0) return null;
-  return (
-    <table className="mt-3 w-full table-fixed border-collapse text-left text-xs">
-      <thead>
-        <tr className="text-[10px] uppercase tracking-wide text-white/40">
-          <th className="pb-1 font-medium">Club</th>
-          <th className="w-10 pb-1 text-right font-medium">P</th>
-          <th className="w-10 pb-1 text-right font-medium">GD</th>
-          <th className="w-10 pb-1 text-right font-medium">Pts</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row) => {
-          const name = getClub(row.clubId)?.name ?? row.clubId;
-          return (
-            <tr key={row.clubId} className={row.clubId === clubId ? 'font-semibold text-white' : 'text-white/70'}>
-              <td className="py-0.5 pr-2">{row.position}. {name}</td>
-              <td className="py-0.5 text-right tabular-nums">{row.played}</td>
-              <td className="py-0.5 text-right tabular-nums">{row.goalsFor - row.goalsAgainst}</td>
-              <td className="py-0.5 text-right tabular-nums">{row.points}</td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
-  );
-}
-
-function LeagueTableCard({
-  table,
-  clubId,
-  leagueName,
-}: {
-  table: SeasonSimState['leagueTable'];
-  clubId: string;
-  leagueName: string;
-}) {
-  const inMls = Boolean(mlsConferenceOf(clubId));
-  const conference = inMls ? conferenceTable(table ?? [], clubId) : [];
-  const overall = table ?? [];
-  const hasConference = inMls && rankLeagueTable(conference).some((row) => row.played > 0);
-  const hasOverall = rankLeagueTable(overall).some((row) => row.played > 0);
-  if (!hasConference && !hasOverall) return null;
-
-  return (
-    <div className="flex flex-col gap-5">
-      {hasConference && (
-        <div>
-          <p className="text-xs uppercase tracking-wide text-white/40">
-            {leagueName} · {conferenceLabel(mlsConferenceOf(clubId))}
-          </p>
-          <LeagueTableRows table={conference} clubId={clubId} />
-        </div>
-      )}
-      <div>
-        <p className="text-xs uppercase tracking-wide text-white/40">
-          {inMls ? `${leagueName} table` : leagueName}
-        </p>
-        <LeagueTableRows table={overall} clubId={clubId} />
-      </div>
-    </div>
-  );
-}
-
-function EuropeanTableCard({
-  table,
-  clubId,
-  standing,
-  remainingOpponents = [],
-}: {
-  table: SeasonSimState['europeanTable'];
-  clubId: string;
-  standing: SeasonSimState['europeanStanding'];
-  remainingOpponents?: string[];
-}) {
-  const cupName = standing ? (CONTINENTAL_CUPS[standing.cup]?.name ?? standing.cup) : null;
-  const rows = rankLeagueTable(table ?? []);
-  if (!cupName || rows.length === 0) return null;
-  const leaguePhase = standing?.cup === 'ucl' || standing?.cup === 'uel' || standing?.cup === 'uecl';
-
-  return (
-    <div>
-      <p className="text-xs uppercase tracking-wide text-white/40">
-        {cupName}
-        {standing?.stage ? ` · ${competitionStageLabel(standing.stage, { leaguePhase })}` : ''}
-        {leaguePhase || rows.length >= 24 ? ` · ${rows.length} clubs` : ''}
-        {standing?.cup === 'ucl' ? ' · 8 matches' : ''}
-      </p>
-      {remainingOpponents.length > 0 && standing?.cup === 'ucl' && (
-        <p className="mt-1 text-[11px] text-white/50">
-          Remaining ties: {remainingOpponents.join(' · ')}
-        </p>
-      )}
-      <div className="mt-3 max-h-72 overflow-y-auto pr-1">
-      <table className="w-full table-fixed border-collapse text-left text-xs">
-        <thead>
-          <tr className="text-[10px] uppercase tracking-wide text-white/40">
-            <th className="pb-1 font-medium">Club</th>
-            <th className="w-10 pb-1 text-right font-medium">P</th>
-            <th className="w-10 pb-1 text-right font-medium">GD</th>
-            <th className="w-10 pb-1 text-right font-medium">Pts</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => {
-            const name = getClub(row.clubId)?.name ?? row.clubId;
-            return (
-              <tr key={row.clubId} className={row.clubId === clubId ? 'font-semibold text-white' : 'text-white/70'}>
-                <td className="py-0.5 pr-2">{row.position}. {name}</td>
-                <td className="py-0.5 text-right tabular-nums">{row.played}</td>
-                <td className="py-0.5 text-right tabular-nums">{row.goalsFor - row.goalsAgainst}</td>
-                <td className="py-0.5 text-right tabular-nums">{row.points}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      </div>
-    </div>
-  );
-}
-
 function InternationalCard({
   nationId,
   nationName,
   clubTier,
   league,
   careerRatio,
-  careerToDateRatio,
-  lastSeasonRatio,
   leagueGames = 0,
   sim,
   caps,
   intlGoals,
   dropped,
   selected,
-  includeTable = true,
-  tableOnly = false,
   publicSeason = null,
   calendarWeek = 99,
   squadStatus = 'starter',
@@ -729,16 +412,12 @@ function InternationalCard({
   clubTier: 1 | 2 | 3 | 4 | 5;
   league?: string | null;
   careerRatio: number;
-  careerToDateRatio?: number;
-  lastSeasonRatio?: number | null;
   leagueGames?: number;
   sim: SeasonSimState | null;
   caps: number;
   intlGoals: number;
   dropped: boolean;
   selected: boolean;
-  includeTable?: boolean;
-  tableOnly?: boolean;
   publicSeason?: number | null;
   calendarWeek?: number;
   squadStatus?: SquadStatus;
@@ -761,10 +440,9 @@ function InternationalCard({
   const tournamentName = sim?.internationalTournament
     ? INTERNATIONAL_TOURNAMENTS[sim.internationalTournament]?.name
     : null;
-  const group = sim?.internationalGroup;
-  const pos = group ? groupPosition(group, nationId) : 0;
+  const ratioProgress = Math.min(1, bar > 0 ? careerRatio / bar : 0);
   const campaignLine = (() => {
-    if (!clubOk) return `Call-ups are from ${callUpLeagueRequirement(nationId)}.`;
+    if (!clubOk) return null;
     if (waitingForLeagueGames) return `First call-up needs ${CALL_UP_MIN_LEAGUE_GAMES} league games this season (${leagueGames} so far).`;
     if (waitingSeason1) return `Season 1 call-ups open after week ${SEASON_1_CALL_UP_MIN_WEEK}.`;
     if (!sim || !selected || !tournamentName) return `Not selected for ${nationName} this window.`;
@@ -785,16 +463,13 @@ function InternationalCard({
       return `${tournamentName} friendlies before the tournament.`;
     }
     if (sim.internationalStage === 'group') {
-      const place = pos > 0 ? ` · ${pos}${ordinal(pos)} in group ${group?.letter ?? ''}` : '';
-      return `${tournamentName} group: ${sim.groupPoints} pts from ${sim.groupPlayed} games${place}.`;
+      return `${tournamentName} group: ${sim.groupPoints} pts from ${sim.groupPlayed} games.`;
     }
     return `Playing at the ${tournamentName}${sim.internationalStage ? ` — ${internationalRoundLabel(sim.internationalStage as never)}` : ''}.`;
   })();
 
   const statusLine = (() => {
-    if (!clubOk) {
-      return `Need a move to ${callUpLeagueRequirement(nationId)} before ${nationName} will consider you.`;
-    }
+    if (!clubOk) return 'Bigger club required';
     if (squadStatus && squadStatus !== 'starter') {
       return `Call-ups are for starters — currently ${SQUAD_STATUS_LABEL[squadStatus]}.`;
     }
@@ -804,85 +479,27 @@ function InternationalCard({
     if (waitingSeason1) {
       return `International call-ups start after week ${SEASON_1_CALL_UP_MIN_WEEK} in Season 1.`;
     }
-    if (inForm) return `Your ${careerRatio.toFixed(2)} goals/game is enough for ${nationName}.`;
-    return `Need a ${bar.toFixed(2)} goals/game ratio for a call-up — currently ${careerRatio.toFixed(2)}.`;
+    return null;
   })();
-  const ratioBreakdown = (() => {
-    if (caps > 0 || leagueGames >= CALL_UP_MIN_LEAGUE_GAMES) return null;
-    const careerLine = `Career ${(careerToDateRatio ?? careerRatio).toFixed(2)}`;
-    if (lastSeasonRatio == null) return careerLine;
-    return `${careerLine} · Last season ${lastSeasonRatio.toFixed(2)}`;
-  })();
-
-  const showTable = includeTable && Boolean(group);
-
-  if (tableOnly) {
-    if (!showTable || !group) return null;
-    return (
-      <div>
-        <p className="text-xs uppercase tracking-wide text-white/40">{nationName} table</p>
-        <table className="mt-3 w-full table-fixed border-collapse text-left text-xs">
-          <thead>
-            <tr className="text-[10px] uppercase tracking-wide text-white/40">
-              <th className="pb-1 font-medium">{group.kind === 'qualifying' ? 'Qualifying' : `Group ${group.letter}`}</th>
-              <th className="w-10 pb-1 text-right font-medium">P</th>
-              <th className="w-10 pb-1 text-right font-medium">GD</th>
-              <th className="w-10 pb-1 text-right font-medium">Pts</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortGroupTable(group.rows).map((row, i) => (
-              <tr key={row.nationId} className={row.nationId === nationId ? 'font-semibold text-white' : 'text-white/70'}>
-                <td className="py-0.5 pr-2">{i + 1}. {row.name}</td>
-                <td className="py-0.5 text-right tabular-nums">{row.played}</td>
-                <td className="py-0.5 text-right tabular-nums">{row.goalsFor - row.goalsAgainst}</td>
-                <td className="py-0.5 text-right tabular-nums">{row.points}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  }
 
   return (
     <div className={DATA_CARD}>
       <p className="text-xs uppercase tracking-wide text-white/40">{nationName} {tournamentName ? `· ${tournamentName}` : 'call-up'}</p>
-      <p className="mt-1 text-xs text-white/55">
-        {nationName} need {bar.toFixed(2)} goals/game for a call-up
+      <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-white/10">
+        <div
+          className={`h-full rounded-full ${ratioProgress >= 1 ? 'bg-emerald-400' : 'bg-amber-400'}`}
+          style={{ width: `${ratioProgress * 100}%` }}
+        />
+      </div>
+      <p className="mt-2 text-xs text-white/50">
+        {careerRatio.toFixed(2)} / {bar.toFixed(2)} required
       </p>
-      <p className={`mt-1 text-sm font-semibold ${inForm ? 'text-emerald-300' : 'text-white/80'}`}>
-        {statusLine}
-      </p>
-      {ratioBreakdown && <p className="mt-1 text-xs text-white/55">{ratioBreakdown}</p>}
-      {campaignLine && <p className="mt-1 text-xs text-emerald-200/80">{campaignLine}</p>}
-      {group && pos > 0 && (
-        <p className="mt-1 text-xs text-white/60">
-          {group.kind === 'qualifying' ? 'Qualifying' : `Group ${group.letter}`} · {pos}{ordinal(pos)}
+      {statusLine && (
+        <p className={`mt-1 text-sm font-semibold ${inForm && clubOk ? 'text-emerald-300' : 'text-white/80'}`}>
+          {statusLine}
         </p>
       )}
-      {showTable && group && (
-        <table className="mt-3 w-full table-fixed border-collapse text-left text-xs">
-          <thead>
-            <tr className="text-[10px] uppercase tracking-wide text-white/40">
-              <th className="pb-1 font-medium">{group.kind === 'qualifying' ? 'Qualifying' : `Group ${group.letter}`}</th>
-              <th className="w-10 pb-1 text-right font-medium">P</th>
-              <th className="w-10 pb-1 text-right font-medium">GD</th>
-              <th className="w-10 pb-1 text-right font-medium">Pts</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortGroupTable(group.rows).map((row, i) => (
-              <tr key={row.nationId} className={row.nationId === nationId ? 'font-semibold text-white' : 'text-white/70'}>
-                <td className="py-0.5 pr-2">{i + 1}. {row.name}</td>
-                <td className="py-0.5 text-right tabular-nums">{row.played}</td>
-                <td className="py-0.5 text-right tabular-nums">{row.goalsFor - row.goalsAgainst}</td>
-                <td className="py-0.5 text-right tabular-nums">{row.points}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      {campaignLine && <p className="mt-1 text-xs text-emerald-200/80">{campaignLine}</p>}
       {caps > 0 && (
         <p className="mt-1 text-xs text-white/60">
           {caps} cap{caps === 1 ? '' : 's'} · {intlGoals} international goal{intlGoals === 1 ? '' : 's'}
@@ -890,15 +507,6 @@ function InternationalCard({
       )}
     </div>
   );
-}
-
-function ordinal(n: number): string {
-  const v = n % 100;
-  if (v >= 11 && v <= 13) return 'th';
-  if (n % 10 === 1) return 'st';
-  if (n % 10 === 2) return 'nd';
-  if (n % 10 === 3) return 'rd';
-  return 'th';
 }
 
 function SeasonCompetitions({ calendar }: { calendar: SeasonCalendar | null }) {
@@ -926,7 +534,7 @@ function SeasonCompetitions({ calendar }: { calendar: SeasonCalendar | null }) {
     : null;
 
   return (
-    <div className="mt-2 flex flex-wrap gap-1.5">
+    <div className="mt-1.5 flex flex-wrap gap-1">
       {domesticCup && (
         <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/70">
           {DOMESTIC_CUPS[domesticCup].name}
@@ -961,16 +569,41 @@ function SeasonCompetitions({ calendar }: { calendar: SeasonCalendar | null }) {
   );
 }
 
-function RecentForm({ matches }: { matches: { played: boolean; scored: boolean | null }[] }) {
+function RecentForm({
+  matches,
+  squadStatus,
+  openedAs,
+  dropWindowFails,
+  nextMissDrops: dropNext,
+}: {
+  matches: MatchRecord[];
+  squadStatus: SquadStatus;
+  openedAs?: SquadStatus;
+  dropWindowFails: number;
+  nextMissDrops: boolean;
+}) {
   const recent = matches.slice(-8);
   if (recent.length === 0) return null;
+  const offset = matches.length - recent.length;
+  const marks = formHighlightIndexes({
+    matches,
+    status: squadStatus,
+    openedAs,
+    dropWindowFails,
+    nextMissDrops: dropNext,
+  });
+  const promoteSet = new Set(marks.promote);
+  const dropSet = new Set(marks.drop);
+  const promo = promotionStreakForStatus(squadStatus, matches, openedAs);
+  const promoteReady = Boolean(promo.nextLabel && promo.streak === promo.needed - 1);
 
   return (
-    <div className={DATA_CARD}>
-      <p className="mb-2 text-xs uppercase tracking-wide text-white/40">Recent form</p>
-      <div className="flex items-center gap-2">
+    <div className={`mt-2 ${DATA_CARD} p-3`}>
+      <p className="mb-2 text-[10px] uppercase tracking-wide text-white/40">Recent form</p>
+      <div className="flex items-center gap-1.5">
         {recent.map((m, i) => {
-          const key = `${matches.length - recent.length + i}`;
+          const index = offset + i;
+          const key = `${index}`;
           if (!m.played) {
             return (
               <span
@@ -982,19 +615,37 @@ function RecentForm({ matches }: { matches: { played: boolean; scored: boolean |
               </span>
             );
           }
+          const promoteMark = promoteSet.has(index);
+          const dropMark = dropSet.has(index);
+          const scored = Boolean(m.scored);
+          const className = dropMark
+            ? 'bg-red-500 text-white ring-2 ring-red-200'
+            : promoteMark
+              ? 'bg-amber-400 text-black ring-2 ring-amber-200'
+              : scored
+                ? 'bg-emerald-400 text-black'
+                : 'bg-white/10 text-white/50';
           return (
             <span
               key={key}
-              title={m.scored ? 'Scored' : 'Blank'}
-              className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
-                m.scored ? 'bg-emerald-400 text-black' : 'bg-white/10 text-white/50'
-              }`}
+              title={dropMark ? 'A blank next game drops you' : promoteMark ? `Score next game for ${promo.nextLabel}` : scored ? 'Scored' : 'Blank'}
+              className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${className}`}
             >
-              {m.scored ? '⚽' : '✕'}
+              {scored ? '⚽' : '✕'}
             </span>
           );
         })}
       </div>
+      {promoteReady && promo.nextLabel && (
+        <p className="mt-2 text-[11px] font-semibold text-amber-200">
+          Score next game for {promo.nextLabel}
+        </p>
+      )}
+      {dropNext && (
+        <p className="mt-2 text-[11px] font-semibold text-red-300">
+          A blank next game drops you
+        </p>
+      )}
     </div>
   );
 }

@@ -67,12 +67,21 @@ export function firstTitleBeat(trophyName: string): CareerBeat {
   return titleBeat(trophyName, { first: true });
 }
 
-export function soldBeat(clubName: string): CareerBeat {
+export function soldBeat(clubName: string, opts?: { freeAgent?: boolean }): CareerBeat {
+  if (opts?.freeAgent) {
+    return {
+      kind: 'sold',
+      eyebrow: 'Free agent',
+      headline: `${clubName} will not review your contract`,
+      copy: 'You are now a free agent.',
+      portrait: 'club',
+    };
+  }
   return {
     kind: 'sold',
     eyebrow: 'Sold',
     headline: `${clubName} are selling you`,
-    copy: 'The shirt comes off. What you built there travels with you — the next club is a choice, not a favour.',
+    copy: '',
     portrait: 'club',
   };
 }
@@ -127,6 +136,7 @@ export function enqueueEndOfSeasonBeats(
     playerName: string;
     outrightRecords: SeasonLegacyHighlight[];
     soldClubName?: string | null;
+    soldFreeAgent?: boolean;
   },
 ): CareerBeat[] {
   let next = pending ?? [];
@@ -137,7 +147,7 @@ export function enqueueEndOfSeasonBeats(
     next = pushCareerBeat(next, seen, recordBeat(highlight, args.playerName));
   }
   if (args.soldClubName) {
-    next = pushCareerBeat(next, seen, soldBeat(args.soldClubName));
+    next = pushCareerBeat(next, seen, soldBeat(args.soldClubName, { freeAgent: args.soldFreeAgent }));
   }
   return next;
 }

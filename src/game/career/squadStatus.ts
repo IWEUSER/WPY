@@ -442,20 +442,82 @@ export function squadRoleRatioGuide(status: SquadStatus, clubBar: number): {
     return {
       keepLabel: 'Reserve',
       keepRatio: clubBar,
-      keepHint: 'Every second game until you score in 3 consecutive matches',
-      nextLabel: 'Starter',
+      keepHint: 'Score in 3 consecutive games for Starter',
+      nextLabel: null,
       nextRatio: null,
-      nextHint: 'Score in 3 consecutive games for Starter',
     };
   }
   return {
     keepLabel: 'Impact',
     keepRatio: RISING_STAR_MIN_RATIO,
-    keepHint: 'Keeps this season · two chances across league, cups and continentals',
-    nextLabel: 'Starter',
-    nextRatio: clubBar,
-    nextHint: 'Score in 3 consecutive games after becoming Impact',
+    keepHint: 'Score in 3 consecutive games for Starter',
+    nextLabel: null,
+    nextRatio: null,
   };
+}
+
+/** Consecutive scoring looks that count toward the next in-season promotion. */
+export function promotionStreakForStatus(
+  status: SquadStatus,
+  matches: Pick<MatchRecord, 'played' | 'scored' | 'chances'>[] | undefined,
+  openedAs?: SquadStatus,
+): { streak: number; nextLabel: string | null; needed: number } {
+  if (status === 'rising-star') {
+    return { streak: consecutiveScoringGames(matches), nextLabel: 'Impact', needed: IMPACT_STREAK };
+  }
+  if (status === 'reserve') {
+    return { streak: consecutiveScoringGames(matches), nextLabel: 'Starter', needed: STARTER_STREAK };
+  }
+  if (status === 'impact') {
+    return {
+      streak: consecutiveScoringAsImpact(matches, openedAs ?? 'impact'),
+      nextLabel: 'Starter',
+      needed: STARTER_STREAK,
+    };
+  }
+  return { streak: 0, nextLabel: null, needed: 0 };
+}
+
+function trailingLookIndexes(
+  matches: Pick<MatchRecord, 'played' | 'scored' | 'chances'>[],
+  count: number,
+  scored: boolean,
+  afterIndex = -1,
+): number[] {
+  if (count <= 0) return [];
+  const indexes: number[] = [];
+  for (let i = matches.length - 1; i > afterIndex && indexes.length < count; i -= 1) {
+    const match = matches[i];
+    if (!isScoringLook(match)) continue;
+    if ((match.scored === true) !== scored) break;
+    indexes.push(i);
+  }
+  return indexes;
+}
+
+/** Match indexes in recent form that should light up for a promotion chance or a drop. */
+export function formHighlightIndexes(params: {
+  matches: Pick<MatchRecord, 'played' | 'scored' | 'chances'>[];
+  status: SquadStatus;
+  openedAs?: SquadStatus;
+  dropWindowFails: number;
+  nextMissDrops: boolean;
+}): { promote: number[]; drop: number[] } {
+  const promo = promotionStreakForStatus(params.status, params.matches, params.openedAs);
+  const promote = promo.nextLabel && promo.streak === promo.needed - 1
+    ? trailingLookIndexes(
+      params.matches,
+      promo.streak,
+      true,
+      params.status === 'impact' && (params.openedAs === 'rising-star' || params.openedAs === 'reserve')
+        ? (impactPromotionMatchIndex(params.matches) ?? -1)
+        : -1,
+    )
+    : [];
+  const drop = params.nextMissDrops
+    ? trailingLookIndexes(params.matches, params.dropWindowFails, false)
+    : [];
+  return { promote, drop };
 }
 
 export function squadStatusOnArrival(params: {

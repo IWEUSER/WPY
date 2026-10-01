@@ -74,7 +74,18 @@ export function applyMatchResult(
   return { ...state, windowFails };
 }
 
-/** Human-readable status for the career hub UI. */
+/** Games left in the current scoring window before a drop. */
+export function gamesLeftInDropWindow(state: AvailabilityState): number {
+  return Math.max(0, allowanceForPhase(state.phase) - state.windowFails);
+}
+
+/** True when a blank in the next scoring look drops the player. */
+export function nextMissDrops(state: AvailabilityState, squadStatus?: SquadStatus): boolean {
+  if (!availabilityDropsApply(squadStatus) || !isAvailable(state)) return false;
+  return gamesLeftInDropWindow(state) === 1;
+}
+
+/** Human-readable status for the career hub UI. Drop risk lives on Recent form. */
 export function describeAvailability(
   state: AvailabilityState,
   squadStatus?: SquadStatus,
@@ -84,8 +95,5 @@ export function describeAvailability(
     const games = state.bannedGamesRemaining;
     return `Dropped from the squad \u2014 ${games} game${games === 1 ? '' : 's'} remaining`;
   }
-  const allowance = allowanceForPhase(state.phase);
-  const remaining = allowance - state.windowFails;
-  if (state.phase === 0 && state.windowFails === 0) return 'In the squad';
-  return `In the squad \u2014 score within ${remaining} game${remaining === 1 ? '' : 's'} or be dropped`;
+  return 'In the squad';
 }
