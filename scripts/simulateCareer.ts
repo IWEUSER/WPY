@@ -920,15 +920,46 @@ if (lutonClub) {
 {
   const luton = getClub('luton');
   if (luton) {
-    const hydrated = hydrateSeason({
+    const unselected = hydrateSeason({
       seasonNumber: 2,
       club: luton,
       careerGoalRatio: 0.5,
       nationId: 'albania',
     });
-    console.log('Albania at Luton S2 intl selected', hydrated.sim.internationalSelected, '(expect false)');
-    if (hydrated.sim.internationalSelected) {
-      console.error('Albania must not call a player up from a second division');
+    const called = hydrateSeason({
+      seasonNumber: 2,
+      club: luton,
+      careerGoalRatio: 0.5,
+      nationId: 'albania',
+      leagueGames: CALL_UP_MIN_LEAGUE_GAMES,
+      hasBeenCapped: false,
+    });
+    const spainCalled = hydrateSeason({
+      seasonNumber: 2,
+      club: luton,
+      careerGoalRatio: 1,
+      nationId: 'spain',
+      leagueGames: CALL_UP_MIN_LEAGUE_GAMES,
+      hasBeenCapped: true,
+    });
+    console.log(
+      'Albania at Luton S2 start',
+      unselected.sim.internationalSelected,
+      'after 20 league games',
+      called.sim.internationalSelected,
+      'Spain at Luton after 20',
+      spainCalled.sim.internationalSelected,
+    );
+    if (unselected.sim.internationalSelected) {
+      console.error('Albania still waits for 20 league games before the first cap');
+      process.exitCode = 1;
+    }
+    if (!called.sim.internationalSelected) {
+      console.error('nations outside FIFA top 20 must be callable from any club after 20 league games');
+      process.exitCode = 1;
+    }
+    if (spainCalled.sim.internationalSelected) {
+      console.error('Spain must not schedule internationals from the Championship');
       process.exitCode = 1;
     }
   }
