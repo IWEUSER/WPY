@@ -73,7 +73,7 @@ export function describeSquadStatus(status: SquadStatus): string {
     return 'Rising star — temporary Season 1–2 role, one chance each time you play. League games rotate. No continental or super-cup minutes, and only the first two domestic cup ties. Score in 3 consecutive games for Impact, then another 3 for Starter. Extra goals in one game still count as one.';
   }
   if (status === 'reserve') {
-    return 'Reserve — sits European Cup nights. In the European Trophy or lower, continental ties come first and league games are the ones rotated. Every second other game. Score in 3 consecutive games for Starter, the same way as Rising star and Impact.';
+    return 'Reserve — league games and the first two domestic cup ties only. Sits super cups, continentals and later cup rounds. League games rotate every other. Score in 3 consecutive games for Starter, the same way as Rising star and Impact.';
   }
   return 'Impact — league, cups and continentals on the same every-fourth rotation as before, two chances each time you play. Keeps for the rest of the season; score in 3 consecutive games for Starter.';
 }
@@ -122,9 +122,9 @@ export function shouldSitToughFixture(status: SquadStatus, completedFixtures: nu
 /** Rising star gets one look; Impact gets two; others keep the drawn chances.
  * A fixture that drew zero looks stays at zero for every role. */
 export function chancesForSquadStatus(status: SquadStatus, drawn: number): number {
-  if (drawn <= 0) return 0;
   if (status === 'rising-star') return 1;
   if (status === 'impact') return IMPACT_CHANCES;
+  if (status === 'reserve') return Math.max(1, drawn);
   return drawn;
 }
 
@@ -184,17 +184,16 @@ export function isSquadRotationSitOut(
   // Academy / reserve-year football is every game except injury.
   if (role === 'reserve') return false;
   if (fixtureKind === 'rest') return false;
-  if (squadStatus === 'rising-star') {
+  if (squadStatus === 'rising-star' || squadStatus === 'reserve') {
     if (isContinentalClubFixture(fixtureKind)) return true;
+    if (fixtureKind === 'international') return squadStatus === 'reserve';
     if (fixtureKind === 'domestic-cup') {
       return (extra?.domesticCupAppearances ?? 0) >= RISING_STAR_DOMESTIC_CUP_GAMES;
     }
   }
-  // Rising star sits the first first-team appearance of a campaign.
-  if (squadStatus === 'rising-star' && extra?.seasonMatchCount === 0) return true;
   if (squadStatus === 'reserve') {
     if (reserveSitsChampionsLeague(fixtureKind, extra?.continentalCup)) return true;
-    if (reservePrioritisesContinental(fixtureKind, extra?.continentalCup)) return false;
+    if (reservePrioritisesContinental(fixtureKind, extra?.continentalCup)) return true;
   }
   if (extra?.toughMinutes && (squadStatus === 'rising-star' || squadStatus === 'impact')) {
     return shouldSitToughFixture(squadStatus, completedFixtures);

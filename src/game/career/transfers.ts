@@ -10,6 +10,7 @@ import {
   DEFAULT_CONTRACT_YEARS,
   FIRST_CONTRACT_YEARS,
   RESERVE_CONTRACT_YEARS,
+  RESERVE_WEEKLY_WAGE,
   ELITE_TRANSFER_VALUE_FLOOR,
   formAdjustedRatio,
   leagueValueWeight,
@@ -367,18 +368,10 @@ function withStepDownStarterClubs(
 }
 
 /** Permanent bids stay at six. Keep most market transfers; step-down only fills the last slots. */
-function clubsForPermanentOffers(transfers: Club[], stepDown: Club[]): Club[] {
+function clubsForPermanentOffers(transfers: Club[], _stepDown: Club[] = []): Club[] {
   const seen = new Set<string>();
   const out: Club[] = [];
-  const stepKeep = Math.min(2, stepDown.length);
-  const marketKeep = TRANSFER_OFFER_COUNT - stepKeep;
   for (const club of transfers) {
-    if (out.length >= marketKeep) break;
-    if (seen.has(club.id)) continue;
-    seen.add(club.id);
-    out.push(club);
-  }
-  for (const club of [...stepDown, ...transfers]) {
     if (out.length >= TRANSFER_OFFER_COUNT) break;
     if (seen.has(club.id)) continue;
     seen.add(club.id);
@@ -965,7 +958,13 @@ interface OfferTermExtras {
 }
 
 function loanSquadStatus(club: Club, extras?: OfferTermExtras): SquadStatus {
-  if (isPeerClub(extras?.originClub, club)) return 'rising-star';
+  if (isPeerClub(extras?.originClub, club)) {
+    if (extras?.allowRisingStar === false) {
+      const stay = extras.nextIfStay ?? extras.originStatus ?? 'reserve';
+      return stay === 'rising-star' || stay === 'impact' ? 'reserve' : stay;
+    }
+    return 'rising-star';
+  }
   return 'starter';
 }
 
@@ -1230,7 +1229,8 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     };
     if (stay.weeklyWage == null) {
       const nextStatus = stay.squadStatus ?? currentStatus;
-      if (nextStatus === 'starter') {
+      const currentPay = params.weeklyWage ?? 0;
+      if (nextStatus === 'starter' && (currentStatus !== 'starter' || currentPay <= RESERVE_WEEKLY_WAGE)) {
         const starterWage = weeklyWageForTransferOffer(
           club,
           value,
@@ -1240,7 +1240,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
           nextLeague,
           recentAggregateRatio(seasons),
         );
-        stay.weeklyWage = Math.max(params.weeklyWage ?? 0, starterWage);
+        stay.weeklyWage = Math.max(currentPay, starterWage);
       } else {
         stay.weeklyWage = params.weeklyWage;
       }
@@ -1560,7 +1560,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       ...offerTerms(loans, 'loan', value, 0, age, loanYears, offerExtras),
       ...offerTerms(clubsForPermanentOffers(transfers, stepDown), 'permanent', value, fee, age, permYears, offerExtras),
     ]);
-    if (includeOpeningLoans && loans.length > 0) {
+    if (includeOpeningLoans && firstPublic && loans.length > 0) {
       return {
         headline: `Stay at ${club.name}, or take a loan`,
         detail: `Your ratio slipped to ${ratio.toFixed(2)} goals/game, below the ${threshold.toFixed(2)} they expect. A loan keeps ${club.name} as your parent club. You can also stay on the years left on your deal — a transfer is not required until the contract expires.`,

@@ -64,7 +64,7 @@ function OfferCard({
         </p>
         <p className={`mt-1 text-white/40 ${compact ? 'text-[10px]' : 'text-[11px]'}`}>
           {isCurrentClubRenewal
-            ? 'Your club’s salary offer'
+            ? 'New contract offer'
             : homeWage != null && homeWage > 0
               ? wageVsHome(offer.weeklyWage, homeWage)
               : 'Agree personal terms'}
@@ -141,11 +141,16 @@ export default function TransferChoiceScreen() {
         <h1 className="font-display text-2xl font-bold">Choose your next move</h1>
         <p className="mt-2 max-w-sm text-sm text-white/60">{KIND_LABEL[pending.kind] ?? 'Clubs'}</p>
         <p className="mt-2 max-w-sm text-xs text-white/45">
-          Compare each weekly wage with your current club’s salary offer before you decide.
+          Compare each weekly wage with your current contract before you decide.
         </p>
-        {homeWage != null && homeWage > 0 && (
+        {keepDealWage > 0 && (
           <p className="mt-2 text-sm font-semibold text-emerald-200/90">
-            Your club’s offer · {formatWeeklyWage(homeWage)}
+            Your current contract · {formatWeeklyWage(keepDealWage)}
+          </p>
+        )}
+        {renewalOffer && renewalOffer.weeklyWage > 0 && renewalOffer.weeklyWage !== keepDealWage && (
+          <p className="text-xs text-white/50">
+            New contract offer · {formatWeeklyWage(renewalOffer.weeklyWage)}
           </p>
         )}
       </div>
@@ -167,7 +172,7 @@ export default function TransferChoiceScreen() {
               clubId={clubId}
               onPick={(id) => resolveTransferChoice(id)}
               likelyStatus={likelyFor(renewalOffer)}
-              homeWage={homeWage}
+              homeWage={keepDealWage > 0 ? keepDealWage : homeWage}
             />
           )}
           {showStay && stayClub && (
@@ -188,11 +193,7 @@ export default function TransferChoiceScreen() {
                     : pending.stay?.clubId && pending.stay.clubId !== clubId
                       ? 'Return to parent club'
                       : 'Stay at this club'}
-                  {renewalOffer
-                    ? (keepDealWage > 0 ? ` · ${formatWeeklyWage(keepDealWage)}` : '')
-                    : pending.stay?.weeklyWage != null && pending.stay.weeklyWage > 0
-                      ? ` · ${formatWeeklyWage(pending.stay.weeklyWage)}`
-                      : ''}
+                  {keepDealWage > 0 ? ` · ${formatWeeklyWage(keepDealWage)}` : ''}
                   {` · ${SQUAD_STATUS_LABEL[nextIfStay]}`}
                 </p>
               </div>
@@ -215,7 +216,7 @@ export default function TransferChoiceScreen() {
               clubId={clubId}
               onPick={(id) => resolveTransferChoice(id)}
               likelyStatus={likelyFor(offer)}
-              homeWage={homeWage}
+              homeWage={keepDealWage > 0 ? keepDealWage : homeWage}
             />
           ))}
         </div>
