@@ -1419,13 +1419,18 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
         ),
       };
     }
+    const parentName = parentClub?.name ?? 'Your parent club';
     return {
       headline: loansUsed >= MAX_CONSECUTIVE_LOANS
         ? 'Two consecutive loans - you are being sold'
-        : `${parentClub?.name ?? 'Your parent club'} are selling you`,
+        : fee <= 0
+          ? `${parentName} will not review your contract`
+          : `${parentName} are selling you`,
       detail: loansUsed >= MAX_CONSECUTIVE_LOANS
-        ? `${parentClub?.name ?? 'Your parent club'} will not send you on a third consecutive loan. They are selling you.`
-        : `${parentClub?.name ?? 'Your parent club'} will not bring you back into the first team.`,
+        ? `${parentName} will not send you on a third consecutive loan. They are selling you.`
+        : fee <= 0
+          ? `${parentName} will not bring you back into the first team. You are now a free agent.`
+          : `${parentName} will not bring you back into the first team.`,
       pendingTransfer: pendingFromOffers(
         'sold',
         fee <= 0

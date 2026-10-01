@@ -22,7 +22,7 @@ import { crowdSwatch, kitFromColor, kitFromScheme, luminance } from '../src/game
 import { AFRICA_SKIN_TONES, createPitchView, idleKeeperPose, MAX_SHOT_DISTANCE_M, MIN_SHOT_DISTANCE_M, PLAYER_SKIN_TONES, pickPlayerLook, pickPlayerSkin, SHORTS_HALF_H, THIGH_SHARE } from '../src/game/shooting/render';
 import { appearanceRegionForNation, HAIR_SWATCHES, isBlackHair, isBlondeHair, isFairSkin, SKIN_SWATCHES } from '../src/game/shooting/appearance';
 import { practiceChanceOptions, PRACTICE_CHANCES, rollChanceSetup } from '../src/game/shooting/chanceSetup';
-import { applyMatchResult, availabilityDropsApply, createAvailability, describeAvailability } from '../src/game/career/availabilityEngine';
+import { applyMatchResult, availabilityDropsApply, createAvailability, describeAvailability, nextMissDrops } from '../src/game/career/availabilityEngine';
 import { useCareerStore } from '../src/game/career/store';
 import { standBottomY, crowdCellSize, pitchQualityFromStrength, stadiumLayout, stadiumRoofBand } from '../src/game/shooting/stadium';
 import {
@@ -84,7 +84,7 @@ import {
 } from '../src/game/career/trial';
 import { isHomeLeagueNation, isSaudiTrialClub, nationUsesMlsLower, pickGeographicTrialClubs, trialDestinationCountries, youthTierForNation, youthTrialsAreMlsOnly } from '../src/game/career/trialGeography';
 import { nextYouthKnockoutRound, pickYouthGroupOpponents, pickYouthKnockoutOpponent, youthMaxGames } from '../src/game/career/youthTournament';
-import { chancesForSquadStatus, consecutiveScoringAsImpact, consecutiveScoringGames, describeSquadStatus, IMPACT_CHANCES, IMPACT_STREAK, isContinentalClubFixture, isLowerDivisionLoan, isSquadRotationSitOut, isToughMinutesFixture, nextSquadStatusAfterSeason, openingSquadStatus, promoteSquadStatusDuringSeason, reservePrioritisesContinental, reserveSitsChampionsLeague, RISING_STAR_DOMESTIC_CUP_GAMES, RISING_STAR_MIN_RATIO, ROLE_REVIEW_WEEK, seasonOverridesRatioBar, shouldSitLeagueFixture, shouldSitToughFixture, squadStatusOnArrival, STARTER_STREAK, youthRolesAllowed } from '../src/game/career/squadStatus';
+import { chancesForSquadStatus, consecutiveScoringAsImpact, consecutiveScoringGames, describeSquadStatus, formHighlightIndexes, IMPACT_CHANCES, IMPACT_STREAK, isContinentalClubFixture, isLowerDivisionLoan, isSquadRotationSitOut, isToughMinutesFixture, nextSquadStatusAfterSeason, openingSquadStatus, promoteSquadStatusDuringSeason, promotionStreakForStatus, reservePrioritisesContinental, reserveSitsChampionsLeague, RISING_STAR_DOMESTIC_CUP_GAMES, RISING_STAR_MIN_RATIO, ROLE_REVIEW_WEEK, seasonOverridesRatioBar, shouldSitLeagueFixture, shouldSitToughFixture, squadRoleRatioGuide, squadStatusOnArrival, STARTER_STREAK, youthRolesAllowed } from '../src/game/career/squadStatus';
 import { OPENING_ROLE_CARDS } from '../src/game/career/openingRoleCopy';
 import { honourArtKind } from '../src/game/career/honourArt';
 import { needsSeasonTwoPaywall, SEASON_PAYWALL_LEAD, SEASON_PAYWALL_POINTS } from '../src/game/career/seasonPaywall';
@@ -2088,6 +2088,39 @@ if (salePerms.some((o) => {
   console.log('reserve-path two-loan sale tiers', saleOfferTiers, loanSale.pendingTransfer?.kind);
   if (loanSale.pendingTransfer?.kind !== 'sold' || saleOfferTiers.length !== 1) {
     console.error('after two failed loans the sale window must stay on one ratio-earned band');
+    process.exitCode = 1;
+  }
+}
+
+{
+  const parentMiss = resolveSeasonTransition({
+    season: {
+      ...dummySeason,
+      clubId: 'cremonese',
+      role: 'loan',
+      goals: 4,
+      gamesPlayed: 30,
+      leagueGoals: 4,
+    },
+    role: 'loan',
+    clubId: 'cremonese',
+    parentClubId: 'inter',
+    seasonsAtCurrentClub: 1,
+    age: 19,
+    careerGoals: 12,
+    careerGames: 50,
+    nationality: 'italy',
+    loansUsed: 1,
+    homeContractYearsRemaining: 0,
+    contractYearsRemaining: 0,
+  });
+  if (
+    parentMiss.pendingTransfer?.kind !== 'sold'
+    || !/will not review your contract/i.test(parentMiss.headline)
+    || !/free agent/i.test(parentMiss.detail ?? '')
+    || /Cremona are selling you/i.test(parentMiss.headline)
+  ) {
+    console.error('a parent-club loan miss with an expired contract must be a free-agent exit from the parent club');
     process.exitCode = 1;
   }
 }
@@ -8985,9 +9018,10 @@ console.log('\n--- Club cups, paced tables, transfers, injuries, and elite score
   if (
     twoCityBlanks.bannedGamesRemaining !== 0
     || twoCityBlanks.windowFails !== 2
-    || !/score within 1 game/i.test(describeAvailability(twoCityBlanks, 'rising-star'))
+    || describeAvailability(twoCityBlanks, 'rising-star') !== 'In the squad'
+    || !nextMissDrops(twoCityBlanks, 'rising-star')
   ) {
-    console.error('two blanks as a Rising star must warn that the next miss drops the player');
+    console.error('two blanks as a Rising star must keep In the squad while the next miss drops');
     process.exitCode = 1;
   }
   if (!/dropped from the squad/i.test(describeAvailability(youthBlanks, 'rising-star'))) {
@@ -9051,6 +9085,57 @@ console.log('\n--- Career beats, chance cards, Europe tables, neutral boards ---
   const soldAgain = pushCareerBeat(sold, [], soldBeat('Bayern Munich'));
   if (soldAgain.length !== 2) {
     console.error('being sold can happen more than once');
+    process.exitCode = 1;
+  }
+  const freeAgentBeat = soldBeat('Milan Blue', { freeAgent: true });
+  if (
+    freeAgentBeat.eyebrow !== 'Free agent'
+    || !/will not review your contract/i.test(freeAgentBeat.headline)
+    || !/free agent/i.test(freeAgentBeat.copy)
+    || /shirt comes off/i.test(soldBeat('Cremona').copy)
+  ) {
+    console.error('a parent-club loan miss with no fee must be a free-agent beat, not a loan-club sale');
+    process.exitCode = 1;
+  }
+  const reserveGuide = squadRoleRatioGuide('reserve', 0.5);
+  const impactGuide = squadRoleRatioGuide('impact', 0.5);
+  if (
+    reserveGuide.keepHint !== 'Score in 3 consecutive games for Starter'
+    || reserveGuide.nextLabel != null
+    || impactGuide.keepHint !== 'Score in 3 consecutive games for Starter'
+    || impactGuide.nextLabel != null
+  ) {
+    console.error('Reserve and Impact season-ratio hints must be one Starter line');
+    process.exitCode = 1;
+  }
+  const promoLooks = [
+    { matchNumber: 1, played: true, scored: true, chances: 1 },
+    { matchNumber: 2, played: false, scored: null, chances: 0 },
+    { matchNumber: 3, played: true, scored: true, chances: 1 },
+  ];
+  const promoMarks = formHighlightIndexes({
+    matches: promoLooks,
+    status: 'reserve',
+    dropWindowFails: 0,
+    nextMissDrops: false,
+  });
+  const promo = promotionStreakForStatus('reserve', promoLooks);
+  if (promo.streak !== 2 || promo.nextLabel !== 'Starter' || promoMarks.promote.length !== 2) {
+    console.error('two consecutive scoring games must light up Recent form for a Starter chance');
+    process.exitCode = 1;
+  }
+  const dropLooks = [
+    { matchNumber: 1, played: true, scored: false, chances: 1 },
+    { matchNumber: 2, played: true, scored: false, chances: 1 },
+  ];
+  const dropMarks = formHighlightIndexes({
+    matches: dropLooks,
+    status: 'rising-star',
+    dropWindowFails: 2,
+    nextMissDrops: true,
+  });
+  if (dropMarks.drop.length !== 2) {
+    console.error('two blanks with one game left must light up Recent form for a drop');
     process.exitCode = 1;
   }
   if (retirementBeat('Alex', 'Inter Miami').eyebrow !== 'Season 20') {

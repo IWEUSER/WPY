@@ -202,6 +202,7 @@ export type CareerPhase =
   | 'season-summary'
   | 'transfer-choice'
   | 'career'
+  | 'tables'
   | 'profile'
   | 'legacy'
   | 'career-end'

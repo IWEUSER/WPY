@@ -1023,6 +1023,7 @@ interface CareerActions {
   continuePastSeasonPaywall: () => void;
   backFromSeasonPaywall: () => void;
   openCareerRecord: () => void;
+  openTables: () => void;
   openProfile: () => void;
   returnFromProfile: () => void;
   openLegacy: () => void;
@@ -2212,7 +2213,11 @@ export const useCareerStore = create<CareerStore>()(
               },
               finishedSeason,
             ),
-            soldClubName: transition.pendingTransfer?.kind === 'sold' && club ? club.name : null,
+            soldClubName: transition.pendingTransfer?.kind === 'sold'
+              ? (state.role === 'loan' && parent ? parent.name : club?.name ?? null)
+              : null,
+            soldFreeAgent: transition.pendingTransfer?.kind === 'sold'
+              && (transition.pendingTransfer.offers ?? []).every((offer) => offer.fee <= 0),
           });
           return {
             seasonHistory,
@@ -2570,6 +2575,8 @@ export const useCareerStore = create<CareerStore>()(
       },
 
       openCareerRecord: () => set({ phase: 'career' }),
+
+      openTables: () => set({ phase: 'tables' }),
 
       openProfile: () =>
         set((state) => ({

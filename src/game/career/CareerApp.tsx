@@ -10,6 +10,7 @@ import OpeningRoleScreen from './screens/OpeningRoleScreen';
 import SeasonPaywallScreen from './screens/SeasonPaywallScreen';
 import CareerHub from './screens/CareerHub';
 import CareerRecordScreen from './screens/CareerRecordScreen';
+import TablesScreen from './screens/TablesScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import LegacyScreen from './screens/LegacyScreen';
 import CareerEndScreen from './screens/CareerEndScreen';
@@ -161,6 +162,8 @@ export default function CareerApp() {
       );
     case 'career':
       return <CareerRecordScreen />;
+    case 'tables':
+      return <TablesScreen />;
     case 'profile':
       return <ProfileScreen />;
     case 'legacy':

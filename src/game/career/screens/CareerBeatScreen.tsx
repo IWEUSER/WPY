@@ -21,10 +21,13 @@ export default function CareerBeatScreen({ beat }: { beat: CareerBeat }) {
   const acknowledgeBeat = useCareerStore((s) => s.acknowledgeBeat);
   const playerName = useCareerStore((s) => s.playerName);
   const clubId = useCareerStore((s) => s.clubId);
+  const parentClubId = useCareerStore((s) => s.parentClubId);
+  const role = useCareerStore((s) => s.role);
   const nationality = useCareerStore((s) => s.nationality);
   const playerSkin = useCareerStore((s) => s.playerSkin);
   const playerHair = useCareerStore((s) => s.playerHair);
-  const club = clubId ? getClub(clubId) : undefined;
+  const portraitClubId = beat.kind === 'sold' && role === 'loan' && parentClubId ? parentClubId : clubId;
+  const club = portraitClubId ? getClub(portraitClubId) : undefined;
   const nation = nationality ? getNation(nationality) : undefined;
   const look = playerSkin && playerHair ? { skin: playerSkin, hair: playerHair } : null;
   const showClub = beat.portrait === 'club' || beat.portrait === 'both';
@@ -47,7 +50,9 @@ export default function CareerBeatScreen({ beat }: { beat: CareerBeat }) {
             look={look}
           />
         )}
-        <p className="mt-5 text-sm leading-relaxed text-white/70">{beat.copy}</p>
+        {beat.copy.trim() ? (
+          <p className="mt-5 text-sm leading-relaxed text-white/70">{beat.copy}</p>
+        ) : null}
       </div>
       <button
         type="button"
