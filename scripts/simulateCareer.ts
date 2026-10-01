@@ -4976,9 +4976,12 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
       console.error('a €10m+ Rising star must still see at least one bid that follows market value');
       process.exitCode = 1;
     }
-    if (risingS1Perms.length > 0 && risingS1Perms.every((o) => (getClub(o.clubId)?.tier ?? 5) >= 5)) {
-      console.error('permanent bids for a valuable Rising star must follow market-value clubs, not only lower-level sides');
-      process.exitCode = 1;
+    if (risingS1Perms.length > 0) {
+      const risingTiers = [...new Set(risingS1Perms.map((o) => getClub(o.clubId)?.tier ?? 5))];
+      if (risingTiers.length > 1) {
+        console.error('Season 1 transfer offers must stay in one quality band');
+        process.exitCode = 1;
+      }
     }
 
     const risingS2 = resolveSeasonTransition({
