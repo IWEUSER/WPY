@@ -8371,9 +8371,9 @@ console.log('\n--- Kits, cup nights, FA Cup semis, sun, World Cup copy, African 
     || peru.pattern !== 'center'
     || peru.shorts !== '#FFFFFF'
     || peru.socks !== '#FFFFFF'
-    || peru.sleeves !== '#D91023'
+    || peru.sleeves !== '#FFFFFF'
   ) {
-    console.error('Peru must wear a white shirt with a red centre stripe, white shorts and white socks');
+    console.error('Peru must wear a white shirt with a red centre stripe, white sleeves, white shorts and white socks');
     process.exitCode = 1;
   }
   if (
@@ -8706,13 +8706,13 @@ console.log('\n--- Kits, cup nights, FA Cup semis, sun, World Cup copy, African 
     process.exitCode = 1;
   }
   if (
-    usaKit.pattern !== 'band'
+    usaKit.pattern !== 'hoops'
     || usaKit.primary !== '#FFFFFF'
     || usaKit.secondary !== '#BF0A30'
     || usaKit.shorts !== '#002868'
     || usaKit.socks !== '#FFFFFF'
   ) {
-    console.error('United States must wear a white shirt with a red mid-band, navy shorts and white socks');
+    console.error('United States must wear a white shirt with red hoops, navy shorts and white socks');
     process.exitCode = 1;
   }
   if (cameroonKit.shorts !== '#C8102E' || cameroonKit.socks !== '#FCD116' || egyptKit.socks !== '#111111') {

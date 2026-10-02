@@ -168,7 +168,7 @@ const PATTERN: Record<string, ShirtPattern> = {
   paraguay: 'vertical',
   peru: 'center',
   norway: 'band',
-  'united-states': 'band',
+  'united-states': 'hoops',
 };
 
 const SHORTS: Record<string, string> = {
@@ -204,7 +204,7 @@ const SHORTS: Record<string, string> = {
 };
 
 const SLEEVES: Record<string, string> = {
-  peru: '#D91023',
+  peru: '#FFFFFF',
 };
 
 const SOCKS: Record<string, string> = {
