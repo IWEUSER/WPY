@@ -317,7 +317,7 @@ export function applyCareerLayoutPreview(): void {
       })
     : null;
 
-  const isTrialPreview = preview === 'trial' || preview === 'trial-england' || preview === 'trial-ireland';
+  const isTrialPreview = preview === 'trial' || preview === 'trial-england' || preview === 'trial-ireland' || preview === 'trial-argentina';
   const isYouthPreview = preview === 'youth';
   const isYouthNextPreview = preview === 'youth-next';
   const isClubTrialPreview = preview === 'club-trial';
@@ -328,6 +328,8 @@ export function applyCareerLayoutPreview(): void {
     ? 'england'
     : preview === 'trial-ireland'
       ? 'republic-of-ireland'
+      : preview === 'trial-argentina'
+        ? 'argentina'
       : preview === 'mls'
         ? 'united-states'
         : preview === 'saudi'
@@ -350,6 +352,8 @@ export function applyCareerLayoutPreview(): void {
         }
       : preview === 'trial-ireland'
         ? { ...youth, goals: 7, youthGoals: 7, gamesPlayed: 7, qualified: true, eliminated: true }
+        : preview === 'trial-argentina'
+          ? { ...youth, goals: 1, youthGoals: 1, gamesPlayed: 7, qualified: true, eliminated: true }
         : { ...youth, goals: 6, youthGoals: 6, gamesPlayed: 7, qualified: true };
     if (isYouthPreview) openingCampaign = youth;
     else if (isYouthNextPreview) {
@@ -400,6 +404,8 @@ export function applyCareerLayoutPreview(): void {
     || preview === 'kit-ajax' || preview === 'kit-psg' || preview === 'kit-monaco'
     || preview === 'kit-galaxy' || preview === 'kit-river' || preview === 'kit-boca'
     || preview === 'kit-santos' || preview === 'kit-espanyol'
+    || preview === 'kit-sao-paulo' || preview === 'kit-gremio' || preview === 'kit-vasco'
+    || preview === 'match-norway' || preview === 'match-usa'
     || preview === 'cup-pens';
   let matchFixtureIndex = Math.max(0, calendar.fixtures.findIndex((f) => f.kind !== 'rest'));
   if (preview === 'match' || preview === 'match-away' || preview === 'match-local' || preview === 'match-night') {
@@ -553,7 +559,7 @@ export function applyCareerLayoutPreview(): void {
       fx.isHome = true;
       fx.playerChances = 2;
     }
-  } else if (preview === 'match-sweden' || preview === 'match-poland' || preview === 'match-brazil' || preview === 'match-colombia' || preview === 'match-peru' || preview === 'match-paraguay') {
+  } else if (preview === 'match-sweden' || preview === 'match-poland' || preview === 'match-brazil' || preview === 'match-colombia' || preview === 'match-peru' || preview === 'match-paraguay' || preview === 'match-norway' || preview === 'match-usa') {
     const idx = calendar.fixtures.findIndex((f) => f.kind === 'international');
     if (idx >= 0) matchFixtureIndex = idx;
     const fx = calendar.fixtures[matchFixtureIndex];
@@ -567,6 +573,10 @@ export function applyCareerLayoutPreview(): void {
             ? { id: 'peru', label: 'Peru' }
             : preview === 'match-paraguay'
               ? { id: 'paraguay', label: 'Paraguay' }
+            : preview === 'match-norway'
+              ? { id: 'norway', label: 'Norway' }
+            : preview === 'match-usa'
+              ? { id: 'united-states', label: 'United States' }
             : { id: 'brazil', label: 'Brazil' };
     if (fx) {
       fx.kind = 'international';
@@ -710,6 +720,7 @@ export function applyCareerLayoutPreview(): void {
     preview === 'kit-ajax' || preview === 'kit-psg' || preview === 'kit-monaco'
     || preview === 'kit-galaxy' || preview === 'kit-river' || preview === 'kit-boca'
     || preview === 'kit-santos' || preview === 'kit-espanyol'
+    || preview === 'kit-sao-paulo' || preview === 'kit-gremio' || preview === 'kit-vasco'
   ) {
     const idx = calendar.fixtures.findIndex((f) => f.kind === 'league' && f.isHome);
     if (idx >= 0) matchFixtureIndex = idx;
@@ -722,6 +733,9 @@ export function applyCareerLayoutPreview(): void {
       : preview === 'kit-river' ? { id: 'river-plate', label: 'Buenos Aires Red' }
       : preview === 'kit-boca' ? { id: 'boca-juniors', label: 'Buenos Aires Blue' }
       : preview === 'kit-santos' ? { id: 'santos', label: 'Santos' }
+      : preview === 'kit-sao-paulo' ? { id: 'sao-paulo', label: 'Sao Paulo' }
+      : preview === 'kit-gremio' ? { id: 'gremio', label: 'Gremio' }
+      : preview === 'kit-vasco' ? { id: 'vasco', label: 'Vasco da Gama' }
       : { id: 'espanyol', label: 'Espanyol' };
     if (fx) {
       fx.kind = 'league';
@@ -1283,10 +1297,10 @@ export function applyCareerLayoutPreview(): void {
       ? 'republic-of-ireland'
       : preview === 'trial-england' || preview === 'mls'
         ? (preview === 'trial-england' ? 'england' : 'united-states')
+        : preview === 'trial-argentina' || preview === 'argentina'
+          ? 'argentina'
         : preview === 'flamengo'
           ? 'brazil'
-        : preview === 'argentina'
-          ? 'argentina'
         : preview === 'liga-mx'
           ? 'mexico'
         : preview === 'saudi'

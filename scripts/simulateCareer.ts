@@ -1351,24 +1351,47 @@ if (nationUsesMlsLower('ghana') || nationUsesMlsLower('brazil') || !nationUsesMl
 }
 {
   const brazilLower = pickGeographicTrialClubs(5, 'brazil', [], 3);
+  const argentinaLower = pickGeographicTrialClubs(5, 'argentina', [], 3);
+  const colombiaLower = pickGeographicTrialClubs(5, 'colombia', [], 3);
+  const uruguayLower = pickGeographicTrialClubs(5, 'uruguay', [], 3);
   const usLower = pickGeographicTrialClubs(5, 'united-states', [], 3);
   const brazilLooks = offerClubsForTrial(0, 3, 'brazil', 7);
+  const argentinaOneGoal = offerClubsForTrial(1, 3, 'argentina', 7);
   console.log(
     'Brazil Lower',
-    brazilLower.map((c) => `${c.id}:${c.league}:${c.tier}`),
+    brazilLower.map((c) => `${c.id}:${c.country}:${c.league}:${c.tier}`),
+    'Argentina 1-goal',
+    argentinaOneGoal.map((c) => `${c.id}:${c.country}:${c.league}:${c.tier}`),
+    'Uruguay Lower',
+    uruguayLower.map((c) => `${c.id}:${c.country}:${c.league}`),
     'US Lower',
     usLower.map((c) => `${c.id}:${c.league}`),
     'Brazil 0-goal looks',
-    brazilLooks.map((c) => `${c.id}:${c.league}:${c.tier}`),
+    brazilLooks.map((c) => `${c.id}:${c.country}:${c.league}:${c.tier}`),
   );
-  const southAmericanLower = (club: { league: string; tier: number }) =>
+  const iberianLower = (club: { league: string; tier: number }) =>
     (club.league === 'Primeira Liga' && club.tier >= 4) || club.league === 'La Liga 2';
+  const homeThenIberian = (clubs: { country: string; league: string; tier: number }[], home: string) => {
+    if (clubs.length !== 3 || clubs.some((club) => club.league === 'MLS')) return false;
+    return clubs.filter((club) => club.country === home).length === 2
+      && clubs.filter(iberianLower).length === 1;
+  };
   if (
-    brazilLower.length !== 3
-    || brazilLower.some((club) => !southAmericanLower(club) || club.league === 'MLS')
-    || brazilLooks.some((club) => !southAmericanLower(club) || club.league === 'MLS')
+    youthTierForNation(1, 'argentina') !== 5
+    || !homeThenIberian(brazilLower, 'Brazil')
+    || !homeThenIberian(argentinaLower, 'Argentina')
+    || !homeThenIberian(colombiaLower, 'Colombia')
+    || !homeThenIberian(brazilLooks, 'Brazil')
+    || !homeThenIberian(argentinaOneGoal, 'Argentina')
   ) {
-    console.error('South American Lower youth trials must be Portuguese lower-level or Spain second division, not MLS');
+    console.error('Home-league CONMEBOL Lower youth trials must be two home clubs plus one Iberian lower look, not three Spain/Portugal trials');
+    process.exitCode = 1;
+  }
+  if (
+    uruguayLower.length !== 3
+    || uruguayLower.some((club) => !iberianLower(club) || club.league === 'MLS')
+  ) {
+    console.error('South American nations without a playable league still trial in Portuguese lower-level or Spain second division');
     process.exitCode = 1;
   }
   if (usLower.length !== 3 || usLower.some((club) => club.league !== 'MLS')) {
@@ -8342,8 +8365,15 @@ console.log('\n--- Kits, cup nights, FA Cup semis, sun, World Cup copy, African 
     console.error('Colombia must wear blue shorts and red socks');
     process.exitCode = 1;
   }
-  if (peru.primary !== '#FFFFFF' || peru.shorts !== '#FFFFFF' || peru.socks !== '#FFFFFF' || peru.sleeves !== '#D91023') {
-    console.error('Peru must wear all white with red sleeves');
+  if (
+    peru.primary !== '#FFFFFF'
+    || peru.secondary !== '#D91023'
+    || peru.pattern !== 'center'
+    || peru.shorts !== '#FFFFFF'
+    || peru.socks !== '#FFFFFF'
+    || peru.sleeves !== '#FFFFFF'
+  ) {
+    console.error('Peru must wear a white shirt with a red centre stripe, white sleeves, white shorts and white socks');
     process.exitCode = 1;
   }
   if (
@@ -8594,6 +8624,131 @@ console.log('\n--- Kits, cup nights, FA Cup semis, sun, World Cup copy, African 
   }
   if (niKit.shorts !== '#FFFFFF' || irlKit.shorts !== '#FFFFFF') {
     console.error('Northern Ireland and Ireland must wear white shorts');
+    process.exitCode = 1;
+  }
+
+  const saoPauloKit = clubKit(getClub('sao-paulo'));
+  const bocaKit = clubKit(getClub('boca-juniors'));
+  const gremioKit = clubKit(getClub('gremio'));
+  const vascoKit = clubKit(getClub('vasco'));
+  if (
+    saoPauloKit.pattern !== 'band'
+    || saoPauloKit.primary !== '#FFFFFF'
+    || saoPauloKit.secondary !== '#E30613'
+    || saoPauloKit.shorts !== '#FFFFFF'
+    || saoPauloKit.socks !== '#FFFFFF'
+  ) {
+    console.error('Sao Paulo must wear a white shirt with a red mid-band, white shorts and white socks');
+    process.exitCode = 1;
+  }
+  if (bocaKit.pattern !== 'band' || bocaKit.primary !== '#003DA5' || bocaKit.secondary !== '#FFD100') {
+    console.error('Boca Juniors must wear a blue shirt with a yellow mid-band');
+    process.exitCode = 1;
+  }
+  if (
+    gremioKit.pattern !== 'vertical'
+    || !['#003DA5', '#111111'].includes(gremioKit.primary)
+    || !['#003DA5', '#111111'].includes(gremioKit.secondary ?? '')
+    || gremioKit.primary === gremioKit.secondary
+    || gremioKit.socks !== '#111111'
+  ) {
+    console.error('Gremio must wear black and blue vertical stripes with black socks');
+    process.exitCode = 1;
+  }
+  if (vascoKit.pattern !== 'center' || vascoKit.primary !== '#111111' || vascoKit.secondary !== '#FFFFFF') {
+    console.error('Vasco da Gama must wear a black shirt with a white centre stripe');
+    process.exitCode = 1;
+  }
+  const australiaKit = nationKit('australia');
+  const belgiumKit = nationKit('belgium');
+  const norwayKit = nationKit('norway');
+  const uruguayKit = nationKit('uruguay');
+  const chileKit = nationKit('chile');
+  const mexicoKit = nationKit('mexico');
+  const usaKit = nationKit('united-states');
+  const cameroonKit = nationKit('cameroon');
+  const egyptKit = nationKit('egypt');
+  const ghanaKit = nationKit('ghana');
+  const ivoryKit = nationKit('ivory-coast');
+  const moroccoKit = nationKit('morocco');
+  const southAfricaKit = nationKit('south-africa');
+  const senegalKit = nationKit('senegal');
+  const chinaKit = nationKit('china-pr');
+  const iranKit = nationKit('iran');
+  const koreaKit = nationKit('south-korea');
+  const indiaKit = nationKit('india');
+  const nzKit = nationKit('new-zealand');
+  const ecuadorKit = nationKit('ecuador');
+  const venezuelaKit = nationKit('venezuela');
+  if (australiaKit.shorts !== '#00843D' || australiaKit.socks !== '#FFFFFF') {
+    console.error('Australia must wear green shorts and white socks');
+    process.exitCode = 1;
+  }
+  if (belgiumKit.shorts !== '#111111' || belgiumKit.socks !== '#111111') {
+    console.error('Belgium must wear black shorts and black socks');
+    process.exitCode = 1;
+  }
+  if (
+    norwayKit.pattern !== 'band'
+    || norwayKit.primary !== '#BA0C2F'
+    || norwayKit.secondary !== '#002868'
+    || norwayKit.socks !== '#002868'
+  ) {
+    console.error('Norway must wear a red shirt with a blue mid-band and blue socks');
+    process.exitCode = 1;
+  }
+  if (uruguayKit.primary !== '#7BADE3' || uruguayKit.pattern || uruguayKit.socks !== '#111111') {
+    console.error('Uruguay must wear a solid light-blue shirt and black socks');
+    process.exitCode = 1;
+  }
+  if (chileKit.socks !== '#0033A0' || mexicoKit.socks !== '#CE1126') {
+    console.error('Chile socks must be blue and Mexico socks must be red');
+    process.exitCode = 1;
+  }
+  if (
+    usaKit.pattern !== 'hoops'
+    || usaKit.primary !== '#FFFFFF'
+    || usaKit.secondary !== '#BF0A30'
+    || usaKit.shorts !== '#002868'
+    || usaKit.socks !== '#FFFFFF'
+  ) {
+    console.error('United States must wear a white shirt with red hoops, navy shorts and white socks');
+    process.exitCode = 1;
+  }
+  if (cameroonKit.shorts !== '#C8102E' || cameroonKit.socks !== '#FCD116' || egyptKit.socks !== '#111111') {
+    console.error('Cameroon must wear red shorts and yellow socks; Egypt black socks');
+    process.exitCode = 1;
+  }
+  if (
+    ghanaKit.primary !== '#FFFFFF' || ghanaKit.shorts !== '#FFFFFF' || ghanaKit.socks !== '#FFFFFF'
+    || senegalKit.primary !== '#FFFFFF' || senegalKit.shorts !== '#FFFFFF' || senegalKit.socks !== '#FFFFFF'
+    || iranKit.primary !== '#FFFFFF' || iranKit.shorts !== '#FFFFFF' || iranKit.socks !== '#FFFFFF'
+    || nzKit.primary !== '#FFFFFF' || nzKit.shorts !== '#FFFFFF' || nzKit.socks !== '#FFFFFF'
+  ) {
+    console.error('Ghana, Senegal, Iran and New Zealand must wear all white');
+    process.exitCode = 1;
+  }
+  if (
+    ivoryKit.shorts !== '#FF8200'
+    || moroccoKit.shorts !== '#006233'
+    || southAfricaKit.primary !== '#FFD100'
+    || southAfricaKit.shorts !== '#007749'
+    || southAfricaKit.socks !== '#FFD100'
+  ) {
+    console.error('Ivory Coast, Morocco and South Africa kit colours are wrong');
+    process.exitCode = 1;
+  }
+  if (
+    chinaKit.shorts !== '#DE2910'
+    || koreaKit.shorts !== '#111111'
+    || indiaKit.primary !== '#0033A0'
+    || indiaKit.shorts !== '#0033A0'
+    || indiaKit.socks !== '#0033A0'
+    || ecuadorKit.shorts !== '#0033A0'
+    || ecuadorKit.socks !== '#0033A0'
+    || venezuelaKit.shorts !== '#8B1A4A'
+  ) {
+    console.error('China, Korea, India, Ecuador or Venezuela kit colours are wrong');
     process.exitCode = 1;
   }
 
@@ -9236,13 +9391,15 @@ console.log('\n--- Career beats, chance cards, Europe tables, neutral boards ---
   }
   const reserveGuide = squadRoleRatioGuide('reserve', 0.5);
   const impactGuide = squadRoleRatioGuide('impact', 0.5);
+  const risingGuide = squadRoleRatioGuide('rising-star', 0.5);
   if (
-    reserveGuide.keepHint !== 'Score in 3 consecutive games for Starter'
+    reserveGuide.keepHint !== 'Score in 3 consecutive games for Starter role'
     || reserveGuide.nextLabel != null
-    || impactGuide.keepHint !== 'Score in 3 consecutive games for Starter'
+    || impactGuide.keepHint !== 'Score in 3 consecutive games for Starter role'
     || impactGuide.nextLabel != null
+    || risingGuide.keepHint !== 'Score in 3 consecutive games for Impact role'
   ) {
-    console.error('Reserve and Impact season-ratio hints must be one Starter line');
+    console.error('Club Season role hints must name Impact role or Starter role');
     process.exitCode = 1;
   }
   const promoLooks = [

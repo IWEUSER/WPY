@@ -957,6 +957,12 @@ function drawHumanoid(
       const stripeW = H * 1.05;
       ctx.fillStyle = style.stripe;
       ctx.fillRect(-stripeW / 2, collarY - H * 0.2, stripeW, (hemY - collarY) + H * 0.5);
+    } else if (style.pattern === 'band') {
+      const bodyH = Math.max(H * 0.8, hemY - collarY);
+      const stripeH = bodyH * 0.25;
+      const y = collarY + (bodyH - stripeH) / 2;
+      ctx.fillStyle = style.stripe;
+      ctx.fillRect(-H * 1.4, y, H * 2.8, stripeH);
     } else {
       const hoopH = Math.max(2.2, H * 0.26);
       for (let y = collarY, i = 0; y < hemY + H * 0.2; y += hoopH, i++) {

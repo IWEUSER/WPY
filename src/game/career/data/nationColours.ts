@@ -78,29 +78,29 @@ const PRIMARY: Record<string, string> = {
   jamaica: '#FED100',
   mexico: '#006847',
   panama: '#DA121A',
-  'united-states': '#002868',
+  'united-states': '#FFFFFF',
   algeria: '#007A33',
   cameroon: '#007A5E',
   'cape-verde': '#003893',
   egypt: '#C8102E',
-  ghana: '#FCD116',
+  ghana: '#FFFFFF',
   'ivory-coast': '#FF8200',
   morocco: '#C1272D',
   nigeria: '#008751',
-  senegal: '#00853F',
-  'south-africa': '#007749',
+  senegal: '#FFFFFF',
+  'south-africa': '#FFD100',
   tunisia: '#E70013',
   australia: '#FFCD00',
   'china-pr': '#DE2910',
-  india: '#FF9933',
-  iran: '#239F40',
+  india: '#0033A0',
+  iran: '#FFFFFF',
   iraq: '#007A3D',
   japan: '#02449B',
   qatar: '#8D1B3D',
   'saudi-arabia': '#006C35',
   'south-korea': '#C60C30',
   'united-arab-emirates': '#CE1126',
-  'new-zealand': '#000000',
+  'new-zealand': '#FFFFFF',
 };
 
 const SECONDARY: Record<string, string> = {
@@ -115,7 +115,7 @@ const SECONDARY: Record<string, string> = {
   sweden: '#006AA7',
   ukraine: '#FFD700',
   jamaica: '#007847',
-  ghana: '#EF3340',
+  ghana: '#FFFFFF',
   colombia: '#003893',
   mexico: '#CE1126',
   'united-states': '#BF0A30',
@@ -127,7 +127,7 @@ const SECONDARY: Record<string, string> = {
   australia: '#00843D',
   nigeria: '#FFFFFF',
   morocco: '#006233',
-  senegal: '#FCD116',
+  senegal: '#FFFFFF',
   wales: '#FFFFFF',
   scotland: '#FFFFFF',
   'republic-of-ireland': '#FFFFFF',
@@ -136,6 +136,8 @@ const SECONDARY: Record<string, string> = {
   uruguay: '#000000',
   ecuador: '#0033A0',
   paraguay: '#FFFFFF',
+  peru: '#D91023',
+  norway: '#002868',
 };
 
 const FALLBACK = [
@@ -162,9 +164,11 @@ function hashId(id: string): number {
 
 const PATTERN: Record<string, ShirtPattern> = {
   argentina: 'vertical',
-  uruguay: 'hoops',
   croatia: 'vertical',
   paraguay: 'vertical',
+  peru: 'center',
+  norway: 'band',
+  'united-states': 'hoops',
 };
 
 const SHORTS: Record<string, string> = {
@@ -181,10 +185,26 @@ const SHORTS: Record<string, string> = {
   colombia: '#003893',
   peru: '#FFFFFF',
   paraguay: '#0038A8',
+  australia: '#00843D',
+  belgium: '#111111',
+  cameroon: '#C8102E',
+  ghana: '#FFFFFF',
+  'ivory-coast': '#FF8200',
+  morocco: '#006233',
+  senegal: '#FFFFFF',
+  'south-africa': '#007749',
+  'china-pr': '#DE2910',
+  iran: '#FFFFFF',
+  'south-korea': '#111111',
+  india: '#0033A0',
+  'new-zealand': '#FFFFFF',
+  ecuador: '#0033A0',
+  venezuela: '#8B1A4A',
+  'united-states': '#002868',
 };
 
 const SLEEVES: Record<string, string> = {
-  peru: '#D91023',
+  peru: '#FFFFFF',
 };
 
 const SOCKS: Record<string, string> = {
@@ -197,15 +217,28 @@ const SOCKS: Record<string, string> = {
   argentina: '#FFFFFF',
   netherlands: '#F36C21',
   portugal: '#FF0000',
-  belgium: '#C8102E',
+  belgium: '#111111',
   croatia: '#FF0000',
   scotland: '#006EB6',
   wales: '#C8102E',
-  mexico: '#006847',
-  uruguay: '#7BADE3',
+  mexico: '#CE1126',
+  uruguay: '#111111',
   colombia: '#C8102E',
   peru: '#FFFFFF',
   paraguay: '#0038A8',
+  australia: '#FFFFFF',
+  norway: '#002868',
+  chile: '#0033A0',
+  cameroon: '#FCD116',
+  egypt: '#111111',
+  ghana: '#FFFFFF',
+  senegal: '#FFFFFF',
+  'south-africa': '#FFD100',
+  iran: '#FFFFFF',
+  india: '#0033A0',
+  'new-zealand': '#FFFFFF',
+  ecuador: '#0033A0',
+  'united-states': '#FFFFFF',
 };
 
 export function nationKit(id: string): KitScheme {

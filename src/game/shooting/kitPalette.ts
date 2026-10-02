@@ -1,6 +1,6 @@
 /** Hex kit helpers shared by the stadium crowd and the defender shirt. */
 
-export type ShirtPattern = 'solid' | 'vertical' | 'hoops' | 'center';
+export type ShirtPattern = 'solid' | 'vertical' | 'hoops' | 'center' | 'band';
 
 export interface DefenderKit {
   shirt: string;
