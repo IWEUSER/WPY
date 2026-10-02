@@ -283,6 +283,17 @@ export function pickGeographicTrialClubs(
       clubsInCountries(destinations, tier, exclude),
       nationId,
     )).slice(0, Math.min(homeLooks, count)));
+    const destHasBand = clubsInCountries(destinations, tier).length > 0;
+    if (!destHasBand && picks.length < Math.min(homeLooks, count)) {
+      for (const nearby of [tier + 1, tier - 1, tier + 2, tier - 2]) {
+        if (picks.length >= Math.min(homeLooks, count)) break;
+        if (nearby < 1 || nearby > 5) continue;
+        takeFrom(shuffle(excludeRestrictedTrials(
+          clubsInCountries(destinations, nearby as ClubTier, exclude),
+          nationId,
+        )));
+      }
+    }
     if (keepBand) {
       // Hitting the band does not require a leftover dest-country option.
       // Take two geographic looks where they exist, then one other club at

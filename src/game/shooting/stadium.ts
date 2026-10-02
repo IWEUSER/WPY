@@ -173,7 +173,7 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
-const SKIN_TONES = ['#e8c4a0', '#c68642', '#8d5524', '#5c3317', '#d4a574', '#4a2612', '#3a1c0e', '#241008'];
+const SKIN_TONES = ['#e8c4a0', '#c68642', '#8d5524', '#5c3317', '#d4a574', '#4a2612', '#3a1c0e', '#381c10'];
 const HAIR_TONES = ['#1c1917', '#0c0a09', '#292524', '#1a120c', '#44403c'];
 const JACKET_TONES = ['#1c1917', '#292524', '#111827', '#1e3a5f', '#3f3f46', '#0f172a'];
 const CIVILIAN_TONES = ['#1e3a5f', '#111827', '#365314', '#7f1d1d', '#374151', '#1f2937'];

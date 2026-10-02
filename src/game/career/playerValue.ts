@@ -734,7 +734,16 @@ export function weeklyWageForClub(club: Club, marketValue: number, playingLeague
     5: 800,
   };
   let wage = tierBase[club.tier] * (0.7 + 0.6 * t);
-  if (club.country === 'Saudi Arabia' || league === 'Saudi Pro League') wage *= 1.2;
+  if (club.country === 'Saudi Arabia' || league === 'Saudi Pro League') {
+    const saudiBase: Record<ClubTier, number> = {
+      1: 48_000,
+      2: 36_000,
+      3: 26_000,
+      4: 16_000,
+      5: 9_000,
+    };
+    wage = saudiBase[club.tier] * (0.85 + 0.35 * t);
+  }
   if (league === 'MLS') {
     const mlsBase: Record<ClubTier, number> = {
       1: 28_000,

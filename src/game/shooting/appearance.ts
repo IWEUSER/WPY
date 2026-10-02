@@ -216,7 +216,7 @@ const FAIR = ['#f7e4cc', '#f6dec0', '#edd0a8'] as const;
 const LIGHT_TAN = ['#e8b88a', '#e0c09a'] as const;
 const LIGHT_BROWN = ['#d4a574', '#c68642'] as const;
 const BROWN = ['#8d5524', '#c68642'] as const;
-const DARK = ['#6b3d1f', '#4a2612', '#3a1c0e', '#241008'] as const;
+const DARK = ['#6b3d1f', '#4a2612', '#3a1c0e', '#381c10'] as const;
 
 const COUNTRY_LOCALE: Record<string, string> = {
   argentina: 'argentina',
@@ -285,7 +285,6 @@ function weightedSkins(locale: string): { value: string; w: number }[] {
 }
 
 function hairForLocale(locale: string, skin: string, seed: number): string {
-  const fair = luminance(skin) > 0.58;
   switch (locale) {
     case 'argentina':
       return pickWeighted(seed + 17, [
@@ -352,7 +351,7 @@ function hairForLocale(locale: string, skin: string, seed: number): string {
 function skinsForRegion(region: AppearanceRegion): readonly string[] {
   switch (region) {
     case 'africa':
-      return [...BROWN, ...DARK];
+      return [...BROWN, '#6b3d1f', '#4a2612', '#3a1c0e', '#381c10'];
     case 'nordic':
     case 'eastern-europe':
       return FAIR;
@@ -476,7 +475,7 @@ export const SKIN_SWATCHES = [
   '#6b3d1f',
   '#4a2612',
   '#3a1c0e',
-  '#241008',
+  '#381c10',
 ] as const;
 
 /** Player-selectable hair colours shown on the identity screens. */

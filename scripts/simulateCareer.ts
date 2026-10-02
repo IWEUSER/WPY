@@ -1450,9 +1450,11 @@ if (youthTierForNation(4, 'cameroon') !== 3 || trialDestinationCountries('camero
   }
   if (
     tierForYouthGoals(5, 7, 'japan') !== 3
-    || japanLooks.some((club) => club.tier !== 3 || isSaudiTrialClub(club) || club.league === 'MLS')
+    || japanLooks.length !== 3
+    || japanLooks.filter((club) => club.country === 'Japan').length < 2
+    || japanLooks.some((club) => isSaudiTrialClub(club) || club.league === 'MLS')
   ) {
-    console.error('Japan 5 youth goals are ranking-capped Mid-table random trials, not Elite/Strong/Saudi');
+    console.error('Japan 5 youth goals are ranking-capped Mid-table trials with two Japan looks, not Elite/Strong/Saudi');
     process.exitCode = 1;
   }
   const argentinaDest = destCountries('argentina');
@@ -1460,9 +1462,10 @@ if (youthTierForNation(4, 'cameroon') !== 3 || trialDestinationCountries('camero
     youthTierForNation(15, 'argentina') !== 1
     || argentinaDest.join() !== 'Argentina'
     || argentinaLooks.length !== 3
-    || argentinaLooks.some((club) => club.tier !== 1 || isSaudiTrialClub(club))
+    || argentinaLooks.filter((club) => club.country === 'Argentina').length < 2
+    || argentinaLooks.some(isSaudiTrialClub)
   ) {
-    console.error('Argentina Elite youth trials stay in the Elite band at home-league geography, not Saudi');
+    console.error('Argentina Elite youth trials take two home-league looks plus one other, not Saudi');
     process.exitCode = 1;
   }
   const englandGeo = englandLooks.filter((club) => club.country === 'England');
@@ -8393,8 +8396,12 @@ console.log('\n--- Kits, cup nights, FA Cup semis, sun, World Cup copy, African 
     console.error('Sporting CP must wear green and white hoops');
     process.exitCode = 1;
   }
-  if (ajaxKit.pattern !== 'vertical' || portoKit.pattern !== 'vertical' || galaKit.pattern !== 'vertical') {
-    console.error('Ajax, Porto and Galatasaray must wear striped shirts');
+  if (ajaxKit.pattern !== 'center' || ajaxKit.primary !== '#FFFFFF' || ajaxKit.secondary !== '#D2122E' || ajaxKit.socks !== '#FFFFFF') {
+    console.error('Amsterdam must wear a white shirt with a red centre stripe and white socks');
+    process.exitCode = 1;
+  }
+  if (portoKit.pattern !== 'vertical' || galaKit.pattern !== 'vertical') {
+    console.error('Porto and Galatasaray must wear striped shirts');
     process.exitCode = 1;
   }
   if (fenerKit.secondary !== '#FFD100' || besiktasKit.pattern !== 'vertical') {
@@ -8577,8 +8584,8 @@ console.log('\n--- Kits, cup nights, FA Cup semis, sun, World Cup copy, African 
   const sevillaKit = clubKit(getClub('sevilla'));
   const niKit = nationKit('northern-ireland');
   const irlKit = nationKit('republic-of-ireland');
-  if (arsenalKit.sleeves !== '#FFFFFF' || psgKit.primary !== '#DA001C' || psgKit.sleeves !== '#004170') {
-    console.error('Arsenal need white sleeves and PSG a red shirt with blue sleeves');
+  if (arsenalKit.sleeves !== '#FFFFFF' || psgKit.primary !== '#004170' || psgKit.secondary !== '#DA001C' || psgKit.pattern !== 'center' || psgKit.sleeves !== '#004170') {
+    console.error('Arsenal need white sleeves and Paris a blue shirt with a red centre stripe');
     process.exitCode = 1;
   }
   if (villaKit.shorts !== '#FFFFFF' || villaKit.socks !== '#95BFE5' || sevillaKit.socks !== '#000000') {

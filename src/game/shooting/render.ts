@@ -429,13 +429,13 @@ export const PLAYER_SKIN_TONES = [
   '#6b3d1f',
   '#4a2612',
   '#3a1c0e',
-  '#241008',
+  '#381c10',
 ] as const;
 
 export type SkinPalette = AppearanceRegion;
 
 /** Medium through dark brown — African national-team keepers and defenders. */
-export const AFRICA_SKIN_TONES = ['#c68642', '#8d5524', '#6b3d1f'] as const;
+export const AFRICA_SKIN_TONES = ['#c68642', '#8d5524', '#6b3d1f', '#4a2612', '#3a1c0e', '#381c10'] as const;
 
 /** Hip→knee share of the hip-to-boot line. Shorts must stay shorter than this. */
 export const THIGH_SHARE = 0.42;

@@ -192,7 +192,6 @@ const SOCK_OVERRIDES: Record<string, string> = {
   'inter-miami': '#F7B5CD',
   'la-galaxy': '#00245D',
   santos: '#111111',
-  monaco: '#E51A22',
   seattle: '#5D9741',
   frankfurt: '#000000',
   gladbach: '#000000',
