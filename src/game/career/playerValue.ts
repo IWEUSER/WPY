@@ -25,7 +25,10 @@ export function leagueValueWeight(league: string): number {
   if (SEMI_EURO_LEAGUES.has(league)) return 0.55;
   if (league === 'Saudi Pro League') return 0.2;
   if (SECOND_DIVISIONS.has(league)) return 0.4;
+  if (league === 'Brasileirao' || league === 'Liga Profesional') return 0.58;
   if (league === 'Liga MX') return 0.32;
+  if (league === 'Primera A') return 0.34;
+  if (league === 'J1 League') return 0.36;
   if (league === 'MLS') return 0.38;
   return 0.3;
 }
@@ -39,7 +42,10 @@ export function leagueOfferWeight(league: string): number {
   if (SEMI_EURO_LEAGUES.has(league) && league !== 'Super Lig') return 0.72;
   if (league === 'Super Lig') return 0.62;
   if (league === 'Saudi Pro League') return 0.7;
+  if (league === 'Brasileirao' || league === 'Liga Profesional') return 0.7;
   if (league === 'Liga MX') return 0.58;
+  if (league === 'Primera A') return 0.56;
+  if (league === 'J1 League') return 0.6;
   if (league === 'MLS') return 0.52;
   if (SECOND_DIVISIONS.has(league)) return 0.65;
   return 0.55;
@@ -156,7 +162,13 @@ export function clubTransferBudget(club: Club): number {
     if (club.tier === 4) return 5_000_000;
     return 2_000_000;
   }
-  if (league === 'Liga MX') return club.tier <= 3 ? 10_000_000 : 4_000_000;
+  if (league === 'Liga MX' || league === 'J1 League') return club.tier <= 3 ? 10_000_000 : 4_000_000;
+  if (league === 'Primera A') return club.tier <= 3 ? 6_000_000 : 2_500_000;
+  if (league === 'Brasileirao' || league === 'Liga Profesional') {
+    if (club.tier <= 2) return 28_000_000;
+    if (club.tier === 3) return 12_000_000;
+    return 5_000_000;
+  }
   if (league === 'Saudi Pro League') return club.tier <= 2 ? 70_000_000 : 12_000_000;
   if (SECOND_DIVISIONS.has(league)) {
     if (league === 'Championship') return 12_000_000;
@@ -282,7 +294,9 @@ export function youngDivisionStarFloor(params: {
   if (TOP_LEAGUES.has(params.league)) base = 80_000_000;
   else if (SECOND_DIVISIONS.has(params.league)) base = 36_000_000;
   else if (params.league === 'Saudi Pro League') base = 10_000_000;
-  else if (params.league === 'Liga MX') base = 14_000_000;
+  else if (params.league === 'Liga MX' || params.league === 'J1 League') base = 14_000_000;
+  else if (params.league === 'Brasileirao' || params.league === 'Liga Profesional') base = 22_000_000;
+  else if (params.league === 'Primera A') base = 10_000_000;
   else if (params.league === 'MLS') base = 8_000_000 + Math.max(0, divisionGoals - 20) * 250_000;
   return Math.max(100_000, Math.round((base * ageValueFactor(params.age)) / 100_000) * 100_000);
 }

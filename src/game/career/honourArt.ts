@@ -98,6 +98,12 @@ const TITLE_KIND: Record<string, HonourArtKind> = {
   'American League': 'mls-cup',
   'American League Cup': 'mls-cup',
   'Mexican League': 'liga-mx',
+  'Brazilian League': 'league-trophy',
+  'Argentine League': 'league-trophy',
+  'Colombian League': 'league-trophy',
+  'Japanese League': 'league-trophy',
+  'South American Cup': 'copa-america',
+  'South American Trophy': 'copa-america',
   'European Cup': 'european-cup',
   'European Trophy': 'europa-league',
   'European Challenge': 'conference-league',
@@ -123,6 +129,11 @@ const TITLE_KIND: Record<string, HonourArtKind> = {
   'Turkish Cup': 'domestic-cup',
   'Saudi Cup': 'domestic-cup',
   'American Cup': 'domestic-cup',
+  'Mexican Cup': 'domestic-cup',
+  'Brazilian Cup': 'domestic-cup',
+  'Argentine Cup': 'domestic-cup',
+  'Colombian Cup': 'domestic-cup',
+  'Japanese Cup': 'domestic-cup',
 };
 
 /** Pick the illustration that looks like this honour. */

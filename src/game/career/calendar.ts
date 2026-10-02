@@ -213,6 +213,11 @@ export function fixtureIsNight(fixture: CalendarFixture): boolean {
       || fixture.domesticCup === 'taca-de-portugal'
       || fixture.domesticCup === 'knvb-beker'
       || fixture.domesticCup === 'turkish-cup'
+      || fixture.domesticCup === 'copa-mx'
+      || fixture.domesticCup === 'copa-do-brasil'
+      || fixture.domesticCup === 'copa-argentina'
+      || fixture.domesticCup === 'copa-colombia'
+      || fixture.domesticCup === 'emperor-cup'
     );
   }
   if (fixture.kind === 'league') {
@@ -282,24 +287,35 @@ const KIND_ORDER: Record<FixtureKind, number> = {
 
 export const INTERNATIONAL_FRIENDLIES = 2;
 
-/** Empty weeks between the last club match and the national tournament. */
-export const INTERNATIONAL_BREAK_WEEKS = 3;
+/** Every career season is the same abstract year. No inverted calendars. */
+export const MAX_SEASON_WEEKS = 52;
+
+/** Last 4–6 weeks of a tournament year are the summer internationals. */
+export const SUMMER_TOURNAMENT_WEEKS = 6;
+
+/** Club football must finish before the reserved summer window. */
+export const CLUB_SEASON_DEADLINE_WEEK = MAX_SEASON_WEEKS - SUMMER_TOURNAMENT_WEEKS;
+
+/** Kept at 0 so every league’s summer tournament follows the last club week. */
+export const INTERNATIONAL_BREAK_WEEKS = 0;
+
+export function hasSummerInternationalTournament(
+  phase: InternationalCampaignPhase | null | undefined,
+): boolean {
+  return phase === 'qualifiers-and-tournament' || phase === 'tournament-only';
+}
 
 export function tournamentWeekCount(tournament: InternationalTournamentId | null | undefined): number {
   if (!tournament || tournament === 'nations-league') return 0;
-  const friendlies = INTERNATIONAL_FRIENDLIES;
-  const groups = tournamentGroupGames(tournament);
-  const knockout = tournamentKnockoutRounds(tournament).length;
-  return friendlies + groups + knockout;
+  return SUMMER_TOURNAMENT_WEEKS;
 }
 
 /**
  * Builds the season's week-by-week fixture list.
  *
- * League weeks run first. Earlier domestic-cup and continental ties share
- * those weeks. The domestic-cup final is the week after the last league
- * game; the continental final is the last club week. National tournaments
- * then start three weeks later and last 4 weeks (continental) or 5 (World Cup).
+ * Every league uses the same abstract year: league and club cups first,
+ * then a reserved 6-week summer international tournament when the campaign
+ * has finals. The year never runs past 52 weeks.
  */
 export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar {
   const {
@@ -492,10 +508,18 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
     }
   }
 
-  let week = leagueMatchWeeks;
+  const summerFinals = Boolean(
+    intlLive && campaign.tournament && hasSummerInternationalTournament(campaign.phase),
+  );
+  const clubDeadline = summerFinals ? CLUB_SEASON_DEADLINE_WEEK : MAX_SEASON_WEEKS;
+  let week = Math.min(leagueMatchWeeks, clubDeadline);
+  const nextClubWeek = () => {
+    if (week < clubDeadline) week += 1;
+    return week;
+  };
   if (domesticCup) {
     fixtures.push({
-      week: ++week,
+      week: nextClubWeek(),
       kind: 'domestic-cup',
       domesticCup,
       domesticCupStage: 'final',
@@ -505,7 +529,7 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
   }
   if (includeLeaguesCup) {
     fixtures.push({
-      week: ++week,
+      week: nextClubWeek(),
       kind: 'leagues-cup',
       continentalCup: 'leagues-cup',
       leaguesCupStage: 'final',
@@ -515,7 +539,7 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
   }
   if (cup) {
     fixtures.push({
-      week: ++week,
+      week: nextClubWeek(),
       kind: 'continental-final',
       continentalCup: cup,
       isDecisive: false,
@@ -526,7 +550,7 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
     const rounds: PlayoffRound[] = ['wild-card', 'first-round', 'conference-semi', 'conference-final', 'mls-cup'];
     for (const playoffRound of rounds) {
       fixtures.push({
-        week: ++week,
+        week: nextClubWeek(),
         kind: 'playoff',
         playoffRound,
         isDecisive: false,
@@ -535,15 +559,13 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
     }
   }
 
-  if (
-    intlLive &&
-    campaign.tournament &&
-    (campaign.phase === 'qualifiers-and-tournament' || campaign.phase === 'tournament-only')
-  ) {
+  if (summerFinals && campaign.tournament) {
     for (let i = 0; i < INTERNATIONAL_BREAK_WEEKS; i++) {
-      fixtures.push({ week: ++week, kind: 'rest', isDecisive: false });
+      if (week < clubDeadline) week += 1;
+      fixtures.push({ week, kind: 'rest', isDecisive: false });
     }
     const finalsWeeks = tournamentWeekCount(campaign.tournament);
+    const tournamentStart = Math.min(week + 1, clubDeadline + 1);
     const groupRounds: CalendarFixture['internationalRound'][] = Array.from(
       { length: tournamentGroupGames(campaign.tournament) },
       () => 'group',
@@ -559,24 +581,27 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
     ];
     let friendlyIndex = 0;
     let groupIndex = 0;
-    for (const packed of packIntoWeeks(rounds, finalsWeeks, week + 1)) {
+    for (const packed of packIntoWeeks(rounds, finalsWeeks, tournamentStart)) {
       const indexInRound =
         packed.round === 'friendly' ? friendlyIndex++ : packed.round === 'group' ? groupIndex++ : 0;
       const venue = internationalVenueFlags(packed.round, campaign.tournament, indexInRound);
       fixtures.push({
-        week: packed.week,
+        week: Math.min(MAX_SEASON_WEEKS, packed.week),
         kind: 'international',
         isDecisive: false,
         internationalRound: packed.round,
         isHome: venue.isHome,
         neutral: venue.neutral,
       });
-      week = Math.max(week, packed.week);
+      week = Math.max(week, Math.min(MAX_SEASON_WEEKS, packed.week));
     }
   }
 
   fixtures.sort((a, b) => a.week - b.week || KIND_ORDER[a.kind] - KIND_ORDER[b.kind]);
-  const totalWeeks = fixtures.reduce((max, f) => Math.max(max, f.week), leagueMatchWeeks);
+  const totalWeeks = Math.min(
+    MAX_SEASON_WEEKS,
+    fixtures.reduce((max, f) => Math.max(max, f.week), Math.min(leagueMatchWeeks, MAX_SEASON_WEEKS)),
+  );
   return {
     seasonNumber,
     totalWeeks,

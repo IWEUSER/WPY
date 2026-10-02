@@ -135,6 +135,7 @@ function clubsInCup(cup: ContinentalCupId): Club[] {
 function padCups(cup: ContinentalCupId): ContinentalCupId[] {
   if (cup === 'ucl') return ['ucl', 'uel'];
   if (cup === 'uel') return ['uel', 'uecl'];
+  if (cup === 'libertadores') return ['libertadores', 'sudamericana'];
   return [cup];
 }
 

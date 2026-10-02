@@ -403,7 +403,7 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
     includePlayoffs: !leagueOnly && isMls,
     // Every MLS first-team season, including the first after a transfer in.
     // Liga MX sides fill the group; reserve years stay league-only.
-    includeLeaguesCup: !leagueOnly && isMls,
+    includeLeaguesCup: !leagueOnly && (isMls || league === 'Liga MX'),
     includeSaudiSuperCup: saudiSuper,
     includeDomesticSuperCup: domesticSuper,
     domesticSuperCupName: domesticSuper ? params.domesticSuperCupName : undefined,
@@ -840,10 +840,12 @@ function assignOpponentsAndChances(
     ? shuffle(clubsForContinentalCup(cup, club.id).filter((id) => id !== club.id))
     : [];
   const usedCupIds = new Set<string>();
-  const leaguesCupRivals = [
-    ...shuffle(ligaMxClubs()),
-    ...shuffle(clubsForSeason(club, league ?? club.league).filter((c) => c.id !== club.id)),
-  ];
+  const leaguesCupRivals = (league ?? club.league) === 'Liga MX'
+    ? shuffle(clubsInLeague('MLS').filter((c) => c.id !== club.id))
+    : [
+      ...shuffle(ligaMxClubs().filter((c) => c.id !== club.id)),
+      ...shuffle(clubsForSeason(club, league ?? club.league).filter((c) => c.id !== club.id)),
+    ];
   const playoffRivals = shuffle(
     clubsForSeason(club, league ?? club.league).filter(
       (c) => c.id !== club.id && mlsConferenceOf(c.id) === mlsConferenceOf(club.id),

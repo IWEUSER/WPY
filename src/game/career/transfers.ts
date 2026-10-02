@@ -140,7 +140,12 @@ export function capTierForSourceLeague(tier: ClubTier, fromLeague?: string | nul
   }
   if (fromLeague === 'Saudi Pro League') return Math.max(tier, SAUDI_BEST_OFFER_TIER) as ClubTier;
   if (fromLeague === 'MLS') return Math.max(tier, MLS_BEST_OFFER_TIER) as ClubTier;
-  if (fromLeague === 'Liga MX') return Math.max(tier, LIGA_MX_BEST_OFFER_TIER) as ClubTier;
+  if (fromLeague === 'Liga MX' || fromLeague === 'Primera A' || fromLeague === 'J1 League') {
+    return Math.max(tier, LIGA_MX_BEST_OFFER_TIER) as ClubTier;
+  }
+  if (fromLeague === 'Brasileirao' || fromLeague === 'Liga Profesional') {
+    return Math.max(tier, SEMI_EURO_BEST_OFFER_TIER) as ClubTier;
+  }
   if (fromLeague === 'Primeira Liga' || fromLeague === 'Eredivisie' || fromLeague === 'Super Lig') {
     return Math.max(tier, SEMI_EURO_BEST_OFFER_TIER) as ClubTier;
   }

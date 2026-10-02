@@ -14,6 +14,7 @@ const NAMED_SUPER_CUPS: Record<string, string> = {
   Scotland: 'Scottish Super Cup',
   Brazil: 'Brazilian Super Cup',
   Argentina: 'Argentine Super Cup',
+  Colombia: 'Colombian Super Cup',
   Mexico: 'Mexican Super Cup',
   Japan: 'Japanese Super Cup',
   'South Korea': 'Korean Super Cup',

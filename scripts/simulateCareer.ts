@@ -4,7 +4,7 @@
  *
  * Run with: npm run simulate:career
  */
-import { buildSeasonCalendar, fixtureCrowdAwayShare, fixtureIsHome, fixtureIsNeutral, fixtureIsNight, fixtureShowsSun, fixtureVenueLabel, INTERNATIONAL_BREAK_WEEKS, isClubFinalNeutral, isFinalFixture, nationsLeagueKnockoutWeeks, scoreboardPlayerOnLeft, tournamentWeekCount } from '../src/game/career/calendar';
+import { buildSeasonCalendar, CLUB_SEASON_DEADLINE_WEEK, fixtureCrowdAwayShare, fixtureIsHome, fixtureIsNeutral, fixtureIsNight, fixtureShowsSun, fixtureVenueLabel, INTERNATIONAL_BREAK_WEEKS, isClubFinalNeutral, isFinalFixture, MAX_SEASON_WEEKS, nationsLeagueKnockoutWeeks, scoreboardPlayerOnLeft, SUMMER_TOURNAMENT_WEEKS, tournamentWeekCount } from '../src/game/career/calendar';
 import { INJURY_CHANCE_PER_MATCH, injuryDuration, sitOutGamesAfterPlayedMatch } from '../src/game/career/injury';
 import {
   chancesForKnockoutTie,
@@ -253,16 +253,20 @@ if (lastLeague !== leagueWeeks || cupFinalWeek !== leagueWeeks + 1 || euroFinalW
   console.error('cup final must follow the last league game; European final is the last club week');
   process.exitCode = 1;
 }
-if (restWeeks.length !== INTERNATIONAL_BREAK_WEEKS || (euroFinalWeek != null && restWeeks[0] !== euroFinalWeek + 1)) {
-  console.error('national tournaments must start after a 3-week break from the European final');
+if (restWeeks.length !== INTERNATIONAL_BREAK_WEEKS) {
+  console.error('summer internationals follow the last club week with no extra rest gap');
   process.exitCode = 1;
 }
-if (tournamentWeeks.length !== tournamentWeekCount('world-cup')) {
-  console.error('World Cup finals must occupy a week per friendly, group game, and knockout round');
+if (tournamentWeeks.length !== SUMMER_TOURNAMENT_WEEKS) {
+  console.error('summer internationals must occupy the last 6 weeks of the season');
   process.exitCode = 1;
 }
-if (calendar.totalWeeks !== leagueWeeks + 1 + 1 + INTERNATIONAL_BREAK_WEEKS + tournamentWeekCount('world-cup')) {
-  console.error(`La Liga World Cup season must be ${leagueWeeks + 1 + 1 + INTERNATIONAL_BREAK_WEEKS + tournamentWeekCount('world-cup')} weeks`);
+if (calendar.totalWeeks > MAX_SEASON_WEEKS || euroFinalWeek! > CLUB_SEASON_DEADLINE_WEEK) {
+  console.error(`every league season must finish inside ${MAX_SEASON_WEEKS} weeks with club football done by week ${CLUB_SEASON_DEADLINE_WEEK}`);
+  process.exitCode = 1;
+}
+if (Math.min(...tournamentWeeks) !== euroFinalWeek! + 1 || Math.max(...tournamentWeeks) !== calendar.totalWeeks) {
+  console.error('the last 4-6 weeks of the year must be the summer international tournament');
   process.exitCode = 1;
 }
 if (lateKnockout.length > 0) {
@@ -1444,16 +1448,13 @@ if (youthTierForNation(4, 'cameroon') !== 3 || trialDestinationCountries('camero
     process.exitCode = 1;
   }
   const argentinaDest = destCountries('argentina');
-  const argentinaGeo = argentinaLooks.filter((club) => argentinaDest.includes(club.country));
-  const argentinaOther = argentinaLooks.filter((club) => !argentinaDest.includes(club.country));
   if (
     youthTierForNation(15, 'argentina') !== 1
+    || argentinaDest.join() !== 'Argentina'
     || argentinaLooks.length !== 3
     || argentinaLooks.some((club) => club.tier !== 1 || isSaudiTrialClub(club))
-    || argentinaGeo.length < 2
-    || (argentinaGeo.length >= 2 && argentinaOther.length !== 1)
   ) {
-    console.error('Argentina Elite youth trials must be two Iberian Elite looks plus one other Elite club, not a Portugal Strong fill');
+    console.error('Argentina Elite youth trials stay in the Elite band at home-league geography, not Saudi');
     process.exitCode = 1;
   }
   const englandGeo = englandLooks.filter((club) => club.country === 'England');
@@ -1951,8 +1952,18 @@ if (!trialContractWon(passClub, 3, 3)) {
 }
 
 const picker = playableClubsGroupedByLeague();
-if (picker.some((g) => g.league === 'Liga MX' || g.clubs.some((c) => c.playable === false))) {
+if (picker.some((g) => g.clubs.some((c) => c.playable === false))) {
   console.error('the favourite-club picker must hide cup-only guest clubs');
+  process.exitCode = 1;
+}
+if (
+  !picker.some((g) => g.league === 'Liga MX' && g.clubs.some((c) => c.id === 'club-america'))
+  || !picker.some((g) => g.league === 'Brasileirao' && g.clubs.some((c) => c.id === 'flamengo-rj'))
+  || !picker.some((g) => g.league === 'Liga Profesional' && g.clubs.some((c) => c.id === 'river-plate'))
+  || !picker.some((g) => g.league === 'Primera A' && g.clubs.some((c) => c.id === 'atletico-nacional'))
+  || !picker.some((g) => g.league === 'J1 League' && g.clubs.some((c) => c.id === 'urawa'))
+) {
+  console.error('the favourite-club picker must include Mexico, Brazil, Argentina, Colombia and Japan');
   process.exitCode = 1;
 }
 if (!picker.some((g) => g.league === 'Premier League' && g.clubs.some((c) => c.id === 'liverpool'))) {
@@ -1966,6 +1977,93 @@ if (
 ) {
   console.error('the favourite-club picker must include Primeira Liga, Eredivisie and Super Lig');
   process.exitCode = 1;
+}
+
+{
+  const newLeagues: { league: string; clubId: string; country: string; nationId: string; cup: string | null; leaguesCup?: boolean }[] = [
+    { league: 'Liga MX', clubId: 'club-america', country: 'Mexico', nationId: 'mexico', cup: null, leaguesCup: true },
+    { league: 'Brasileirao', clubId: 'flamengo-rj', country: 'Brazil', nationId: 'brazil', cup: 'libertadores' },
+    { league: 'Liga Profesional', clubId: 'river-plate', country: 'Argentina', nationId: 'argentina', cup: 'libertadores' },
+    { league: 'Primera A', clubId: 'atletico-nacional', country: 'Colombia', nationId: 'colombia', cup: 'sudamericana' },
+    { league: 'J1 League', clubId: 'urawa', country: 'Japan', nationId: 'japan', cup: 'acle' },
+  ];
+  for (const row of newLeagues) {
+    const group = picker.find((g) => g.league === row.league);
+    const club = getClub(row.clubId);
+    if (!group || group.clubs.length !== 18 || !club || club.playable === false) {
+      console.error(`${row.league} must be an 18-club playable career destination`);
+      process.exitCode = 1;
+    }
+    if (leagueMatchWeeks(row.league) !== 34) {
+      console.error(`${row.league} must use a 34-week home-and-away season`);
+      process.exitCode = 1;
+    }
+    if (!leagueEligibleForNationalTeam(row.league, row.nationId, club?.tier)) {
+      console.error(`${row.country} call-ups must accept a ${row.league} club`);
+      process.exitCode = 1;
+    }
+    const hydrated = hydrateSeason({
+      seasonNumber: 2,
+      club: club!,
+      careerGoalRatio: 1.13,
+      nationId: row.nationId,
+      careerStart: 'favourite-first-team',
+      leagueGames: CALL_UP_MIN_LEAGUE_GAMES,
+    });
+    const lastClub = Math.max(
+      0,
+      ...hydrated.calendar.fixtures.filter((f) => f.kind !== 'international' && f.kind !== 'rest').map((f) => f.week),
+    );
+    const summerWeeks = [...new Set(
+      hydrated.calendar.fixtures
+        .filter((f) => f.kind === 'international' && f.internationalRound !== 'qualifier')
+        .map((f) => f.week),
+    )].sort((a, b) => a - b);
+    console.log(
+      `${row.league} calendar`,
+      hydrated.calendar.totalWeeks,
+      'last club',
+      lastClub,
+      'summer',
+      summerWeeks,
+      'cup',
+      clubContinentalCup(club!),
+      'leagues cup',
+      hydrated.calendar.fixtures.some((f) => f.kind === 'leagues-cup'),
+    );
+    if (hydrated.calendar.totalWeeks > MAX_SEASON_WEEKS || lastClub > CLUB_SEASON_DEADLINE_WEEK) {
+      console.error(`${row.league} must finish inside ${MAX_SEASON_WEEKS} weeks with club football done by week ${CLUB_SEASON_DEADLINE_WEEK}`);
+      process.exitCode = 1;
+    }
+    if (summerWeeks.length !== SUMMER_TOURNAMENT_WEEKS || summerWeeks[0] !== lastClub + 1 || summerWeeks[summerWeeks.length - 1] !== hydrated.calendar.totalWeeks) {
+      console.error(`${row.league} must reserve the last 6 weeks for the summer international tournament`);
+      process.exitCode = 1;
+    }
+    if (row.cup && clubContinentalCup(club!) !== row.cup) {
+      console.error(`${club!.name} must play the ${row.cup}`);
+      process.exitCode = 1;
+    }
+    if (row.leaguesCup) {
+      const mxLeagues = hydrated.calendar.fixtures.filter((f) => f.kind === 'leagues-cup');
+      const mlsOpp = mxLeagues.filter((f) => getClub(f.opponentId ?? '')?.league === 'MLS');
+      if (mxLeagues.length < 4 || mlsOpp.length < 1) {
+        console.error('Liga MX must play Leagues Cup against MLS clubs');
+        process.exitCode = 1;
+      }
+    }
+  }
+  const champCal = buildSeasonCalendar({
+    seasonNumber: 2,
+    leagueMatchWeeks: leagueMatchWeeks('Championship'),
+    clubTier: 5,
+    confederation: 'UEFA',
+    country: 'England',
+    nationConfederation: 'UEFA',
+  });
+  if (champCal.totalWeeks > MAX_SEASON_WEEKS) {
+    console.error('the longest domestic league must still finish inside 52 weeks');
+    process.exitCode = 1;
+  }
 }
 
 console.log('\n--- Transfer offers: at least one home-nation club ---');
@@ -6238,8 +6336,8 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     console.error('MLS must play a 28-club, 34-game regular season (26 conference + 8 inter)');
     process.exitCode = 1;
   }
-  if (mlsCal.totalWeeks > 64) {
-    console.error('an MLS season must not run past 64 weeks');
+  if (mlsCal.totalWeeks > MAX_SEASON_WEEKS) {
+    console.error('an MLS season must finish inside 52 weeks');
     process.exitCode = 1;
   }
   if ((mlsKinds.playoff ?? 0) < 5 || (mlsKinds['leagues-cup'] ?? 0) < 4) {
@@ -6322,8 +6420,8 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
   const saudiCups = saudiCal.fixtures.filter((f) => f.continentalCup === 'acle' || f.domesticCup === 'kings-cup' || f.kind === 'super-cup');
   const acleOpp = saudiCal.fixtures.find((f) => f.kind === 'continental-group' && f.opponentId && getClub(f.opponentId)?.country !== 'Saudi Arabia');
   console.log('Saudi weeks', saudiCal.totalWeeks, 'kinds', saudiKinds, 'ACLE away', acleOpp?.opponentLabel);
-  if (saudiCal.totalWeeks > 56) {
-    console.error('a Saudi season must not run past 56 weeks');
+  if (saudiCal.totalWeeks > MAX_SEASON_WEEKS) {
+    console.error('a Saudi season must finish inside 52 weeks');
     process.exitCode = 1;
   }
   if (!saudiCal.fixtures.some((f) => f.domesticCup === 'kings-cup')) {
