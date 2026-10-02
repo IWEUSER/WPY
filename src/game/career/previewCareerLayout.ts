@@ -397,6 +397,9 @@ export function applyCareerLayoutPreview(): void {
     || preview === 'match-colombia' || preview === 'match-peru' || preview === 'match-paraguay'
     || preview === 'match-psg' || preview === 'match-city'
     || preview === 'match-benfica' || preview === 'match-ajax' || preview === 'match-galatasaray'
+    || preview === 'kit-ajax' || preview === 'kit-psg' || preview === 'kit-monaco'
+    || preview === 'kit-galaxy' || preview === 'kit-river' || preview === 'kit-boca'
+    || preview === 'kit-santos' || preview === 'kit-espanyol'
     || preview === 'cup-pens';
   let matchFixtureIndex = Math.max(0, calendar.fixtures.findIndex((f) => f.kind !== 'rest'));
   if (preview === 'match' || preview === 'match-away' || preview === 'match-local' || preview === 'match-night') {
@@ -700,6 +703,30 @@ export function applyCareerLayoutPreview(): void {
       fx.kind = 'league';
       fx.opponentId = 'fenerbahce';
       fx.opponentLabel = 'Fenerbahçe';
+      fx.isHome = true;
+      fx.playerChances = 2;
+    }
+  } else if (
+    preview === 'kit-ajax' || preview === 'kit-psg' || preview === 'kit-monaco'
+    || preview === 'kit-galaxy' || preview === 'kit-river' || preview === 'kit-boca'
+    || preview === 'kit-santos' || preview === 'kit-espanyol'
+  ) {
+    const idx = calendar.fixtures.findIndex((f) => f.kind === 'league' && f.isHome);
+    if (idx >= 0) matchFixtureIndex = idx;
+    const fx = calendar.fixtures[matchFixtureIndex];
+    const opp =
+      preview === 'kit-ajax' ? { id: 'ajax', label: 'Amsterdam' }
+      : preview === 'kit-psg' ? { id: 'psg', label: 'Paris' }
+      : preview === 'kit-monaco' ? { id: 'monaco', label: 'Monaco' }
+      : preview === 'kit-galaxy' ? { id: 'la-galaxy', label: 'Los Angeles' }
+      : preview === 'kit-river' ? { id: 'river-plate', label: 'Buenos Aires Red' }
+      : preview === 'kit-boca' ? { id: 'boca-juniors', label: 'Buenos Aires Blue' }
+      : preview === 'kit-santos' ? { id: 'santos', label: 'Santos' }
+      : { id: 'espanyol', label: 'Espanyol' };
+    if (fx) {
+      fx.kind = 'league';
+      fx.opponentId = opp.id;
+      fx.opponentLabel = opp.label;
       fx.isHome = true;
       fx.playerChances = 2;
     }
