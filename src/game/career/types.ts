@@ -308,6 +308,8 @@ export interface CareerState {
   pendingBeats?: CareerBeat[];
   /** Beat kinds already shown so first-cap / first-title / retirement fire once. */
   seenBeatKinds?: CareerBeatKind[];
+  /** First-time trophy, award, and career-event keys (league medal, WPY, debut, …). */
+  seenMilestones?: string[];
   /** One guided first chance, then leave the player alone. */
   guidedChanceSeen?: boolean;
   /** One-time unlock after Season 1. Older saves remain unlocked. */
@@ -332,6 +334,15 @@ export interface LastMatchResult {
   nextLine?: string | null;
   /** Why the player sat the fixture out (injured, reserve, dropped, no chance). */
   sitOutReason?: string | null;
+  /** Open-play score before any penalty shootout. */
+  scoreFor?: number | null;
+  scoreAgainst?: number | null;
+  /** True when this fixture went to a fifth-kick shootout. */
+  penaltyKick?: boolean;
+  penaltyScored?: boolean;
+  penaltiesWon?: boolean | null;
+  /** Team would not have won without the player's open-play goals. */
+  winningGoal?: boolean;
 }
 
 export interface IntlQualifyingCarry {

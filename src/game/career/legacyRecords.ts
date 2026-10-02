@@ -609,6 +609,11 @@ export interface SeasonLegacyHighlight {
   kind: 'season' | 'all-time';
   domain: LegacyDomain;
   group: LegacyBoardDef['group'];
+  /** Historic #1 total on this board, when known. */
+  recordGoals?: number;
+  /** Goals still needed to match the record. Zero when the player holds it. */
+  goalsToRecord?: number;
+  previousRank?: number | null;
 }
 
 export function inputWithoutSeason(input: LegacyCareerInput, season: SeasonRecord): LegacyCareerInput {
@@ -655,6 +660,7 @@ export function seasonLegacyHighlights(
       const seasonRank = rankForGoals(seasonGoals, board.historical);
       if (revealForRank(seasonRank, board.historical) !== 'top10') continue;
       if (seasonGoals !== board.playerGoals) continue;
+      const recordGoals = board.historical[0] ?? seasonGoals;
       highlights.push({
         id: board.def.id,
         title: board.def.title,
@@ -665,11 +671,14 @@ export function seasonLegacyHighlights(
         kind: 'season',
         domain: board.def.domain,
         group: board.def.group,
+        recordGoals,
+        goalsToRecord: Math.max(0, recordGoals - seasonGoals),
       });
       continue;
     }
     const before = beforeById.get(board.def.id);
-    if (before?.reveal === 'top10') continue;
+    if (before?.reveal === 'top10' && before.rank <= board.rank) continue;
+    const recordGoals = board.historical[0] ?? board.playerGoals;
     highlights.push({
       id: board.def.id,
       title: board.def.title,
@@ -680,6 +689,9 @@ export function seasonLegacyHighlights(
       kind: 'all-time',
       domain: board.def.domain,
       group: board.def.group,
+      recordGoals,
+      goalsToRecord: Math.max(0, recordGoals - board.playerGoals),
+      previousRank: before?.reveal === 'top10' ? before.rank : null,
     });
   }
   return highlights;
@@ -692,6 +704,15 @@ export function seasonOutrightRecordHighlights(
   thisSeason: SeasonRecord,
 ): SeasonLegacyHighlight[] {
   return seasonLegacyHighlights(previous, current, thisSeason).filter((item) => item.rank === 1);
+}
+
+/** Rank 1 records plus top-10 climbs (newly in, or a higher place). */
+export function seasonRecordBeatHighlights(
+  previous: LegacyCareerInput,
+  current: LegacyCareerInput,
+  thisSeason: SeasonRecord,
+): SeasonLegacyHighlight[] {
+  return seasonLegacyHighlights(previous, current, thisSeason).filter((item) => item.rank >= 1 && item.rank <= LEGACY_TOP_N);
 }
 
 export function defaultPlayerName(): string {

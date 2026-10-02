@@ -16,6 +16,7 @@ import {
   revealForRank,
   seasonLegacyHighlights,
   seasonOutrightRecordHighlights,
+  seasonRecordBeatHighlights,
   viewForBoard,
   type LegacyCareerInput,
 } from '../src/game/career/legacyRecords';
@@ -507,6 +508,11 @@ assert(
   !seasonOutrightRecordHighlights({ seasons: [], nationalTeam: emptyTeam('france') }, franceInput, franceSeason)
     .some((item) => item.title.includes('World Championship') && item.rank !== 1),
   '11 World Cup goals is a top-10 inclusion, not an outright record beat',
+);
+assert(
+  seasonRecordBeatHighlights({ seasons: [], nationalTeam: emptyTeam('france') }, franceInput, franceSeason)
+    .some((item) => item.title.includes('World Championship') && item.rank > 1 && item.rank <= 10 && (item.goalsToRecord ?? 0) > 0),
+  '11 World Cup goals should still get a top-10 climb beat with goals still needed for the record',
 );
 
 const stripped = inputWithoutSeason(allTimeAfter, allTimeSeason);
