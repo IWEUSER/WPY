@@ -1743,6 +1743,8 @@ function applyLegacyRecordsOverlay(preview: string): void {
       goals: 66,
       gamesPlayed: 57,
       continentalStats: [{ cup: 'ucl' as const, games: 13, goals: 15 }],
+      transferFeePaid: 80_000_000,
+      transferFromClubId: 'real-madrid',
       international: {
         tournament: 'world-cup' as const,
         qualifyingGames: 10,
