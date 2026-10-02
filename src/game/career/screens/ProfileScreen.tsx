@@ -9,6 +9,7 @@ import { countsTowardCareerRecord } from '../seasonDisplay';
 import { getNation } from '../international';
 import { useCareerStore } from '../store';
 import { DATA_CARD } from './dataUi';
+import { CareerTotals } from './CareerTotals';
 import { AwardIcon, EarningsIcon, RecordsIcon, TrophyIcon, WageIcon } from './careerIcons';
 import { HonoursPills } from './HonoursPills';
 import { PlayerKitPortrait } from './PlayerKitPortrait';
@@ -139,6 +140,8 @@ export default function ProfileScreen() {
           {fee != null ? ` · Transfer fee ${fee <= 0 ? 'Free' : formatEuros(fee)}` : ''}
         </p>
       )}
+
+      <CareerTotals seasons={recordSeasons} />
 
       {nationalTeam && (
         <IdentityBox title="International" className="mt-3">

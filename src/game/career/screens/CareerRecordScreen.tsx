@@ -2,10 +2,10 @@ import { getClub } from '../data/clubs';
 import { formatInternationalSeason, seasonClubName, seasonLeagueLabel } from '../honoursDisplay';
 import { formatEuros } from '../playerValue';
 import { countsTowardCareerRecord, displaySeasonLabel } from '../seasonDisplay';
-import { aggregateContinental, aggregateDomesticSplit, careerClubRecord, careerTransferFeesPaid, seasonDomesticSplit } from '../seasonStats';
+import { seasonDomesticSplit } from '../seasonStats';
 import { useCareerStore } from '../store';
 import type { SeasonRecord } from '../types';
-import { DATA_CARD, DATA_TILE } from './dataUi';
+import { DATA_CARD } from './dataUi';
 import { SeasonHonoursLines } from './HonoursPills';
 import { ClubCompetitionTable, InternationalSeasonBlock } from './StatsTable';
 
@@ -24,13 +24,6 @@ export default function CareerRecordScreen() {
     ...(current && countsTowardCareerRecord(current.seasonNumber, current.role) ? [{ ...current, inProgress: true }] : []),
     ...[...history].filter((s) => countsTowardCareerRecord(s.seasonNumber, s.role)).reverse(),
   ];
-  const recordSeasons = [...history, ...(current && countsTowardCareerRecord(current.seasonNumber, current.role) ? [current] : [])];
-  const scoredSeasons = recordSeasons.filter((s) => countsTowardCareerRecord(s.seasonNumber, s.role));
-  const domestic = aggregateDomesticSplit(scoredSeasons);
-  const continental = aggregateContinental(scoredSeasons);
-  const feesPaid = careerTransferFeesPaid(recordSeasons);
-  const clubRecord = careerClubRecord(scoredSeasons);
-  const ratio = clubRecord.ratio;
 
   return (
     <div className="flex h-full w-full flex-col overflow-y-auto px-5 py-[max(1.25rem,env(safe-area-inset-top))] pb-10 text-white">
@@ -41,21 +34,7 @@ export default function CareerRecordScreen() {
         <span className="text-xs uppercase tracking-wide text-white/40">Career record</span>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
-        <StatTile value={String(clubRecord.games)} label="Club games" />
-        <StatTile value={String(clubRecord.goals)} label="Club goals" />
-        <StatTile value={ratio.toFixed(2)} label="Club ratio" />
-      </div>
-      <div className="mt-2 grid grid-cols-1 gap-2">
-        <StatTile value={feesPaid > 0 ? formatEuros(feesPaid) : '—'} label="Transfer fees paid" />
-      </div>
-
-      <div className={`mt-3 ${DATA_CARD} text-sm`}>
-        <p className="text-xs uppercase tracking-wide text-white/40">Club</p>
-        <ClubCompetitionTable split={domestic} continental={continental} alwaysShowEuropean />
-      </div>
-
-      <div className="mt-5 flex flex-col gap-3">
+      <div className="flex flex-col gap-3">
         {seasons.length === 0 && (
           <p className="text-sm text-white/50">
             Season 1 will appear here once you play your first first-team match.
@@ -65,15 +44,6 @@ export default function CareerRecordScreen() {
           <SeasonCard key={`${season.inProgress ? 'live' : 'done'}-${season.seasonNumber}`} season={season} />
         ))}
       </div>
-    </div>
-  );
-}
-
-function StatTile({ value, label }: { value: string; label: string }) {
-  return (
-    <div className={DATA_TILE}>
-      <p className="text-lg font-bold">{value}</p>
-      <p className="text-[10px] uppercase tracking-wide text-white/40">{label}</p>
     </div>
   );
 }
