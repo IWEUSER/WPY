@@ -1303,12 +1303,16 @@ if (trialDestinationCountries('poland').join() !== 'Germany,Netherlands,Italy') 
   console.error('Eastern Europe must see German, Dutch or Italian trial clubs');
   process.exitCode = 1;
 }
-if (trialDestinationCountries('brazil').join() !== 'Spain,Portugal') {
-  console.error('South American players must see Spain or Portugal');
+if (trialDestinationCountries('brazil').join() !== 'Brazil' || trialDestinationCountries('uruguay').join() !== 'Spain,Portugal') {
+  console.error('Brazil trials at home; other South American players see Spain or Portugal');
   process.exitCode = 1;
 }
-if (trialDestinationCountries('united-states').join() !== 'United States' || trialDestinationCountries('mexico').join() !== 'United States') {
-  console.error('CONCACAF players must see MLS');
+if (
+  trialDestinationCountries('united-states').join() !== 'United States'
+  || trialDestinationCountries('mexico').join() !== 'Mexico'
+  || trialDestinationCountries('jamaica').join() !== 'United States'
+) {
+  console.error('Mexico trials at home; other CONCACAF players see MLS');
   process.exitCode = 1;
 }
 if (trialDestinationCountries('qatar').join() !== 'Saudi Arabia') {
@@ -1494,11 +1498,11 @@ if (youthTierForNation(4, 'cameroon') !== 3 || trialDestinationCountries('camero
     console.error('Qatar Strong youth trials must usually include two Saudi looks');
     process.exitCode = 1;
   }
-  if (trialDestinationCountries('japan').length > 0 || trialDestinationCountries('australia').length > 0) {
-    console.error('Asia and Oceania must not use a Brazil-to-Iberia geographic trial path');
+  if (trialDestinationCountries('japan').join() !== 'Japan' || trialDestinationCountries('australia').length > 0) {
+    console.error('Japan trials at home; other Asia and Oceania stay off the Brazil-to-Iberia path');
     process.exitCode = 1;
   }
-  if (isHomeLeagueNation('germany') !== true || isHomeLeagueNation('japan') !== false || isHomeLeagueNation('cameroon') !== false) {
+  if (isHomeLeagueNation('germany') !== true || isHomeLeagueNation('japan') !== true || isHomeLeagueNation('cameroon') !== false) {
     console.error('only nations with an in-game league count as home-league trial countries');
     process.exitCode = 1;
   }
@@ -4612,11 +4616,11 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
     process.exitCode = 1;
   }
 
-  const brazilLoans = pickLoanClubsForMiss(0, 'brazil', LOAN_OFFER_COUNT, ['toulouse'], 'toulouse');
-  const brazilGeo = brazilLoans.filter((c) => c.country === 'Spain' || c.country === 'Portugal').length;
-  console.log('loan split Brazil at Toulouse', brazilGeo, brazilLoans.map((c) => c.country));
-  if (brazilLoans.length !== LOAN_OFFER_COUNT || brazilGeo < 2) {
-    console.error('when nationality has no league, two of three loans must use trial geography (Brazil → Spain/Portugal)');
+  const uruguayLoans = pickLoanClubsForMiss(0, 'uruguay', LOAN_OFFER_COUNT, ['toulouse'], 'toulouse');
+  const uruguayGeo = uruguayLoans.filter((c) => c.country === 'Spain' || c.country === 'Portugal').length;
+  console.log('loan split Uruguay at Toulouse', uruguayGeo, uruguayLoans.map((c) => c.country));
+  if (uruguayLoans.length !== LOAN_OFFER_COUNT || uruguayGeo < 2) {
+    console.error('when nationality has no league, two of three loans must use trial geography (Uruguay → Spain/Portugal)');
     process.exitCode = 1;
   }
   const irelandLoans = pickLoanClubsForMiss(0, 'republic-of-ireland', LOAN_OFFER_COUNT, ['toulouse'], 'toulouse');

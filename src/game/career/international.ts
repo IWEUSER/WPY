@@ -114,10 +114,9 @@ export function leagueEligibleForNationalTeam(
   nationId?: string | null,
   clubTier?: ClubTier | null,
 ): boolean {
+  if (!league || SECOND_DIVISIONS.has(league)) return false;
   const rank = nationId ? fifaRank(nationId) : 99;
   if (rank > 20) return true;
-  if (!league) return false;
-  if (SECOND_DIVISIONS.has(league)) return false;
   if (nationId && HOME_NATION_LEAGUES[nationId]?.has(league)) return true;
   if (TOP_LEAGUES.has(league)) return true;
   return SEMI_EURO_LEAGUES.has(league) && clubTier != null && clubTier <= 2;
