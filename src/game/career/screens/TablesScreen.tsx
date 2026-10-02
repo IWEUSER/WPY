@@ -1,9 +1,9 @@
 import { getClub } from '../data/clubs';
-import { conferenceLabel, leagueDisplayName, mlsConferenceOf } from '../data/leagueFormat';
+import { argentinaGroupLabel, argentinaGroupOf, conferenceLabel, leagueDisplayName, mlsConferenceOf } from '../data/leagueFormat';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { getNation } from '../international';
 import { rankLeagueTable, type SeasonStandings } from '../matchEngine';
-import { conferenceTable, ensureInternationalGroup, type SeasonSimState } from '../seasonSim';
+import { argentinaGroupTable, conferenceTable, ensureInternationalGroup, type SeasonSimState } from '../seasonSim';
 import { sortGroupTable } from '../internationalTable';
 import { competitionStageLabel } from '../honoursDisplay';
 import { useCareerStore } from '../store';
@@ -104,9 +104,12 @@ function StandingsCard({
 }) {
   const conference = conferenceTable(standings.league, clubId);
   const inMls = Boolean(mlsConferenceOf(clubId));
+  const argGroup = argentinaGroupOf(clubId);
+  const groupTable = argGroup ? argentinaGroupTable(standings.league, clubId) : [];
   const conferenceRow = inMls ? conference.find((r) => r.clubId === clubId) : undefined;
+  const groupRow = argGroup ? groupTable.find((r) => r.clubId === clubId) : undefined;
   const overall = standings.league.find((r) => r.clubId === clubId);
-  const us = conferenceRow ?? overall;
+  const us = conferenceRow ?? groupRow ?? overall;
   const europe = standings.europeanStanding;
   const competitions: { name: string; stage: string }[] = [];
   if (europe) {
@@ -145,7 +148,7 @@ function StandingsCard({
         <div>
           <p className="text-2xl font-extrabold">{us && us.played > 0 ? `${us.position}` : '—'}</p>
           <p className="text-[10px] uppercase tracking-wide text-white/40">
-            {inMls ? conferenceLabel(mlsConferenceOf(clubId)) : 'League position'}
+            {inMls ? conferenceLabel(mlsConferenceOf(clubId)) : argGroup ? argentinaGroupLabel(argGroup) : 'League position'}
           </p>
           {inMls && overall && overall.played > 0 && (
             <p className="mt-1 text-xs text-white/50">
@@ -224,11 +227,14 @@ function LeagueTableCard({
   leagueName: string;
 }) {
   const inMls = Boolean(mlsConferenceOf(clubId));
+  const argGroup = argentinaGroupOf(clubId);
   const conference = inMls ? conferenceTable(table ?? [], clubId) : [];
+  const group = argGroup ? argentinaGroupTable(table ?? [], clubId) : [];
   const overall = table ?? [];
   const hasConference = inMls && rankLeagueTable(conference).some((row) => row.played > 0);
+  const hasGroup = Boolean(argGroup) && rankLeagueTable(group).some((row) => row.played > 0);
   const hasOverall = rankLeagueTable(overall).some((row) => row.played > 0);
-  if (!hasConference && !hasOverall) return null;
+  if (!hasConference && !hasGroup && !hasOverall) return null;
 
   return (
     <div className={`${DATA_CARD} flex flex-col gap-4`}>
@@ -240,9 +246,17 @@ function LeagueTableCard({
           <LeagueTableRows table={conference} clubId={clubId} />
         </div>
       )}
+      {hasGroup && (
+        <div>
+          <p className="text-xs uppercase tracking-wide text-white/40">
+            {leagueName} · {argentinaGroupLabel(argGroup)}
+          </p>
+          <LeagueTableRows table={group} clubId={clubId} />
+        </div>
+      )}
       <div>
         <p className="text-xs uppercase tracking-wide text-white/40">
-          {inMls ? `${leagueName} table` : leagueName}
+          {inMls || argGroup ? `${leagueName} table` : leagueName}
         </p>
         <LeagueTableRows table={overall} clubId={clubId} />
       </div>

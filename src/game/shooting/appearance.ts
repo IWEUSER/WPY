@@ -216,7 +216,138 @@ const FAIR = ['#f7e4cc', '#f6dec0', '#edd0a8'] as const;
 const LIGHT_TAN = ['#e8b88a', '#e0c09a'] as const;
 const LIGHT_BROWN = ['#d4a574', '#c68642'] as const;
 const BROWN = ['#8d5524', '#c68642'] as const;
-const DARK = ['#6b3d1f'] as const;
+const DARK = ['#6b3d1f', '#4a2612', '#3a1c0e', '#241008'] as const;
+
+const COUNTRY_LOCALE: Record<string, string> = {
+  argentina: 'argentina',
+  brazil: 'brazil',
+  colombia: 'colombia',
+  mexico: 'mexico',
+  japan: 'japan',
+  'saudi-arabia': 'saudi-arabia',
+  england: 'england',
+  netherlands: 'netherlands',
+  holland: 'netherlands',
+  france: 'france',
+  germany: 'germany',
+  spain: 'spain',
+  portugal: 'portugal',
+  italy: 'italy',
+  'united-states': 'united-states',
+  usa: 'united-states',
+  america: 'united-states',
+};
+
+export function appearanceLocaleForNation(nation?: { id: string } | null): string | null {
+  if (!nation) return null;
+  return COUNTRY_LOCALE[nation.id] ?? null;
+}
+
+export function appearanceLocaleForCountry(country?: string | null): string | null {
+  if (!country) return null;
+  const key = country.trim().toLowerCase().replace(/\s+/g, '-');
+  return COUNTRY_LOCALE[key] ?? COUNTRY_LOCALE[country.trim().toLowerCase()] ?? null;
+}
+
+function weightedSkins(locale: string): { value: string; w: number }[] {
+  const fair = FAIR.map((value) => ({ value, w: 1 }));
+  const tan = LIGHT_TAN.map((value) => ({ value, w: 1 }));
+  const lightBrown = LIGHT_BROWN.map((value) => ({ value, w: 1 }));
+  const brown = BROWN.map((value) => ({ value, w: 1 }));
+  const dark = DARK.map((value) => ({ value, w: 1 }));
+  const mix = (items: readonly string[], w: number) => items.map((value) => ({ value, w }));
+  switch (locale) {
+    case 'argentina':
+      return [...mix(FAIR, 8), ...mix(LIGHT_TAN, 2), ...mix(LIGHT_BROWN, 1)];
+    case 'brazil':
+      return [...mix(LIGHT_BROWN, 5), ...mix(BROWN, 4), ...mix(DARK, 3), ...mix(LIGHT_TAN, 1), ...mix(FAIR, 1)];
+    case 'colombia':
+    case 'saudi-arabia':
+      return [...mix(LIGHT_BROWN, 5), ...mix(BROWN, 4), ...mix(DARK, 3), ...mix(FAIR, 1), ...mix(LIGHT_TAN, 1)];
+    case 'mexico':
+      return [...mix(LIGHT_BROWN, 6), ...mix(BROWN, 3), ...mix(DARK, 1)];
+    case 'japan':
+      return [...mix(FAIR, 6), ...mix(LIGHT_TAN, 5), ...mix(LIGHT_BROWN, 2)];
+    case 'england':
+    case 'netherlands':
+    case 'france':
+    case 'united-states':
+      return [...fair, ...tan, ...lightBrown, ...brown, ...dark];
+    case 'germany':
+    case 'italy':
+      return [...mix(FAIR, 7), ...mix(LIGHT_TAN, 3), ...mix(LIGHT_BROWN, 2), ...mix(BROWN, 2), ...mix(DARK, 2)];
+    case 'spain':
+    case 'portugal':
+      return [...mix(LIGHT_BROWN, 5), ...mix(BROWN, 4), ...mix(DARK, 2), ...mix(FAIR, 2), ...mix(LIGHT_TAN, 2)];
+    default:
+      return [...fair, ...tan, ...lightBrown, ...brown, ...dark];
+  }
+}
+
+function hairForLocale(locale: string, skin: string, seed: number): string {
+  const fair = luminance(skin) > 0.58;
+  switch (locale) {
+    case 'argentina':
+      return pickWeighted(seed + 17, [
+        { value: HAIR_BROWN, w: 5 },
+        { value: HAIR_BLACK, w: 4 },
+        { value: HAIR_DARK_BROWN, w: 3 },
+      ]);
+    case 'brazil':
+    case 'colombia':
+    case 'mexico':
+      return pickWeighted(seed + 17, [
+        { value: HAIR_BLACK, w: 6 },
+        { value: HAIR_DARK_BROWN, w: 3 },
+        { value: HAIR_BROWN, w: locale === 'mexico' ? 1 : 2 },
+      ]);
+    case 'japan':
+      return pickWeighted(seed + 17, [
+        { value: HAIR_BROWN, w: 6 },
+        { value: HAIR_DARK_BROWN, w: 3 },
+        { value: HAIR_BLACK, w: 2 },
+        { value: HAIR_BLONDE, w: 2 },
+        { value: HAIR_DARK_BLONDE, w: 1 },
+      ]);
+    case 'saudi-arabia':
+      return pickWeighted(seed + 17, [
+        { value: HAIR_BLACK, w: 6 },
+        { value: HAIR_DARK_BROWN, w: 4 },
+        { value: HAIR_BROWN, w: 2 },
+        { value: HAIR_BLONDE, w: 1 },
+      ]);
+    case 'england':
+    case 'netherlands':
+    case 'france':
+    case 'united-states':
+      return pickWeighted(seed + 17, [
+        { value: HAIR_BROWN, w: 4 },
+        { value: HAIR_DARK_BROWN, w: 3 },
+        { value: HAIR_BLACK, w: 3 },
+        { value: HAIR_BLONDE, w: 2 },
+        { value: HAIR_DARK_BLONDE, w: 2 },
+      ]);
+    case 'germany':
+    case 'italy':
+      return pickWeighted(seed + 17, [
+        { value: HAIR_BROWN, w: 5 },
+        { value: HAIR_DARK_BROWN, w: 4 },
+        { value: HAIR_BLACK, w: 3 },
+        { value: HAIR_DARK_BLONDE, w: locale === 'germany' ? 2 : 1 },
+        { value: HAIR_BLONDE, w: locale === 'germany' ? 1 : 0 },
+      ].filter((item) => item.w > 0));
+    case 'spain':
+    case 'portugal':
+      return pickWeighted(seed + 17, [
+        { value: HAIR_BROWN, w: 5 },
+        { value: HAIR_BLACK, w: 5 },
+        { value: HAIR_DARK_BROWN, w: 3 },
+        { value: HAIR_BLONDE, w: 1 },
+      ]);
+    default:
+      return hairForRegion('any', skin, seed);
+  }
+}
 
 function skinsForRegion(region: AppearanceRegion): readonly string[] {
   switch (region) {
@@ -317,7 +448,16 @@ function hairForRegion(region: AppearanceRegion, skin: string, seed: number): st
   }
 }
 
-export function pickPlayerLook(seed: number, region: AppearanceRegion = 'any'): PlayerLook {
+export function pickPlayerLook(
+  seed: number,
+  region: AppearanceRegion = 'any',
+  locale?: string | null,
+): PlayerLook {
+  if (locale) {
+    const skins = weightedSkins(locale);
+    const skin = pickWeighted(Math.abs(Math.floor(seed)), skins);
+    return { skin, hair: hairForLocale(locale, skin, Math.floor(seed)) };
+  }
   const skins = skinsForRegion(region);
   const skin = skins[Math.abs(Math.floor(seed)) % skins.length];
   return { skin, hair: hairForRegion(region, skin, Math.floor(seed)) };
@@ -334,6 +474,9 @@ export const SKIN_SWATCHES = [
   '#c68642',
   '#8d5524',
   '#6b3d1f',
+  '#4a2612',
+  '#3a1c0e',
+  '#241008',
 ] as const;
 
 /** Player-selectable hair colours shown on the identity screens. */

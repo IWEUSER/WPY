@@ -383,7 +383,7 @@ export function applyCareerLayoutPreview(): void {
     if (fx) {
       fx.kind = 'league';
       fx.opponentId = preview === 'match-local' ? 'getafe' : 'barcelona';
-      fx.opponentLabel = preview === 'match-local' ? 'Getafe' : 'Barcino';
+      fx.opponentLabel = preview === 'match-local' ? 'Getafe' : 'Barcelona';
       fx.isHome = wantHome;
       fx.playerChances = 2;
       if (preview === 'match-night') {

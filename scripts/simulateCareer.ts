@@ -593,8 +593,12 @@ if (
   leagueDisplayName('Premier League') !== 'English League'
   || getClub('man-city')?.name !== 'Manchester Civic'
   || getClub('real-madrid')?.name !== 'Madrid'
-  || getClub('barcelona')?.name !== 'Barcino'
-  || getClub('ny-red-bulls')?.name !== 'Harrison'
+  || getClub('barcelona')?.name !== 'Barcelona'
+  || getClub('ny-red-bulls')?.name !== 'New York Red'
+  || getClub('qpr')?.name !== 'Queens Park'
+  || getClub('st-pauli')?.name !== 'St Pauli'
+  || getClub('club-america')?.name !== 'America'
+  || getClub('al-hilal')?.name !== 'Hilal'
   || confederationDisplayName('UEFA') !== 'Europe'
   || CONTINENTAL_CUPS.ucl.name !== 'European Cup'
   || INTERNATIONAL_TOURNAMENTS['world-cup'].name !== 'World Championship'
@@ -1994,12 +1998,14 @@ if (
   for (const row of newLeagues) {
     const group = picker.find((g) => g.league === row.league);
     const club = getClub(row.clubId);
-    if (!group || group.clubs.length !== 18 || !club || club.playable === false) {
-      console.error(`${row.league} must be an 18-club playable career destination`);
+    const expectedSize = row.league === 'Brasileirao' ? 20 : row.league === 'Liga Profesional' ? 30 : 18;
+    const expectedWeeks = row.league === 'Brasileirao' ? 38 : row.league === 'Liga Profesional' ? 16 : 34;
+    if (!group || group.clubs.length !== expectedSize || !club || club.playable === false) {
+      console.error(`${row.league} must be a ${expectedSize}-club playable career destination`);
       process.exitCode = 1;
     }
-    if (leagueMatchWeeks(row.league) !== 34) {
-      console.error(`${row.league} must use a 34-week home-and-away season`);
+    if (leagueMatchWeeks(row.league) !== expectedWeeks) {
+      console.error(`${row.league} must use a ${expectedWeeks}-week league stage`);
       process.exitCode = 1;
     }
     if (!leagueEligibleForNationalTeam(row.league, row.nationId, club?.tier)) {
@@ -2240,8 +2246,30 @@ if (!hilal || hilal.tier === 1 || hilal.tier > (lafc.tier)) {
   console.error('Saudi clubs must not be Elite, but should rank above MLS');
   process.exitCode = 1;
 }
-if (assignClubTier('United States', 'MLS', 94) < 3 || assignClubTier('Saudi Arabia', 'Saudi Pro League', 94) === 1) {
-  console.error('league caps must keep MLS off the elite tier and Saudi off Elite');
+if (assignClubTier('United States', 'MLS', 94) !== 4 || assignClubTier('Saudi Arabia', 'Saudi Pro League', 94) !== 3) {
+  console.error('league floors must keep MLS at Medium and Saudi no better than Mid-table');
+  process.exitCode = 1;
+}
+if (
+  CLUBS.some((club) =>
+    (club.league === 'MLS' || club.league === 'Liga MX' || club.league === 'J1 League' || club.league === 'Primera A')
+    && club.playable !== false
+    && club.tier <= 3,
+  )
+) {
+  console.error('MLS, Mexico, Japan and Colombia must sit at Medium or Lower on the global scale');
+  process.exitCode = 1;
+}
+if (CLUBS.some((club) => (club.league === 'Brasileirao' || club.league === 'Liga Profesional') && club.playable !== false && club.tier <= 2)) {
+  console.error('Brazil and Argentina must not have Strong or Elite clubs on the global scale');
+  process.exitCode = 1;
+}
+if (getClub('flamengo-rj')?.tier !== 3 || clubContinentalCup(getClub('flamengo-rj')!) !== 'libertadores') {
+  console.error('Flamengo is Mid-table globally and still plays the Libertadores');
+  process.exitCode = 1;
+}
+if (getClub('al-hilal')?.tier !== 3 || (getClub('lafc')?.tier ?? 5) < 4) {
+  console.error('Hilal is Mid-table; MLS tops out at Medium');
   process.exitCode = 1;
 }
 if (assignClubTier('England', 'Championship', 72) !== 5 || assignClubTier('England', 'Premier League', 68) !== 4) {

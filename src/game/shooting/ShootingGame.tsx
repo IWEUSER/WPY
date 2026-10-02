@@ -37,6 +37,7 @@ import {
   type SkinPalette,
 } from './render';
 import { drawStadium, DEFAULT_STADIUM, defenderKitFromStadium, pitchQualityFromStrength, profileFromScale, type StadiumAppearance } from './stadium';
+import { isEliteOpposition, pickKeeperKit, type KeeperKit } from './keeperKit';
 import { groundForClub } from './grounds';
 import { normalizeHex } from './kitPalette';
 import { getClub } from '../career/data/clubs';
@@ -386,6 +387,7 @@ function nextChance(
   opponentStrength?: number,
   forcePenaltyChance = false,
   practiceChance?: PracticeChanceId,
+  lookLocale?: string | null,
 ): ChanceSetup {
   const practice = practiceChanceOptions(practiceChance);
   const forcePenalty = (allowPenalties && readDevPenalty()) || forcePenaltyChance || Boolean(practice.forcePenalty);
@@ -406,6 +408,7 @@ function nextChance(
     forceDualDefenders: readDevDualDefenders(),
     forceKind: forcePenalty ? 'penalty' : readDevChanceKind() ?? practice.forceKind,
     forceFlight: flight ?? undefined,
+    lookLocale,
   });
 }
 
@@ -450,8 +453,13 @@ function readDevPoseCell(): { col: number; row: number } | null {
   return { col, row };
 }
 
-function makeIdleKeeper(palette: SkinPalette = 'any'): KeeperPose {
-  return idleKeeperPose(Math.random, palette);
+function makeIdleKeeper(palette: SkinPalette = 'any', locale?: string | null, previous?: KeeperPose): KeeperPose {
+  const next = idleKeeperPose(Math.random, palette, locale);
+  if (previous?.skinTone && previous.hairColor) {
+    next.skinTone = previous.skinTone;
+    next.hairColor = previous.hairColor;
+  }
+  return next;
 }
 
 export interface ShootingGameProps {
@@ -479,6 +487,8 @@ export interface ShootingGameProps {
   stadium?: StadiumAppearance;
   /** Skin palette for the opposition keeper and defender. */
   opponentSkinPalette?: SkinPalette;
+  /** Country-specific skin/hair mix for the opposition. */
+  opponentLookLocale?: string | null;
   /** When false, every chance is open play (club trials). */
   allowPenalties?: boolean;
   /** Force this session to a penalty kick (cup shootouts). */
@@ -519,6 +529,7 @@ export default function ShootingGame({
   opponentStrength,
   stadium,
   opponentSkinPalette = 'any',
+  opponentLookLocale = null,
   allowPenalties = true,
   forcePenalty = false,
   venueLine,
@@ -551,7 +562,7 @@ export default function ShootingGame({
   } | null>(null);
 
   const [initialChance] = useState(() =>
-    nextChance(clubStrength, opponentSkinPalette, allowPenalties, opponentStrength, forcePenalty, practiceChance),
+    nextChance(clubStrength, opponentSkinPalette, allowPenalties, opponentStrength, forcePenalty, practiceChance, opponentLookLocale),
   );
   const [ballHintX, setBallHintX] = useState(initialChance.ballStartXRatio);
   const [chanceKind, setChanceKind] = useState<ChanceKind>(initialChance.kind);
@@ -571,6 +582,9 @@ export default function ShootingGame({
   opponentStrengthRef.current = opponentStrength ?? readDevOpponentStrength();
   const skinPaletteRef = useRef(opponentSkinPalette);
   skinPaletteRef.current = opponentSkinPalette;
+  const lookLocaleRef = useRef(opponentLookLocale);
+  lookLocaleRef.current = opponentLookLocale;
+  const keeperKitRef = useRef<KeeperKit | null>(null);
   const allowPenaltiesRef = useRef(allowPenalties);
   allowPenaltiesRef.current = allowPenalties;
   const forcePenaltyRef = useRef(forcePenalty);
@@ -609,7 +623,7 @@ export default function ShootingGame({
     ballRadius: 0,
     ballRotation: 0,
     ballTrail: [],
-    keeperPose: makeIdleKeeper(opponentSkinPalette),
+    keeperPose: makeIdleKeeper(opponentSkinPalette, opponentLookLocale),
     resultAtMs: 0,
     shakeMagnitude: 0,
     shakeUntilMs: 0,
@@ -760,6 +774,7 @@ export default function ShootingGame({
       opponentStrengthRef.current,
       forcePenaltyRef.current,
       practiceChanceRef.current,
+      lookLocaleRef.current,
     );
     const view = createPitchView(w, h, chance.distanceM);
     const start = ballStartPixel(view, chance.ballStartXRatio);
@@ -786,7 +801,7 @@ export default function ShootingGame({
     anim.ballRadius = ballRadiusNear(view);
     anim.ballRotation = 0;
     anim.ballTrail = [];
-    anim.keeperPose = makeIdleKeeper(skinPaletteRef.current);
+    anim.keeperPose = makeIdleKeeper(skinPaletteRef.current, lookLocaleRef.current, anim.keeperPose);
     anim.shakeMagnitude = 0;
     anim.shakeUntilMs = 0;
     anim.bounceElapsedS = Math.random() * BALL_BOUNCE_PERIOD_S;
@@ -938,6 +953,14 @@ export default function ShootingGame({
         const view = createPitchView(w, h, anim.shotDistanceM);
         const look = stadiumRef.current;
         const defenderKit = defenderKitFromStadium(look);
+        if (!keeperKitRef.current) {
+          keeperKitRef.current = pickKeeperKit(
+            defenderKit,
+            isEliteOpposition(opponentStrengthRef.current),
+            Math.round((opponentStrengthRef.current ?? 70) * 17 + (defenderKit?.shirt?.length ?? 0)),
+          );
+        }
+        const keeperKit = keeperKitRef.current;
         const plainPitch = look.bowl === false;
         if (!plainPitch) drawStadium(ctx, view, now, look);
         drawPitch(ctx, view, now, {
@@ -1017,7 +1040,7 @@ export default function ShootingGame({
           anim.ballRadius = ballRadiusNear(view);
           const devPose = readDevKeeperPose();
           const devCell = readDevPoseCell();
-          drawKeeper(ctx, view, devPose ?? anim.keeperPose, { longSleeves: look.showSun === false });
+          drawKeeper(ctx, view, devPose ?? anim.keeperPose, { longSleeves: look.showSun === false, ...keeperKit });
           for (const defender of [...anim.defenders].sort((a, b) => a.z - b.z)) {
             drawDefender(ctx, view, defender.worldX, defender.z, defenderKit, defender.stride, defender.skinTone, defender.hairColor, look.showSun === false);
           }
@@ -1107,7 +1130,7 @@ export default function ShootingGame({
           };
 
           drawTrail(ctx, anim.ballTrail);
-          drawKeeper(ctx, view, anim.keeperPose, { longSleeves: look.showSun === false });
+          drawKeeper(ctx, view, anim.keeperPose, { longSleeves: look.showSun === false, ...keeperKit });
           for (const defender of [...anim.defenders].sort((a, b) => a.z - b.z)) {
             drawDefender(ctx, view, defender.worldX, defender.z, defenderKit, defender.stride, defender.skinTone, defender.hairColor, look.showSun === false);
           }
@@ -1146,7 +1169,7 @@ export default function ShootingGame({
             finishShot(result);
           }
         } else if (anim.phase === 'result' && anim.result) {
-          drawKeeper(ctx, view, anim.keeperPose, { longSleeves: look.showSun === false });
+          drawKeeper(ctx, view, anim.keeperPose, { longSleeves: look.showSun === false, ...keeperKit });
           for (const defender of [...anim.defenders].sort((a, b) => a.z - b.z)) {
             drawDefender(ctx, view, defender.worldX, defender.z, defenderKit, defender.stride, defender.skinTone, defender.hairColor, look.showSun === false);
           }

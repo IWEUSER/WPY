@@ -25,7 +25,9 @@ export default function MatchResultScreen() {
           <p className="text-xs uppercase tracking-[0.3em] text-amber-200">{firstTitle ? 'First title' : 'Champions'}</p>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-amber-100">You won the {result.trophyName}</h1>
           <HonourArt name={result.trophyName} caption="Trophy" />
-          <p className="mt-4 text-lg font-semibold text-white/90">{headline}</p>
+          <p className="mt-4 text-lg font-semibold text-white/90">
+            {headline.replace(/\s·\s(?:are out|out of the [^.]+)$/i, '')}
+          </p>
           {playerLine && <p className="mt-2 text-sm text-white/70">{playerLine}</p>}
           {sitOutLine && (
             <p className="mt-2 text-sm font-semibold text-amber-200">

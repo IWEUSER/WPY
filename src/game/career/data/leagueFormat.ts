@@ -85,3 +85,64 @@ export function isMlsLeague(league: string | null | undefined): boolean {
 export function isSaudiLeague(league: string | null | undefined): boolean {
   return league === 'Saudi Pro League';
 }
+
+export type ArgentinaGroup = 'A' | 'B';
+
+/** Group A of the 30-club Argentine league. */
+export const ARGENTINA_GROUP_A = new Set([
+  'instituto',
+  'velez',
+  'defensa',
+  'gimnasia-mza',
+  'boca-juniors',
+  'independiente',
+  'lanus',
+  'newells',
+  'union-sf',
+  'san-lorenzo',
+  'estudiantes',
+  'riestra',
+  'platense',
+  'talleres',
+  'central-cordoba',
+]);
+
+/** Group B of the 30-club Argentine league. */
+export const ARGENTINA_GROUP_B = new Set([
+  'argentinos',
+  'rosario-central',
+  'independiente-riv',
+  'gimnasia-lp',
+  'belgrano',
+  'huracan',
+  'sarmiento',
+  'river-plate',
+  'atletico-tucuman',
+  'tigre',
+  'barracas',
+  'banfield',
+  'aldosivi',
+  'racing-club',
+  'estudiantes-rc',
+]);
+
+/** 14 intra-group games plus 2 interzonal games. */
+export const ARGENTINA_GROUP_WEEKS = 16;
+/** Top eight from each group reach the knockout. */
+export const ARGENTINA_KNOCKOUT_SPOTS = 8;
+
+export function argentinaGroupOf(id: string): ArgentinaGroup | null {
+  if (ARGENTINA_GROUP_A.has(id)) return 'A';
+  if (ARGENTINA_GROUP_B.has(id)) return 'B';
+  return null;
+}
+
+export function isArgentineLeague(league: string | null | undefined): boolean {
+  return league === 'Liga Profesional';
+}
+
+export function argentinaGroupLabel(group: ArgentinaGroup | null | undefined): string {
+  if (group === 'A') return 'Group A';
+  if (group === 'B') return 'Group B';
+  return 'Argentine League';
+}
