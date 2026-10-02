@@ -5,6 +5,7 @@ import {
   type ContinentalCupId,
 } from './data/competitions';
 import { CHAMPIONS_LEAGUE_FIELD_SIZE, championsLeagueField } from './continentalDraw';
+import { argentinaGroupOf } from './data/leagueFormat';
 
 /**
  * Probabilistic club-vs-club engine for seasons 2-20. Stronger squads
@@ -524,15 +525,31 @@ export function simulateRestOfLeagueRound(
   pairingSeed = '',
 ): LeagueStanding[] {
   const others = table.map((r) => r.clubId).filter((id) => id !== playerClubId && id !== playerOpponentId);
-  const ordered = pairingSeed
-    ? [...others].sort((a, b) => {
-        const ha = pairingHash(`${pairingSeed}|${a}`);
-        const hb = pairingHash(`${pairingSeed}|${b}`);
-        return ha - hb || a.localeCompare(b);
-      })
+  const orderForPairing = (ids: string[]) =>
+    pairingSeed
+      ? [...ids].sort((a, b) => {
+          const ha = pairingHash(`${pairingSeed}|${a}`);
+          const hb = pairingHash(`${pairingSeed}|${b}`);
+          return ha - hb || a.localeCompare(b);
+        })
+      : ids;
+  const playerGroup = argentinaGroupOf(playerClubId);
+  const groupOthers = playerGroup
+    ? others.filter((id) => argentinaGroupOf(id) === playerGroup)
+    : [];
+  const otherGroup = playerGroup
+    ? others.filter((id) => argentinaGroupOf(id) && argentinaGroupOf(id) !== playerGroup)
+    : [];
+  const intra = playerGroup ? pairClubs(orderForPairing(groupOthers)) : [];
+  const used = new Set(intra.flat());
+  const leftovers = playerGroup
+    ? [...groupOthers.filter((id) => !used.has(id)), ...otherGroup]
     : others;
+  const pairs = playerGroup
+    ? [...intra, ...pairClubs(orderForPairing(leftovers))]
+    : pairClubs(orderForPairing(leftovers));
   let next = table;
-  for (const [homeId, awayId] of pairClubs(ordered)) {
+  for (const [homeId, awayId] of pairs) {
     const home = getClub(homeId);
     const away = getClub(awayId);
     if (!home || !away) continue;

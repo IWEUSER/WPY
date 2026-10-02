@@ -142,6 +142,19 @@ export function clubContinentalCup(club: Club): ContinentalCupId | null {
   if (club.league === 'Saudi Pro League') {
     return club.strength >= 76 ? 'acle' : null;
   }
+  if (club.league === 'J1 League') {
+    return club.strength >= 68 ? 'acle' : null;
+  }
+  if (club.league === 'Brasileirao' || club.league === 'Liga Profesional') {
+    if (club.strength >= 76) return 'libertadores';
+    if (club.strength >= 68) return 'sudamericana';
+    return null;
+  }
+  if (club.league === 'Primera A') {
+    if (club.strength >= 74) return 'libertadores';
+    if (club.strength >= 68) return 'sudamericana';
+    return null;
+  }
   const conf = confederationForCountry(club.country);
   if (conf === 'AFC' && club.playable === false) return 'acle';
   return continentalCupForClub(club.tier, conf);

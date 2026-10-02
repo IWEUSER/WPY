@@ -427,12 +427,15 @@ export const PLAYER_SKIN_TONES = [
   '#c68642',
   '#8d5524',
   '#6b3d1f',
+  '#4a2612',
+  '#3a1c0e',
+  '#381c10',
 ] as const;
 
 export type SkinPalette = AppearanceRegion;
 
 /** Medium through dark brown — African national-team keepers and defenders. */
-export const AFRICA_SKIN_TONES = ['#c68642', '#8d5524', '#6b3d1f'] as const;
+export const AFRICA_SKIN_TONES = ['#c68642', '#8d5524', '#6b3d1f', '#4a2612', '#3a1c0e', '#381c10'] as const;
 
 /** Hip→knee share of the hip-to-boot line. Shorts must stay shorter than this. */
 export const THIGH_SHARE = 0.42;
@@ -444,12 +447,16 @@ export const JERSEY_SHOULDER_INSET = 0.12;
 /** Raise the shorts oval so it covers the lower jersey instead of sitting under it. */
 export const SHORTS_CENTER = -0.08;
 
-export function pickPlayerSkin(seed: number, palette: SkinPalette = 'any'): string {
-  return pickPlayerLook(seed, palette).skin;
+export function pickPlayerSkin(seed: number, palette: SkinPalette = 'any', locale?: string | null): string {
+  return pickPlayerLook(seed, palette, locale).skin;
 }
 
-export function idleKeeperPose(rng: () => number = Math.random, palette: SkinPalette = 'any'): KeeperPose {
-  const look = pickPlayerLook(Math.floor(rng() * 1_000_000), palette);
+export function idleKeeperPose(
+  rng: () => number = Math.random,
+  palette: SkinPalette = 'any',
+  locale?: string | null,
+): KeeperPose {
+  const look = pickPlayerLook(Math.floor(rng() * 1_000_000), palette, locale);
   return {
     pos: { x: 0, y: 0.28 },
     stretch: 0,
@@ -946,6 +953,10 @@ function drawHumanoid(
         ctx.fillStyle = style.stripe;
         ctx.fillRect(x, collarY - H * 0.2, stripeW, (hemY - collarY) + H * 0.5);
       }
+    } else if (style.pattern === 'center') {
+      const stripeW = H * 1.05;
+      ctx.fillStyle = style.stripe;
+      ctx.fillRect(-stripeW / 2, collarY - H * 0.2, stripeW, (hemY - collarY) + H * 0.5);
     } else {
       const hoopH = Math.max(2.2, H * 0.26);
       for (let y = collarY, i = 0; y < hemY + H * 0.2; y += hoopH, i++) {
@@ -1032,7 +1043,7 @@ export function drawKeeper(
   ctx: CanvasRenderingContext2D,
   view: PitchView,
   pose: KeeperPose,
-  kit?: { longSleeves?: boolean; sleeves?: string },
+  kit?: { longSleeves?: boolean; sleeves?: string; shirt?: string; shirtDark?: string; shorts?: string; socks?: string; glove?: string; gloveLine?: string },
 ) {
   const H = (FIFA.keeperHeight / FIFA.goalHeight) * view.goal.heightPx / 8;
   const collisionHips = goalToPixel(pose.pos, view);
@@ -1092,14 +1103,14 @@ export function drawKeeper(
     {
       skin: pose.skinTone || PLAYER_SKIN_TONES[1],
       hair: pose.hairColor,
-      shirt: pose.beaten ? '#9ca3af' : '#fde047',
-      shirtDark: pose.beaten ? '#4b5563' : '#ca8a04',
-      shorts: pose.beaten ? '#1f2937' : '#14532d',
-      socks: pose.beaten ? '#374151' : '#166534',
+      shirt: kit?.shirt ?? '#fde047',
+      shirtDark: kit?.shirtDark ?? '#ca8a04',
+      shorts: kit?.shorts ?? '#14532d',
+      socks: kit?.socks ?? '#166534',
       boot: '#181818',
-      glove: pose.beaten ? '#4b5563' : '#22c55e',
-      gloveLine: pose.beaten ? '#1f2937' : '#166534',
-      sleeves: kit?.sleeves,
+      glove: kit?.glove ?? '#22c55e',
+      gloveLine: kit?.gloveLine ?? '#166534',
+      sleeves: kit?.sleeves ?? kit?.shirt,
       longSleeves: Boolean(kit?.longSleeves),
     },
     0,

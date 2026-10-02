@@ -7,7 +7,7 @@ import { getClub, leagueMatchWeeks } from '../data/clubs';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { nationStrength } from '../data/fifaRankings';
 import { getNation } from '../international';
-import { appearanceRegionForNation } from '../../shooting/appearance';
+import { appearanceLocaleForCountry, appearanceLocaleForNation, appearanceRegionForNation } from '../../shooting/appearance';
 import { resolveCareerStadium } from '../matchVenue';
 import { fixtureTitle, isOneOffKnockout, liveMatchBoardLine, liveMatchBoardScores } from '../seasonSim';
 import { firstLegStakeLine, isTwoLeggedClubKnockout } from '../matchBriefing';
@@ -176,6 +176,11 @@ export default function MatchScreen() {
       chanceTotal={chances}
       knockoutChance={knockoutChance}
       opponentSkinPalette={appearanceRegionForNation(opponentNation)}
+      opponentLookLocale={
+        opponentNation
+          ? appearanceLocaleForNation(opponentNation)
+          : appearanceLocaleForCountry(opponentClub?.country)
+      }
       onShotResolved={(result) => {
         lastResultRef.current = result;
         if (simulated) recordMatchChance(result);

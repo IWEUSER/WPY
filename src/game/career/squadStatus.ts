@@ -426,16 +426,21 @@ export function squadRoleRatioGuide(status: SquadStatus, clubBar: number): {
   nextHint?: string;
 } {
   if (status === 'starter') {
-    return { keepLabel: 'Starter', keepRatio: clubBar, nextLabel: null, nextRatio: null };
+    return {
+      keepLabel: 'Starter',
+      keepRatio: clubBar,
+      keepHint: `${clubBar.toFixed(2)} to keep this role`,
+      nextLabel: null,
+      nextRatio: null,
+    };
   }
   if (status === 'rising-star') {
     return {
       keepLabel: 'Rising star',
       keepRatio: RISING_STAR_MIN_RATIO,
-      keepHint: `${RISING_STAR_MIN_RATIO.toFixed(2)} at season end, or a Season 2 loan is available`,
-      nextLabel: 'Impact',
+      keepHint: 'Score in 3 consecutive games for Impact',
+      nextLabel: null,
       nextRatio: null,
-      nextHint: 'Score in 3 consecutive games for Impact, then 3 more for Starter',
     };
   }
   if (status === 'reserve') {

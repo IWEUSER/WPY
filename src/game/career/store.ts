@@ -115,6 +115,7 @@ import {
   isToughMinutesFixture,
   nextSquadStatusAfterSeason,
   normalizeSquadStatus,
+  openingSquadStatus,
   resolveOpeningSquadStatus,
   type OpeningSquadPick,
   promoteSquadStatusDuringSeason,
@@ -637,7 +638,9 @@ function finishOpeningMatch(state: CareerState): Partial<CareerState> {
     } else if (fixture.internationalRound === 'group' && next.eliminated) {
       youthSummary = `${summary} · did not get out of the group`;
     } else if (fixture.internationalRound && fixture.internationalRound !== 'group') {
-      if (next.eliminated || (done && result.outcome !== 'win' && fixture.internationalRound !== 'final')) {
+      if (fixture.internationalRound === 'final' && result.outcome === 'win') {
+        youthSummary = `${summary} · ${nationName ?? 'You'} are champions`;
+      } else if (next.eliminated || (done && result.outcome !== 'win')) {
         youthSummary = `${summary} · ${nationName ?? 'You'} are out`;
       } else if (nextRound && !done) {
         youthSummary = `${summary} · through to the ${internationalRoundLabel(nextRound.internationalRound).toLowerCase()}`;
@@ -893,7 +896,9 @@ function beginSignedCareer(
   const seasonNumber = 1;
   const age = role === 'first-team' ? STARTING_AGE + 1 : STARTING_AGE;
   const dealYears = role === 'reserve' ? RESERVE_CONTRACT_YEARS : FIRST_CONTRACT_YEARS;
-  const squadStatus = resolveOpeningSquadStatus(role, openingPick);
+  const squadStatus = careerStart === 'youth'
+    ? openingSquadStatus(role)
+    : resolveOpeningSquadStatus(role, openingPick);
   const weeklyWage = club
     ? openingWeeklyWageForSquadStatus(
         club,
@@ -1761,11 +1766,21 @@ export const useCareerStore = create<CareerStore>()(
           };
           const nationId = state.nationality;
           if (!nationId) return { playerName, ...appearance, phase: 'nationality-choice' };
-          return {
+          const named = {
+            ...state,
             playerName,
             ...appearance,
             nationality: nationId,
             nationalTeam: state.nationalTeam ?? createNationalTeamState(nationId),
+          };
+          if (state.careerStart === 'youth' || !isFavouriteStart(state.careerStart)) {
+            return startCareerFromOpeningRole(named, 'rising-star');
+          }
+          return {
+            playerName,
+            ...appearance,
+            nationality: nationId,
+            nationalTeam: named.nationalTeam,
             phase: 'opening-role',
           };
         }),

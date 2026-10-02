@@ -212,7 +212,7 @@ export function placeDefender(
   ballStartXRatio: number,
   rng: () => number = Math.random,
   palette: SkinPalette = 'any',
-  opts?: { wideLane?: boolean },
+  opts?: { wideLane?: boolean; locale?: string | null },
 ): DefenderPose {
   const ballWorldX = ballWorldXFromRatio(ballStartXRatio);
   const ballSide: -1 | 1 = ballWorldX >= 0 ? 1 : -1;
@@ -224,14 +224,14 @@ export function placeDefender(
     const z = MIN_DEFENDER_Z_M + t * (maxZ - MIN_DEFENDER_Z_M);
     const offset = opts?.wideLane ? 0.35 + rng() * 0.45 : 0.7 + rng() * 0.95;
     const worldX = clamp(lineToGoalCentreX(ballWorldX, shotDistanceM, z) + coverSide * offset, -7.5, 7.5);
-    const look = pickPlayerLook(rng() * 1_000_000, palette);
+    const look = pickPlayerLook(rng() * 1_000_000, palette, opts?.locale);
     return { worldX, z, coverSide, duty: 'press', stride: 0, skinTone: look.skin, hairColor: look.hair };
   }
 
   const z = clamp(Math.min(shotDistanceM * 0.38, 3.2), 1.55, Math.max(1.55, shotDistanceM - 1.15));
   const offset = CLOSE_COVER_MIN_OFFSET_M + rng() * (CLOSE_COVER_MAX_OFFSET_M - CLOSE_COVER_MIN_OFFSET_M);
   const worldX = clamp(lineToGoalCentreX(ballWorldX, shotDistanceM, z) + coverSide * offset, -3.45, 3.45);
-  const look = pickPlayerLook(rng() * 1_000_000, palette);
+  const look = pickPlayerLook(rng() * 1_000_000, palette, opts?.locale);
   return { worldX, z, coverSide, duty: 'press', stride: 0, skinTone: look.skin, hairColor: look.hair };
 }
 
@@ -275,6 +275,7 @@ export function placeHeaderDefender(
   rng: () => number = Math.random,
   palette: SkinPalette = 'any',
   landingXRatio?: number,
+  locale?: string | null,
 ): DefenderPose {
   const landRatio = landingXRatio ?? ballStartXRatio;
   const landWorldX = ballWorldXFromRatio(landRatio);
@@ -282,7 +283,7 @@ export function placeHeaderDefender(
   const z = clamp(shotDistanceM * 0.5, 2.05, Math.max(2.05, shotDistanceM - 1.4));
   const jitter = (rng() - 0.5) * 0.7;
   const worldX = clamp(landWorldX + jitter, -5.8, 5.8);
-  const look = pickPlayerLook(rng() * 1_000_000, palette);
+  const look = pickPlayerLook(rng() * 1_000_000, palette, locale);
   return { worldX, z, coverSide, duty: 'press', stride: 0, skinTone: look.skin, hairColor: look.hair };
 }
 
@@ -485,6 +486,7 @@ export interface RollChanceOptions {
   forceDistanceM?: number;
   disableDefender?: boolean;
   skinPalette?: SkinPalette;
+  lookLocale?: string | null;
   allowPenalties?: boolean;
   forceDualDefenders?: boolean;
   forceKind?: ChanceKind;
@@ -545,6 +547,7 @@ export function placeCoverDefender(
   ballStartXRatio: number,
   rng: () => number = Math.random,
   palette: SkinPalette = 'any',
+  locale?: string | null,
 ): DefenderPose | null {
   if (!canKeepTenYardGap(shotDistanceM)) return null;
   const coverSide: -1 | 1 = first.coverSide === 1 ? -1 : 1;
@@ -555,7 +558,7 @@ export function placeCoverDefender(
   );
   const farPost = (FIFA.goalWidth / 2) * coverSide;
   const tryOffset = (t: number): DefenderPose => {
-    const look = pickPlayerLook(rng() * 1_000_000, palette);
+    const look = pickPlayerLook(rng() * 1_000_000, palette, locale);
     return {
       worldX: clamp(farPost * t, -FIFA.goalWidth / 2, FIFA.goalWidth / 2),
       z,
@@ -623,8 +626,8 @@ export function rollChanceSetup(options: RollChanceOptions = {}): ChanceSetup {
     const first = options.disableDefender || (flight === 'header' && rng() >= HEADER_DEFENDER_CHANCE)
       ? null
       : flight === 'header'
-        ? placeHeaderDefender(distanceM, ballStartXRatio, rng, options.skinPalette ?? 'any', headerArc?.headerLandingXRatio)
-        : placeDefender(distanceM, ballStartXRatio, rng, options.skinPalette ?? 'any');
+        ? placeHeaderDefender(distanceM, ballStartXRatio, rng, options.skinPalette ?? 'any', headerArc?.headerLandingXRatio, options.lookLocale)
+        : placeDefender(distanceM, ballStartXRatio, rng, options.skinPalette ?? 'any', { locale: options.lookLocale });
     return {
       kind: 'cross',
       distanceM,
@@ -649,10 +652,10 @@ export function rollChanceSetup(options: RollChanceOptions = {}): ChanceSetup {
   const first = options.disableDefender || (flight === 'header' && rng() >= HEADER_DEFENDER_CHANCE)
     ? null
     : flight === 'header'
-      ? placeHeaderDefender(distanceM, ballStartXRatio, rng, options.skinPalette ?? 'any', headerArc?.headerLandingXRatio)
-      : placeDefender(distanceM, ballStartXRatio, rng, options.skinPalette ?? 'any', { wideLane: wantCover });
+      ? placeHeaderDefender(distanceM, ballStartXRatio, rng, options.skinPalette ?? 'any', headerArc?.headerLandingXRatio, options.lookLocale)
+      : placeDefender(distanceM, ballStartXRatio, rng, options.skinPalette ?? 'any', { wideLane: wantCover, locale: options.lookLocale });
   const cover = wantCover && first
-    ? placeCoverDefender(first, distanceM, ballStartXRatio, rng, options.skinPalette ?? 'any')
+    ? placeCoverDefender(first, distanceM, ballStartXRatio, rng, options.skinPalette ?? 'any', options.lookLocale)
     : null;
   const defenders = first ? (cover ? [first, cover] : [first]) : [];
   return {

@@ -173,7 +173,7 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
-const SKIN_TONES = ['#e8c4a0', '#c68642', '#8d5524', '#5c3317', '#d4a574'];
+const SKIN_TONES = ['#e8c4a0', '#c68642', '#8d5524', '#5c3317', '#d4a574', '#4a2612', '#3a1c0e', '#381c10'];
 const HAIR_TONES = ['#1c1917', '#0c0a09', '#292524', '#1a120c', '#44403c'];
 const JACKET_TONES = ['#1c1917', '#292524', '#111827', '#1e3a5f', '#3f3f46', '#0f172a'];
 const CIVILIAN_TONES = ['#1e3a5f', '#111827', '#365314', '#7f1d1d', '#374151', '#1f2937'];
@@ -335,6 +335,7 @@ function paintPackedFans(
   viewW: number,
   layout: StadiumLayout,
   darkDeck: boolean,
+  allowAway: boolean,
 ) {
   const minX = Math.min(tl.x, tr.x, br.x, bl.x);
   const maxX = Math.max(tl.x, tr.x, br.x, bl.x);
@@ -373,7 +374,7 @@ function paintPackedFans(
       const px = x + stagger + jitterX;
       const py = y + jitterY;
       const u = Math.max(0, Math.min(1, (px + colW / 2) / Math.max(1, viewW)));
-      const visiting = u > 1 - Math.min(0.42, Math.max(0.14, stadium.awayShare ?? 0.2));
+      const visiting = allowAway && u > 1 - Math.min(0.42, Math.max(0.14, stadium.awayShare ?? 0.2));
       const paleSection = visiting ? paleAway : paleHome;
 
       const jacketChance = (paleSection ? 0.52 : 0.22) + (darkDeck ? 0.34 : 0);
@@ -481,6 +482,7 @@ function crowdLayer(w: number, h: number, view: StadiumView, stadium: StadiumApp
       w,
       layout,
       darkDeck,
+      i === 0,
     );
     if (i < layout.decks.length - 1) {
       const next = layout.decks[i + 1];

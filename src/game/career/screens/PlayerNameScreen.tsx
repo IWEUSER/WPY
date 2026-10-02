@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { appearanceRegionForNation, pickPlayerLook } from '../../shooting/appearance';
+import { appearanceLocaleForNation, appearanceRegionForNation, pickPlayerLook } from '../../shooting/appearance';
 import { getNation } from '../international';
 import { useCareerStore } from '../store';
 import { AppearancePicker } from './AppearancePicker';
@@ -24,7 +24,7 @@ export default function PlayerNameScreen() {
   const [value, setValue] = useState('');
   const suggested = useMemo(() => {
     const nation = nationality ? getNation(nationality) : undefined;
-    return pickPlayerLook(1, appearanceRegionForNation(nation ?? null));
+    return pickPlayerLook(1, appearanceRegionForNation(nation ?? null), appearanceLocaleForNation(nation ?? null));
   }, [nationality]);
   const [skin, setSkin] = useState(suggested.skin);
   const [hair, setHair] = useState(suggested.hair);

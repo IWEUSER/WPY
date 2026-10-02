@@ -31,7 +31,16 @@ export type FixtureKind =
   | 'international'
   | 'rest';
 
-export type PlayoffRound = 'wild-card' | 'first-round' | 'conference-semi' | 'conference-final' | 'mls-cup';
+export type PlayoffRound =
+  | 'wild-card'
+  | 'first-round'
+  | 'conference-semi'
+  | 'conference-final'
+  | 'mls-cup'
+  | 'argentina-r16'
+  | 'argentina-qf'
+  | 'argentina-sf'
+  | 'argentina-final';
 export type LeaguesCupStage = 'group' | 'quarter-final' | 'semi-final' | 'final';
 export type SuperCupStage = 'semi-final' | 'final';
 
@@ -107,7 +116,7 @@ export function isClubFinalNeutral(fixture: CalendarFixture): boolean {
     || (fixture.kind === 'domestic-cup' && fixture.domesticCup === 'fa-cup' && fixture.domesticCupStage === 'semi-final')
     || (fixture.kind === 'super-cup' && (fixture.superCupStage === 'final' || !fixture.superCupStage))
     || (fixture.kind === 'leagues-cup' && fixture.leaguesCupStage === 'final')
-    || (fixture.kind === 'playoff' && fixture.playoffRound === 'mls-cup')
+    || (fixture.kind === 'playoff' && (fixture.playoffRound === 'mls-cup' || fixture.playoffRound === 'argentina-final'))
   );
 }
 
@@ -333,6 +342,7 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
     includeSaudiSuperCup = false,
     includeDomesticSuperCup = false,
     domesticSuperCupName,
+    league,
   } = params;
   const cup =
     params.continentalCup !== undefined
@@ -547,14 +557,16 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
     });
   }
   if (includePlayoffs) {
-    const rounds: PlayoffRound[] = ['wild-card', 'first-round', 'conference-semi', 'conference-final', 'mls-cup'];
+    const rounds: PlayoffRound[] = league === 'Liga Profesional'
+      ? ['argentina-r16', 'argentina-qf', 'argentina-sf', 'argentina-final']
+      : ['wild-card', 'first-round', 'conference-semi', 'conference-final', 'mls-cup'];
     for (const playoffRound of rounds) {
       fixtures.push({
         week: nextClubWeek(),
         kind: 'playoff',
         playoffRound,
         isDecisive: false,
-        neutral: playoffRound === 'mls-cup',
+        neutral: playoffRound === 'mls-cup' || playoffRound === 'argentina-final',
       });
     }
   }
@@ -671,7 +683,7 @@ export function isFinalFixture(fixture: CalendarFixture): boolean {
   if (fixture.kind === 'super-cup' && (fixture.superCupStage === 'final' || !fixture.superCupStage)) return true;
   if (fixture.kind === 'domestic-cup' && fixture.domesticCupStage === 'final') return true;
   if (fixture.kind === 'leagues-cup' && fixture.leaguesCupStage === 'final') return true;
-  if (fixture.kind === 'playoff' && fixture.playoffRound === 'mls-cup') return true;
+  if (fixture.kind === 'playoff' && (fixture.playoffRound === 'mls-cup' || fixture.playoffRound === 'argentina-final')) return true;
   return fixture.kind === 'international' && fixture.internationalRound === 'final';
 }
 

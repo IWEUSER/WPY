@@ -31,6 +31,9 @@ import {
   type Club,
 } from './data/clubs';
 import {
+  ARGENTINA_GROUP_WEEKS,
+  ARGENTINA_KNOCKOUT_SPOTS,
+  argentinaGroupOf,
   MLS_REGULAR_SEASON_WEEKS,
   mlsConferenceOf,
   playoffOpeningForPosition,
@@ -400,7 +403,7 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
     includeInternational: campaignActive && inEuro && inNationsLeague,
     includeDomesticCup: !leagueOnly,
     includeSuperCup: Boolean(!leagueOnly && includeSuperCup && cup && clubConfederation === 'UEFA'),
-    includePlayoffs: !leagueOnly && isMls,
+    includePlayoffs: !leagueOnly && (isMls || league === 'Liga Profesional'),
     // Every MLS first-team season, including the first after a transfer in.
     // Liga MX sides fill the group; reserve years stay league-only.
     includeLeaguesCup: !leagueOnly && (isMls || league === 'Liga MX'),
@@ -478,7 +481,7 @@ export function hydrateSeason(params: HydrateSeasonParams): { calendar: SeasonCa
       titleRivalId: titleRival?.id ?? null,
       rivalHomeOutcome: null,
       rivalAwayOutcome: null,
-      playoffStage: !leagueOnly && isMls ? 'pending' : null,
+      playoffStage: !leagueOnly && (isMls || league === 'Liga Profesional') ? 'pending' : null,
       leaguesCupStage: !leagueOnly && isMls ? 'group' : 'not-entered',
       leaguesCupGroupPlayed: 0,
       leaguesCupGroupPoints: 0,
@@ -556,6 +559,22 @@ export function pickTitleRival(club: Club, league?: string): Club | undefined {
 
 export function lostTitleToRival(sim: SeasonSimState): boolean {
   return sim.rivalHomeOutcome === 'loss' && sim.rivalAwayOutcome === 'loss';
+}
+
+export function argentinaGroupTable(table: SeasonSimState['leagueTable'], clubId: string): SeasonSimState['leagueTable'] {
+  const group = argentinaGroupOf(clubId);
+  if (!group) return table;
+  const rows = table.filter((r) => argentinaGroupOf(r.clubId) === group);
+  return rows
+    .slice()
+    .sort((a, b) => {
+      if (b.points !== a.points) return b.points - a.points;
+      const gdA = a.goalsFor - a.goalsAgainst;
+      const gdB = b.goalsFor - b.goalsAgainst;
+      if (gdB !== gdA) return gdB - gdA;
+      return a.clubId.localeCompare(b.clubId);
+    })
+    .map((row, i) => ({ ...row, position: i + 1 }));
 }
 
 export function conferenceTable(table: SeasonSimState['leagueTable'], clubId: string): SeasonSimState['leagueTable'] {
@@ -945,10 +964,10 @@ function assignOpponentsAndChances(
       }
       f.playerChances = chancesForLeagueMatch({ strength: club.strength }).count;
     } else if (f.kind === 'playoff') {
-      const opp = f.playoffRound === 'mls-cup'
+      const opp = f.playoffRound === 'mls-cup' || f.playoffRound === 'argentina-final'
         ? mlsCupOpp
         : playoffRivals[playoffI % Math.max(1, playoffRivals.length)];
-      if (f.playoffRound !== 'mls-cup') playoffI += 1;
+      if (f.playoffRound !== 'mls-cup' && f.playoffRound !== 'argentina-final') playoffI += 1;
       if (opp) {
         f.opponentId = opp.id;
         f.opponentLabel = opp.name;
@@ -1215,6 +1234,12 @@ export function leagueOpponentQueue(club: Club, league?: string): Club[] {
     const inter = shuffle(seasonClubs.filter((c) => mlsConferenceOf(c.id) && mlsConferenceOf(c.id) !== conf));
     return [...conference, ...conference, ...inter.slice(0, 8)];
   }
+  const group = argentinaGroupOf(club.id);
+  if ((league ?? club.league) === 'Liga Profesional' && group) {
+    const intra = shuffle(seasonClubs.filter((c) => c.id !== club.id && argentinaGroupOf(c.id) === group));
+    const inter = shuffle(seasonClubs.filter((c) => argentinaGroupOf(c.id) && argentinaGroupOf(c.id) !== group));
+    return [...intra, ...inter.slice(0, 2)];
+  }
   const rivals = shuffle(seasonClubs.filter((c) => c.id !== club.id));
   return [...rivals, ...rivals];
 }
@@ -1410,6 +1435,9 @@ export function applyPlayoffResult(
   if (fixture.playoffRound === 'first-round') return { ...sim, playoffStage: 'conference-semi' };
   if (fixture.playoffRound === 'conference-semi') return { ...sim, playoffStage: 'conference-final' };
   if (fixture.playoffRound === 'conference-final') return { ...sim, playoffStage: 'mls-cup' };
+  if (fixture.playoffRound === 'argentina-r16') return { ...sim, playoffStage: 'argentina-qf' };
+  if (fixture.playoffRound === 'argentina-qf') return { ...sim, playoffStage: 'argentina-sf' };
+  if (fixture.playoffRound === 'argentina-sf') return { ...sim, playoffStage: 'argentina-final' };
   return {
     ...sim,
     playoffStage: 'champion',
@@ -1419,6 +1447,13 @@ export function applyPlayoffResult(
 
 function maybeOpenPlayoffs(sim: SeasonSimState, clubId: string): SeasonSimState {
   if (sim.playoffStage !== 'pending' && sim.playoffStage !== 'first-round') return sim;
+  if (argentinaGroupOf(clubId)) {
+    const table = argentinaGroupTable(sim.leagueTable, clubId);
+    const us = table.find((r) => r.clubId === clubId);
+    if (!us || us.played < ARGENTINA_GROUP_WEEKS) return sim;
+    if (us.position > ARGENTINA_KNOCKOUT_SPOTS) return { ...sim, playoffStage: 'not-qualified' };
+    return { ...sim, playoffStage: 'argentina-r16' };
+  }
   const table = conferenceTable(sim.leagueTable, clubId);
   const us = table.find((r) => r.clubId === clubId);
   if (!us || us.played < MLS_REGULAR_SEASON_WEEKS) return sim;
@@ -1878,6 +1913,10 @@ export function fixtureTitle(
     if (fixture.playoffRound === 'conference-semi') return `Conference semi-final${vs}`;
     if (fixture.playoffRound === 'conference-final') return `Conference final${vs}`;
     if (fixture.playoffRound === 'mls-cup') return `American League Cup${vs}`;
+    if (fixture.playoffRound === 'argentina-r16') return `League last 16${vs}`;
+    if (fixture.playoffRound === 'argentina-qf') return `League quarter-final${vs}`;
+    if (fixture.playoffRound === 'argentina-sf') return `League semi-final${vs}`;
+    if (fixture.playoffRound === 'argentina-final') return `League final${vs}`;
     return `Playoffs${vs}`;
   }
   if (fixture.kind === 'domestic-cup') {
@@ -1943,6 +1982,7 @@ export function trophyNameForFixture(
   }
   if (fixture.kind === 'leagues-cup' && fixture.leaguesCupStage === 'final') return CONTINENTAL_CUPS['leagues-cup'].name;
   if (fixture.kind === 'playoff' && fixture.playoffRound === 'mls-cup') return 'American League Cup';
+  if (fixture.kind === 'playoff' && fixture.playoffRound === 'argentina-final') return 'Argentine League';
   if (fixture.kind === 'domestic-cup' && fixture.domesticCupStage === 'final' && fixture.domesticCup) {
     return DOMESTIC_CUPS[fixture.domesticCup].name;
   }
@@ -2034,11 +2074,24 @@ function knockoutProgressNote(
     return won ? `through to the ${label.toLowerCase()}` : 'out of the cup';
   }
   if (fixture.kind === 'domestic-cup' && fixture.domesticCupStage === 'final') {
-    return won ? null : 'lost the final';
+    return won ? 'are champions' : 'lost the final';
   }
-  return won ? null : fixture.kind === 'playoff' || fixture.kind === 'leagues-cup' || fixture.kind === 'super-cup'
-    ? 'out'
-    : null;
+  if (fixture.kind === 'continental-final') {
+    return won ? 'are champions' : 'are out';
+  }
+  if (fixture.kind === 'playoff' && (fixture.playoffRound === 'mls-cup' || fixture.playoffRound === 'argentina-final')) {
+    return won ? 'are champions' : 'are out';
+  }
+  if (fixture.kind === 'leagues-cup' && fixture.leaguesCupStage === 'final') {
+    return won ? 'are champions' : 'are out';
+  }
+  if (fixture.kind === 'super-cup' && (fixture.superCupStage === 'final' || !fixture.superCupStage)) {
+    return won ? 'are champions' : 'are out';
+  }
+  if (fixture.kind === 'playoff' || fixture.kind === 'leagues-cup' || fixture.kind === 'super-cup') {
+    return won ? null : 'are out';
+  }
+  return null;
 }
 
 export function resolveFixture(

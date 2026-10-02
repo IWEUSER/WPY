@@ -345,8 +345,9 @@ function attachOneSaudiOffer(
       !excludeIds.includes(club.id),
   );
   const saudi = shuffle(sameTier)[0]
-    ?? (qualityTier === 1 ? giants[0] : undefined)
-    ?? giants.find((club) => club.tier === qualityTier);
+    ?? (qualityTier <= 3 ? giants[0] : undefined)
+    ?? giants.find((club) => club.tier === qualityTier)
+    ?? giants[0];
   if (!saudi) {
     return without;
   }
@@ -1794,7 +1795,7 @@ function withTwilightMlsOffers(
           !excludeIds.includes(club.id) &&
           !next.some((offer) => offer.clubId === club.id),
       );
-      const giantFallback = bestPermTier === 1
+      const giantFallback = bestPermTier <= 3
         ? TWILIGHT_SAUDI_CLUB_IDS
             .map((id) => getClub(id))
             .find((club) => club && !excludeIds.includes(club.id) && !next.some((offer) => offer.clubId === club.id))
