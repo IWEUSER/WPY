@@ -17,6 +17,7 @@ import {
   MIN_ACCEPTED_FEE_RATIO,
   newContractYears,
   playerMarketValueFromSeasons,
+  lastSeasonRatio,
   seasonCountsTowardForm,
   tierForMarketValue,
   TOP_LEAGUES,
@@ -1184,7 +1185,8 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     return { headline: 'Season complete', detail: '' };
   }
   const ratio = season.gamesPlayed > 0 ? season.goals / season.gamesPlayed : 0;
-  const lastStanding = seasonStandingRatio(season);
+  const lastStanding = lastSeasonRatio([...(params.seasonHistory ?? []), season])
+    ?? seasonStandingRatio(season);
   const yearsLeft = params.contractYearsRemaining ?? DEFAULT_CONTRACT_YEARS;
   const parentYears = params.homeContractYearsRemaining;
   const seasons = [...(params.seasonHistory ?? []), season];
