@@ -438,7 +438,7 @@ export function squadRoleRatioGuide(status: SquadStatus, clubBar: number): {
     return {
       keepLabel: 'Rising star',
       keepRatio: RISING_STAR_MIN_RATIO,
-      keepHint: 'Score in 3 consecutive games for Impact',
+      keepHint: 'Score in 3 consecutive games for Impact role',
       nextLabel: null,
       nextRatio: null,
     };
@@ -447,7 +447,7 @@ export function squadRoleRatioGuide(status: SquadStatus, clubBar: number): {
     return {
       keepLabel: 'Reserve',
       keepRatio: clubBar,
-      keepHint: 'Score in 3 consecutive games for Starter',
+      keepHint: 'Score in 3 consecutive games for Starter role',
       nextLabel: null,
       nextRatio: null,
     };
@@ -455,7 +455,7 @@ export function squadRoleRatioGuide(status: SquadStatus, clubBar: number): {
   return {
     keepLabel: 'Impact',
     keepRatio: RISING_STAR_MIN_RATIO,
-    keepHint: 'Score in 3 consecutive games for Starter',
+    keepHint: 'Score in 3 consecutive games for Starter role',
     nextLabel: null,
     nextRatio: null,
   };
