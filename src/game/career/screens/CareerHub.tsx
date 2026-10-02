@@ -547,7 +547,9 @@ function SeasonCompetitions({ calendar }: { calendar: SeasonCalendar | null }) {
       )}
       {hasPlayoffs && (
         <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/70">
-          American League Playoffs
+          {calendar.fixtures.some((f) => f.kind === 'playoff' && f.playoffRound?.startsWith('argentina-'))
+            ? 'Argentine League knockout'
+            : 'American League Playoffs'}
         </span>
       )}
       {superCupLabel && (
