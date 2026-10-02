@@ -253,7 +253,37 @@ export function pickGeographicTrialClubs(
       : [...picks, ...shuffle(mlsClubsAtTier(5, [...exclude, ...picks.map((c) => c.id)]))].slice(0, count);
   }
   if (nationId && getNation(nationId)?.confederation === 'CONMEBOL' && tier >= 5) {
-    return shuffle(southAmericanLowerTrialClubs(exclude)).slice(0, count);
+    if (!isHomeLeagueNation(nationId)) {
+      return shuffle(southAmericanLowerTrialClubs(exclude)).slice(0, count);
+    }
+    const homeName = getNation(nationId)?.name;
+    const homePicks: Club[] = [];
+    const takeHome = (pool: Club[]) => {
+      for (const club of pool) {
+        if (homePicks.length >= count) break;
+        homePicks.push(club);
+        exclude.push(club.id);
+      }
+    };
+    if (homeName) {
+      takeHome(shuffle(excludeRestrictedTrials(
+        clubsInCountries([homeName], 5, exclude),
+        nationId,
+      )).slice(0, Math.min(homeLooks, count)));
+      if (homePicks.length < Math.min(homeLooks, count)) {
+        for (const nearby of [4, 3, 2] as ClubTier[]) {
+          if (homePicks.length >= Math.min(homeLooks, count)) break;
+          takeHome(shuffle(excludeRestrictedTrials(
+            clubsInCountries([homeName], nearby, exclude),
+            nationId,
+          )));
+        }
+      }
+    }
+    if (homePicks.length < count) {
+      takeHome(shuffle(southAmericanLowerTrialClubs(exclude)));
+    }
+    return homePicks.slice(0, count);
   }
 
   const destinations = trialDestinationCountries(nationId);
