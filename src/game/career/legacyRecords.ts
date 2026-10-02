@@ -589,14 +589,7 @@ export function careerLegacyBoards(input: LegacyCareerInput): LegacyBoardView[] 
 }
 
 export function identityLegacyBoards(input: LegacyCareerInput): LegacyBoardView[] {
-  return careerLegacyBoards(input).filter((board) => {
-    if (board.reveal !== 'top10') return false;
-    if (board.def.span === 'season') {
-      if (board.def.id.startsWith('continental:')) return true;
-      return board.rank === 1;
-    }
-    return true;
-  });
+  return careerLegacyBoards(input).filter((board) => board.reveal === 'top10');
 }
 
 export interface SeasonLegacyHighlight {

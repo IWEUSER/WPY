@@ -5,7 +5,7 @@ import { createNationalTeamState, recordInternationalAppearance } from './intern
 import { mlsConferenceOf } from './data/leagueFormat';
 import { applyMatchToTable, buildSeasonStandings, rankLeagueTable } from './matchEngine';
 import { awardBeat, firstCapBeat, firstTitleBeat, recordBeat, retirementBeat, soldBeat, titleBeat, tournamentCallUpBeat } from './careerBeat';
-import { newContractYears, playerMarketValueFromSeasons, weeklyWageForClub } from './playerValue';
+import { newContractYears, openingWeeklyWageForSquadStatus, playerMarketValueFromSeasons, weeklyWageForClub } from './playerValue';
 import { applyTrialMatch, applyYouthMatch, assignOpeningTrialClub, beginClubTrial, beginFavouriteClubTrial, chooseTrialClub, createYouthCampaign, failClubTrial } from './openingFlow';
 import { hydrateSeason, nextActionableFixture } from './seasonSim';
 import { CURRENT_RULES_STAMP } from './rulesStamp';
@@ -1046,6 +1046,71 @@ export function applyCareerLayoutPreview(): void {
           minFromCountry: 4,
         })
       : null;
+  const ferrolClub = getClub('racing-ferrol');
+  const ferrolOpenWage = ferrolClub ? openingWeeklyWageForSquadStatus(ferrolClub, 0, 'starter') : 13_000;
+  const ferrolRenewPreview =
+    preview === 'ferrol-renew' && ferrolClub
+      ? resolveSeasonTransition({
+          season: season({
+            seasonNumber: 1,
+            clubId: 'racing-ferrol',
+            role: 'first-team',
+            matches: [],
+            goals: 16,
+            gamesPlayed: 38,
+            ratioMet: true,
+            age: 18,
+            leagueGoals: 16,
+            trophies: [],
+            topGoalscorer: false,
+            playerOfTheYear: false,
+            wonWpy: false,
+            league: 'La Liga 2',
+            squadStatus: 'starter',
+          }),
+          role: 'first-team',
+          clubId: 'racing-ferrol',
+          parentClubId: 'racing-ferrol',
+          seasonsAtCurrentClub: 0,
+          age: 18,
+          careerGoals: 16,
+          careerGames: 38,
+          nationality: 'spain',
+          loansUsed: 0,
+          contractYearsRemaining: 4,
+          careerStart: 'pick-club',
+          squadStatus: 'starter',
+          clubLeague: 'La Liga 2',
+          weeklyWage: ferrolOpenWage,
+        })
+      : null;
+  const madridSaudiPreview =
+    preview === 'madrid-saudi'
+      ? {
+          kind: 'end-of-season' as const,
+          detail: 'Saudi clubs must meet the listed transfer value when they bid.',
+          clubIds: ['al-hilal'],
+          offers: [
+            {
+              clubId: 'al-hilal',
+              move: 'permanent' as const,
+              fee: 333_000_000,
+              weeklyWage: weeklyWageForClub(getClub('al-hilal')!, 333_000_000),
+              contractYears: newContractYears(19),
+            },
+          ],
+          allowDecline: true,
+          stay: {
+            clubId: 'real-madrid',
+            parentClubId: 'real-madrid',
+            role: 'first-team' as const,
+            seasonsAtCurrentClub: 1,
+            contractYearsRemaining: 4,
+            clubLeague: 'La Liga',
+            squadStatus: 'starter' as const,
+          },
+        }
+      : null;
   const pendingTransfer: PendingTransfer | null =
     preview === 'renew'
       ? renewalPreview?.pendingTransfer ?? null
@@ -1067,6 +1132,10 @@ export function applyCareerLayoutPreview(): void {
       ? firstTeamMissPreview?.pendingTransfer ?? null
       : preview === 'rising-loans' || preview === 'rising-loans-s2'
       ? risingLoansPreview?.pendingTransfer ?? null
+      : preview === 'ferrol-renew'
+      ? ferrolRenewPreview?.pendingTransfer ?? null
+      : preview === 'madrid-saudi'
+      ? madridSaudiPreview
       : preview === 'expired'
       ? {
           kind: 'end-of-season',
@@ -1180,7 +1249,7 @@ export function applyCareerLayoutPreview(): void {
           ? 'match'
         : isYouthNextPreview
           ? 'hub'
-        : preview === 'record' || preview === 'record-club'
+        : preview === 'record' || preview === 'record-club' || preview === 'record-madrid'
         ? 'career'
         : preview === 'profile'
         ? 'profile'
@@ -1196,13 +1265,13 @@ export function applyCareerLayoutPreview(): void {
         ? 'legacy'
         : preview === 'club-choice'
         ? 'club-choice'
-        : preview === 'transfer' || preview === 'expired' || preview === 'renew' || preview === 'championship-transfer' || preview === 'oxford-free' || preview === 'palace-hot' || preview === 'burnley-s1' || isReserveLoansPreview || preview === 'first-team-miss' || preview === 'transfer-20' || preview === 'transfer-reject' || preview === 'rising-loans' || preview === 'rising-loans-s2'
+        : preview === 'transfer' || preview === 'expired' || preview === 'renew' || preview === 'championship-transfer' || preview === 'oxford-free' || preview === 'palace-hot' || preview === 'burnley-s1' || isReserveLoansPreview || preview === 'first-team-miss' || preview === 'transfer-20' || preview === 'transfer-reject' || preview === 'rising-loans' || preview === 'rising-loans-s2' || preview === 'ferrol-renew' || preview === 'madrid-saudi'
           ? 'transfer-choice'
           : preview === 'reserve-promo' || preview === 'loan-summary' || preview === 's1-summary'
           ? 'season-summary'
           : preview === 'club-offer'
             ? 'club-offer'
-          : preview === 'result' || preview === 'result-pens'
+          : preview === 'result' || preview === 'result-pens' || preview === 'result-league'
             ? 'match-result'
             : preview === 'end'
               ? 'career-end'
@@ -1215,8 +1284,8 @@ export function applyCareerLayoutPreview(): void {
                   : 'hub',
     age: isTrialPreview || isYouthPreview || isYouthNextPreview || isClubTrialPreview || isReservePreview || preview === 'reserve-promo' ? 16 : preview === 'end' ? 36 : preview === 'palace-hot' ? 28 : preview === 'championship-transfer' || preview === 'oxford-free' || preview === 'transfer-20' ? 20 : preview === 'rising-loans' || preview === 'rising-loans-s2' ? 18 : preview === 'first-team-miss' || preview === 's1-summary' || preview === 'hub-rising-star' || preview === 'hub-rotation' || preview === 'hub-qualifying' || preview === 'burnley-s1' ? 17 : promoteSummary ? 22 : 19,
     seasonNumber: isTrialPreview || isYouthPreview || isYouthNextPreview || isClubTrialPreview || isReservePreview || preview === 'hub-qualifying' || preview === 'hub-rising-star' || preview === 'hub-rotation' || preview === 'reserve-promo' || preview === 's1-summary' || preview === 'rising-loans' || preview === 'burnley-s1' ? 1 : preview === 'rising-loans-s2' ? 2 : preview === 'oxford-free' ? 3 : preview === 'palace-hot' ? 12 : preview === 'end' ? 21 : promoteSummary ? 6 : 4,
-    clubId: isYouthPreview || isYouthNextPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : preview === 'match-psg' ? 'psg' : preview === 'benfica' || preview === 'rebuild' || preview === 'match-benfica' ? 'benfica' : preview === 'ajax' || preview === 'match-ajax' ? 'ajax' : preview === 'galatasaray' || preview === 'match-galatasaray' ? 'galatasaray' : preview === 'championship-transfer' || promoteSummary ? 'leicester' : preview === 'oxford-free' ? 'oxford' : preview === 'palace-hot' ? 'crystal-palace' : preview === 'burnley-s1' ? 'burnley' : preview === 'loan-summary' ? 'levante' : preview === 's1-summary' || preview === 'opening-role' ? 'man-city' : preview === 'rising-loans' || preview === 'rising-loans-s2' ? 'arsenal' : preview === 'beat-sold-free' ? 'cremonese' : 'real-madrid',
-    parentClubId: isYouthPreview || isYouthNextPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : preview === 'match-psg' ? 'psg' : preview === 'benfica' || preview === 'rebuild' || preview === 'match-benfica' ? 'benfica' : preview === 'ajax' || preview === 'match-ajax' ? 'ajax' : preview === 'galatasaray' || preview === 'match-galatasaray' ? 'galatasaray' : preview === 'championship-transfer' || promoteSummary ? 'leicester' : preview === 'oxford-free' ? 'oxford' : preview === 'palace-hot' ? 'crystal-palace' : preview === 'burnley-s1' ? 'burnley' : preview === 's1-summary' ? 'man-city' : preview === 'rising-loans' || preview === 'rising-loans-s2' ? 'arsenal' : preview === 'beat-sold-free' ? 'inter' : 'real-madrid',
+    clubId: isYouthPreview || isYouthNextPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : preview === 'match-psg' ? 'psg' : preview === 'benfica' || preview === 'rebuild' || preview === 'match-benfica' ? 'benfica' : preview === 'ajax' || preview === 'match-ajax' ? 'ajax' : preview === 'galatasaray' || preview === 'match-galatasaray' ? 'galatasaray' : preview === 'championship-transfer' || promoteSummary ? 'leicester' : preview === 'oxford-free' ? 'oxford' : preview === 'palace-hot' ? 'crystal-palace' : preview === 'burnley-s1' ? 'burnley' : preview === 'ferrol-renew' ? 'racing-ferrol' : preview === 'loan-summary' ? 'levante' : preview === 's1-summary' || preview === 'opening-role' ? 'man-city' : preview === 'rising-loans' || preview === 'rising-loans-s2' ? 'arsenal' : preview === 'beat-sold-free' ? 'cremonese' : 'real-madrid',
+    parentClubId: isYouthPreview || isYouthNextPreview || isTrialPreview ? null : isClubTrialPreview ? openingCampaign?.trialClubId ?? null : preview === 'end' ? 'inter-miami' : preview === 'mls' ? 'lafc' : preview === 'saudi' ? 'al-hilal' : preview === 'match-psg' ? 'psg' : preview === 'benfica' || preview === 'rebuild' || preview === 'match-benfica' ? 'benfica' : preview === 'ajax' || preview === 'match-ajax' ? 'ajax' : preview === 'galatasaray' || preview === 'match-galatasaray' ? 'galatasaray' : preview === 'championship-transfer' || promoteSummary ? 'leicester' : preview === 'oxford-free' ? 'oxford' : preview === 'palace-hot' ? 'crystal-palace' : preview === 'burnley-s1' ? 'burnley' : preview === 'ferrol-renew' ? 'racing-ferrol' : preview === 's1-summary' ? 'man-city' : preview === 'rising-loans' || preview === 'rising-loans-s2' ? 'arsenal' : preview === 'beat-sold-free' ? 'inter' : 'real-madrid',
     role: isReservePreview || isTrialPreview || isYouthPreview || isYouthNextPreview || isClubTrialPreview || preview === 'reserve-promo' ? 'reserve' : preview === 'loan-summary' || preview === 'beat-sold-free' ? 'loan' : 'first-team',
     trial: preview === 'club-offer'
       ? { shots: [], goals: 6, offeredClubIds: ['real-madrid', 'barcelona', 'atletico-madrid'] }
@@ -1248,7 +1317,29 @@ export function applyCareerLayoutPreview(): void {
     availability: preview === 'hub-ucl-leg2' || preview === 'hub-rotation'
       ? { phase: 0, windowFails: 2, bannedGamesRemaining: 0 }
       : createAvailability(),
-    seasonHistory: preview === 'championship-transfer' ? champSeasons.slice(0, 2) : preview === 'record-club' ? [season({
+    seasonHistory: preview === 'record-madrid' ? [season({
+      seasonNumber: 4,
+      clubId: 'real-madrid',
+      role: 'first-team',
+      matches: [],
+      goals: 52,
+      gamesPlayed: 51,
+      ratioMet: true,
+      age: 20,
+      leagueGoals: 45,
+      leagueGames: 38,
+      cupGames: 0,
+      cupGoals: 0,
+      domesticGames: 38,
+      domesticGoals: 45,
+      continentalStats: [{ cup: 'ucl', games: 13, goals: 12 }],
+      trophies: ['Spanish League'],
+      topGoalscorer: true,
+      playerOfTheYear: false,
+      wonWpy: false,
+      earnings: 7_280_000,
+      league: 'La Liga',
+    })] : preview === 'championship-transfer' ? champSeasons.slice(0, 2) : preview === 'record-club' ? [season({
       seasonNumber: 12,
       clubId: 'crystal-palace',
       role: 'first-team',
@@ -1330,7 +1421,7 @@ export function applyCareerLayoutPreview(): void {
       : sim,
     seasonStandings: buildSeasonStandings(promoteSummary ? leicesterTable : sim.leagueTable, promoteSummary ? null : sim.europeanStanding),
     currentSeason:
-      isYouthPreview || isYouthNextPreview || isTrialPreview || isClubTrialPreview || preview === 'record-club'
+      isYouthPreview || isYouthNextPreview || isTrialPreview || isClubTrialPreview || preview === 'record-club' || preview === 'record-madrid'
         ? null
       : preview === 'end'
         ? history[history.length - 1]
@@ -1534,22 +1625,24 @@ export function applyCareerLayoutPreview(): void {
           nextLine: computedNextLine,
         }
       : {
-          summary: 'Spain won 2–0 vs Italy · 2 goals from 2 chances',
-          headline: 'Spain won 2–0 vs Italy',
-          isFinal: preview === 'result',
+          summary: preview === 'result-league'
+            ? 'Madrid won 2–0 vs Seville · 2 goals from 2 chances'
+            : 'Spain won 2–0 vs Italy · 2 goals from 2 chances',
+          headline: preview === 'result-league' ? 'Madrid won 2–0 vs Seville' : 'Spain won 2–0 vs Italy',
+          isFinal: preview === 'result' || preview === 'result-league',
           won: true,
-          trophyName: preview === 'result' ? 'European Nations Cup' : null,
-          afterPhase: preview === 'result' ? 'season-summary' : 'hub',
+          trophyName: preview === 'result-league' ? 'Spanish League' : preview === 'result' ? 'European Nations Cup' : null,
+          afterPhase: preview === 'result' || preview === 'result-league' ? 'season-summary' : 'hub',
           playerGoals: 2,
           chances: 2,
           aggregateLine: null,
-          nextLine: computedNextLine,
+          nextLine: preview === 'result-league' ? 'Season complete · Spanish League champions' : computedNextLine,
         },
-    weeklyWage: preview === 'end' ? 40_000 : promoteSummary && leicester ? weeklyWageForClub(leicester, value, 'Championship') : 140_000,
+    weeklyWage: preview === 'end' ? 40_000 : preview === 'ferrol-renew' ? ferrolOpenWage : promoteSummary && leicester ? weeklyWageForClub(leicester, value, 'Championship') : 140_000,
     careerEarnings: preview === 'end' ? 86_400_000 : 14_560_000,
     contractYears: preview === 'end' ? 1 : promoteSummary || preview === 'expired' ? 2 : preview === 'hub' ? 2 : 5,
     contractYearsRemaining: preview === 'end' || preview === 'expired' || preview === 'oxford-free' || preview === 'palace-hot' ? 0 : preview === 'championship-transfer' || preview === 'burnley-s1' ? 3 : promoteSummary || preview === 'hub' ? 2 : 5,
-    clubLeague: preview === 'end' || preview === 'mls' ? 'MLS' : preview === 'saudi' ? 'Saudi Pro League' : preview === 'championship-transfer' || preview === 'oxford-free' || promoteSummary ? 'Championship' : preview === 'benfica' || preview === 'rebuild' || preview === 'match-benfica' ? 'Primeira Liga' : preview === 'ajax' || preview === 'match-ajax' ? 'Eredivisie' : preview === 'galatasaray' || preview === 'match-galatasaray' ? 'Super Lig' : preview === 'match-psg' ? 'Ligue 1' : preview === 's1-summary' || preview === 'rising-loans' || preview === 'rising-loans-s2' || preview === 'palace-hot' || preview === 'burnley-s1' ? 'Premier League' : 'La Liga',
+    clubLeague: preview === 'end' || preview === 'mls' ? 'MLS' : preview === 'saudi' ? 'Saudi Pro League' : preview === 'championship-transfer' || preview === 'oxford-free' || promoteSummary ? 'Championship' : preview === 'ferrol-renew' ? 'La Liga 2' : preview === 'benfica' || preview === 'rebuild' || preview === 'match-benfica' ? 'Primeira Liga' : preview === 'ajax' || preview === 'match-ajax' ? 'Eredivisie' : preview === 'galatasaray' || preview === 'match-galatasaray' ? 'Super Lig' : preview === 'match-psg' ? 'Ligue 1' : preview === 's1-summary' || preview === 'rising-loans' || preview === 'rising-loans-s2' || preview === 'palace-hot' || preview === 'burnley-s1' ? 'Premier League' : 'La Liga',
     homeContractYearsRemaining: null,
     seasonSponsorship: preview === 'end' ? 280_000 : 9_300_000,
     injuryGamesRemaining: 0,

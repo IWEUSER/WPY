@@ -1,5 +1,6 @@
 import { CLUBS, clubsByTier, clubsInCountry, type Club, type ClubTier } from './data/clubs';
 import { getNation } from './data/nations';
+import { trialDestinationCountries } from './trialGeography';
 import { shuffle } from './util';
 
 /**
@@ -41,6 +42,47 @@ export function pickClubsBiasedToCountry(
     return [...homePicks, ...awayPicks, ...shuffle(filler)].slice(0, count);
   }
   return [...homePicks, ...awayPicks];
+}
+
+/**
+ * Half the window from the current club's country, half from nationality
+ * geography. When those are the same country, the second half is abroad.
+ */
+export function pickClubsSplitByCurrentAndGeo(
+  preferred: Club[],
+  count: number,
+  currentCountry: string | null | undefined,
+  nationality: string | null | undefined,
+  extra: Club[] = [],
+): Club[] {
+  const pool = uniqueById([...preferred, ...extra].filter((club) => club.playable !== false));
+  const seen = new Set<string>();
+  const homeWanted = Math.ceil(count / 2);
+  const homeCountry = currentCountry && pool.some((club) => club.country === currentCountry)
+    ? currentCountry
+    : null;
+  const geoCountries = new Set(
+    trialDestinationCountries(nationality).filter((country) => country !== homeCountry),
+  );
+  const take = (filter: (club: Club) => boolean, n: number): Club[] => {
+    const out: Club[] = [];
+    for (const club of shuffle(pool.filter((item) => !seen.has(item.id) && filter(item)))) {
+      if (out.length >= n) break;
+      seen.add(club.id);
+      out.push(club);
+    }
+    return out;
+  };
+  const home = homeCountry ? take((club) => club.country === homeCountry, homeWanted) : [];
+  const geo = geoCountries.size > 0
+    ? take((club) => geoCountries.has(club.country), count - home.length)
+    : [];
+  const away = take(
+    (club) => !homeCountry || club.country !== homeCountry,
+    count - home.length - geo.length,
+  );
+  const rest = take(() => true, count - home.length - geo.length - away.length);
+  return [...home, ...geo, ...away, ...rest].slice(0, count);
 }
 
 export function countryForNationality(nationId: string | null | undefined): string | null {

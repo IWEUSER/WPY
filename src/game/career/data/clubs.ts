@@ -1,4 +1,4 @@
-import { MLS_CONFERENCE_SIZE, MLS_REGULAR_SEASON_WEEKS, leagueDisplayName, mlsConferenceOf } from './leagueFormat';
+import { MLS_CONFERENCE_SIZE, MLS_REGULAR_SEASON_WEEKS, mlsConferenceOf } from './leagueFormat';
 
 /**
  * The football pyramid this career mode plays out across: the big five
@@ -26,14 +26,8 @@ export const TIER_LABEL: Record<ClubTier, string> = {
   5: 'Lower level',
 };
 
-/**
- * Transfer-card band. Second-division clubs sit below first-division
- * Medium — Leicester is English Championship, Palace is Medium.
- */
+/** Transfer-card band. Every offer shows Elite–Lower level, never the division name. */
 export function clubQualityLabel(club: { tier: ClubTier; league: string }): string {
-  if (SECOND_DIVISIONS.has(club.league)) {
-    return leagueDisplayName(club.league);
-  }
   return TIER_LABEL[club.tier];
 }
 

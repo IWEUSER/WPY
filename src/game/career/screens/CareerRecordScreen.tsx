@@ -1,5 +1,6 @@
 import { getClub } from '../data/clubs';
 import { formatInternationalSeason, seasonClubName, seasonLeagueLabel } from '../honoursDisplay';
+import { goalsLabel, identityLegacyBoards } from '../legacyRecords';
 import { formatEuros } from '../playerValue';
 import { countsTowardCareerRecord, displaySeasonLabel } from '../seasonDisplay';
 import { aggregateContinental, aggregateDomesticSplit, careerClubRecord, careerTransferFeesPaid, seasonDomesticSplit } from '../seasonStats';
@@ -7,6 +8,7 @@ import { useCareerStore } from '../store';
 import type { SeasonRecord } from '../types';
 import { DATA_CARD, DATA_TILE } from './dataUi';
 import { SeasonHonoursLines } from './HonoursPills';
+import { RECORD_KIND_BADGE, RECORD_KIND_LABEL, RECORD_KIND_TEXT, RECORD_KIND_VALUE, colorKindForDef } from './recordColors';
 import { ClubCompetitionTable, InternationalSeasonBlock } from './StatsTable';
 
 const ROLE_LABEL: Record<string, string> = {
@@ -18,6 +20,9 @@ const ROLE_LABEL: Record<string, string> = {
 export default function CareerRecordScreen() {
   const history = useCareerStore((s) => s.seasonHistory);
   const current = useCareerStore((s) => s.currentSeason);
+  const nationalTeam = useCareerStore((s) => s.nationalTeam);
+  const nationality = useCareerStore((s) => s.nationality);
+  const playerName = useCareerStore((s) => s.playerName);
   const returnToHub = useCareerStore((s) => s.returnToHub);
 
   const seasons: Array<SeasonRecord & { inProgress?: boolean }> = [
@@ -31,6 +36,12 @@ export default function CareerRecordScreen() {
   const feesPaid = careerTransferFeesPaid(recordSeasons);
   const clubRecord = careerClubRecord(scoredSeasons);
   const ratio = clubRecord.ratio;
+  const records = identityLegacyBoards({
+    seasons: scoredSeasons,
+    nationalTeam,
+    nationality,
+    playerName,
+  });
 
   return (
     <div className="flex h-full w-full flex-col overflow-y-auto px-5 py-[max(1.25rem,env(safe-area-inset-top))] pb-10 text-white">
@@ -53,6 +64,36 @@ export default function CareerRecordScreen() {
       <div className={`mt-3 ${DATA_CARD} text-sm`}>
         <p className="text-xs uppercase tracking-wide text-white/40">Club</p>
         <ClubCompetitionTable split={domestic} continental={continental} alwaysShowEuropean />
+      </div>
+
+      <div className={`mt-3 ${DATA_CARD} text-sm`}>
+        <p className="text-xs uppercase tracking-wide text-white/40">Records</p>
+        {records.length === 0 ? (
+          <p className="mt-2 text-sm text-white/50">No top-10 records yet.</p>
+        ) : (
+          <ul className="mt-2 space-y-2">
+            {records.map((board) => {
+              const kind = colorKindForDef(board.def);
+              return (
+                <li key={board.def.id} className="flex items-baseline justify-between gap-3 text-sm">
+                  <span className={`font-semibold ${RECORD_KIND_TEXT[kind]}`}>
+                    {board.def.title}
+                    <span className="mt-0.5 block text-[10px] font-medium uppercase tracking-wide text-white/45">
+                      {board.def.subtitle}
+                    </span>
+                    <span className={`mt-1 inline-block rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${RECORD_KIND_BADGE[kind]}`}>
+                      {RECORD_KIND_LABEL[kind]}
+                    </span>
+                  </span>
+                  <span className={`shrink-0 text-right ${RECORD_KIND_VALUE[kind]}`}>
+                    {board.rankLabel}
+                    <span className="block text-[10px] text-white/50">{goalsLabel(board.playerGoals)}</span>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
 
       <div className="mt-5 flex flex-col gap-3">
