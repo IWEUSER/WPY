@@ -31,12 +31,16 @@ import { trophyLabels } from './honoursDisplay';
 import {
   enqueueEndOfSeasonBeats,
   enqueueLeagueTitleBeat,
+  enqueueMatchMilestones,
   firstCapBeat,
+  markMilestone,
   pushCareerBeat,
   retirementBeat,
+  signedClubBeat,
   tournamentCallUpBeat,
 } from './careerBeat';
-import { inputWithoutSeason, seasonOutrightRecordHighlights } from './legacyRecords';
+import { scoredWinningGoal, trophyClass, trophyMilestoneId } from './careerBeatCopy';
+import { inputWithoutSeason, seasonRecordBeatHighlights } from './legacyRecords';
 import {
   bumpInternationalSeason,
   isInternationalFinalsRound,
@@ -449,6 +453,8 @@ function recapFromResolution(opts: {
   isFinal: boolean;
   trophyName: string | null;
   afterPhase: LastMatchResult['afterPhase'];
+  penaltyKick?: boolean;
+  penaltyScored?: boolean;
 }): { lastMatchSummary: string; lastMatchResult: LastMatchResult } {
   const playerLine =
     opts.chances != null && opts.playerGoals != null
@@ -481,6 +487,18 @@ function recapFromResolution(opts: {
       aggregateLine: opts.aggregateLine,
       nextLine,
       sitOutReason: opts.extra ?? null,
+      scoreFor: opts.result.scoreFor,
+      scoreAgainst: opts.result.scoreAgainst,
+      penaltyKick: Boolean(opts.penaltyKick),
+      penaltyScored: Boolean(opts.penaltyScored),
+      penaltiesWon: opts.result.penalties ? opts.result.penalties.won : null,
+      winningGoal: scoredWinningGoal(
+        opts.result.scoreFor,
+        opts.result.scoreAgainst,
+        opts.playerGoals ?? 0,
+        opts.result.outcome === 'win',
+        Boolean(opts.result.penalties),
+      ),
     },
   };
 }
@@ -811,6 +829,7 @@ function initialState(): CareerState {
     profileReturnPhase: null,
     pendingBeats: [],
     seenBeatKinds: [],
+    seenMilestones: [],
     guidedChanceSeen: false,
     fullCareerUnlocked: false,
     pendingSeasonTwoChoice: null,
@@ -935,6 +954,7 @@ function beginSignedCareer(
     trial: null,
     liveMatch: null,
     phase: 'hub',
+    pendingBeats: [signedClubBeat(club?.name ?? 'Your club')],
   };
 }
 
@@ -1135,6 +1155,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
           club,
           state.clubLeague,
           state.seasonHistory,
+          state.seenMilestones,
         )
         : state.pendingBeats,
     };
@@ -1173,6 +1194,7 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
           club,
           state.clubLeague,
           state.seasonHistory,
+          state.seenMilestones,
         ),
       };
     }
@@ -1578,6 +1600,8 @@ function finishResolvedLiveMatch(
     isFinal: isFinalFixture(fixture),
     trophyName: trophyNameForFixture(fixture, sim.internationalTournament),
     afterPhase,
+    penaltyKick: Boolean(live.penaltyKick),
+    penaltyScored: Boolean(live.penaltyKick && live.goals > (live.goalsAtNinety ?? 0)),
   });
 
   const reviewed = complete
@@ -1587,7 +1611,22 @@ function finishResolvedLiveMatch(
         awarded.season,
       );
 
-  let pendingBeats = state.pendingBeats ?? [];
+  const priorClubGames = (season.gamesPlayed ?? 0)
+    + state.seasonHistory.reduce((sum, row) => sum + (row.gamesPlayed ?? 0), 0);
+  const priorClubGoals = (season.goals ?? 0)
+    + state.seasonHistory.reduce((sum, row) => sum + (row.goals ?? 0), 0);
+  const priorCaps = state.nationalTeam?.caps ?? 0;
+  const priorIntlGoals = state.nationalTeam?.goals ?? 0;
+  let pendingBeats = enqueueMatchMilestones(state.pendingBeats, state.seenBeatKinds, {
+    clubAppearance,
+    international: isInternational,
+    playerGoals: historyGoals,
+    priorClubGames,
+    priorClubGoals,
+    priorCaps,
+    priorIntlGoals,
+    nationName: state.nationality ? getNation(state.nationality)?.name ?? 'Your country' : 'Your country',
+  });
   if (complete) {
     pendingBeats = enqueueLeagueTitleBeat(
       pendingBeats,
@@ -1596,6 +1635,7 @@ function finishResolvedLiveMatch(
       club,
       state.clubLeague,
       state.seasonHistory,
+      state.seenMilestones,
     );
   }
 
@@ -1912,6 +1952,7 @@ export const useCareerStore = create<CareerStore>()(
           return {
             pendingBeats: rest,
             seenBeatKinds: seen.includes(current.kind) ? seen : [...seen, current.kind],
+            seenMilestones: markMilestone(state.seenMilestones, current.milestoneId),
           };
         }),
 
@@ -1921,13 +1962,20 @@ export const useCareerStore = create<CareerStore>()(
         set((state) => {
           const after = state.lastMatchResult?.afterPhase;
           const seen = state.seenBeatKinds ?? [];
-          const firstTitleSeen =
+          const trophyName = state.lastMatchResult?.trophyName;
+          const celebrated = Boolean(
             state.lastMatchResult?.isFinal
             && state.lastMatchResult.won
-            && state.lastMatchResult.trophyName
-            && !seen.includes('first-title')
+            && trophyName,
+          );
+          const firstTitleSeen =
+            celebrated && !seen.includes('first-title')
               ? [...seen, 'first-title' as const]
               : seen;
+          let seenMilestones = state.seenMilestones ?? [];
+          if (celebrated && trophyName) {
+            seenMilestones = markMilestone(seenMilestones, trophyMilestoneId(trophyClass(trophyName)));
+          }
           if (after === 'match' && state.openingCampaign) {
             const live = liveFromOpening(state.openingCampaign);
             return {
@@ -1936,6 +1984,7 @@ export const useCareerStore = create<CareerStore>()(
               lastMatchResult: null,
               seasonCalendar: state.openingCampaign.calendar,
               seenBeatKinds: firstTitleSeen,
+              seenMilestones,
             };
           }
           if (after === 'opening-brief') {
@@ -1943,18 +1992,19 @@ export const useCareerStore = create<CareerStore>()(
               state.openingCampaign && state.nationality
                 ? repairOpeningCampaign(state.openingCampaign, state.nationality)
                 : state.openingCampaign;
-            return { phase: 'opening-brief', lastMatchResult: null, openingCampaign: opening, seenBeatKinds: firstTitleSeen };
+            return { phase: 'opening-brief', lastMatchResult: null, openingCampaign: opening, seenBeatKinds: firstTitleSeen, seenMilestones };
           }
           if (after === 'club-offer') {
-            return { phase: 'club-offer', lastMatchResult: null, seenBeatKinds: firstTitleSeen };
+            return { phase: 'club-offer', lastMatchResult: null, seenBeatKinds: firstTitleSeen, seenMilestones };
           }
           if (after === 'hub') {
-            return { phase: 'hub', lastMatchResult: null, seenBeatKinds: firstTitleSeen };
+            return { phase: 'hub', lastMatchResult: null, seenBeatKinds: firstTitleSeen, seenMilestones };
           }
           return {
             phase: after ?? (state.clubId ? 'hub' : 'menu'),
             lastMatchResult: null,
             seenBeatKinds: firstTitleSeen,
+            seenMilestones,
           };
         }),
 
@@ -2078,7 +2128,8 @@ export const useCareerStore = create<CareerStore>()(
                 enqueueEndOfSeasonBeats(state.pendingBeats, state.seenBeatKinds, {
                   season: finishedSeason,
                   playerName,
-                  outrightRecords: seasonOutrightRecordHighlights(
+                  seenMilestones: state.seenMilestones,
+                  outrightRecords: seasonRecordBeatHighlights(
                     inputWithoutSeason({
                       seasons: seasonHistory,
                       nationalTeam: state.nationalTeam,
@@ -2143,7 +2194,8 @@ export const useCareerStore = create<CareerStore>()(
             const pendingBeats = enqueueEndOfSeasonBeats(state.pendingBeats, state.seenBeatKinds, {
               season: finishedSeason,
               playerName,
-              outrightRecords: seasonOutrightRecordHighlights(
+              seenMilestones: state.seenMilestones,
+              outrightRecords: seasonRecordBeatHighlights(
                 inputWithoutSeason({
                   seasons: seasonHistory,
                   nationalTeam,
@@ -2213,7 +2265,8 @@ export const useCareerStore = create<CareerStore>()(
           const pendingBeats = enqueueEndOfSeasonBeats(state.pendingBeats, state.seenBeatKinds, {
             season: finishedSeason,
             playerName,
-            outrightRecords: seasonOutrightRecordHighlights(
+            seenMilestones: state.seenMilestones,
+            outrightRecords: seasonRecordBeatHighlights(
               inputWithoutSeason({
                 seasons: seasonHistory,
                 nationalTeam,
@@ -2642,7 +2695,7 @@ export const useCareerStore = create<CareerStore>()(
     }),
     {
       name: 'wpy-career-v1',
-      version: 43,
+      version: 44,
       migrate: (persisted) => {
         try {
           return migrateCareerPersist(persisted);
@@ -2894,6 +2947,7 @@ function migrateCareerPersist(persisted: unknown): CareerState {
             copy: rewriteLicensedDisplayText(beat.copy),
           })),
           seenBeatKinds: state.seenBeatKinds ?? [],
+          seenMilestones: state.seenMilestones ?? [],
           guidedChanceSeen: state.guidedChanceSeen ?? false,
           squadStatus: (() => {
             const status = normalizeSquadStatus(state.squadStatus, state.role ?? 'reserve');

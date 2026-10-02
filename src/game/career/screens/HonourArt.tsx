@@ -11,7 +11,7 @@ export function HonourArt({
   const kind = honourArtKind(name);
   const alt = name?.trim() || 'Award';
   return (
-    <div className="mt-5 flex flex-col items-center">
+    <div className="honour-stage mt-5 flex flex-col items-center">
       <img
         src={src}
         alt={alt}
@@ -19,7 +19,7 @@ export function HonourArt({
         className="h-48 w-48 rounded-2xl object-cover shadow-lg shadow-black/40 ring-1 ring-white/15"
       />
       {caption ? (
-        <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-200/80">{caption}</p>
+        <p className="relative z-[1] mt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-200/80">{caption}</p>
       ) : null}
     </div>
   );

@@ -6,6 +6,7 @@ import { rankLeagueTable, type SeasonStandings } from '../matchEngine';
 import { argentinaGroupTable, conferenceTable, ensureInternationalGroup, type SeasonSimState } from '../seasonSim';
 import { sortGroupTable } from '../internationalTable';
 import { competitionStageLabel } from '../honoursDisplay';
+import { STANDINGS_HEAD, positionZone, zoneEdgeClass, zonePosClass, type TableZoneContext } from '../leagueTableZones';
 import { useCareerStore } from '../store';
 import { DATA_CARD } from './dataUi';
 
@@ -55,6 +56,7 @@ export default function TablesScreen() {
             table={seasonSimWithGroup.leagueTable}
             clubId={club.id}
             leagueName={leagueDisplayName(clubLeague ?? club.league)}
+            league={clubLeague ?? club.league}
           />
         )}
         {seasonSimWithGroup && club && (
@@ -184,36 +186,28 @@ function StandingsCard({
 function LeagueTableRows({
   table,
   clubId,
+  context,
 }: {
   table: SeasonSimState['leagueTable'];
   clubId: string;
+  context: TableZoneContext;
 }) {
   const rows = rankLeagueTable(table ?? []).filter((row) => row.played > 0);
   if (rows.length === 0) return null;
   return (
-    <table className="mt-3 w-full table-fixed border-collapse text-left text-xs">
-      <thead>
-        <tr className="text-[10px] uppercase tracking-wide text-white/40">
-          <th className="pb-1 font-medium">Club</th>
-          <th className="w-10 pb-1 text-right font-medium">P</th>
-          <th className="w-10 pb-1 text-right font-medium">GD</th>
-          <th className="w-10 pb-1 text-right font-medium">Pts</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row) => {
-          const name = getClub(row.clubId)?.name ?? row.clubId;
-          return (
-            <tr key={row.clubId} className={row.clubId === clubId ? 'font-semibold text-white' : 'text-white/70'}>
-              <td className="py-0.5 pr-2">{row.position}. {name}</td>
-              <td className="py-0.5 text-right tabular-nums">{row.played}</td>
-              <td className="py-0.5 text-right tabular-nums">{row.goalsFor - row.goalsAgainst}</td>
-              <td className="py-0.5 text-right tabular-nums">{row.points}</td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+    <StandingsTable
+      rows={rows.map((row) => ({
+        id: row.clubId,
+        name: getClub(row.clubId)?.name ?? row.clubId,
+        position: row.position,
+        played: row.played,
+        gd: row.goalsFor - row.goalsAgainst,
+        points: row.points,
+        you: row.clubId === clubId,
+      }))}
+      nameHeader="Club"
+      context={context}
+    />
   );
 }
 
@@ -221,10 +215,12 @@ function LeagueTableCard({
   table,
   clubId,
   leagueName,
+  league,
 }: {
   table: SeasonSimState['leagueTable'];
   clubId: string;
   leagueName: string;
+  league: string;
 }) {
   const inMls = Boolean(mlsConferenceOf(clubId));
   const argGroup = argentinaGroupOf(clubId);
@@ -243,7 +239,7 @@ function LeagueTableCard({
           <p className="text-xs uppercase tracking-wide text-white/40">
             {leagueName} · {conferenceLabel(mlsConferenceOf(clubId))}
           </p>
-          <LeagueTableRows table={conference} clubId={clubId} />
+          <LeagueTableRows table={conference} clubId={clubId} context={{ kind: 'mls-conference' }} />
         </div>
       )}
       {hasGroup && (
@@ -251,14 +247,14 @@ function LeagueTableCard({
           <p className="text-xs uppercase tracking-wide text-white/40">
             {leagueName} · {argentinaGroupLabel(argGroup)}
           </p>
-          <LeagueTableRows table={group} clubId={clubId} />
+          <LeagueTableRows table={group} clubId={clubId} context={{ kind: 'argentina-group' }} />
         </div>
       )}
       <div>
         <p className="text-xs uppercase tracking-wide text-white/40">
           {inMls || argGroup ? `${leagueName} table` : leagueName}
         </p>
-        <LeagueTableRows table={overall} clubId={clubId} />
+        <LeagueTableRows table={overall} clubId={clubId} context={{ kind: 'league', league }} />
       </div>
     </div>
   );
@@ -294,29 +290,20 @@ function EuropeanTableCard({
         </p>
       )}
       <div className="mt-3 max-h-72 overflow-y-auto pr-1">
-      <table className="w-full table-fixed border-collapse text-left text-xs">
-        <thead>
-          <tr className="text-[10px] uppercase tracking-wide text-white/40">
-            <th className="pb-1 font-medium">Club</th>
-            <th className="w-10 pb-1 text-right font-medium">P</th>
-            <th className="w-10 pb-1 text-right font-medium">GD</th>
-            <th className="w-10 pb-1 text-right font-medium">Pts</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => {
-            const name = getClub(row.clubId)?.name ?? row.clubId;
-            return (
-              <tr key={row.clubId} className={row.clubId === clubId ? 'font-semibold text-white' : 'text-white/70'}>
-                <td className="py-0.5 pr-2">{row.position}. {name}</td>
-                <td className="py-0.5 text-right tabular-nums">{row.played}</td>
-                <td className="py-0.5 text-right tabular-nums">{row.goalsFor - row.goalsAgainst}</td>
-                <td className="py-0.5 text-right tabular-nums">{row.points}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+        <StandingsTable
+          stickyHeader
+          rows={rows.map((row) => ({
+            id: row.clubId,
+            name: getClub(row.clubId)?.name ?? row.clubId,
+            position: row.position,
+            played: row.played,
+            gd: row.goalsFor - row.goalsAgainst,
+            points: row.points,
+            you: row.clubId === clubId,
+          }))}
+          nameHeader="Club"
+          context={{ kind: 'europe', cup: standing?.cup }}
+        />
       </div>
     </div>
   );
@@ -336,27 +323,72 @@ function InternationalTableCard({
   return (
     <div>
       <p className="text-xs uppercase tracking-wide text-white/40">{nationName} table</p>
-      <table className="mt-3 w-full table-fixed border-collapse text-left text-xs">
-        <thead>
-          <tr className="text-[10px] uppercase tracking-wide text-white/40">
-            <th className="pb-1 font-medium">{group.kind === 'qualifying' ? 'Qualifying' : `Group ${group.letter}`}</th>
-            <th className="w-10 pb-1 text-right font-medium">P</th>
-            <th className="w-10 pb-1 text-right font-medium">GD</th>
-            <th className="w-10 pb-1 text-right font-medium">Pts</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sortGroupTable(group.rows).map((row, i) => (
-            <tr key={row.nationId} className={row.nationId === nationId ? 'font-semibold text-white' : 'text-white/70'}>
-              <td className="py-0.5 pr-2">{i + 1}. {row.name}</td>
-              <td className="py-0.5 text-right tabular-nums">{row.played}</td>
-              <td className="py-0.5 text-right tabular-nums">{row.goalsFor - row.goalsAgainst}</td>
-              <td className="py-0.5 text-right tabular-nums">{row.points}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <StandingsTable
+        rows={sortGroupTable(group.rows).map((row, i) => ({
+          id: row.nationId,
+          name: row.name,
+          position: i + 1,
+          played: row.played,
+          gd: row.goalsFor - row.goalsAgainst,
+          points: row.points,
+          you: row.nationId === nationId,
+        }))}
+        nameHeader={group.kind === 'qualifying' ? 'Qualifying' : `Group ${group.letter}`}
+        context={{ kind: 'intl-group' }}
+      />
     </div>
+  );
+}
+
+function StandingsTable({
+  rows,
+  nameHeader,
+  context,
+  stickyHeader = false,
+}: {
+  rows: { id: string; name: string; position: number; played: number; gd: number; points: number; you: boolean }[];
+  nameHeader: string;
+  context: TableZoneContext;
+  stickyHeader?: boolean;
+}) {
+  return (
+    <table className="mt-3 w-full table-fixed border-collapse text-left text-xs">
+      <thead>
+        <tr className={STANDINGS_HEAD}>
+          <th className={`pb-1.5 font-semibold ${stickyHeader ? 'sticky top-0 bg-[#050807]' : ''}`}>{nameHeader}</th>
+          <th className={`w-10 pb-1.5 text-right font-semibold ${stickyHeader ? 'sticky top-0 bg-[#050807]' : ''}`}>P</th>
+          <th className={`w-10 pb-1.5 text-right font-semibold ${stickyHeader ? 'sticky top-0 bg-[#050807]' : ''}`}>GD</th>
+          <th className={`w-10 pb-1.5 text-right font-semibold ${stickyHeader ? 'sticky top-0 bg-[#050807]' : ''}`}>Pts</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => {
+          const zone = positionZone(context, row.position, rows.length);
+          return (
+            <tr
+              key={row.id}
+              data-you={row.you ? 'true' : undefined}
+              data-zone={zone ?? undefined}
+              className={
+                row.you
+                  ? 'bg-emerald-950/80 font-semibold text-white shadow-[inset_0_0_22px_rgba(16,185,129,0.22)]'
+                  : 'odd:bg-white/[0.03] text-white/70'
+              }
+            >
+              <td className={`border-l-[3px] py-1 pr-2 pl-1.5 ${zoneEdgeClass(zone, row.you)}`}>
+                <span className={`mr-1.5 inline-block w-5 tabular-nums ${zonePosClass(zone, row.you)}`}>
+                  {row.position}
+                </span>
+                {row.name}
+              </td>
+              <td className="py-1 text-right tabular-nums">{row.played}</td>
+              <td className="py-1 text-right tabular-nums">{row.gd}</td>
+              <td className="py-1 text-right tabular-nums">{row.points}</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
   );
 }
 

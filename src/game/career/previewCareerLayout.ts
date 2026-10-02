@@ -4,7 +4,7 @@ import { getClub } from './data/clubs';
 import { createNationalTeamState, recordInternationalAppearance } from './international';
 import { mlsConferenceOf } from './data/leagueFormat';
 import { applyMatchToTable, buildSeasonStandings, rankLeagueTable } from './matchEngine';
-import { awardBeat, firstCapBeat, firstTitleBeat, recordBeat, retirementBeat, soldBeat, titleBeat, tournamentCallUpBeat } from './careerBeat';
+import { awardBeat, debutBeat, firstCapBeat, firstTitleBeat, recordBeat, retirementBeat, signedClubBeat, soldBeat, titleBeat, tournamentCallUpBeat } from './careerBeat';
 import { newContractYears, playerMarketValueFromSeasons, weeklyWageForClub } from './playerValue';
 import { applyTrialMatch, applyYouthMatch, assignOpeningTrialClub, beginClubTrial, beginFavouriteClubTrial, chooseTrialClub, createYouthCampaign, failClubTrial } from './openingFlow';
 import { hydrateSeason, nextActionableFixture } from './seasonSim';
@@ -1597,16 +1597,22 @@ export function applyCareerLayoutPreview(): void {
         }
       : preview === 'result-pens'
       ? {
-          summary: 'Spain drew 1–1 vs France (won 5–4 on penalties) · through to the quarter-finals · 1 goal from 2 chances',
-          headline: 'Spain drew 1–1 vs France (won 5–4 on penalties) · through to the quarter-finals',
-          isFinal: false,
+          summary: 'Spain drew 1–1 vs France (won 5–4 on penalties) · 1 goal from 2 chances',
+          headline: 'Spain drew 1–1 vs France (won 5–4 on penalties)',
+          isFinal: true,
           won: true,
-          trophyName: null,
-          afterPhase: 'hub',
+          trophyName: 'European Nations Cup',
+          afterPhase: 'season-summary',
           playerGoals: 1,
           chances: 2,
           aggregateLine: null,
           nextLine: computedNextLine,
+          scoreFor: 1,
+          scoreAgainst: 1,
+          penaltyKick: true,
+          penaltyScored: true,
+          penaltiesWon: true,
+          winningGoal: false,
         }
       : {
           summary: 'Spain won 2–0 vs Italy · 2 goals from 2 chances',
@@ -1619,6 +1625,9 @@ export function applyCareerLayoutPreview(): void {
           chances: 2,
           aggregateLine: null,
           nextLine: computedNextLine,
+          scoreFor: 2,
+          scoreAgainst: 0,
+          winningGoal: preview === 'result',
         },
     weeklyWage: preview === 'end' ? 40_000 : promoteSummary && leicester ? weeklyWageForClub(leicester, value, 'Championship') : 140_000,
     careerEarnings: preview === 'end' ? 86_400_000 : 14_560_000,
@@ -1648,9 +1657,14 @@ export function applyCareerLayoutPreview(): void {
       : undefined,
     guidedChanceSeen: preview !== 'guide',
     seenBeatKinds: [],
+    seenMilestones: preview === 'beat-league' ? ['league-medal'] : [],
     pendingBeats:
       preview === 'beat-cap'
         ? [firstCapBeat('Spain')]
+        : preview === 'beat-signed'
+          ? [signedClubBeat('Madrid')]
+        : preview === 'beat-debut'
+          ? [debutBeat()]
         : preview === 'beat-tournament'
           ? [tournamentCallUpBeat('Spain', 'World Championship')]
         : preview === 'beat-title'
@@ -1658,7 +1672,7 @@ export function applyCareerLayoutPreview(): void {
           : preview === 'beat-title-nation'
             ? [firstTitleBeat('European Nations Cup')]
             : preview === 'beat-league'
-              ? [titleBeat('English League')]
+              ? [titleBeat('English League', { seenMilestones: ['league-medal'] })]
             : preview === 'beat-sold'
             ? [soldBeat('Madrid')]
             : preview === 'beat-sold-free'
@@ -1673,6 +1687,22 @@ export function applyCareerLayoutPreview(): void {
                 kind: 'season',
                 domain: 'club',
                 group: 'league',
+                recordGoals: 38,
+                goalsToRecord: 0,
+              }, 'Alex Rivera')]
+              : preview === 'beat-record-climb'
+              ? [recordBeat({
+                title: 'World Championship',
+                subtitle: 'All-time World Championship goals',
+                rankLabel: '2nd',
+                rank: 2,
+                playerGoals: 13,
+                kind: 'all-time',
+                domain: 'nation',
+                group: 'nation',
+                recordGoals: 16,
+                goalsToRecord: 3,
+                id: 'intl-tournament:career:world-cup',
               }, 'Alex Rivera')]
               : preview === 'beat-award'
                 ? [awardBeat('League top goalscorer', 'Alex Rivera', 'Won the Spanish League golden boot with 24 league goals.')]
