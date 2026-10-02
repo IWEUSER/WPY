@@ -6,7 +6,10 @@ import { useCareerStore } from '../store';
 export default function ClubChoiceScreen() {
   const chooseFavouriteClub = useCareerStore((s) => s.chooseFavouriteClub);
   const backFromSetup = useCareerStore((s) => s.backFromSetup);
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return new URLSearchParams(window.location.search).get('q') ?? '';
+  });
 
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();

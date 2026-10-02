@@ -78,6 +78,11 @@ const HOME_LEAGUE_COUNTRIES = new Set([
   'Turkey',
   'United States',
   'Saudi Arabia',
+  'Mexico',
+  'Brazil',
+  'Argentina',
+  'Colombia',
+  'Japan',
 ]);
 
 /** Destination countries for youth/club trials. Empty means use home-country bias. */

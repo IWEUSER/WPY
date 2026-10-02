@@ -72,6 +72,14 @@ export function seasonStandingRatio(season: SeasonRecord): number {
   return Math.max(overall, league);
 }
 
+/** Newest season that actually counts toward form, using league standing when it is hotter. */
+export function lastFormStandingRatio(seasons: SeasonRecord[]): number | null {
+  for (let i = seasons.length - 1; i >= 0; i--) {
+    if (seasonCountsTowardForm(seasons[i])) return seasonStandingRatio(seasons[i]);
+  }
+  return null;
+}
+
 export function offerRatioPreferringLastSeason(last: number, career: number): number {
   return last > career ? last : Math.max(last, career);
 }
@@ -140,7 +148,12 @@ export function capTierForSourceLeague(tier: ClubTier, fromLeague?: string | nul
   }
   if (fromLeague === 'Saudi Pro League') return Math.max(tier, SAUDI_BEST_OFFER_TIER) as ClubTier;
   if (fromLeague === 'MLS') return Math.max(tier, MLS_BEST_OFFER_TIER) as ClubTier;
-  if (fromLeague === 'Liga MX') return Math.max(tier, LIGA_MX_BEST_OFFER_TIER) as ClubTier;
+  if (fromLeague === 'Liga MX' || fromLeague === 'Primera A' || fromLeague === 'J1 League') {
+    return Math.max(tier, LIGA_MX_BEST_OFFER_TIER) as ClubTier;
+  }
+  if (fromLeague === 'Brasileirao' || fromLeague === 'Liga Profesional') {
+    return Math.max(tier, SEMI_EURO_BEST_OFFER_TIER) as ClubTier;
+  }
   if (fromLeague === 'Primeira Liga' || fromLeague === 'Eredivisie' || fromLeague === 'Super Lig') {
     return Math.max(tier, SEMI_EURO_BEST_OFFER_TIER) as ClubTier;
   }
@@ -1179,7 +1192,8 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     return { headline: 'Season complete', detail: '' };
   }
   const ratio = season.gamesPlayed > 0 ? season.goals / season.gamesPlayed : 0;
-  const lastStanding = seasonStandingRatio(season);
+  const lastStanding = lastFormStandingRatio([...(params.seasonHistory ?? []), season])
+    ?? seasonStandingRatio(season);
   const yearsLeft = params.contractYearsRemaining ?? DEFAULT_CONTRACT_YEARS;
   const parentYears = params.homeContractYearsRemaining;
   const seasons = [...(params.seasonHistory ?? []), season];

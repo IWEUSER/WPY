@@ -95,6 +95,16 @@ const KITS: Record<string, KitScheme> = {
   'aek-athens': { primary: '#FFD100', secondary: '#111111', pattern: 'vertical', shorts: '#111111', socks: '#FFD100' },
   'slovan-bratislava': { primary: '#6EC1E4', shorts: '#FFFFFF', socks: '#6EC1E4' },
   shakhtar: { primary: '#F68712', secondary: '#111111', pattern: 'vertical', shorts: '#111111', socks: '#F68712' },
+
+  'club-america': { primary: '#FFD100', secondary: '#003DA5', pattern: 'solid', shorts: '#003DA5', socks: '#FFD100' },
+  chivas: { primary: '#E30613', secondary: '#FFFFFF', pattern: 'vertical', shorts: '#003DA5', socks: '#E30613' },
+  'flamengo-rj': { primary: '#E30613', secondary: '#111111', pattern: 'hoops', shorts: '#111111', socks: '#E30613' },
+  'palmeiras-sp': { primary: '#007A33', secondary: '#FFFFFF', pattern: 'solid', shorts: '#FFFFFF', socks: '#007A33' },
+  'river-plate': { primary: '#FFFFFF', secondary: '#E30613', pattern: 'solid', shorts: '#111111', socks: '#FFFFFF', sleeves: '#E30613' },
+  'boca-juniors': { primary: '#003DA5', secondary: '#FFD100', pattern: 'hoops', shorts: '#003DA5', socks: '#003DA5' },
+  'atletico-nacional': { primary: '#007A33', secondary: '#FFFFFF', pattern: 'vertical', shorts: '#FFFFFF', socks: '#007A33' },
+  urawa: { primary: '#E30613', shorts: '#E30613', socks: '#E30613' },
+  kawasaki: { primary: '#87CEEB', secondary: '#003DA5', pattern: 'solid', shorts: '#003DA5', socks: '#87CEEB' },
 };
 
 /**

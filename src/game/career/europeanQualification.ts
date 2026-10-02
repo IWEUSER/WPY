@@ -11,6 +11,9 @@ import { clubContinentalCup, type ContinentalCupId } from './data/competitions';
  * Ligue 1: 1–3 CL, 4 EL, 5 ECL
  * Primeira Liga / Eredivisie / Super Lig: 1–2 CL, 3 EL, 4 ECL
  * Saudi Pro League: 1–4 AFC Champions League Elite
+ * J1 League: 1–3 AFC Champions League Elite
+ * Brasileirao / Liga Profesional: 1–4 Libertadores, 5–8 Sudamericana
+ * Primera A: 1–2 Libertadores, 3–6 Sudamericana
  */
 const UEFA_PLACES: Record<string, { ucl: number; uel: number; uecl: number }> = {
   'Premier League': { ucl: 4, uel: 1, uecl: 1 },
@@ -26,7 +29,9 @@ const UEFA_PLACES: Record<string, { ucl: number; uel: number; uecl: number }> = 
 const CUP_RANK: Record<ContinentalCupId, number> = {
   ucl: 4,
   acle: 4,
+  libertadores: 4,
   uel: 3,
+  sudamericana: 3,
   uecl: 2,
   'leagues-cup': 1,
 };
@@ -45,6 +50,7 @@ export function cupFromDefendingTitle(won: ContinentalCupId | null | undefined):
   if (won === 'ucl' || won === 'uel') return 'ucl';
   if (won === 'uecl') return 'uel';
   if (won === 'acle') return 'acle';
+  if (won === 'libertadores' || won === 'sudamericana') return 'libertadores';
   return null;
 }
 
@@ -54,6 +60,17 @@ export function cupFromLeaguePosition(
 ): ContinentalCupId | null {
   if (position == null || position <= 0) return null;
   if (league === 'Saudi Pro League') return position <= 4 ? 'acle' : null;
+  if (league === 'J1 League') return position <= 3 ? 'acle' : null;
+  if (league === 'Brasileirao' || league === 'Liga Profesional') {
+    if (position <= 4) return 'libertadores';
+    if (position <= 8) return 'sudamericana';
+    return null;
+  }
+  if (league === 'Primera A') {
+    if (position <= 2) return 'libertadores';
+    if (position <= 6) return 'sudamericana';
+    return null;
+  }
   const places = UEFA_PLACES[league];
   if (!places) return null;
   if (position <= places.ucl) return 'ucl';

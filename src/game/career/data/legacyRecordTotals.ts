@@ -36,6 +36,11 @@ export const LEAGUE_CAREER: Record<string, number[]> = {
   'Super Lig': [240, 188, 158, 146, 140, 136, 128, 121, 116, 112],
   'Saudi Pro League': [189, 140, 122, 108, 96, 88, 82, 78, 74, 70],
   MLS: [184, 158, 145, 136, 126, 117, 112, 108, 104, 101],
+  'Liga MX': [312, 198, 162, 148, 136, 124, 118, 112, 106, 100],
+  Brasileirao: [190, 168, 154, 140, 128, 118, 110, 104, 98, 94],
+  'Liga Profesional': [295, 220, 180, 156, 142, 130, 120, 112, 106, 100],
+  'Primera A': [224, 176, 148, 132, 118, 108, 100, 94, 88, 84],
+  'J1 League': [234, 176, 148, 132, 120, 110, 102, 96, 90, 86],
 };
 
 export const LEAGUE_SEASON: Record<string, number[]> = {
@@ -54,6 +59,11 @@ export const LEAGUE_SEASON: Record<string, number[]> = {
   'Super Lig': [39, 33, 32, 31, 30, 29, 28, 27, 26, 25],
   'Saudi Pro League': [35, 31, 28, 26, 24, 23, 22, 21, 20, 19],
   MLS: [34, 31, 28, 27, 26, 25, 24, 23, 22, 22],
+  'Liga MX': [30, 27, 24, 22, 21, 20, 19, 18, 17, 16],
+  Brasileirao: [39, 34, 31, 29, 27, 25, 24, 23, 22, 21],
+  'Liga Profesional': [43, 37, 32, 28, 26, 24, 23, 22, 21, 20],
+  'Primera A': [29, 26, 24, 22, 21, 20, 19, 18, 17, 16],
+  'J1 League': [33, 28, 26, 24, 23, 22, 21, 20, 19, 18],
 };
 
 export const CUP_CAREER: Record<string, number[]> = {
@@ -67,6 +77,11 @@ export const CUP_CAREER: Record<string, number[]> = {
   'taca-de-portugal': [51, 42, 36, 32, 28, 26, 24, 22, 21, 20],
   'knvb-beker': [36, 30, 26, 24, 22, 20, 19, 18, 17, 16],
   'turkish-cup': [42, 34, 28, 24, 22, 20, 19, 18, 17, 16],
+  'copa-mx': [28, 22, 18, 16, 14, 13, 12, 11, 10, 10],
+  'copa-do-brasil': [54, 40, 32, 28, 24, 22, 20, 18, 17, 16],
+  'copa-argentina': [36, 28, 22, 18, 16, 14, 13, 12, 11, 10],
+  'copa-colombia': [24, 18, 15, 13, 12, 11, 10, 9, 8, 8],
+  'emperor-cup': [32, 24, 20, 16, 14, 13, 12, 11, 10, 9],
 };
 
 export const CUP_SEASON: Record<string, number[]> = {
@@ -80,6 +95,11 @@ export const CUP_SEASON: Record<string, number[]> = {
   'taca-de-portugal': [8, 7, 6, 5, 5, 4, 4, 4, 3, 3],
   'knvb-beker': [6, 5, 5, 4, 4, 4, 3, 3, 3, 3],
   'turkish-cup': [7, 6, 5, 5, 4, 4, 4, 3, 3, 3],
+  'copa-mx': [6, 5, 4, 4, 3, 3, 3, 2, 2, 2],
+  'copa-do-brasil': [8, 7, 6, 5, 5, 4, 4, 3, 3, 3],
+  'copa-argentina': [6, 5, 4, 4, 3, 3, 3, 2, 2, 2],
+  'copa-colombia': [5, 4, 4, 3, 3, 3, 2, 2, 2, 2],
+  'emperor-cup': [6, 5, 4, 4, 3, 3, 3, 2, 2, 2],
 };
 
 export const CONTINENTAL_CAREER: Record<string, number[]> = {
@@ -88,6 +108,8 @@ export const CONTINENTAL_CAREER: Record<string, number[]> = {
   uecl: [12, 10, 9, 8, 7, 7, 6, 6, 5, 5],
   acle: [44, 36, 30, 26, 24, 22, 20, 19, 18, 17],
   'leagues-cup': [10, 8, 7, 6, 6, 5, 5, 4, 4, 4],
+  libertadores: [54, 37, 31, 25, 25, 24, 23, 22, 19, 17],
+  sudamericana: [24, 16, 14, 12, 11, 10, 9, 8, 8, 7],
   'super-cup': [8, 6, 5, 5, 4, 4, 3, 3, 3, 3],
 };
 
@@ -97,6 +119,8 @@ export const CONTINENTAL_SEASON: Record<string, number[]> = {
   uecl: [8, 7, 6, 6, 5, 5, 4, 4, 4, 3],
   acle: [13, 11, 10, 9, 8, 8, 7, 7, 6, 6],
   'leagues-cup': [6, 5, 4, 4, 3, 3, 3, 2, 2, 2],
+  libertadores: [12, 10, 9, 8, 8, 7, 7, 6, 6, 5],
+  sudamericana: [8, 6, 5, 5, 4, 4, 4, 3, 3, 3],
   'super-cup': [3, 2, 2, 2, 1, 1, 1, 1, 1, 1],
 };
 

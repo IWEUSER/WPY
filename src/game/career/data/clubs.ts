@@ -2,8 +2,8 @@ import { MLS_CONFERENCE_SIZE, MLS_REGULAR_SEASON_WEEKS, leagueDisplayName, mlsCo
 
 /**
  * The football pyramid this career mode plays out across: the big five
- * European leagues, Primeira Liga, Eredivisie, Super Lig, plus Saudi Arabia
- * and MLS, each at its real division size.
+ * European leagues, Primeira Liga, Eredivisie, Super Lig, Saudi Arabia,
+ * MLS, Liga MX, Brasileirao, Liga Profesional, Primera A, and J1 League.
  * Tiers 1 (elite) through 5 (lower level) exist so the trial and transfer
  * logic has real headroom.
  *
@@ -77,6 +77,9 @@ export const MLS_SEASON_CLUBS = 28;
 export function leagueTierFloor(country: string, league: string): ClubTier {
   if (league === 'MLS' || country === 'United States') return 3;
   if (country === 'Saudi Arabia' || league === 'Saudi Pro League') return 2;
+  if (league === 'Liga MX' || country === 'Mexico') return 2;
+  if (league === 'J1 League' || country === 'Japan') return 2;
+  if (league === 'Primera A' || country === 'Colombia') return 3;
   if (SECOND_DIVISIONS.has(league)) return 5;
   return 1;
 }
@@ -103,7 +106,7 @@ export interface Club {
   league: string;
   /** MLS Eastern or Western Conference. */
   conference?: 'east' | 'west';
-  /** False for cup-only guests (Liga MX, AFC) that are not career destinations. */
+  /** False for cup-only guests (AFC / extra UEFA sides) that are not career destinations. */
   playable?: boolean;
   tier: ClubTier;
   /**
@@ -488,22 +491,107 @@ const CLUB_SEED: Club[] = [
   { id: 'hatayspor', name: 'Hatay', country: 'Turkey', league: 'Super Lig', tier: 5, strength: 62, color: '#6B1E3A', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
   { id: 'kocaelispor', name: 'Kocaeli', country: 'Turkey', league: 'Super Lig', tier: 5, strength: 61, color: '#007A33', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
 
-  // Mexico - Liga MX (Leagues Cup opponents)
-  { id: 'club-america', name: 'Mexico City', country: 'Mexico', league: 'Liga MX', tier: 2, strength: 80, color: '#FFD100', reserveGoalRatio: 0.5, firstTeamGoalRatio: 0.4, playable: false },
-  { id: 'monterrey', name: 'Monterrey', country: 'Mexico', league: 'Liga MX', tier: 2, strength: 79, color: '#003DA5', reserveGoalRatio: 0.5, firstTeamGoalRatio: 0.4, playable: false },
-  { id: 'tigres', name: 'Monterrey Gold', country: 'Mexico', league: 'Liga MX', tier: 2, strength: 78, color: '#F5A12D', reserveGoalRatio: 0.5, firstTeamGoalRatio: 0.4, playable: false },
-  { id: 'chivas', name: 'Guadalajara', country: 'Mexico', league: 'Liga MX', tier: 2, strength: 77, color: '#E30613', reserveGoalRatio: 0.48, firstTeamGoalRatio: 0.38, playable: false },
-  { id: 'cruz-azul', name: 'Mexico City Blue', country: 'Mexico', league: 'Liga MX', tier: 2, strength: 76, color: '#003DA5', reserveGoalRatio: 0.48, firstTeamGoalRatio: 0.38, playable: false },
-  { id: 'pumas', name: 'Mexico City South', country: 'Mexico', league: 'Liga MX', tier: 3, strength: 73, color: '#002D62', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32, playable: false },
-  { id: 'toluca', name: 'Toluca', country: 'Mexico', league: 'Liga MX', tier: 3, strength: 74, color: '#E30613', reserveGoalRatio: 0.42, firstTeamGoalRatio: 0.34, playable: false },
-  { id: 'leon', name: 'Leon', country: 'Mexico', league: 'Liga MX', tier: 3, strength: 72, color: '#007A33', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32, playable: false },
-  { id: 'santos-laguna', name: 'Torreon', country: 'Mexico', league: 'Liga MX', tier: 3, strength: 71, color: '#007A33', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32, playable: false },
-  { id: 'pachuca', name: 'Pachuca', country: 'Mexico', league: 'Liga MX', tier: 3, strength: 73, color: '#003DA5', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32, playable: false },
+  // Mexico - Liga MX
+  { id: 'club-america', name: 'Mexico City', country: 'Mexico', league: 'Liga MX', tier: 2, strength: 80, color: '#FFD100', reserveGoalRatio: 0.5, firstTeamGoalRatio: 0.4 },
+  { id: 'monterrey', name: 'Monterrey', country: 'Mexico', league: 'Liga MX', tier: 2, strength: 79, color: '#003DA5', reserveGoalRatio: 0.5, firstTeamGoalRatio: 0.4 },
+  { id: 'tigres', name: 'Monterrey Gold', country: 'Mexico', league: 'Liga MX', tier: 2, strength: 78, color: '#F5A12D', reserveGoalRatio: 0.5, firstTeamGoalRatio: 0.4 },
+  { id: 'chivas', name: 'Guadalajara', country: 'Mexico', league: 'Liga MX', tier: 2, strength: 77, color: '#E30613', reserveGoalRatio: 0.48, firstTeamGoalRatio: 0.38 },
+  { id: 'cruz-azul', name: 'Mexico City Blue', country: 'Mexico', league: 'Liga MX', tier: 2, strength: 76, color: '#003DA5', reserveGoalRatio: 0.48, firstTeamGoalRatio: 0.38 },
+  { id: 'pumas', name: 'Mexico City South', country: 'Mexico', league: 'Liga MX', tier: 3, strength: 73, color: '#002D62', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'toluca', name: 'Toluca', country: 'Mexico', league: 'Liga MX', tier: 3, strength: 74, color: '#E30613', reserveGoalRatio: 0.42, firstTeamGoalRatio: 0.34 },
+  { id: 'leon', name: 'Leon', country: 'Mexico', league: 'Liga MX', tier: 3, strength: 72, color: '#007A33', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'santos-laguna', name: 'Torreon', country: 'Mexico', league: 'Liga MX', tier: 3, strength: 71, color: '#007A33', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'pachuca', name: 'Pachuca', country: 'Mexico', league: 'Liga MX', tier: 3, strength: 73, color: '#003DA5', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'tijuana', name: 'Tijuana', country: 'Mexico', league: 'Liga MX', tier: 3, strength: 70, color: '#E30613', reserveGoalRatio: 0.38, firstTeamGoalRatio: 0.3 },
+  { id: 'atlas', name: 'Guadalajara Red', country: 'Mexico', league: 'Liga MX', tier: 3, strength: 70, color: '#6B1E3A', reserveGoalRatio: 0.38, firstTeamGoalRatio: 0.3 },
+  { id: 'puebla', name: 'Puebla', country: 'Mexico', league: 'Liga MX', tier: 4, strength: 67, color: '#003DA5', reserveGoalRatio: 0.34, firstTeamGoalRatio: 0.28 },
+  { id: 'queretaro', name: 'Queretaro', country: 'Mexico', league: 'Liga MX', tier: 4, strength: 66, color: '#003DA5', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'necaxa', name: 'Aguascalientes', country: 'Mexico', league: 'Liga MX', tier: 4, strength: 66, color: '#E30613', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'mazatlan', name: 'Mazatlan', country: 'Mexico', league: 'Liga MX', tier: 4, strength: 64, color: '#6B1E3A', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+  { id: 'juarez', name: 'Ciudad Juarez', country: 'Mexico', league: 'Liga MX', tier: 4, strength: 64, color: '#007A33', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+  { id: 'san-luis', name: 'San Luis Potosi', country: 'Mexico', league: 'Liga MX', tier: 4, strength: 63, color: '#003DA5', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+
+  // Brazil - Brasileirao
+  { id: 'flamengo-rj', name: 'Rio Red', country: 'Brazil', league: 'Brasileirao', tier: 2, strength: 86, color: '#E30613', reserveGoalRatio: 0.55, firstTeamGoalRatio: 0.44 },
+  { id: 'palmeiras-sp', name: 'Sao Paulo Green', country: 'Brazil', league: 'Brasileirao', tier: 2, strength: 85, color: '#007A33', reserveGoalRatio: 0.55, firstTeamGoalRatio: 0.44 },
+  { id: 'botafogo', name: 'Rio Black', country: 'Brazil', league: 'Brasileirao', tier: 2, strength: 83, color: '#111111', reserveGoalRatio: 0.52, firstTeamGoalRatio: 0.42 },
+  { id: 'fluminense', name: 'Rio Green', country: 'Brazil', league: 'Brasileirao', tier: 2, strength: 82, color: '#006400', reserveGoalRatio: 0.5, firstTeamGoalRatio: 0.4 },
+  { id: 'sao-paulo', name: 'Sao Paulo White', country: 'Brazil', league: 'Brasileirao', tier: 2, strength: 82, color: '#E30613', reserveGoalRatio: 0.5, firstTeamGoalRatio: 0.4 },
+  { id: 'corinthians-sp', name: 'Sao Paulo Black', country: 'Brazil', league: 'Brasileirao', tier: 2, strength: 81, color: '#111111', reserveGoalRatio: 0.48, firstTeamGoalRatio: 0.38 },
+  { id: 'atletico-mg', name: 'Belo Horizonte', country: 'Brazil', league: 'Brasileirao', tier: 2, strength: 80, color: '#111111', reserveGoalRatio: 0.48, firstTeamGoalRatio: 0.38 },
+  { id: 'internacional', name: 'Porto Alegre Red', country: 'Brazil', league: 'Brasileirao', tier: 3, strength: 79, color: '#E30613', reserveGoalRatio: 0.45, firstTeamGoalRatio: 0.36 },
+  { id: 'gremio', name: 'Porto Alegre Blue', country: 'Brazil', league: 'Brasileirao', tier: 3, strength: 78, color: '#003DA5', reserveGoalRatio: 0.45, firstTeamGoalRatio: 0.36 },
+  { id: 'cruzeiro', name: 'Belo Horizonte Blue', country: 'Brazil', league: 'Brasileirao', tier: 3, strength: 77, color: '#003DA5', reserveGoalRatio: 0.42, firstTeamGoalRatio: 0.34 },
+  { id: 'athletico-pr', name: 'Curitiba', country: 'Brazil', league: 'Brasileirao', tier: 3, strength: 76, color: '#E30613', reserveGoalRatio: 0.42, firstTeamGoalRatio: 0.34 },
+  { id: 'bahia', name: 'Salvador Blue', country: 'Brazil', league: 'Brasileirao', tier: 3, strength: 75, color: '#003DA5', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'fortaleza', name: 'Fortaleza', country: 'Brazil', league: 'Brasileirao', tier: 3, strength: 74, color: '#E30613', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'vasco', name: 'Rio Cross', country: 'Brazil', league: 'Brasileirao', tier: 3, strength: 73, color: '#111111', reserveGoalRatio: 0.38, firstTeamGoalRatio: 0.3 },
+  { id: 'santos', name: 'Santos', country: 'Brazil', league: 'Brasileirao', tier: 3, strength: 73, color: '#111111', reserveGoalRatio: 0.38, firstTeamGoalRatio: 0.3 },
+  { id: 'bragantino', name: 'Braganca', country: 'Brazil', league: 'Brasileirao', tier: 4, strength: 72, color: '#E30613', reserveGoalRatio: 0.36, firstTeamGoalRatio: 0.3 },
+  { id: 'cuiaba', name: 'Cuiaba', country: 'Brazil', league: 'Brasileirao', tier: 4, strength: 68, color: '#007A33', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'goias', name: 'Goiania', country: 'Brazil', league: 'Brasileirao', tier: 4, strength: 67, color: '#007A33', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+
+  // Argentina - Liga Profesional
+  { id: 'river-plate', name: 'Buenos Aires Red', country: 'Argentina', league: 'Liga Profesional', tier: 2, strength: 85, color: '#E30613', reserveGoalRatio: 0.55, firstTeamGoalRatio: 0.44 },
+  { id: 'boca-juniors', name: 'Buenos Aires Blue', country: 'Argentina', league: 'Liga Profesional', tier: 2, strength: 84, color: '#003DA5', reserveGoalRatio: 0.55, firstTeamGoalRatio: 0.44 },
+  { id: 'racing-club', name: 'Avellaneda Blue', country: 'Argentina', league: 'Liga Profesional', tier: 2, strength: 80, color: '#6EC1E4', reserveGoalRatio: 0.48, firstTeamGoalRatio: 0.38 },
+  { id: 'independiente', name: 'Avellaneda Red', country: 'Argentina', league: 'Liga Profesional', tier: 2, strength: 79, color: '#E30613', reserveGoalRatio: 0.48, firstTeamGoalRatio: 0.38 },
+  { id: 'san-lorenzo', name: 'Buenos Aires Green', country: 'Argentina', league: 'Liga Profesional', tier: 3, strength: 77, color: '#003DA5', reserveGoalRatio: 0.42, firstTeamGoalRatio: 0.34 },
+  { id: 'estudiantes', name: 'La Plata', country: 'Argentina', league: 'Liga Profesional', tier: 3, strength: 76, color: '#E30613', reserveGoalRatio: 0.42, firstTeamGoalRatio: 0.34 },
+  { id: 'velez', name: 'Buenos Aires White', country: 'Argentina', league: 'Liga Profesional', tier: 3, strength: 76, color: '#FFFFFF', reserveGoalRatio: 0.42, firstTeamGoalRatio: 0.34 },
+  { id: 'talleres', name: 'Cordoba', country: 'Argentina', league: 'Liga Profesional', tier: 3, strength: 75, color: '#003DA5', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'rosario-central', name: 'Rosario Yellow', country: 'Argentina', league: 'Liga Profesional', tier: 3, strength: 73, color: '#F5C518', reserveGoalRatio: 0.38, firstTeamGoalRatio: 0.3 },
+  { id: 'newells', name: 'Rosario Red', country: 'Argentina', league: 'Liga Profesional', tier: 3, strength: 73, color: '#E30613', reserveGoalRatio: 0.38, firstTeamGoalRatio: 0.3 },
+  { id: 'lanus', name: 'Lanus', country: 'Argentina', league: 'Liga Profesional', tier: 3, strength: 72, color: '#6B1E3A', reserveGoalRatio: 0.36, firstTeamGoalRatio: 0.3 },
+  { id: 'huracan', name: 'Buenos Aires Balloon', country: 'Argentina', league: 'Liga Profesional', tier: 4, strength: 70, color: '#E30613', reserveGoalRatio: 0.34, firstTeamGoalRatio: 0.28 },
+  { id: 'gimnasia-lp', name: 'La Plata Wolf', country: 'Argentina', league: 'Liga Profesional', tier: 4, strength: 69, color: '#003DA5', reserveGoalRatio: 0.34, firstTeamGoalRatio: 0.28 },
+  { id: 'belgrano', name: 'Cordoba Green', country: 'Argentina', league: 'Liga Profesional', tier: 4, strength: 68, color: '#6EC1E4', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'argentinos', name: 'Buenos Aires Bajo', country: 'Argentina', league: 'Liga Profesional', tier: 4, strength: 68, color: '#E30613', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'defensa', name: 'Florencio Varela', country: 'Argentina', league: 'Liga Profesional', tier: 4, strength: 67, color: '#007A33', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'instituto', name: 'Cordoba Red', country: 'Argentina', league: 'Liga Profesional', tier: 4, strength: 66, color: '#E30613', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+  { id: 'tigre', name: 'Victoria', country: 'Argentina', league: 'Liga Profesional', tier: 4, strength: 65, color: '#003DA5', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+
+  // Colombia - Primera A
+  { id: 'atletico-nacional', name: 'Medellin Green', country: 'Colombia', league: 'Primera A', tier: 3, strength: 78, color: '#007A33', reserveGoalRatio: 0.45, firstTeamGoalRatio: 0.36 },
+  { id: 'millonarios', name: 'Bogota Blue', country: 'Colombia', league: 'Primera A', tier: 3, strength: 77, color: '#003DA5', reserveGoalRatio: 0.45, firstTeamGoalRatio: 0.36 },
+  { id: 'america-cali', name: 'Cali Red', country: 'Colombia', league: 'Primera A', tier: 3, strength: 76, color: '#E30613', reserveGoalRatio: 0.42, firstTeamGoalRatio: 0.34 },
+  { id: 'independiente-medellin', name: 'Medellin Red', country: 'Colombia', league: 'Primera A', tier: 3, strength: 75, color: '#E30613', reserveGoalRatio: 0.42, firstTeamGoalRatio: 0.34 },
+  { id: 'junior-baq', name: 'Barranquilla', country: 'Colombia', league: 'Primera A', tier: 3, strength: 75, color: '#E30613', reserveGoalRatio: 0.42, firstTeamGoalRatio: 0.34 },
+  { id: 'santa-fe', name: 'Bogota Red', country: 'Colombia', league: 'Primera A', tier: 3, strength: 74, color: '#E30613', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'deportivo-cali', name: 'Cali Green', country: 'Colombia', league: 'Primera A', tier: 3, strength: 73, color: '#007A33', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'deportes-tolima', name: 'Ibague', country: 'Colombia', league: 'Primera A', tier: 3, strength: 73, color: '#F5C518', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'once-caldas', name: 'Manizales', country: 'Colombia', league: 'Primera A', tier: 4, strength: 70, color: '#FFFFFF', reserveGoalRatio: 0.34, firstTeamGoalRatio: 0.28 },
+  { id: 'atletico-bucaramanga', name: 'Bucaramanga', country: 'Colombia', league: 'Primera A', tier: 4, strength: 69, color: '#FFD100', reserveGoalRatio: 0.34, firstTeamGoalRatio: 0.28 },
+  { id: 'aguilas-doradas', name: 'Pereira', country: 'Colombia', league: 'Primera A', tier: 4, strength: 68, color: '#F5A12D', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'la-equidad', name: 'Bogota White', country: 'Colombia', league: 'Primera A', tier: 4, strength: 67, color: '#007A33', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'envigado', name: 'Envigado', country: 'Colombia', league: 'Primera A', tier: 4, strength: 66, color: '#F5A12D', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+  { id: 'alianza-fc', name: 'Valledupar', country: 'Colombia', league: 'Primera A', tier: 4, strength: 65, color: '#FFD100', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+  { id: 'jaguares', name: 'Monteria', country: 'Colombia', league: 'Primera A', tier: 4, strength: 64, color: '#007A33', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+  { id: 'fortaleza-ce', name: 'Bogota Fort', country: 'Colombia', league: 'Primera A', tier: 4, strength: 63, color: '#003DA5', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+  { id: 'patriotas', name: 'Tunja', country: 'Colombia', league: 'Primera A', tier: 4, strength: 62, color: '#E30613', reserveGoalRatio: 0.28, firstTeamGoalRatio: 0.24 },
+  { id: 'boyaca-chico', name: 'Tunja Green', country: 'Colombia', league: 'Primera A', tier: 4, strength: 61, color: '#007A33', reserveGoalRatio: 0.28, firstTeamGoalRatio: 0.24 },
+
+  // Japan - J1 League
+  { id: 'urawa', name: 'Saitama', country: 'Japan', league: 'J1 League', tier: 2, strength: 76, color: '#E30613', reserveGoalRatio: 0.45, firstTeamGoalRatio: 0.36 },
+  { id: 'kawasaki', name: 'Kawasaki', country: 'Japan', league: 'J1 League', tier: 2, strength: 75, color: '#87CEEB', reserveGoalRatio: 0.45, firstTeamGoalRatio: 0.36 },
+  { id: 'yokohama-fm', name: 'Yokohama', country: 'Japan', league: 'J1 League', tier: 2, strength: 74, color: '#003DA5', reserveGoalRatio: 0.42, firstTeamGoalRatio: 0.34 },
+  { id: 'vissel-kobe', name: 'Kobe', country: 'Japan', league: 'J1 League', tier: 2, strength: 74, color: '#6B1E3A', reserveGoalRatio: 0.42, firstTeamGoalRatio: 0.34 },
+  { id: 'kashima', name: 'Kashima', country: 'Japan', league: 'J1 League', tier: 2, strength: 73, color: '#E30613', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'sanfrecce', name: 'Hiroshima', country: 'Japan', league: 'J1 League', tier: 3, strength: 72, color: '#6B1E3A', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'gamba-osaka', name: 'Osaka Blue', country: 'Japan', league: 'J1 League', tier: 3, strength: 72, color: '#003DA5', reserveGoalRatio: 0.4, firstTeamGoalRatio: 0.32 },
+  { id: 'nagoya', name: 'Nagoya', country: 'Japan', league: 'J1 League', tier: 3, strength: 71, color: '#E30613', reserveGoalRatio: 0.38, firstTeamGoalRatio: 0.3 },
+  { id: 'fc-tokyo', name: 'Tokyo Blue', country: 'Japan', league: 'J1 League', tier: 3, strength: 71, color: '#003DA5', reserveGoalRatio: 0.38, firstTeamGoalRatio: 0.3 },
+  { id: 'cerezo-osaka', name: 'Osaka Pink', country: 'Japan', league: 'J1 League', tier: 3, strength: 70, color: '#E75480', reserveGoalRatio: 0.38, firstTeamGoalRatio: 0.3 },
+  { id: 'tokyo-verdy', name: 'Tokyo Green', country: 'Japan', league: 'J1 League', tier: 3, strength: 69, color: '#007A33', reserveGoalRatio: 0.36, firstTeamGoalRatio: 0.28 },
+  { id: 'kashiwa', name: 'Kashiwa', country: 'Japan', league: 'J1 League', tier: 3, strength: 69, color: '#FFD100', reserveGoalRatio: 0.36, firstTeamGoalRatio: 0.28 },
+  { id: 'kyoto', name: 'Kyoto', country: 'Japan', league: 'J1 League', tier: 4, strength: 67, color: '#6B1E3A', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'shimizu', name: 'Shizuoka', country: 'Japan', league: 'J1 League', tier: 4, strength: 66, color: '#F68B1F', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'machida', name: 'Machida', country: 'Japan', league: 'J1 League', tier: 4, strength: 66, color: '#003DA5', reserveGoalRatio: 0.32, firstTeamGoalRatio: 0.26 },
+  { id: 'consadole', name: 'Sapporo', country: 'Japan', league: 'J1 League', tier: 4, strength: 65, color: '#E30613', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+  { id: 'shonan', name: 'Hiratsuka', country: 'Japan', league: 'J1 League', tier: 4, strength: 64, color: '#007A33', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
+  { id: 'albirex', name: 'Niigata', country: 'Japan', league: 'J1 League', tier: 4, strength: 63, color: '#F68B1F', reserveGoalRatio: 0.3, firstTeamGoalRatio: 0.25 },
 
   // AFC Champions League Elite opponents
-  { id: 'urawa', name: 'Saitama', country: 'Japan', league: 'J1 League', tier: 2, strength: 76, color: '#E30613', reserveGoalRatio: 0.45, firstTeamGoalRatio: 0.36, playable: false },
-  { id: 'kawasaki', name: 'Kawasaki', country: 'Japan', league: 'J1 League', tier: 2, strength: 75, color: '#87CEEB', reserveGoalRatio: 0.45, firstTeamGoalRatio: 0.36, playable: false },
-  { id: 'yokohama-fm', name: 'Yokohama', country: 'Japan', league: 'J1 League', tier: 2, strength: 74, color: '#003DA5', reserveGoalRatio: 0.42, firstTeamGoalRatio: 0.34, playable: false },
   { id: 'ulsan', name: 'Ulsan', country: 'South Korea', league: 'K League 1', tier: 2, strength: 76, color: '#003DA5', reserveGoalRatio: 0.45, firstTeamGoalRatio: 0.36, playable: false },
   { id: 'jeonbuk', name: 'Jeonju', country: 'South Korea', league: 'K League 1', tier: 2, strength: 74, color: '#007A33', reserveGoalRatio: 0.42, firstTeamGoalRatio: 0.34, playable: false },
   { id: 'al-ain', name: 'Al Ain', country: 'United Arab Emirates', league: 'UAE Pro League', tier: 2, strength: 75, color: '#8B1E21', reserveGoalRatio: 0.45, firstTeamGoalRatio: 0.36, playable: false },
@@ -598,6 +686,11 @@ export const TARGET_LEAGUE_SIZE: Record<string, number> = {
   'Super Lig': 18,
   'Saudi Pro League': 18,
   MLS: 28,
+  'Liga MX': 18,
+  Brasileirao: 18,
+  'Liga Profesional': 18,
+  'Primera A': 18,
+  'J1 League': 18,
 };
 
 export function leagueMatchWeeks(league: string, playerClub?: Club): number {

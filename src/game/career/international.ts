@@ -92,30 +92,40 @@ export const MAX_CLUB_TIER_FOR_SELECTION: ClubTier = 3;
 /** Top-20 FIFA nations demand a 0.66 career ratio. */
 export const TOP_NATION_SELECTION_RATIO = 0.66;
 
+/** A top-20 nation's own top flight is always enough for a call-up. */
+const HOME_NATION_LEAGUES: Record<string, Set<string>> = {
+  mexico: new Set(['Liga MX']),
+  brazil: new Set(['Brasileirao']),
+  argentina: new Set(['Liga Profesional']),
+  colombia: new Set(['Primera A']),
+  japan: new Set(['J1 League']),
+  'united-states': new Set(['MLS']),
+  'saudi-arabia': new Set(['Saudi Pro League']),
+};
+
 /**
- * Call-ups follow the league, not the club. Second divisions are never
- * selected. Top-20 nations take any big-five top-division club, or a
- * Strong club in Holland, Portugal, or Turkey.
+ * Call-ups follow the league only for FIFA top-20 nations. Those sides
+ * take their own top flight, any big-five top-division club, or a Strong
+ * club in Holland, Portugal, or Turkey. Nations outside the top 20 have
+ * no club-level bar.
  */
 export function leagueEligibleForNationalTeam(
   league: string | null | undefined,
   nationId?: string | null,
   clubTier?: ClubTier | null,
 ): boolean {
-  if (!league) return false;
-  if (SECOND_DIVISIONS.has(league)) return false;
+  if (!league || SECOND_DIVISIONS.has(league)) return false;
   const rank = nationId ? fifaRank(nationId) : 99;
-  if (rank <= 20) {
-    if (TOP_LEAGUES.has(league)) return true;
-    return SEMI_EURO_LEAGUES.has(league) && clubTier != null && clubTier <= 2;
-  }
-  return true;
+  if (rank > 20) return true;
+  if (nationId && HOME_NATION_LEAGUES[nationId]?.has(league)) return true;
+  if (TOP_LEAGUES.has(league)) return true;
+  return SEMI_EURO_LEAGUES.has(league) && clubTier != null && clubTier <= 2;
 }
 
 export function callUpLeagueRequirement(nationId: string): string {
   const rank = fifaRank(nationId);
   if (rank <= 20) {
-    return 'a top-division English, Spanish, Italian, German or French club, or a strong club in the Dutch League, Portuguese League or Turkish League';
+    return 'a top-division club in your country, a top-division English, Spanish, Italian, German or French club, or a strong club in the Dutch League, Portuguese League or Turkish League';
   }
   return 'a top division';
 }

@@ -36,7 +36,7 @@ export function domesticLeagueCompetition(club: Club): Competition {
   return { id: `league:${slug(club.league)}`, name: leagueDisplayName(club.league), kind: 'domestic-league' };
 }
 
-export type ContinentalCupId = 'ucl' | 'uel' | 'uecl' | 'acle' | 'leagues-cup';
+export type ContinentalCupId = 'ucl' | 'uel' | 'uecl' | 'acle' | 'leagues-cup' | 'libertadores' | 'sudamericana';
 
 export const CONTINENTAL_CUPS: Record<ContinentalCupId, Competition> = {
   ucl: { id: 'ucl', name: 'European Cup', kind: 'continental-cup', confederation: 'UEFA' },
@@ -54,6 +54,18 @@ export const CONTINENTAL_CUPS: Record<ContinentalCupId, Competition> = {
     kind: 'continental-cup',
     confederation: 'CONCACAF',
   },
+  libertadores: {
+    id: 'libertadores',
+    name: 'South American Cup',
+    kind: 'continental-cup',
+    confederation: 'CONMEBOL',
+  },
+  sudamericana: {
+    id: 'sudamericana',
+    name: 'South American Trophy',
+    kind: 'continental-cup',
+    confederation: 'CONMEBOL',
+  },
 };
 
 export const SUPER_CUP: Competition = { id: 'super-cup', name: 'European Super Cup', kind: 'super-cup', confederation: 'UEFA' };
@@ -68,7 +80,12 @@ export type DomesticCupId =
   | 'us-open-cup'
   | 'taca-de-portugal'
   | 'knvb-beker'
-  | 'turkish-cup';
+  | 'turkish-cup'
+  | 'copa-mx'
+  | 'copa-do-brasil'
+  | 'copa-argentina'
+  | 'copa-colombia'
+  | 'emperor-cup';
 
 export const DOMESTIC_CUPS: Record<DomesticCupId, Competition> = {
   'fa-cup': { id: 'fa-cup', name: 'English Cup', kind: 'domestic-cup', country: 'England' },
@@ -81,6 +98,11 @@ export const DOMESTIC_CUPS: Record<DomesticCupId, Competition> = {
   'taca-de-portugal': { id: 'taca-de-portugal', name: 'Portuguese Cup', kind: 'domestic-cup', country: 'Portugal' },
   'knvb-beker': { id: 'knvb-beker', name: 'Dutch Cup', kind: 'domestic-cup', country: 'Netherlands' },
   'turkish-cup': { id: 'turkish-cup', name: 'Turkish Cup', kind: 'domestic-cup', country: 'Turkey' },
+  'copa-mx': { id: 'copa-mx', name: 'Mexican Cup', kind: 'domestic-cup', country: 'Mexico' },
+  'copa-do-brasil': { id: 'copa-do-brasil', name: 'Brazilian Cup', kind: 'domestic-cup', country: 'Brazil' },
+  'copa-argentina': { id: 'copa-argentina', name: 'Argentine Cup', kind: 'domestic-cup', country: 'Argentina' },
+  'copa-colombia': { id: 'copa-colombia', name: 'Colombian Cup', kind: 'domestic-cup', country: 'Colombia' },
+  'emperor-cup': { id: 'emperor-cup', name: 'Japanese Cup', kind: 'domestic-cup', country: 'Japan' },
 };
 
 const DOMESTIC_CUP_BY_COUNTRY: Record<string, DomesticCupId> = {
@@ -94,6 +116,11 @@ const DOMESTIC_CUP_BY_COUNTRY: Record<string, DomesticCupId> = {
   Portugal: 'taca-de-portugal',
   Netherlands: 'knvb-beker',
   Turkey: 'turkish-cup',
+  Mexico: 'copa-mx',
+  Brazil: 'copa-do-brasil',
+  Argentina: 'copa-argentina',
+  Colombia: 'copa-colombia',
+  Japan: 'emperor-cup',
 };
 
 export function domesticCupForCountry(country: string): DomesticCupId | null {
@@ -122,7 +149,12 @@ export function clubContinentalCup(club: Club): ContinentalCupId | null {
 
 export function continentalCupForClub(tier: ClubTier, confederation: Confederation): ContinentalCupId | null {
   if (confederation === 'AFC') {
-    if (tier <= 2) return 'acle';
+    if (tier <= 3) return 'acle';
+    return null;
+  }
+  if (confederation === 'CONMEBOL') {
+    if (tier <= 2) return 'libertadores';
+    if (tier === 3) return 'sudamericana';
     return null;
   }
   if (confederation === 'CONCACAF') {
