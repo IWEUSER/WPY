@@ -117,8 +117,8 @@ export const VALUE_MILESTONES = [
 ] as const;
 export const YOUTH_MARKET_VALUE = 100_000;
 export const SPONSORSHIP_VALUE_FLOOR = 10_000_000;
-/** Ignore the live season until it has a real sample, or value swings week to week. */
-export const VALUE_FORM_MIN_GAMES = 15;
+/** Live form counts from the first appearance so value can move from week 2. */
+export const VALUE_FORM_MIN_GAMES = 1;
 export const PREMIER_LEAGUE_WAGE_FLOOR = 32_000;
 
 /** Longer deals for teenagers; the max shortens as the player ages. */
@@ -348,7 +348,6 @@ export function playerMarketValue(params: MarketValueParams): number {
  */
 export function seasonCountsTowardForm(season: SeasonRecord): boolean {
   if (!countsTowardCareerRecord(season.seasonNumber, season.role)) return false;
-  if (season.gamesPlayed <= 0) return false;
   return season.gamesPlayed >= VALUE_FORM_MIN_GAMES;
 }
 
