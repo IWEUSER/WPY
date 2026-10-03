@@ -1,3 +1,4 @@
+import { ALL_AWARD_NAMES, hasWonThisAward, missingCatalogAwards } from '../src/game/career/awardCatalog';
 import { awardClass, awardCopyFor, recordCopy, scoredWinningGoal, titleCopyFor, tournamentWinFlavour, trophyClass } from '../src/game/career/careerBeatCopy';
 import { positionZone } from '../src/game/career/leagueTableZones';
 import { awardBeat, enqueueMatchMilestones, enqueueValueMilestoneBeats, firstCapBeat, firstTitleBeat, impactRoleBeat, recordBeat, signedClubBeat, titleBeat } from '../src/game/career/careerBeat';
@@ -36,22 +37,56 @@ assert(trophyClass('German Super Cup') === 'super-cup', 'domestic super cup clas
 assert(trophyClass('European Super Cup') === 'super-cup', 'european super cup class');
 assert(titleCopyFor('super-cup', true).includes('cabinet'), 'super cup copy is measured');
 assert(!titleCopyFor('super-cup', true).includes('confetti'), 'super cup must not reuse knockout cup copy');
-assert(trophyClass('European Cup') === 'continental', 'continental class');
+assert(trophyClass('South American Cup') === 'continental', 'Libertadores is continental, not Europe');
 assert(trophyClass('World Championship') === 'world', 'world class');
 assert(trophyClass('European Nations Cup') === 'euro', 'euro class');
 assert(trophyClass('Nations Cup') === 'nations-league', 'nations class');
 assert(titleCopyFor('league', true).includes('podium'), 'first league copy');
 assert(titleCopyFor('league', false).includes('Another winter'), 'repeat league copy');
 assert(titleCopyFor('world', true).includes('World Championship'), 'first WC copy');
-assert(!titleCopyFor('continental', true).includes('pinnacle'), 'Europe is a European competition, not the pinnacle');
-assert(titleCopyFor('continental', true).includes('European'), 'Europe trophy names the competition');
+assert(!titleCopyFor('continental', true).includes('pinnacle'), 'continental copy is not the European pinnacle');
+assert(titleCopyFor('continental', true).includes('continent'), 'continental copy names the continent, not Europe');
+assert(!titleCopyFor('continental', true).includes('European night'), 'Libertadores must not borrow European Cup nights');
 assert(awardClass('World Player of the Year') === 'wpy', 'WPY class');
 assert(awardClass('World Championship top goalscorer') === 'world-boot', 'WC boot is not league copy');
-assert(awardCopyFor('world-boot', true).includes('World Championship'), 'WC boot copy is about the tournament');
-assert(!awardCopyFor('world-boot', true).includes('dictated'), 'WC boot must not reuse league-player copy');
+assert(awardCopyFor('World Championship top goalscorer', true).includes('World Championship'), 'WC boot copy is about the tournament');
+assert(!awardCopyFor('World Championship top goalscorer', true).includes('dictated'), 'WC boot must not reuse league-player copy');
 assert(impactRoleBeat().kind === 'impact-role', 'impact role beat exists');
-assert(awardCopyFor('wpy', true).includes('planet earth'), 'first WPY copy');
-assert(awardCopyFor('wpy', false).includes('again'), 'repeat WPY copy');
+assert(awardCopyFor('World Player of the Year', true).includes('planet earth'), 'first WPY copy');
+assert(awardCopyFor('World Player of the Year', false).includes('again'), 'repeat WPY copy');
+assert(missingCatalogAwards().length === 0, `award catalog missing ${missingCatalogAwards().join(', ')}`);
+assert(ALL_AWARD_NAMES.includes('European Cup Player of the Tournament'), 'European Cup POTT is catalogued');
+assert(awardCopyFor('European Cup Player of the Tournament', true).includes('European Cup'), 'UCL POTT names the Cup');
+assert(awardCopyFor('European Trophy Player of the Tournament', true).includes('step below'), 'Europa POTT is below the Cup');
+assert(
+  !awardBeat('European Cup top goalscorer', 'Alex', null, ['award:European Trophy top goalscorer']).copy.includes('again'),
+  'a first European Cup boot is not an Europa boot repeat',
+);
+assert(
+  awardBeat('League top goalscorer', 'Alex', null, ['award:League top goalscorer']).eyebrow === 'Award again',
+  'repeat league boot uses the thereafter line',
+);
+assert(
+  !hasWonThisAward(['tournament-golden-boot'], 'African Championship top goalscorer'),
+  'a coarse tournament-boot stamp must not mark every golden boot as already won',
+);
+assert(trophyClass('European Cup') === 'european-cup', 'European Cup is its own trophy class');
+assert(trophyClass('European Trophy') === 'european-secondary', 'Europa is the lower European rung');
+assert(titleCopyFor('european-cup', true).includes('above the rest of Europe'), 'first UCL copy');
+assert(titleCopyFor('european-secondary', true).includes('not the European Cup'), 'first Europa copy');
+assert(titleBeat('European Cup', { seenMilestones: ['continental-medal'] }).copy.includes('above the rest'), 'old continental stamp is not a prior European Cup');
+assert(
+  !awardBeat('European Trophy Player of the Tournament', 'Alex', null, ['award:European Cup Player of the Tournament']).copy.includes('again'),
+  'winning the European Cup POTT is not a prior Europa POTT',
+);
+assert(
+  awardBeat('European Cup Player of the Tournament', 'Alex', null, ['award:European Cup Player of the Tournament']).copy.includes('again'),
+  'a second European Cup POTT uses thereafter copy',
+);
+assert(
+  titleBeat('European Trophy', { seenMilestones: ['european-cup-medal'] }).copy.includes('not the European Cup'),
+  'a first Europa title after a European Cup is still a first on that rung',
+);
 assert(scoredWinningGoal(1, 0, 1, true, false), '1-0 from one goal is the winner');
 assert(!scoredWinningGoal(3, 0, 1, true, false), '3-0 with one goal is not the winner');
 assert(!scoredWinningGoal(1, 1, 1, true, true), 'penalties are not an open-play winner');

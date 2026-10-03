@@ -1773,6 +1773,14 @@ export function applyCareerLayoutPreview(): void {
                 ? [awardBeat('World Championship Player of the Tournament', 'Alex Rivera', 'The golden ball: player of the World Championship.')]
               : preview === 'beat-title-ucl'
                 ? [titleBeat('European Cup')]
+              : preview === 'beat-title-europa'
+                ? [titleBeat('European Trophy')]
+              : preview === 'beat-award-ucl'
+                ? [awardBeat('European Cup Player of the Tournament', 'Alex Rivera')]
+              : preview === 'beat-award-europa'
+                ? [awardBeat('European Trophy Player of the Tournament', 'Alex Rivera')]
+              : preview === 'beat-award-again'
+                ? [awardBeat('League top goalscorer', 'Alex Rivera', null, ['award:League top goalscorer'])]
               : preview === 'beat-super-cup'
                 ? [firstTitleBeat('German Super Cup')]
               : preview === 'beat-value'

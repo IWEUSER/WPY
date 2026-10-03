@@ -1,7 +1,7 @@
 import { RETIREMENT_AGE } from '../constants';
 import { getClub } from '../data/clubs';
 import { leagueDisplayName } from '../data/leagueFormat';
-import { formatEuros, formatWeeklyWage } from '../playerValue';
+import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from '../data/competitions';
 import { awardLabels, competitionStageLabel, tournamentOutcomeLabel } from '../honoursDisplay';
 import { displaySeasonLabel, displaySeasonNumber } from '../seasonDisplay';
@@ -167,6 +167,22 @@ export default function SeasonSummaryScreen() {
   };
   const legacyHighlights = seasonLegacyHighlights(inputWithoutSeason(legacyInput, season), legacyInput, season);
   const name = playerName?.trim() || 'You';
+  const endValue = playerMarketValueFromSeasons({
+    age,
+    careerGoals,
+    careerGames,
+    seasons: [...seasonHistory, season],
+    fallbackClub: role === 'loan' ? parentClub ?? club : club,
+    contractYearsRemaining,
+    seasonNumber,
+    calendarWeek: 99,
+    careerStart,
+    role,
+  });
+  const feeYears = role === 'loan' && homeContractYearsRemaining != null && homeContractYearsRemaining > 0
+    ? homeContractYearsRemaining
+    : contractYearsRemaining;
+  const endFee = transferFeeFromValue(endValue, feeYears ?? 0);
 
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-6 overflow-y-auto px-6 py-10 text-center text-white">
@@ -192,8 +208,12 @@ export default function SeasonSummaryScreen() {
             <p className="text-[10px] uppercase tracking-wide text-white/40">Ratio</p>
           </div>
         </div>
+        <p className="mt-3 text-xs text-white/50">
+          Market value {formatEuros(endValue)}
+          {` · Transfer value ${endFee <= 0 ? 'Free' : formatEuros(endFee)}`}
+        </p>
         {(season.earnings ?? 0) > 0 && (
-          <p className="mt-3 text-xs text-white/50">
+          <p className="mt-1 text-xs text-white/50">
             Earned {formatEuros(season.earnings ?? 0)} this season
             {(season.sponsorship ?? seasonSponsorship) > 0
               ? ` · ${formatEuros(season.sponsorship ?? seasonSponsorship)} sponsorship`

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { clubQualityLabel, getClub } from '../data/clubs';
 import { leagueDisplayName } from '../data/leagueFormat';
-import { formatEuros, formatWeeklyWage } from '../playerValue';
+import { formatEuros, formatWeeklyWage, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
 import { defaultSquadStatus, squadStatusOnArrival, SQUAD_STATUS_LABEL } from '../squadStatus';
 import { useCareerStore } from '../store';
 import type { ClubOfferTerms } from '../transfers';
@@ -54,7 +54,7 @@ function OfferCard({
           {club.country} · {leagueDisplayName(club.league)}
         </p>
         <p className={`mt-1 text-white/70 ${compact ? 'text-[11px] leading-snug' : 'text-xs'}`}>
-          {offer.move === 'loan' ? 'Loan' : offer.fee <= 0 ? 'Free' : `Fee ${formatEuros(offer.fee)}`}
+          {offer.move === 'loan' ? 'Loan · current wage' : offer.fee <= 0 ? 'Free' : `Fee ${formatEuros(offer.fee)}`}
           {' · '}
           {formatWeeklyWage(offer.weeklyWage)}
           {offer.contractYears > 0
@@ -87,6 +87,16 @@ export default function TransferChoiceScreen() {
   const resolveTransferChoice = useCareerStore((s) => s.resolveTransferChoice);
   const currentSeason = useCareerStore((s) => s.currentSeason);
   const currentWeeklyWage = useCareerStore((s) => s.weeklyWage);
+  const age = useCareerStore((s) => s.age);
+  const careerGoals = useCareerStore((s) => s.careerGoals);
+  const careerGames = useCareerStore((s) => s.careerGames);
+  const seasonHistory = useCareerStore((s) => s.seasonHistory);
+  const seasonNumber = useCareerStore((s) => s.seasonNumber);
+  const careerStart = useCareerStore((s) => s.careerStart);
+  const role = useCareerStore((s) => s.role);
+  const contractYearsRemaining = useCareerStore((s) => s.contractYearsRemaining);
+  const homeContractYearsRemaining = useCareerStore((s) => s.homeContractYearsRemaining);
+  const parentClubId = useCareerStore((s) => s.parentClubId);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const rejectionRef = useRef<HTMLDivElement>(null);
 
@@ -120,6 +130,32 @@ export default function TransferChoiceScreen() {
   const showStay = Boolean(pending.allowDecline && pending.stay && stayClub && !outOfContract);
   const nextIfStay = pending.stay?.squadStatus ?? defaultSquadStatus('first-team');
   const fromClub = clubId ? getClub(clubId) : undefined;
+  const valueClub = (role === 'loan' ? getClub(parentClubId ?? '') : fromClub) ?? fromClub;
+  const askingLine = (() => {
+    if (!valueClub || !currentSeason) return null;
+    const value = playerMarketValueFromSeasons({
+      age,
+      careerGoals,
+      careerGames,
+      seasons: [...seasonHistory, currentSeason],
+      fallbackClub: valueClub,
+      contractYearsRemaining,
+      seasonNumber,
+      calendarWeek: 99,
+      careerStart,
+      role,
+    });
+    const feeYears = role === 'loan' && homeContractYearsRemaining != null && homeContractYearsRemaining > 0
+      ? homeContractYearsRemaining
+      : contractYearsRemaining;
+    const asking = transferFeeFromValue(value, feeYears ?? 0);
+    return (
+      <p className="mt-1 text-xs text-white/45">
+        Market value {formatEuros(value)}
+        {` · Transfer value ${asking <= 0 ? 'Free' : formatEuros(asking)}`}
+      </p>
+    );
+  })();
   const playerRatio = currentSeason && currentSeason.gamesPlayed > 0
     ? currentSeason.goals / currentSeason.gamesPlayed
     : undefined;
@@ -148,6 +184,7 @@ export default function TransferChoiceScreen() {
             Your current contract · {formatWeeklyWage(keepDealWage)}
           </p>
         )}
+        {askingLine}
         {renewalOffer && renewalOffer.weeklyWage > 0 && renewalOffer.weeklyWage !== keepDealWage && (
           <p className="text-xs text-white/50">
             New contract offer · {formatWeeklyWage(renewalOffer.weeklyWage)}

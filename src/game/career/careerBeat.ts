@@ -6,7 +6,6 @@ import type { Club } from './data/clubs';
 import type { SeasonHonours } from './seasonSim';
 import type { SeasonRecord } from './types';
 import {
-  awardClass,
   awardCopyFor,
   awardMilestoneId,
   callUpCopy,
@@ -24,6 +23,7 @@ import {
   trophyMilestoneId,
   type CareerMilestoneId,
 } from './careerBeatCopy';
+import { hasWonThisAward } from './awardCatalog';
 import { formatEuros, VALUE_MILESTONES } from './playerValue';
 
 export type CareerBeatKind =
@@ -270,17 +270,16 @@ export function awardBeat(
   seenMilestones?: readonly string[] | null,
 ): CareerBeat {
   const world = /World Player/i.test(awardName);
-  const klass = awardClass(awardName);
-  const milestoneId = awardMilestoneId(klass);
-  const first = !hasMilestone(seenMilestones, milestoneId);
+  const milestoneId = awardMilestoneId(awardName);
+  const first = !hasWonThisAward(seenMilestones, awardName);
   return {
     kind: 'award',
     eyebrow: first ? 'Award' : 'Award again',
     headline: `${playerName} — ${awardName}`,
-    copy: awardCopyFor(klass, first, reason),
+    copy: awardCopyFor(awardName, first, reason),
     portrait: world ? 'both' : NATION_AWARD.test(awardName) ? 'nation' : 'club',
     honourName: awardName,
-    milestoneId: milestoneId ?? undefined,
+    milestoneId,
   };
 }
 

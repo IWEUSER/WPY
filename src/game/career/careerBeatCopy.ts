@@ -1,3 +1,4 @@
+import { awardCopyForName, awardMilestoneIdForName } from './awardCatalog';
 import { CONTINENTAL_CUPS, DOMESTIC_CUPS, INTERNATIONAL_TOURNAMENTS } from './data/competitions';
 import { migrateTrophyName } from './data/displayNames';
 import { ordinal, type SeasonLegacyHighlight } from './legacyRecords';
@@ -15,6 +16,8 @@ export type CareerMilestoneId =
   | 'cup-medal'
   | 'super-cup-medal'
   | 'continental-medal'
+  | 'european-cup-medal'
+  | 'european-secondary-medal'
   | 'world-championship'
   | 'european-championship'
   | 'nations-league'
@@ -28,12 +31,15 @@ export type CareerMilestoneId =
   | 'euro-pott'
   | 'nations-pott'
   | 'continental-nations-pott'
-  | 'wpy';
+  | 'wpy'
+  | `award:${string}`;
 
 export type TrophyClass =
   | 'league'
   | 'cup'
   | 'super-cup'
+  | 'european-cup'
+  | 'european-secondary'
   | 'continental'
   | 'world'
   | 'euro'
@@ -75,8 +81,12 @@ const FIRST = {
   cup: 'A knockout campaign defined by pressure, ending with silver in your hands and confetti in the air.',
   superCup:
     'Another for the cabinet — a good start to the season, and the chance to go after every trophy still to come.',
+  europeanCup:
+    'The European Cup. This is the club tournament that sits above the rest of Europe, and you have won it.',
+  europeanSecondary:
+    'A European club trophy, not the European Cup. Silver on a lower European rung.',
   continental:
-    'A European night, a European trophy; you have won a continental club competition and put your name on it.',
+    'A continental club trophy. Not Europe’s Cup — the prize for this continent, and it has your name on it.',
   world: 'The ultimate glory, immortalized on earth; you have won the World Championship and touched footballing heaven.',
   euro: 'The kings of Europe—you survived the toughest tournament grid in the world to claim continental crown rule.',
   nationsLeague:
@@ -113,8 +123,12 @@ const AGAIN = {
   cup: 'Another knockout run, another night of silver; you make winning cups look like a habit.',
   superCup:
     'The season opens with another piece of silverware. Useful, then the real work starts.',
+  europeanCup:
+    'The European Cup again. The rest of Europe is still playing for the competitions beneath this one.',
+  europeanSecondary:
+    'Another lower European club trophy. The European Cup remains the one above it.',
   continental:
-    'Another European trophy. The continent still has to play you, and you still win those nights.',
+    'Another continental club trophy. This continent still has to play you.',
   world: 'Back on top of the world. Dynasties are built on nights like this, and yours is still being written.',
   euro: 'Europe bows twice. You walked the same brutal grid and came home with the crown again.',
   nationsLeague:
@@ -154,6 +168,8 @@ export function trophyClass(trophyName: string | null | undefined): TrophyClass 
   if (intlId === 'euro') return 'euro';
   if (intlId === 'nations-league') return 'nations-league';
   if (intlId) return 'continental-nations';
+  if (name === 'European Cup' || trophyName === 'European Cup') return 'european-cup';
+  if (name === 'European Trophy' || name === 'European Challenge') return 'european-secondary';
   if (CONTINENTAL_NAMES.has(name) || CONTINENTAL_NAMES.has(trophyName ?? '')) return 'continental';
   if (/Super Cup|super cup/i.test(name) || /Super Cup|super cup/i.test(trophyName ?? '')) {
     return 'super-cup';
@@ -172,6 +188,10 @@ export function trophyMilestoneId(klass: TrophyClass): CareerMilestoneId {
       return 'cup-medal';
     case 'super-cup':
       return 'super-cup-medal';
+    case 'european-cup':
+      return 'european-cup-medal';
+    case 'european-secondary':
+      return 'european-secondary-medal';
     case 'continental':
       return 'continental-medal';
     case 'world':
@@ -215,31 +235,8 @@ export function awardClass(awardName: string): AwardClass {
   return 'other';
 }
 
-export function awardMilestoneId(klass: AwardClass): CareerMilestoneId | null {
-  switch (klass) {
-    case 'league-boot':
-      return 'league-golden-boot';
-    case 'world-boot':
-      return 'world-golden-boot';
-    case 'tournament-boot':
-      return 'tournament-golden-boot';
-    case 'league-player':
-      return 'league-player';
-    case 'continental-player':
-      return 'continental-player';
-    case 'world-pott':
-      return 'world-pott';
-    case 'euro-pott':
-      return 'euro-pott';
-    case 'nations-pott':
-      return 'nations-pott';
-    case 'continental-nations-pott':
-      return 'continental-nations-pott';
-    case 'wpy':
-      return 'wpy';
-    default:
-      return null;
-  }
+export function awardMilestoneId(awardName: string): CareerMilestoneId {
+  return awardMilestoneIdForName(awardName) as CareerMilestoneId;
 }
 
 export function hasMilestone(
@@ -291,6 +288,10 @@ export function titleCopyFor(klass: TrophyClass, first: boolean): string {
         return FIRST.cup;
       case 'super-cup':
         return FIRST.superCup;
+      case 'european-cup':
+        return FIRST.europeanCup;
+      case 'european-secondary':
+        return FIRST.europeanSecondary;
       case 'continental':
         return FIRST.continental;
       case 'world':
@@ -310,6 +311,10 @@ export function titleCopyFor(klass: TrophyClass, first: boolean): string {
       return AGAIN.cup;
     case 'super-cup':
       return AGAIN.superCup;
+    case 'european-cup':
+      return AGAIN.europeanCup;
+    case 'european-secondary':
+      return AGAIN.europeanSecondary;
     case 'continental':
       return AGAIN.continental;
     case 'world':
@@ -323,54 +328,8 @@ export function titleCopyFor(klass: TrophyClass, first: boolean): string {
   }
 }
 
-export function awardCopyFor(klass: AwardClass, first: boolean, fallback?: string | null): string {
-  if (klass === 'other') return fallback?.trim() || FIRST.leaguePlayer;
-  if (first) {
-    switch (klass) {
-      case 'league-boot':
-        return FIRST.leagueBoot;
-      case 'world-boot':
-        return FIRST.worldBoot;
-      case 'tournament-boot':
-        return FIRST.tournamentBoot;
-      case 'league-player':
-        return FIRST.leaguePlayer;
-      case 'continental-player':
-        return FIRST.continentalPlayer;
-      case 'world-pott':
-        return FIRST.worldPott;
-      case 'euro-pott':
-        return FIRST.euroPott;
-      case 'nations-pott':
-        return FIRST.nationsPott;
-      case 'continental-nations-pott':
-        return FIRST.continentalNationsPott;
-      case 'wpy':
-        return FIRST.wpy;
-    }
-  }
-  switch (klass) {
-    case 'league-boot':
-      return AGAIN.leagueBoot;
-    case 'world-boot':
-      return AGAIN.worldBoot;
-    case 'tournament-boot':
-      return AGAIN.tournamentBoot;
-    case 'league-player':
-      return AGAIN.leaguePlayer;
-    case 'continental-player':
-      return AGAIN.continentalPlayer;
-    case 'world-pott':
-      return AGAIN.worldPott;
-    case 'euro-pott':
-      return AGAIN.euroPott;
-    case 'nations-pott':
-      return AGAIN.nationsPott;
-    case 'continental-nations-pott':
-      return AGAIN.continentalNationsPott;
-    case 'wpy':
-      return AGAIN.wpy;
-  }
+export function awardCopyFor(awardName: string, first: boolean, fallback?: string | null): string {
+  return awardCopyForName(awardName, first, fallback);
 }
 
 export function scoredWinningGoal(

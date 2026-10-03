@@ -560,7 +560,7 @@ if (!loanClubId) {
   {
     const dest = loaned.clubId ? getClub(loaned.clubId) : undefined;
     if (loaned.weeklyWage !== offeredWage || offeredWage <= 0) {
-      console.error('The first loan must pay the destination starter wage from the offer');
+      console.error('The first loan must keep the offered parent-club wage');
       process.exitCode = 1;
     }
     if (dest && SECOND_DIVISIONS.has(dest.league) && (loaned.squadStatus === 'starter') && offeredWage < SECOND_DIVISION_STARTER_FLOOR) {
