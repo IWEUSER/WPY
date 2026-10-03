@@ -21,6 +21,7 @@ import {
   seasonalSponsorship,
   openingWeeklyWageForSquadStatus,
   YOUTH_LOAN_YEARS,
+  YOUTH_MARKET_VALUE,
 } from './playerValue';
 import { evaluatePlayerOfTheYear, evaluateTopGoalscorer } from './domesticAwards';
 import { evaluateClubPlayerOfTheTournament, evaluateContinentalTopGoalscorer } from './clubInternationalAwards';
@@ -31,6 +32,7 @@ import { trophyLabels } from './honoursDisplay';
 import {
   enqueueEndOfSeasonBeats,
   enqueueLeagueTitleBeat,
+  enqueueValueMilestoneBeats,
   debutBeat,
   enqueueMatchMilestones,
   firstCapBeat,
@@ -1071,6 +1073,29 @@ interface CareerActions {
 
 export type CareerStore = CareerState & CareerActions;
 
+function marketValueAt(
+  state: CareerState,
+  season: SeasonRecord | null | undefined,
+  careerGoals: number,
+  careerGames: number,
+  week: number,
+): number {
+  const club = state.clubId ? getClub(state.clubId) : undefined;
+  if (!club) return YOUTH_MARKET_VALUE;
+  return playerMarketValueFromSeasons({
+    age: state.age,
+    careerGoals,
+    careerGames,
+    seasons: [...state.seasonHistory, ...(season ? [season] : [])],
+    fallbackClub: club,
+    contractYearsRemaining: state.contractYearsRemaining,
+    seasonNumber: state.seasonNumber,
+    calendarWeek: week,
+    careerStart: state.careerStart,
+    role: state.role,
+  });
+}
+
 function openNextSimFixture(state: CareerState): Partial<CareerState> {
   let sim = state.seasonSim;
   let calendar = state.seasonCalendar;
@@ -1086,6 +1111,13 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
   if (!sim || !calendar || !season || !state.clubId) return {};
   const club = getClub(state.clubId);
   if (!club) return {};
+  const openingValue = marketValueAt(
+    state,
+    season,
+    state.careerGoals,
+    careerGames,
+    currentCalendarWeek(calendar, sim.fixtureIndex),
+  );
   sim = ensureInternationalGroup(sim, calendar, state.seasonNumber);
   const nationName = state.nationality ? getNation(state.nationality)?.name : undefined;
 
@@ -1190,14 +1222,25 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
         seasonStandings: buildSeasonStandings(withHonours.leagueTable, withHonours.europeanStanding),
         phase: 'season-summary',
         wpyResult: awarded.wpyResult,
-        pendingBeats: enqueueLeagueTitleBeat(
-          state.pendingBeats,
+        pendingBeats: enqueueValueMilestoneBeats(
+          enqueueLeagueTitleBeat(
+            state.pendingBeats,
+            state.seenBeatKinds,
+            withHonours.honours,
+            club,
+            state.clubLeague,
+            state.seasonHistory,
+            state.seenMilestones,
+          ),
           state.seenBeatKinds,
-          withHonours.honours,
-          club,
-          state.clubLeague,
-          state.seasonHistory,
-          state.seenMilestones,
+          openingValue,
+          marketValueAt(
+            state,
+            season,
+            state.careerGoals,
+            careerGames,
+            currentCalendarWeek(calendar, sim!.fixtureIndex),
+          ),
         ),
       };
     }
@@ -1235,6 +1278,18 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
       injuryGamesRemaining,
       seasonStandings: buildSeasonStandings(hubSim.leagueTable, hubSim.europeanStanding),
       liveMatch: null,
+      pendingBeats: enqueueValueMilestoneBeats(
+        state.pendingBeats,
+        state.seenBeatKinds,
+        openingValue,
+        marketValueAt(
+          state,
+          reviewed.currentSeason ?? season,
+          state.careerGoals,
+          careerGames,
+          currentCalendarWeek(calendar, hubSim.fixtureIndex),
+        ),
+      ),
       phase: 'hub',
     };
   };
@@ -1627,6 +1682,20 @@ function finishResolvedLiveMatch(
     + state.seasonHistory.reduce((sum, row) => sum + (row.goals ?? 0), 0);
   const priorCaps = state.nationalTeam?.caps ?? 0;
   const priorIntlGoals = state.nationalTeam?.goals ?? 0;
+  const prevValue = marketValueAt(
+    state,
+    season,
+    state.careerGoals,
+    state.careerGames,
+    currentCalendarWeek(calendar, live.fixtureIndex),
+  );
+  const nextValue = marketValueAt(
+    { ...state, careerGoals: nextCareerGoals, careerGames: nextCareerGames },
+    awarded.season,
+    nextCareerGoals,
+    nextCareerGames,
+    currentCalendarWeek(nextCalendar, nextSim.fixtureIndex),
+  );
   let pendingBeats = enqueueMatchMilestones(state.pendingBeats, state.seenBeatKinds, {
     clubAppearance,
     international: isInternational,
@@ -1637,6 +1706,7 @@ function finishResolvedLiveMatch(
     priorIntlGoals,
     nationName: state.nationality ? getNation(state.nationality)?.name ?? 'Your country' : 'Your country',
   });
+  pendingBeats = enqueueValueMilestoneBeats(pendingBeats, state.seenBeatKinds, prevValue, nextValue);
   if (state.squadStatus === 'rising-star' && reviewed.squadStatus === 'impact') {
     pendingBeats = pushCareerBeat(pendingBeats, state.seenBeatKinds, impactRoleBeat());
   }

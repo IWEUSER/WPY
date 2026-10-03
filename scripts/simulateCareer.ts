@@ -4,7 +4,7 @@
  *
  * Run with: npm run simulate:career
  */
-import { buildSeasonCalendar, CLUB_SEASON_DEADLINE_WEEK, fixtureCrowdAwayShare, fixtureIsHome, fixtureIsNeutral, fixtureIsNight, fixtureShowsSun, fixtureVenueLabel, INTERNATIONAL_BREAK_WEEKS, isClubFinalNeutral, isFinalFixture, MAX_SEASON_WEEKS, nationsLeagueKnockoutWeeks, scoreboardPlayerOnLeft, SUMMER_TOURNAMENT_WEEKS, tournamentWeekCount } from '../src/game/career/calendar';
+import { buildSeasonCalendar, CLUB_SEASON_DEADLINE_WEEK, fixtureCrowdAwayShare, fixtureIsHome, fixtureIsNeutral, fixtureIsNight, fixtureShowsSun, fixtureVenueLabel, INTERNATIONAL_BREAK_WEEKS, isClubFinalNeutral, isFinalFixture, MAX_SEASON_WEEKS, nationsLeagueKnockoutWeeks, scoreboardPlayerOnLeft, SINGLE_TIER_AWAY_SHARE, SUMMER_TOURNAMENT_WEEKS, tournamentWeekCount } from '../src/game/career/calendar';
 import { INJURY_CHANCE_PER_MATCH, injuryDuration, sitOutGamesAfterPlayedMatch } from '../src/game/career/injury';
 import {
   chancesForKnockoutTie,
@@ -14,7 +14,7 @@ import {
 import { assignClubTier, clubQualityLabel, CLUBS, clubsByTier, clubsForSeason, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, leagueMatchWeeks, playableClubsGroupedByLeague, SECOND_DIVISIONS, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
 import { leagueDisplayName, playoffGamesFromOpening, playoffOpeningForPosition } from '../src/game/career/data/leagueFormat';
 import { confederationDisplayName } from '../src/game/career/data/displayNames';
-import { clubTransferBudget, consecutivePoorFactor, contractValueFactor, DEFAULT_CONTRACT_YEARS, ELITE_TRANSFER_VALUE_FLOOR, FIRST_CONTRACT_YEARS, firstTopFlightValueCap, formAdjustedRatio, isSeason1ValueLocked, leagueAdjustedOfferRatio, leagueValueWeight, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, MIN_ACCEPTED_FEE_RATIO, newContractYears, openingWeeklyWageForSquadStatus, playerMarketValue, playerMarketValueFromSeasons, recentAggregateRatio, RESERVE_CONTRACT_YEARS, RESERVE_WAGE_FACTOR, RESERVE_WEEKLY_WAGE, SECOND_DIVISION_STARTER_FLOOR, seasonalSponsorship, tierForMarketValue, TOP_LEAGUES, transferFeeFromValue, VALUE_POOR_RATIO, wageCareerMaturityScale, wageOfferScale, wagePoorFactor, weeklyWageForClub, weeklyWageForRatio, weeklyWageForSquadStatus, weeklyWageForTransferOffer, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
+import { clubTransferBudget, consecutivePoorFactor, contractValueFactor, DEFAULT_CONTRACT_YEARS, ELITE_TRANSFER_VALUE_FLOOR, FIRST_CONTRACT_YEARS, firstTopFlightValueCap, formAdjustedRatio, isSeason1ValueLocked, leagueAdjustedOfferRatio, leagueValueWeight, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, MIN_ACCEPTED_FEE_RATIO, newContractYears, openingWeeklyWageForSquadStatus, playerMarketValue, playerMarketValueFromSeasons, recentAggregateRatio, RESERVE_CONTRACT_YEARS, RESERVE_WAGE_FACTOR, RESERVE_WEEKLY_WAGE, SECOND_DIVISION_STARTER_FLOOR, seasonalSponsorship, tierForMarketValue, TOP_LEAGUES, transferFeeFromValue, VALUE_MILESTONES, VALUE_POOR_RATIO, wageCareerMaturityScale, wageOfferScale, wagePoorFactor, weeklyWageForClub, weeklyWageForRatio, weeklyWageForSquadStatus, weeklyWageForTransferOffer, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { nationKit } from '../src/game/career/data/nationColours';
 import { reserveStadium, resolveCareerStadium, resolveMatchStadium, trialStadium } from '../src/game/career/matchVenue';
@@ -88,7 +88,7 @@ import { chancesForSquadStatus, consecutiveScoringAsImpact, consecutiveScoringGa
 import { OPENING_ROLE_CARDS } from '../src/game/career/openingRoleCopy';
 import { honourArtKind } from '../src/game/career/honourArt';
 import { needsSeasonTwoPaywall, SEASON_PAYWALL_LEAD, SEASON_PAYWALL_POINTS } from '../src/game/career/seasonPaywall';
-import { clubAllowedByLeagueSample, consecutiveLoanSpells, ELITE_OFFER_MIN_LEAGUE_GAMES, LOAN_OFFER_COUNT, SAUDI_OFFER_MIN_AGE, SECOND_DIVISION_BEST_OFFER_TIER, STRONG_OFFER_MIN_LEAGUE_GAMES, TRANSFER_MARKET_CAP, TRANSFER_OFFER_COUNT, offerFormRatio, offerRatioPreferringLastSeason, offerTierFromStanding, pickLoanClubsForMiss, pickLoanClubsFromOrigin, pickPermanentClubs, requiredGoalRatio, resolveSeasonTransition, seasonStandingRatio, sellingClubAcceptsOffer, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, trialFailTransferPending, tierEarnedByRatio, tierForRatio } from '../src/game/career/transfers';
+import { clubAllowedByLeagueSample, consecutiveLoanSpells, consecutiveRatioMissesAtClub, ELITE_OFFER_MIN_LEAGUE_GAMES, LOAN_OFFER_COUNT, SAUDI_OFFER_MIN_AGE, SECOND_DIVISION_BEST_OFFER_TIER, STRONG_OFFER_MIN_LEAGUE_GAMES, TRANSFER_MARKET_CAP, TRANSFER_OFFER_COUNT, offerFormRatio, offerRatioPreferringLastSeason, offerTierFromStanding, pickLoanClubsForMiss, pickLoanClubsFromOrigin, pickPermanentClubs, requiredGoalRatio, resolveSeasonTransition, seasonStandingRatio, sellingClubAcceptsOffer, TWILIGHT_MLS_CLUB_IDS, TWILIGHT_SAUDI_CLUB_IDS, trialFailTransferPending, tierEarnedByRatio, tierForRatio } from '../src/game/career/transfers';
 import { evaluateWpy } from '../src/game/career/wpy';
 import { internationalCampaignForSeason } from '../src/game/career/data/competitions';
 import { continentalLabel } from '../src/game/career/seasonStats';
@@ -2139,6 +2139,7 @@ const sale = resolveSeasonTransition({
   careerGames: 24,
   nationality: 'germany',
   loansUsed: 0,
+  seasonHistory: [{ ...dummySeason, seasonNumber: 2, ratioMet: false }],
 });
 const saleClubs = sale.pendingTransfer?.clubIds ?? [];
 const saleHome = saleClubs.filter((id) => getClub(id)?.country === 'Germany').length;
@@ -2151,8 +2152,64 @@ if (saleHome < 1) {
   process.exitCode = 1;
 }
 if (saleLoans !== LOAN_OFFER_COUNT || salePerms.length !== TRANSFER_OFFER_COUNT) {
-  console.error('a failed first-team season must offer 3 loans and 6 transfers');
+  console.error('two consecutive first-team misses must offer 3 loans and 6 transfers');
   process.exitCode = 1;
+}
+{
+  const oneMissAfterMeet = resolveSeasonTransition({
+    season: dummySeason,
+    role: 'first-team',
+    clubId: 'bayern',
+    parentClubId: 'bayern',
+    seasonsAtCurrentClub: 1,
+    age: 20,
+    careerGoals: 22,
+    careerGames: 48,
+    nationality: 'germany',
+    loansUsed: 0,
+    contractYearsRemaining: 4,
+    seasonHistory: [{
+      ...dummySeason,
+      seasonNumber: 2,
+      clubId: 'bayern',
+      ratioMet: true,
+      goals: 20,
+      gamesPlayed: 24,
+    }],
+  });
+  const oneMissLoans = (oneMissAfterMeet.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan');
+  console.log(
+    'one miss after meeting',
+    oneMissAfterMeet.headline,
+    'stay',
+    oneMissAfterMeet.pendingTransfer?.stay?.squadStatus ?? oneMissAfterMeet.immediate?.squadStatus,
+    'forced loans',
+    oneMissLoans.length,
+    'streak',
+    consecutiveRatioMissesAtClub(
+      [{ ...dummySeason, seasonNumber: 2, clubId: 'bayern', ratioMet: true, goals: 20, gamesPlayed: 24 }],
+      'bayern',
+      true,
+    ),
+  );
+  if (
+    consecutiveRatioMissesAtClub(
+      [{ ...dummySeason, seasonNumber: 2, clubId: 'bayern', ratioMet: true, goals: 20, gamesPlayed: 24 }],
+      'bayern',
+      true,
+    ) !== 1
+  ) {
+    console.error('a miss after a season that met the bar is only one consecutive failure');
+    process.exitCode = 1;
+  }
+  if (
+    oneMissAfterMeet.pendingTransfer?.kind === 'sold'
+    || oneMissAfterMeet.pendingTransfer?.allowDecline === false
+    || (oneMissAfterMeet.pendingTransfer?.stay?.squadStatus ?? oneMissAfterMeet.immediate?.squadStatus) !== 'reserve'
+  ) {
+    console.error('one miss after meeting the bar must keep the player as a reserve, not force a loan');
+    process.exitCode = 1;
+  }
 }
 if (salePerms.some((o) => {
   const expected = o.squadStatus === 'reserve' ? RESERVE_CONTRACT_YEARS : newContractYears(20);
@@ -2198,6 +2255,7 @@ if (salePerms.some((o) => {
     careerGames: 24,
     nationality: 'germany',
     loansUsed: 0,
+    seasonHistory: [{ ...dummySeason, seasonNumber: 2, ratioMet: false }],
   });
   const teenSaudi = (teenSale.pendingTransfer?.offers ?? []).filter((o) => getClub(o.clubId)?.league === 'Saudi Pro League');
   console.log('Saudi age gate', '20', saleSaudi.map((o) => o.clubId), '17', teenSaudi.map((o) => o.clubId));
@@ -4631,6 +4689,7 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
     nationality: 'england',
     loansUsed: 0,
     contractYearsRemaining: 5,
+    seasonHistory: [{ ...dummySeason, seasonNumber: 2, clubId: 'toulouse', ratioMet: false, goals: 2, gamesPlayed: 24 }],
   });
   const zeroOffers = zeroRatio.pendingTransfer?.offers ?? [];
   console.log('0.0-ratio offers', zeroOffers.map((o) => `${o.move}:${o.clubId}:${getClub(o.clubId)?.tier}:${getClub(o.clubId)?.league}`));
@@ -6952,11 +7011,11 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
   });
   console.log('S1 value week 1', earlyS1, 'week 21', lateS1);
   if (earlyS1 !== YOUTH_MARKET_VALUE) {
-    console.error('season 1 market value must stay at €100k until week 20');
+    console.error('season 1 market value must stay at €100k in week 1');
     process.exitCode = 1;
   }
   if (lateS1 <= YOUTH_MARKET_VALUE) {
-    console.error('season 1 market value must update after week 20');
+    console.error('season 1 market value must update from week 2');
     process.exitCode = 1;
   }
   const favEarly = playerMarketValueFromSeasons({
@@ -7016,13 +7075,36 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     careerStart: 'favourite-first-team',
     role: 'first-team',
   });
-  console.log('favourite S1 week 15', favEarly, 'week 25', favLate, 'S2 week 1', favS2Week1);
-  if (favEarly !== YOUTH_MARKET_VALUE) {
-    console.error('favourite first-team Season 1 must stay at €100k until week 20');
+  const favWeek2 = playerMarketValueFromSeasons({
+    age: 17,
+    careerGoals: 18,
+    careerGames: 20,
+    seasons: [{
+      ...dummySeason,
+      seasonNumber: 1,
+      clubId: 'wolves',
+      role: 'first-team',
+      goals: 18,
+      gamesPlayed: 20,
+    }],
+    fallbackClub: getClub('wolves')!,
+    contractYearsRemaining: 2,
+    seasonNumber: 1,
+    calendarWeek: 2,
+    careerStart: 'favourite-first-team',
+    role: 'first-team',
+  });
+  console.log('favourite S1 week 2', favWeek2, 'week 15', favEarly, 'week 25', favLate, 'S2 week 1', favS2Week1);
+  if (favWeek2 <= YOUTH_MARKET_VALUE) {
+    console.error('favourite first-team Season 1 must start moving market value in week 2');
+    process.exitCode = 1;
+  }
+  if (favEarly <= YOUTH_MARKET_VALUE) {
+    console.error('favourite first-team Season 1 must update market value from week 2');
     process.exitCode = 1;
   }
   if (favLate <= YOUTH_MARKET_VALUE) {
-    console.error('favourite first-team Season 1 must update market value after week 20');
+    console.error('favourite first-team Season 1 must keep updating market value later in the season');
     process.exitCode = 1;
   }
   if (favS2Week1 <= YOUTH_MARKET_VALUE) {
@@ -7033,8 +7115,20 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     console.error('favourite Season 1 week 25 must not be value-locked');
     process.exitCode = 1;
   }
-  if (!isSeason1ValueLocked(1, 15, { careerStart: 'youth', role: 'first-team' })) {
-    console.error('youth-path Season 1 must stay locked until week 20');
+  if (!isSeason1ValueLocked(1, 1, { careerStart: 'youth', role: 'first-team' })) {
+    console.error('youth-path Season 1 week 1 must stay at the youth value');
+    process.exitCode = 1;
+  }
+  if (isSeason1ValueLocked(1, 2, { careerStart: 'youth', role: 'first-team' })) {
+    console.error('youth-path Season 1 must unlock market value from week 2');
+    process.exitCode = 1;
+  }
+  if (isSeason1ValueLocked(4, 1, { careerStart: 'favourite-first-team', role: 'first-team' })) {
+    console.error('later seasons must keep updating market value from week 1');
+    process.exitCode = 1;
+  }
+  if (VALUE_MILESTONES[0] !== 1_000_000 || VALUE_MILESTONES[VALUE_MILESTONES.length - 1] !== 400_000_000) {
+    console.error('value milestones must run 1m through 400m');
     process.exitCode = 1;
   }
   const finished = {
@@ -7727,6 +7821,29 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
   }
   if (luminance(madrid.socks) < 0.85) {
     console.error('Real Madrid must wear white socks');
+    process.exitCode = 1;
+  }
+  const dortmundKit = clubKit(getClub('dortmund'));
+  const psvKit = clubKit(getClub('psv'));
+  const romaKit = clubKit(getClub('roma'));
+  if ((dortmundKit?.socks ?? '').toLowerCase() !== '#fde100') {
+    console.error('Dortmund must wear yellow socks');
+    process.exitCode = 1;
+  }
+  if (luminance(psvKit?.socks ?? '#000000') < 0.85) {
+    console.error('Eindhoven must wear white socks');
+    process.exitCode = 1;
+  }
+  if ((romaKit?.shorts ?? '').toLowerCase() !== (romaKit?.primary ?? '').toLowerCase()) {
+    console.error('Rome shorts must match the shirt colour');
+    process.exitCode = 1;
+  }
+  const dortmundHome = resolveMatchStadium({
+    fixture: { week: 4, kind: 'league', isDecisive: false, isHome: true },
+    club: getClub('dortmund'),
+  });
+  if (Math.abs(dortmundHome.awayShare - SINGLE_TIER_AWAY_SHARE) > 1e-9) {
+    console.error('single-tier grounds must cut the away end to 5%');
     process.exitCode = 1;
   }
   const sevilla = kitFromScheme(clubKit(getClub('sevilla')));
@@ -9363,6 +9480,30 @@ console.log('\n--- Club cups, paced tables, transfers, injuries, and elite score
   const byeStage = { ...s2.sim, europeanStanding: { cup: 'ucl' as const, stage: 'round-of-16' as const } };
   if (playOff.some((f) => !shouldSkipFixture(f, byeStage))) {
     console.error('top-eight sides must skip the knockout play-off');
+    process.exitCode = 1;
+  }
+
+  const bundCal = buildSeasonCalendar({
+    seasonNumber: 1,
+    leagueMatchWeeks: leagueMatchWeeks('Bundesliga'),
+    clubTier: 1,
+    confederation: 'UEFA',
+    country: 'Germany',
+    continentalCup: 'ucl',
+    includeInternational: false,
+  });
+  const bundGroups = bundCal.fixtures.filter((f) => f.kind === 'continental-group');
+  const bundKo = bundCal.fixtures.filter((f) => f.kind === 'continental-knockout' || f.kind === 'continental-semi-final');
+  const lastGroupWeek = Math.max(...bundGroups.map((f) => f.week));
+  const firstKoWeek = Math.min(...bundKo.map((f) => f.week));
+  const r16Weeks = bundCal.fixtures.filter((f) => f.kind === 'continental-knockout' && f.europeanRound === 'round-of-16');
+  console.log('Bundesliga UCL pack', bundCal.totalWeeks, 'last group', lastGroupWeek, 'first KO', firstKoWeek, 'R16', r16Weeks.map((f) => f.week));
+  if (bundGroups.length !== 8 || lastGroupWeek >= firstKoWeek) {
+    console.error('Bundesliga UCL league phase must finish before the first knockout week');
+    process.exitCode = 1;
+  }
+  if (r16Weeks.some((f) => shouldSkipFixture(f, r16Stage))) {
+    console.error('a top-eight Bundesliga UCL finish must still play the last 16');
     process.exitCode = 1;
   }
 }

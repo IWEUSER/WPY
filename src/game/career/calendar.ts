@@ -175,9 +175,19 @@ export function internationalVenueFlags(
  * Share of seats given to the away support. Neutral ties (club finals and
  * international tournament games) are a true 50/50 split by club or country.
  */
-export function fixtureCrowdAwayShare(fixture: CalendarFixture): number {
+/** Default away allocation. Single-deck bowls keep a quarter of this. */
+export const DEFAULT_AWAY_SHARE = 0.2;
+export const SINGLE_TIER_AWAY_SHARE = 0.05;
+
+/**
+ * Share of seats given to the away support. Neutral ties are 50/50.
+ * One-deck grounds (Dortmund, Liverpool, Rome, and the other single-tier
+ * bowls) cut the away end by 75% so it only occupies part of the stand.
+ */
+export function fixtureCrowdAwayShare(fixture: CalendarFixture, standTiers?: number): number {
   if (fixtureIsNeutral(fixture)) return 0.5;
-  return 0.2;
+  if ((standTiers ?? 2) <= 1) return SINGLE_TIER_AWAY_SHARE;
+  return DEFAULT_AWAY_SHARE;
 }
 
 function fixtureKickoffSeed(fixture: CalendarFixture): number {
@@ -416,17 +426,20 @@ export function buildSeasonCalendar(params: BuildCalendarParams): SeasonCalendar
   }
 
   if (cup) {
-
-    const groupInterval = Math.max(1, Math.floor(leagueMatchWeeks / GROUP_STAGE_MATCHDAYS));
-    for (let i = 0; i < GROUP_STAGE_MATCHDAYS; i++) {
-      const groupWeek = Math.min(leagueMatchWeeks, (i + 1) * groupInterval);
-      fixtures.push({ week: groupWeek, kind: 'continental-group', continentalCup: cup, isDecisive: false });
-    }
-
     const knockoutRounds: NonNullable<CalendarFixture['europeanRound']>[] =
       cup === 'ucl' ? ['play-off', 'round-of-16', 'quarter-final'] : ['round-of-16', 'quarter-final'];
     const knockoutLegs = knockoutRounds.length * 2 + 2;
     const knockoutStart = Math.max(1, leagueMatchWeeks - knockoutLegs + 1);
+    // League-phase nights must finish before the first knockout week. On a
+    // 34-week Bundesliga the old even spread put the 8th Swiss match after
+    // the R16 window, so a top-eight finish never played a knockout.
+    const groupWindow = Math.max(GROUP_STAGE_MATCHDAYS, knockoutStart - 1);
+    const groupInterval = Math.max(1, Math.floor(groupWindow / GROUP_STAGE_MATCHDAYS));
+    for (let i = 0; i < GROUP_STAGE_MATCHDAYS; i++) {
+      const groupWeek = Math.min(groupWindow, (i + 1) * groupInterval);
+      fixtures.push({ week: groupWeek, kind: 'continental-group', continentalCup: cup, isDecisive: false });
+    }
+
     let knockoutWeek = knockoutStart;
     for (const europeanRound of knockoutRounds) {
       fixtures.push({

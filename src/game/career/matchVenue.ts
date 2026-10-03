@@ -102,7 +102,7 @@ export function resolveMatchStadium(args: {
     opponentSocks: opponent.socks,
     opponentPattern: opponent.pattern,
     opponentSleeves: opponent.sleeves,
-    awayShare: fixture ? fixtureCrowdAwayShare(fixture) : 0.2,
+    awayShare: fixture ? fixtureCrowdAwayShare(fixture, ground.tiers) : 0.2,
     crowdFill: openingKind === 'youth-tournament' ? 'sparse' : openingKind === 'club-trial' ? 'empty' : 'full',
     pitchQuality: youthOrTrial
       ? 'worn'

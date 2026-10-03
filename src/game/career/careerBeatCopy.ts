@@ -13,6 +13,7 @@ export type CareerMilestoneId =
   | 'first-intl-hattrick'
   | 'league-medal'
   | 'cup-medal'
+  | 'super-cup-medal'
   | 'continental-medal'
   | 'world-championship'
   | 'european-championship'
@@ -32,6 +33,7 @@ export type CareerMilestoneId =
 export type TrophyClass =
   | 'league'
   | 'cup'
+  | 'super-cup'
   | 'continental'
   | 'world'
   | 'euro'
@@ -71,6 +73,8 @@ const FIRST = {
   league:
     'Through the winter mud and the grueling fixtures, you are finally standing on the podium as a champion.',
   cup: 'A knockout campaign defined by pressure, ending with silver in your hands and confetti in the air.',
+  superCup:
+    'Another for the cabinet — a good start to the season, and the chance to go after every trophy still to come.',
   continental:
     'A European night, a European trophy; you have won a continental club competition and put your name on it.',
   world: 'The ultimate glory, immortalized on earth; you have won the World Championship and touched footballing heaven.',
@@ -107,6 +111,8 @@ const AGAIN = {
   league:
     'Another winter, another podium. The dressing room knows this feeling now — and they still never get tired of it.',
   cup: 'Another knockout run, another night of silver; you make winning cups look like a habit.',
+  superCup:
+    'The season opens with another piece of silverware. Useful, then the real work starts.',
   continental:
     'Another European trophy. The continent still has to play you, and you still win those nights.',
   world: 'Back on top of the world. Dynasties are built on nights like this, and yours is still being written.',
@@ -149,11 +155,10 @@ export function trophyClass(trophyName: string | null | undefined): TrophyClass 
   if (intlId === 'nations-league') return 'nations-league';
   if (intlId) return 'continental-nations';
   if (CONTINENTAL_NAMES.has(name) || CONTINENTAL_NAMES.has(trophyName ?? '')) return 'continental';
-  if (
-    DOMESTIC_CUP_NAMES.has(name)
-    || DOMESTIC_CUP_NAMES.has(trophyName ?? '')
-    || /Super Cup|super cup/i.test(name)
-  ) {
+  if (/Super Cup|super cup/i.test(name) || /Super Cup|super cup/i.test(trophyName ?? '')) {
+    return 'super-cup';
+  }
+  if (DOMESTIC_CUP_NAMES.has(name) || DOMESTIC_CUP_NAMES.has(trophyName ?? '')) {
     return 'cup';
   }
   return 'league';
@@ -165,6 +170,8 @@ export function trophyMilestoneId(klass: TrophyClass): CareerMilestoneId {
       return 'league-medal';
     case 'cup':
       return 'cup-medal';
+    case 'super-cup':
+      return 'super-cup-medal';
     case 'continental':
       return 'continental-medal';
     case 'world':
@@ -282,6 +289,8 @@ export function titleCopyFor(klass: TrophyClass, first: boolean): string {
         return FIRST.league;
       case 'cup':
         return FIRST.cup;
+      case 'super-cup':
+        return FIRST.superCup;
       case 'continental':
         return FIRST.continental;
       case 'world':
@@ -299,6 +308,8 @@ export function titleCopyFor(klass: TrophyClass, first: boolean): string {
       return AGAIN.league;
     case 'cup':
       return AGAIN.cup;
+    case 'super-cup':
+      return AGAIN.superCup;
     case 'continental':
       return AGAIN.continental;
     case 'world':
@@ -457,6 +468,9 @@ export function recordCopy(highlight: SeasonLegacyHighlight): string {
   const recordGoals = highlight.recordGoals ?? 0;
   const gap = highlight.goalsToRecord ?? Math.max(0, recordGoals - highlight.playerGoals);
   const place = highlight.rankLabel || ordinal(highlight.rank);
+  if (highlight.kind === 'season') {
+    return `You are now ${place} on the ${scope} (${board}).`;
+  }
   if (gap <= 0) {
     return `You are now ${place} on the ${scope} (${board}), level with the historic mark.`;
   }

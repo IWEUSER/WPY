@@ -24,6 +24,7 @@ import {
   trophyMilestoneId,
   type CareerMilestoneId,
 } from './careerBeatCopy';
+import { formatEuros, VALUE_MILESTONES } from './playerValue';
 
 export type CareerBeatKind =
   | 'first-cap'
@@ -41,7 +42,8 @@ export type CareerBeatKind =
   | 'first-intl-goal'
   | 'hattrick'
   | 'intl-hattrick'
-  | 'impact-role';
+  | 'impact-role'
+  | 'value-milestone';
 
 export interface CareerBeat {
   kind: CareerBeatKind;
@@ -53,6 +55,8 @@ export interface CareerBeat {
   honourName?: string;
   /** First-time milestone so later trophies/awards can use the thereafter line. */
   milestoneId?: CareerMilestoneId;
+  /** Record board rank — 1 is an outright record, 2–10 is a chart climb. */
+  recordRank?: number;
 }
 
 const INTERNATIONAL_TROPHY_NAMES = new Set(
@@ -226,7 +230,35 @@ export function recordBeat(highlight: SeasonLegacyHighlight, _playerName: string
     headline: `${highlight.title} — ${highlight.rankLabel}`,
     copy: recordCopy(highlight),
     portrait: highlight.domain === 'nation' ? 'nation' : 'club',
+    honourName: highlight.title,
+    recordRank: highlight.rank,
   };
+}
+
+export function valueMilestoneBeat(threshold: number): CareerBeat {
+  const label = formatEuros(threshold);
+  return {
+    kind: 'value-milestone',
+    eyebrow: 'Market value',
+    headline: `${label} player`,
+    copy: `Your market value has reached ${label}.`,
+    portrait: 'club',
+  };
+}
+
+export function enqueueValueMilestoneBeats(
+  pending: CareerBeat[] | null | undefined,
+  seen: CareerBeatKind[] | null | undefined,
+  previousValue: number,
+  nextValue: number,
+): CareerBeat[] {
+  let next = pending ?? [];
+  for (const mark of VALUE_MILESTONES) {
+    if (previousValue < mark && nextValue >= mark) {
+      next = pushCareerBeat(next, seen, valueMilestoneBeat(mark));
+    }
+  }
+  return next;
 }
 
 const NATION_AWARD = /World Championship|World Cup|European Nations Cup|European Championship|South American Championship|Copa Am[eé]rica|North American Championship|Gold Cup|African Championship|Africa Cup|Asian Championship|Asian Cup|Oceania Championship|Nations Cup|Nations League/i;

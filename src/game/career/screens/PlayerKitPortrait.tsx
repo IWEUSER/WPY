@@ -65,7 +65,7 @@ export function PlayerKitPortrait({
   const look = lookOverride ?? pickPlayerLook(seedFrom(name, nation?.id), appearanceRegionForNation(nation ?? null));
   if (!club && !nation) return null;
   return (
-    <div className="mt-4 flex items-end justify-center gap-2">
+    <div className="flex items-end justify-center gap-2">
       {club && (
         <KitFigure
           label={club.name}

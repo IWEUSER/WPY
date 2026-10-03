@@ -1,6 +1,6 @@
 import { awardClass, awardCopyFor, recordCopy, scoredWinningGoal, titleCopyFor, tournamentWinFlavour, trophyClass } from '../src/game/career/careerBeatCopy';
 import { positionZone } from '../src/game/career/leagueTableZones';
-import { awardBeat, enqueueMatchMilestones, firstCapBeat, firstTitleBeat, impactRoleBeat, recordBeat, signedClubBeat, titleBeat } from '../src/game/career/careerBeat';
+import { awardBeat, enqueueMatchMilestones, enqueueValueMilestoneBeats, firstCapBeat, firstTitleBeat, impactRoleBeat, recordBeat, signedClubBeat, titleBeat } from '../src/game/career/careerBeat';
 
 function assert(cond: boolean, message: string) {
   if (!cond) {
@@ -32,6 +32,10 @@ assert(positionZone({ kind: 'intl-group' }, 2, 4) === 'champions', 'intl top 2 q
 
 assert(trophyClass('Spanish League') === 'league', 'league class');
 assert(trophyClass('Spanish Cup') === 'cup', 'cup class');
+assert(trophyClass('German Super Cup') === 'super-cup', 'domestic super cup class');
+assert(trophyClass('European Super Cup') === 'super-cup', 'european super cup class');
+assert(titleCopyFor('super-cup', true).includes('cabinet'), 'super cup copy is measured');
+assert(!titleCopyFor('super-cup', true).includes('confetti'), 'super cup must not reuse knockout cup copy');
 assert(trophyClass('European Cup') === 'continental', 'continental class');
 assert(trophyClass('World Championship') === 'world', 'world class');
 assert(trophyClass('European Nations Cup') === 'euro', 'euro class');
@@ -106,7 +110,7 @@ const wcHold = recordCopy({
 });
 assert(wcHold.includes('World Championship'), 'unique WC record line');
 assert(!/shatter/i.test(wcHold), 'record copy must not say shattered');
-assert(recordCopy({
+const seasonClimb = recordCopy({
   title: 'Spanish League',
   subtitle: 'Single-season league goals',
   rankLabel: '3rd',
@@ -118,7 +122,23 @@ assert(recordCopy({
   recordGoals: 47,
   goalsToRecord: 7,
   id: 'league:season:la-liga',
-}).includes('league record'), 'top ten names league vs club vs tournament');
+});
+assert(seasonClimb.includes('league record'), 'top ten names league vs club vs tournament');
+assert(!/from the record/i.test(seasonClimb), 'single-season records must not mention the gap to the record');
+const seasonRecordBeat = recordBeat({
+  title: 'Spanish League',
+  subtitle: 'Single-season league goals',
+  rankLabel: '1st',
+  rank: 1,
+  playerGoals: 50,
+  kind: 'season',
+  domain: 'club',
+  group: 'league',
+  id: 'league:season:la-liga',
+}, 'Alex');
+assert(seasonRecordBeat.recordRank === 1 && seasonRecordBeat.honourName === 'Spanish League', 'outright records carry trophy art');
+const valueBeats = enqueueValueMilestoneBeats([], [], 900_000, 12_000_000);
+assert(valueBeats.length === 2 && valueBeats[0].kind === 'value-milestone', 'crossing 1m and 10m queues both value popups');
 
 const milestones = enqueueMatchMilestones([], [], {
   clubAppearance: true,
