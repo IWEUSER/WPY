@@ -7308,25 +7308,38 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
       console.error('clubs that cannot pay the transfer value must not appear in the window');
       process.exitCode = 1;
     }
-    const cheapIanBid = sellingClubAcceptsOffer({
+    const cheapIanParams = {
       offer: {
         clubId: 'getafe',
-        move: 'permanent',
+        move: 'permanent' as const,
         fee: 35_000_000,
         weeklyWage: 80_000,
         contractYears: 5,
       },
-      kind: 'end-of-season',
+      kind: 'end-of-season' as const,
       allowDecline: true,
       currentClubId: 'real-madrid',
-      role: 'first-team',
-      squadStatus: 'starter',
+      role: 'first-team' as const,
+      squadStatus: 'starter' as const,
       contractYearsLeft: 4,
       playerValue: 100_000_000,
       remainingPermanentOffers: 3,
-    });
+    };
+    const cheapIanBid = sellingClubAcceptsOffer(cheapIanParams);
     if (cheapIanBid.accepted) {
       console.error('a €35m bid on a €100m / 4-year transfer value must be rejected');
+      process.exitCode = 1;
+    }
+    const cheapRisingBid = sellingClubAcceptsOffer({
+      ...cheapIanParams,
+      squadStatus: 'rising-star',
+    });
+    const cheapImpactBid = sellingClubAcceptsOffer({
+      ...cheapIanParams,
+      squadStatus: 'impact',
+    });
+    if (cheapRisingBid.accepted || cheapImpactBid.accepted) {
+      console.error('a bid below 80% of transfer value is vetoed even as a Rising star or Impact player');
       process.exitCode = 1;
     }
   }

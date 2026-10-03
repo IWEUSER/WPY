@@ -2033,9 +2033,9 @@ function withTwilightMlsOffers(
 /**
  * Two-step transfer: the player has already accepted personal terms.
  * Forced sales, free transfers, loans, and expiring deals go through.
- * A starter with years left can have a short-fee peer bid vetoed — but
- * never the last remaining permanent offer, and never while the player
- * is already out on loan.
+ * Any voluntary bid below 80% of transfer value is vetoed — but never
+ * the last remaining permanent offer, and never while the player is
+ * already out on loan.
  */
 export function sellingClubAcceptsOffer(params: {
   offer: ClubOfferTerms;
@@ -2072,9 +2072,6 @@ export function sellingClubAcceptsOffer(params: {
 
   const feeLine = `€${Math.round(params.offer.fee / 1_000_000)}m bid`;
 
-  if (params.squadStatus === 'impact' || params.squadStatus === 'rising-star' || params.squadStatus === 'reserve') {
-    return { accepted: true, detail: '' };
-  }
   if ((params.remainingPermanentOffers ?? 1) <= 0) {
     return { accepted: true, detail: '' };
   }

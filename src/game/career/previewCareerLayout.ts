@@ -1137,6 +1137,7 @@ export function applyCareerLayoutPreview(): void {
           contractYearsRemaining: preview === 'rising-loans-s2' ? 4 : 5,
           careerStart: 'favourite-first-team',
           squadStatus: 'rising-star',
+          weeklyWage: 140_000,
           clubLeague: 'Premier League',
           seasonHistory: preview === 'rising-loans-s2'
             ? [season({
