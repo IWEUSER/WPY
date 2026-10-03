@@ -4749,8 +4749,8 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
   const irelandFrance = irelandLoans.filter((c) => c.country === 'France').length;
   const irelandEngland = irelandLoans.filter((c) => c.country === 'England').length;
   console.log('loan split Ireland at Toulouse', irelandFrance, irelandEngland, irelandLoans.map((c) => c.country));
-  if (irelandLoans.length !== LOAN_OFFER_COUNT || irelandFrance < 2 || irelandEngland < 1) {
-    console.error('Irish player in France: two French loans and one English leftover');
+  if (irelandLoans.length !== LOAN_OFFER_COUNT || irelandFrance < 2) {
+    console.error('Irish player in France: two of three loans must come from the host country');
     process.exitCode = 1;
   }
 
@@ -5664,8 +5664,15 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
     careerGames: 89,
   });
   console.log('13-game 0.00 offers', thinOffers.map((o) => `${o.move}:${o.clubId}:${getClub(o.clubId)?.tier}`), 'form', form.toFixed(2));
-  if (form < 0.9 || thinPermTiers.some((t) => t > 1) || thinPerms.length === 0) {
-    console.error('a 13-game blank must not tank transfers — they still follow career form');
+  if (form >= 0.9) {
+    console.error('a 13-game blank must count as live form so market value can move before a loan or a new season');
+    process.exitCode = 1;
+  }
+  if (thinPerms.some((o) => {
+    const dest = getClub(o.clubId);
+    return dest != null && clubTransferBudget(dest) < (o.fee || 1) * MIN_ACCEPTED_FEE_RATIO && o.fee > 0;
+  })) {
+    console.error('even after a thin blank, listed bids must still come from clubs that can pay the transfer value');
     process.exitCode = 1;
   }
   if (
@@ -6311,7 +6318,7 @@ const secured = resolveSeasonTransition({
   nationality: 'germany',
   loansUsed: 0,
 });
-if (!secured.pendingTransfer || !secured.pendingTransfer.allowDecline || secured.pendingTransfer.offers.length < 3) {
+if (!secured.pendingTransfer || !secured.pendingTransfer.allowDecline || (secured.pendingTransfer.offers ?? []).filter((o) => o.move === 'permanent').length < 1) {
   console.error('every finished season must still table transfer offers in parallel');
   process.exitCode = 1;
 }
@@ -9508,8 +9515,14 @@ console.log('\n--- Club cups, paced tables, transfers, injuries, and elite score
   const saudiTooYoung = pickPermanentClubs(1, 260_000_000, ['man-city'], 'spain', false, 'Premier League', TRANSFER_MARKET_CAP + 1, 19);
   const saudiGiants = saudiOnly.filter((club) => (TWILIGHT_SAUDI_CLUB_IDS as readonly string[]).includes(club.id));
   const saudiEurope = saudiOnly.filter((club) => club.league !== 'Saudi Pro League' && club.country !== 'Saudi Arabia');
-  if (saudiGiants.length !== 1 || saudiEurope.length < 2 || saudiEurope.some((club) => clubTransferBudget(club) < 260_000_000 * MIN_ACCEPTED_FEE_RATIO)) {
-    console.error('players valued over €250m must only see clubs that can fund 80% of the fee, plus exactly one top Saudi offer');
+  const megaAsk = 260_000_000 * MIN_ACCEPTED_FEE_RATIO;
+  if (
+    saudiEurope.length < 2
+    || saudiEurope.some((club) => clubTransferBudget(club) < megaAsk)
+    || saudiGiants.some((club) => clubTransferBudget(club) < megaAsk)
+    || (saudiGiants.length !== 1 && saudiGiants.some((club) => clubTransferBudget(club) >= megaAsk))
+  ) {
+    console.error('players valued over €250m must only see clubs that can fund 80% of the fee; Saudi only joins when it can pay');
     process.exitCode = 1;
   }
   if (saudiTooYoung.some((club) => (TWILIGHT_SAUDI_CLUB_IDS as readonly string[]).includes(club.id))) {

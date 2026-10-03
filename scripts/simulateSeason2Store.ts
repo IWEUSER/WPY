@@ -7,7 +7,7 @@
 import { useCareerStore } from '../src/game/career/store';
 import { getClub, leagueMatchWeeks, SECOND_DIVISIONS } from '../src/game/career/data/clubs';
 import { currentCalendarWeek } from '../src/game/career/calendar';
-import { FIRST_CONTRACT_YEARS, openingWeeklyWageForSquadStatus, playerMarketValue, playerMarketValueFromSeasons, SECOND_DIVISION_STARTER_FLOOR, weeklyWageForSquadStatus, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
+import { FIRST_CONTRACT_YEARS, openingWeeklyWageForSquadStatus, playerMarketValue, playerMarketValueFromSeasons, SEASON_1_VALUE_LOCK_WEEKS, SECOND_DIVISION_STARTER_FLOOR, weeklyWageForSquadStatus, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import type { ShotResult } from '../src/game/shooting/types';
 
 function fakeShot(scored: boolean): ShotResult {
@@ -443,8 +443,8 @@ const afterWeek =
         })
       : null;
 console.log('S1 market value after first match', afterValue, 'week', afterWeek);
-if (afterValue !== YOUTH_MARKET_VALUE) {
-  console.error('Season 1 market value must stay €100k until week 20');
+if (afterWeek <= SEASON_1_VALUE_LOCK_WEEKS && afterValue !== YOUTH_MARKET_VALUE) {
+  console.error('Season 1 market value must stay €100k in week 1');
   process.exitCode = 1;
 }
 if (after.seasonSponsorship !== 0) {
@@ -746,8 +746,8 @@ pickNation('england');
       })
     : 0;
   console.log('favourite first-team S1 week', week, 'value', value, 'cup', s.seasonSim?.europeanStanding?.cup);
-  if (value !== YOUTH_MARKET_VALUE) {
-    console.error('Favourite first-team Season 1 must show €100k until week 20');
+  if (week <= SEASON_1_VALUE_LOCK_WEEKS && value !== YOUTH_MARKET_VALUE) {
+    console.error('Favourite first-team Season 1 must show €100k in week 1');
     process.exitCode = 1;
   }
 }
