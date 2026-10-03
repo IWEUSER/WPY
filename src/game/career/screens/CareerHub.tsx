@@ -18,7 +18,7 @@ import {
   squadRoleRatioGuide,
 } from '../squadStatus';
 import { displaySeasonLabel, displaySeasonNumber } from '../seasonDisplay';
-import { clubEligibleForNationalTeam, CALL_UP_MIN_LEAGUE_GAMES, callUpRatio, getNation, isSelectedForNationalTeam, SEASON_1_CALL_UP_MIN_WEEK, selectionRatioForNation } from '../international';
+import { clubEligibleForNationalTeam, CALL_UP_MIN_LEAGUE_GAMES, callUpRatio, getNation, isSelectedForNationalTeam, playerHasBeenCapped, SEASON_1_CALL_UP_MIN_WEEK, selectionRatioForNation } from '../international';
 import { formatEuros, playerMarketValueFromSeasons, transferFeeFromValue } from '../playerValue';
 import { ensureInternationalGroup, fixtureTitle, internationalRoundLabel, nextActionableFixture, type SeasonSimState } from '../seasonSim';
 import { nextMatchBriefing, playerGoalsLine, sitOutRecapLine } from '../matchBriefing';
@@ -339,7 +339,15 @@ export default function CareerHub({ onOpenMenu }: { onOpenMenu: () => void }) {
             nationName={nation.name}
             clubTier={club.tier}
             league={clubLeague ?? club.league}
-            careerRatio={callUpRatio({ season, careerGoals, careerGames })}
+            careerRatio={callUpRatio({
+              season,
+              careerGoals,
+              careerGames,
+              hasBeenCapped: playerHasBeenCapped({
+                caps: nationalTeam?.caps,
+                seasons: [...seasonHistory, ...(season ? [season] : [])],
+              }),
+            })}
             leagueGames={seasonLeagueGames}
             sim={seasonSimWithGroup}
             caps={nationalTeam?.caps ?? 0}

@@ -186,9 +186,10 @@ function shirtColor(
   awaySecondary: string | undefined,
   awayShare: number,
   u: number,
+  allowAway = true,
 ): string {
   const awayStart = 1 - Math.min(0.42, Math.max(0.14, awayShare));
-  const visiting = u > awayStart;
+  const visiting = allowAway && u > awayStart;
   const primary = visiting ? away : home;
   const secondary = visiting ? awaySecondary : homeSecondary;
   const useSecondary = Boolean(secondary) && rng() < 0.42;
@@ -392,6 +393,7 @@ function paintPackedFans(
               stadium.awaySecondary,
               stadium.awayShare ?? 0.2,
               u,
+              allowAway,
             );
       if (darkDeck && !jacket) fill = shadeHex(fill, -0.28);
       ctx.fillStyle = fill;
@@ -626,10 +628,7 @@ function drawHoardings(
   for (let i = 0; i < segments; i++) {
     const x0 = lerp(left, right, i / segments);
     const x1 = lerp(left, right, (i + 1) / segments);
-    const homeBand = i % 3 !== 2;
-    ctx.fillStyle = homeBand
-      ? mixHex(stadium.homeColor, '#111827', 0.15)
-      : mixHex(stadium.awayColor, '#111827', 0.2);
+    ctx.fillStyle = mixHex(stadium.homeColor, '#111827', i % 2 === 0 ? 0.12 : 0.28);
     ctx.fillRect(x0 + 1, y - thickness + 1, Math.max(1, x1 - x0 - 2), thickness - 2);
   }
 }

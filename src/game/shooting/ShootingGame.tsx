@@ -186,7 +186,13 @@ function takeTimingLabel(takeQuality?: number): string | null {
   return null;
 }
 
-function powerTierLabel(power: number): string {
+function powerTierLabel(power: number, header = false): string {
+  if (header) {
+    if (power >= 1.55) return 'Powerful header';
+    if (power >= 1.15) return 'Firm header';
+    if (power >= 0.75) return 'Clean header';
+    return 'Glancing header';
+  }
   if (power >= 1.55) return 'Thunderbolt';
   if (power >= 1.15) return 'Firm strike';
   if (power >= 0.75) return 'Well struck';
@@ -196,12 +202,15 @@ function powerTierLabel(power: number): string {
 /** Describes the curl in football terms (inswinger/outswinger, which side of
  * the boot), based on which way the shot bent relative to which side of goal
  * it was aimed at. Returns null for a near-straight strike. */
-function curlStyleLabel(result: ShotResult): string | null {
+function curlStyleLabel(result: ShotResult, header = false): string | null {
   if (Math.abs(result.curl) < 0.15) return null;
-  const aimSign = Math.sign(result.aim.x);
   const curlSign = Math.sign(result.curl);
-  const bendsTowardCenter = aimSign !== 0 && curlSign !== 0 && aimSign !== curlSign;
   const dir = curlSign > 0 ? 'right' : 'left';
+  if (header) {
+    return `Glanced ${dir} \u2014 headed across goal`;
+  }
+  const aimSign = Math.sign(result.aim.x);
+  const bendsTowardCenter = aimSign !== 0 && curlSign !== 0 && aimSign !== curlSign;
   const boot = bendsTowardCenter ? 'inswinger, inside of the boot' : 'outswinger, outside of the boot';
   return `Curled ${dir} \u2014 ${boot}`;
 }
@@ -891,11 +900,12 @@ export default function ShootingGame({
         bestStreak: Math.max(prev.bestStreak, streak),
       };
     });
+    const headed = animRef.current.ballFlight === 'header';
     const detailParts = [
-      result.shotStyle ? SHOT_STYLE_LABEL[result.shotStyle] : null,
-      result.groundBounce ? 'Bounced' : null,
-      powerTierLabel(result.power),
-      curlStyleLabel(result),
+      headed ? 'Header' : result.shotStyle ? SHOT_STYLE_LABEL[result.shotStyle] : null,
+      !headed && result.groundBounce ? 'Bounced' : null,
+      powerTierLabel(result.power, headed),
+      curlStyleLabel(result, headed),
       takeTimingLabel(result.takeQuality),
     ].filter(Boolean) as string[];
     setResultLabel({

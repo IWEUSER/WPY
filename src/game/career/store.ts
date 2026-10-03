@@ -31,8 +31,11 @@ import { trophyLabels } from './honoursDisplay';
 import {
   enqueueEndOfSeasonBeats,
   enqueueLeagueTitleBeat,
+  debutBeat,
   enqueueMatchMilestones,
   firstCapBeat,
+  impactRoleBeat,
+  intlDebutBeat,
   markMilestone,
   pushCareerBeat,
   retirementBeat,
@@ -214,7 +217,7 @@ function withInternationalForm(
   });
   const selected = isSelectedForNationalTeam({
     clubTier: club.tier,
-    careerGoalRatio: callUpRatio({ season, careerGoals, careerGames }),
+    careerGoalRatio: callUpRatio({ season, careerGoals, careerGames, hasBeenCapped: ctx?.hasBeenCapped }),
     nationId,
     publicSeason: publicSeason >= 1 ? publicSeason : null,
     calendarWeek: ctx?.week ?? 1,
@@ -403,7 +406,7 @@ function startSimulatedSeason(
   const { calendar, sim } = hydrateSeason({
     seasonNumber,
     club,
-    careerGoalRatio: callUpRatio({ season, careerGoals, careerGames }),
+    careerGoalRatio: callUpRatio({ season, careerGoals, careerGames, hasBeenCapped: extras?.hasBeenCapped }),
     nationId,
     qualifierCarry,
     includeSuperCup: leagueOnly ? false : superCup?.include,
@@ -1403,12 +1406,19 @@ function openNextSimFixture(state: CareerState): Partial<CareerState> {
       const callNation = nationName ?? 'Your country';
       if ((nationalTeam?.caps ?? 0) === 0) {
         pendingBeats = pushCareerBeat(pendingBeats, state.seenBeatKinds, firstCapBeat(callNation));
+        pendingBeats = pushCareerBeat(pendingBeats, state.seenBeatKinds, intlDebutBeat(callNation));
       }
       if (isInternationalFinalsRound(fixture.internationalRound) && (season.international?.finalsGames ?? 0) === 0) {
         const cupName = sim.internationalTournament
           ? (INTERNATIONAL_TOURNAMENTS[sim.internationalTournament]?.name ?? 'the tournament')
           : 'the tournament';
         pendingBeats = pushCareerBeat(pendingBeats, state.seenBeatKinds, tournamentCallUpBeat(callNation, cupName));
+      }
+    } else if (countsTowardCareerRecord(state.seasonNumber, state.role)) {
+      const priorClubGames = (season.gamesPlayed ?? 0)
+        + state.seasonHistory.reduce((sum, row) => sum + (row.gamesPlayed ?? 0), 0);
+      if (priorClubGames === 0) {
+        pendingBeats = pushCareerBeat(pendingBeats, state.seenBeatKinds, debutBeat());
       }
     }
     return {
@@ -1627,6 +1637,9 @@ function finishResolvedLiveMatch(
     priorIntlGoals,
     nationName: state.nationality ? getNation(state.nationality)?.name ?? 'Your country' : 'Your country',
   });
+  if (state.squadStatus === 'rising-star' && reviewed.squadStatus === 'impact') {
+    pendingBeats = pushCareerBeat(pendingBeats, state.seenBeatKinds, impactRoleBeat());
+  }
   if (complete) {
     pendingBeats = enqueueLeagueTitleBeat(
       pendingBeats,

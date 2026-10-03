@@ -272,19 +272,26 @@ function weightedSkins(locale: string): { value: string; w: number }[] {
     case 'netherlands':
     case 'france':
     case 'united-states':
-      return [...fair, ...tan, ...lightBrown, ...brown, ...dark];
+      return [...mix(FAIR, 10), ...mix(LIGHT_TAN, 4), ...mix(LIGHT_BROWN, 1), ...mix(BROWN, 1)];
     case 'germany':
     case 'italy':
-      return [...mix(FAIR, 7), ...mix(LIGHT_TAN, 3), ...mix(LIGHT_BROWN, 2), ...mix(BROWN, 2), ...mix(DARK, 2)];
+      return [...mix(FAIR, 10), ...mix(LIGHT_TAN, 3), ...mix(LIGHT_BROWN, 1), ...mix(BROWN, 1)];
     case 'spain':
     case 'portugal':
-      return [...mix(LIGHT_BROWN, 5), ...mix(BROWN, 4), ...mix(DARK, 2), ...mix(FAIR, 2), ...mix(LIGHT_TAN, 2)];
+      return [...mix(LIGHT_BROWN, 5), ...mix(BROWN, 4), ...mix(DARK, 1), ...mix(FAIR, 2), ...mix(LIGHT_TAN, 2)];
     default:
       return [...fair, ...tan, ...lightBrown, ...brown, ...dark];
   }
 }
 
 function hairForLocale(locale: string, skin: string, seed: number): string {
+  const fair = luminance(skin) > 0.58;
+  const weights = (items: { value: string; w: number }[]) =>
+    fair
+      ? items
+      : items.map((item) =>
+          isBlondeHair(item.value) ? { ...item, w: Math.min(item.w, 0.15) } : item,
+        ).filter((item) => item.w > 0);
   switch (locale) {
     case 'argentina':
       return pickWeighted(seed + 17, [
@@ -301,48 +308,48 @@ function hairForLocale(locale: string, skin: string, seed: number): string {
         { value: HAIR_BROWN, w: locale === 'mexico' ? 1 : 2 },
       ]);
     case 'japan':
-      return pickWeighted(seed + 17, [
+      return pickWeighted(seed + 17, weights([
         { value: HAIR_BROWN, w: 6 },
         { value: HAIR_DARK_BROWN, w: 3 },
         { value: HAIR_BLACK, w: 2 },
         { value: HAIR_BLONDE, w: 2 },
         { value: HAIR_DARK_BLONDE, w: 1 },
-      ]);
+      ]));
     case 'saudi-arabia':
-      return pickWeighted(seed + 17, [
+      return pickWeighted(seed + 17, weights([
         { value: HAIR_BLACK, w: 6 },
         { value: HAIR_DARK_BROWN, w: 4 },
         { value: HAIR_BROWN, w: 2 },
         { value: HAIR_BLONDE, w: 1 },
-      ]);
+      ]));
     case 'england':
     case 'netherlands':
     case 'france':
     case 'united-states':
-      return pickWeighted(seed + 17, [
+      return pickWeighted(seed + 17, weights([
         { value: HAIR_BROWN, w: 4 },
         { value: HAIR_DARK_BROWN, w: 3 },
         { value: HAIR_BLACK, w: 3 },
         { value: HAIR_BLONDE, w: 2 },
         { value: HAIR_DARK_BLONDE, w: 2 },
-      ]);
+      ]));
     case 'germany':
     case 'italy':
-      return pickWeighted(seed + 17, [
+      return pickWeighted(seed + 17, weights([
         { value: HAIR_BROWN, w: 5 },
         { value: HAIR_DARK_BROWN, w: 4 },
         { value: HAIR_BLACK, w: 3 },
         { value: HAIR_DARK_BLONDE, w: locale === 'germany' ? 2 : 1 },
         { value: HAIR_BLONDE, w: locale === 'germany' ? 1 : 0 },
-      ].filter((item) => item.w > 0));
+      ]).filter((item) => item.w > 0));
     case 'spain':
     case 'portugal':
-      return pickWeighted(seed + 17, [
+      return pickWeighted(seed + 17, weights([
         { value: HAIR_BROWN, w: 5 },
         { value: HAIR_BLACK, w: 5 },
         { value: HAIR_DARK_BROWN, w: 3 },
         { value: HAIR_BLONDE, w: 1 },
-      ]);
+      ]));
     default:
       return hairForRegion('any', skin, seed);
   }

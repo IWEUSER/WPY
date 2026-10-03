@@ -19,6 +19,8 @@ export type CareerMilestoneId =
   | 'nations-league'
   | 'continental-nations'
   | 'league-golden-boot'
+  | 'world-golden-boot'
+  | 'tournament-golden-boot'
   | 'league-player'
   | 'continental-player'
   | 'world-pott'
@@ -38,6 +40,8 @@ export type TrophyClass =
 
 export type AwardClass =
   | 'league-boot'
+  | 'world-boot'
+  | 'tournament-boot'
   | 'league-player'
   | 'continental-player'
   | 'world-pott'
@@ -68,7 +72,7 @@ const FIRST = {
     'Through the winter mud and the grueling fixtures, you are finally standing on the podium as a champion.',
   cup: 'A knockout campaign defined by pressure, ending with silver in your hands and confetti in the air.',
   continental:
-    'The absolute pinnacle of club football; you have conquered the continent and etched your name into European folklore.',
+    'A European night, a European trophy; you have won a continental club competition and put your name on it.',
   world: 'The ultimate glory, immortalized on earth; you have won the World Championship and touched footballing heaven.',
   euro: 'The kings of Europe—you survived the toughest tournament grid in the world to claim continental crown rule.',
   nationsLeague:
@@ -77,6 +81,10 @@ const FIRST = {
     'A continent on your shoulders, a medal on your chest; this is the night your nation will tell for decades.',
   leagueBoot:
     "The Golden Boot is yours; the league's defenders spent a season trying to stop you, and every single one failed.",
+  worldBoot:
+    'The Golden Boot at the World Championship — most goals at the tournament, not a league season dressed up as something else.',
+  tournamentBoot:
+    'You finished as the tournament’s top goalscorer. This award is the finishing chart, not a league title by another name.',
   leaguePlayer:
     "The undivided respect of your peers—you didn't just play in the league this year, you completely dictated it.",
   continentalPlayer:
@@ -100,7 +108,7 @@ const AGAIN = {
     'Another winter, another podium. The dressing room knows this feeling now — and they still never get tired of it.',
   cup: 'Another knockout run, another night of silver; you make winning cups look like a habit.',
   continental:
-    'You have done it again on the biggest club stage. Continents do not yield twice to ordinary players.',
+    'Another European trophy. The continent still has to play you, and you still win those nights.',
   world: 'Back on top of the world. Dynasties are built on nights like this, and yours is still being written.',
   euro: 'Europe bows twice. You walked the same brutal grid and came home with the crown again.',
   nationsLeague:
@@ -109,6 +117,10 @@ const AGAIN = {
     'Your nation lifts it again, and your name is in the middle of the pile of medals.',
   leagueBoot:
     'The Golden Boot returns to you. Defenders had a whole season to learn, and they still could not live with you.',
+  worldBoot:
+    'The World Championship Golden Boot is yours again. Same tournament, same finishing chart, another top mark.',
+  tournamentBoot:
+    'Tournament top goalscorer again. The chart still has your name at the top.',
   leaguePlayer:
     'Voted the best in the league again. When the votes come in, there is only one column that matters.',
   continentalPlayer:
@@ -169,6 +181,10 @@ export function trophyMilestoneId(klass: TrophyClass): CareerMilestoneId {
 export function awardClass(awardName: string): AwardClass {
   if (/World Player of the Year/i.test(awardName)) return 'wpy';
   if (/League top goalscorer/i.test(awardName)) return 'league-boot';
+  if (/top goalscorer/i.test(awardName)) {
+    if (/World Championship|World Cup/i.test(awardName)) return 'world-boot';
+    return 'tournament-boot';
+  }
   if (/League player of the year/i.test(awardName)) return 'league-player';
   if (/Player of the Tournament/i.test(awardName)) {
     if (/World Championship|World Cup/i.test(awardName)) return 'world-pott';
@@ -196,6 +212,10 @@ export function awardMilestoneId(klass: AwardClass): CareerMilestoneId | null {
   switch (klass) {
     case 'league-boot':
       return 'league-golden-boot';
+    case 'world-boot':
+      return 'world-golden-boot';
+    case 'tournament-boot':
+      return 'tournament-golden-boot';
     case 'league-player':
       return 'league-player';
     case 'continental-player':
@@ -298,6 +318,10 @@ export function awardCopyFor(klass: AwardClass, first: boolean, fallback?: strin
     switch (klass) {
       case 'league-boot':
         return FIRST.leagueBoot;
+      case 'world-boot':
+        return FIRST.worldBoot;
+      case 'tournament-boot':
+        return FIRST.tournamentBoot;
       case 'league-player':
         return FIRST.leaguePlayer;
       case 'continental-player':
@@ -317,6 +341,10 @@ export function awardCopyFor(klass: AwardClass, first: boolean, fallback?: strin
   switch (klass) {
     case 'league-boot':
       return AGAIN.leagueBoot;
+    case 'world-boot':
+      return AGAIN.worldBoot;
+    case 'tournament-boot':
+      return AGAIN.tournamentBoot;
     case 'league-player':
       return AGAIN.leaguePlayer;
     case 'continental-player':
@@ -384,43 +412,53 @@ export function penaltyOutcomeCopy(opts: {
   return 'The fifth penalty missed, yet the night somehow still broke your way.';
 }
 
+export function recordScopeLabel(highlight: Pick<SeasonLegacyHighlight, 'group' | 'domain' | 'id'>): string {
+  const id = highlight.id ?? '';
+  if (id.startsWith('continental:') || highlight.group === 'continental') return 'club tournament record';
+  if (id.startsWith('intl-tournament:') || highlight.group === 'nation' || highlight.domain === 'nation') {
+    return 'tournament record';
+  }
+  if (highlight.group === 'league') return 'league record';
+  if (highlight.group === 'cup') return 'cup record';
+  return 'club record';
+}
+
 function recordBoardCopy(highlight: SeasonLegacyHighlight): string | null {
   const id = highlight.id ?? '';
   const title = `${highlight.title} ${highlight.subtitle}`.toLowerCase();
   if (highlight.rank !== 1) return null;
   if (id.includes('intl-tournament:career:world-cup') || /world championship.*all-time/.test(title)) {
-    return 'Move over, legends; you have just scored your record-breaking goal to become the highest goalscorer in World Championship history.';
+    return 'You now hold the World Championship all-time tournament record — the most goals in World Championship history.';
   }
   if (id.includes('intl-tournament:season:world-cup') || /world championship.*single/.test(title)) {
-    return 'An unprecedented tournament masterclass; you have shattered the all-time record for the most goals scored in a single World Championship campaign.';
+    return 'You now hold the World Championship single-campaign tournament record — the most goals in one World Championship.';
   }
   if (id.includes('continental:career:ucl') || /european cup.*all-time/.test(title)) {
-    return 'The ultimate European talisman; no player in the history of continental football has found the back of the net more times than you.';
+    return 'You now hold the European Cup club tournament record — the most goals in the history of that competition.';
   }
   if (id.includes('league:') && highlight.kind === 'season' && /single-season league/.test(title)) {
-    return 'A relentless domestic campaign; you have surpassed the historic milestone for the most goals scored in a single league season.';
+    return `You now hold the ${highlight.title} league record for a single season.`;
   }
   if (id.startsWith('nation-overall:') || /all-time international goals/.test(title)) {
-    return "A historic moment for your nation; with that strike, you are officially your country's all-time leading goalscorer.";
+    return "You now hold your nation's all-time international scoring record.";
   }
   if (/international caps|appearances/.test(title)) {
-    return 'The ultimate servant to your nation; you cross the white line today to break the all-time record for international caps.';
+    return 'You now hold the tournament record for international appearances.';
   }
   return null;
 }
 
 export function recordCopy(highlight: SeasonLegacyHighlight): string {
+  const scope = recordScopeLabel(highlight);
+  const board = `${highlight.title} — ${highlight.subtitle}`;
   if (highlight.rank === 1) {
-    return (
-      recordBoardCopy(highlight)
-      ?? `${highlight.title}. ${highlight.subtitle}. The record is yours now — a line on the board that used to belong to someone else.`
-    );
+    return recordBoardCopy(highlight) ?? `You now hold the ${scope}: ${board}.`;
   }
   const recordGoals = highlight.recordGoals ?? 0;
   const gap = highlight.goalsToRecord ?? Math.max(0, recordGoals - highlight.playerGoals);
   const place = highlight.rankLabel || ordinal(highlight.rank);
   if (gap <= 0) {
-    return `You are now ${place} on this list, level with the historic mark. One more swing and the record is yours.`;
+    return `You are now ${place} on the ${scope} (${board}), level with the historic mark.`;
   }
-  return `You are now ${place} — ${gap} goal${gap === 1 ? '' : 's'} from the record.`;
+  return `You are now ${place} on the ${scope} (${board}) — ${gap} goal${gap === 1 ? '' : 's'} from the record.`;
 }

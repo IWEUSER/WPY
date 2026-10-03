@@ -40,7 +40,8 @@ export type CareerBeatKind =
   | 'intl-debut'
   | 'first-intl-goal'
   | 'hattrick'
-  | 'intl-hattrick';
+  | 'intl-hattrick'
+  | 'impact-role';
 
 export interface CareerBeat {
   kind: CareerBeatKind;
@@ -73,6 +74,16 @@ export function signedClubBeat(clubName: string): CareerBeat {
     copy: signedCopy(),
     portrait: 'club',
     milestoneId: 'signed-club',
+  };
+}
+
+export function impactRoleBeat(): CareerBeat {
+  return {
+    kind: 'impact-role',
+    eyebrow: 'Impact',
+    headline: 'You move into an Impact role',
+    copy: 'The manager has seen enough. You are no longer waiting on the fringe — you are in the side to change matches.',
+    portrait: 'club',
   };
 }
 
@@ -205,14 +216,14 @@ export function soldBeat(clubName: string, opts?: { freeAgent?: boolean }): Care
   };
 }
 
-export function recordBeat(highlight: SeasonLegacyHighlight, playerName: string): CareerBeat {
+export function recordBeat(highlight: SeasonLegacyHighlight, _playerName: string): CareerBeat {
   const holder = highlight.rank === 1;
   return {
     kind: 'record',
     eyebrow: holder
       ? highlight.kind === 'season' ? 'Season record' : 'All-time record'
       : highlight.kind === 'season' ? 'Season chart' : 'All-time chart',
-    headline: `${playerName} — ${highlight.rankLabel}`,
+    headline: `${highlight.title} — ${highlight.rankLabel}`,
     copy: recordCopy(highlight),
     portrait: highlight.domain === 'nation' ? 'nation' : 'club',
   };
@@ -317,6 +328,7 @@ const ONCE_BEATS: CareerBeatKind[] = [
   'first-intl-goal',
   'hattrick',
   'intl-hattrick',
+  'impact-role',
 ];
 
 export function pushCareerBeat(

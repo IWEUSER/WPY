@@ -14,7 +14,7 @@ import {
 import { assignClubTier, clubQualityLabel, CLUBS, clubsForSeason, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, leagueMatchWeeks, playableClubsGroupedByLeague, SECOND_DIVISIONS, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
 import { leagueDisplayName, playoffGamesFromOpening, playoffOpeningForPosition } from '../src/game/career/data/leagueFormat';
 import { confederationDisplayName } from '../src/game/career/data/displayNames';
-import { clubTransferBudget, consecutivePoorFactor, contractValueFactor, DEFAULT_CONTRACT_YEARS, ELITE_TRANSFER_VALUE_FLOOR, FIRST_CONTRACT_YEARS, firstTopFlightValueCap, formAdjustedRatio, isSeason1ValueLocked, leagueAdjustedOfferRatio, leagueValueWeight, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, MIN_ACCEPTED_FEE_RATIO, newContractYears, openingWeeklyWageForSquadStatus, playerMarketValue, playerMarketValueFromSeasons, recentAggregateRatio, RESERVE_CONTRACT_YEARS, RESERVE_WAGE_FACTOR, RESERVE_WEEKLY_WAGE, SECOND_DIVISION_STARTER_FLOOR, seasonalSponsorship, tierForMarketValue, TOP_LEAGUES, transferFeeFromValue, wageCareerMaturityScale, wageOfferScale, weeklyWageForClub, weeklyWageForRatio, weeklyWageForSquadStatus, weeklyWageForTransferOffer, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
+import { clubTransferBudget, consecutivePoorFactor, contractValueFactor, DEFAULT_CONTRACT_YEARS, ELITE_TRANSFER_VALUE_FLOOR, FIRST_CONTRACT_YEARS, firstTopFlightValueCap, formAdjustedRatio, isSeason1ValueLocked, leagueAdjustedOfferRatio, leagueValueWeight, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, MIN_ACCEPTED_FEE_RATIO, newContractYears, openingWeeklyWageForSquadStatus, playerMarketValue, playerMarketValueFromSeasons, recentAggregateRatio, RESERVE_CONTRACT_YEARS, RESERVE_WAGE_FACTOR, RESERVE_WEEKLY_WAGE, SECOND_DIVISION_STARTER_FLOOR, seasonalSponsorship, tierForMarketValue, TOP_LEAGUES, transferFeeFromValue, VALUE_POOR_RATIO, wageCareerMaturityScale, wageOfferScale, wagePoorFactor, weeklyWageForClub, weeklyWageForRatio, weeklyWageForSquadStatus, weeklyWageForTransferOffer, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
 import { NATIONS, getNation } from '../src/game/career/data/nations';
 import { nationKit } from '../src/game/career/data/nationColours';
 import { reserveStadium, resolveCareerStadium, resolveMatchStadium, trialStadium } from '../src/game/career/matchVenue';
@@ -904,9 +904,19 @@ if (albaniaLuton || !albaniaAjax || albaniaMiss || leagueEligibleForNationalTeam
   const afterSample = callUpRatio({ season: { goals: 0, gamesPlayed: 20, leagueGames: 20 }, careerGoals: 45, careerGames: 60 });
   const slumpAfterCall = callUpRatio({ season: { goals: 8, gamesPlayed: 24, leagueGames: 22 }, careerGoals: 53, careerGames: 64 });
   const hotStart = callUpRatio({ season: { goals: 1, gamesPlayed: 1 }, careerGoals: 1, careerGames: 1 });
-  console.log('call-up ratio career/thin/20-blank/slump/hot', fromCareer.toFixed(2), thinSample.toFixed(2), afterSample.toFixed(2), slumpAfterCall.toFixed(2), hotStart.toFixed(2));
+  const cappedSlump = callUpRatio({
+    season: { goals: 1, gamesPlayed: 7, leagueGames: 7 },
+    careerGoals: 46,
+    careerGames: 47,
+    hasBeenCapped: true,
+  });
+  console.log('call-up ratio career/thin/20-blank/slump/hot/capped', fromCareer.toFixed(2), thinSample.toFixed(2), afterSample.toFixed(2), slumpAfterCall.toFixed(2), hotStart.toFixed(2), cappedSlump.toFixed(2));
   if (fromCareer < 0.66 || thinSample < 0.66 || afterSample !== 0 || slumpAfterCall >= 0.66 || hotStart < 0.66) {
     console.error('call-up must use career until 20 league games, then this season so a slump drops the player');
+    process.exitCode = 1;
+  }
+  if (Math.abs(cappedSlump - 1 / 7) > 1e-9) {
+    console.error('after the first cap, call-up uses this season immediately — not the 20-game career hold');
     process.exitCode = 1;
   }
 }
@@ -4665,23 +4675,24 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
     console.error('same-division loans are only allowed when the player already matches that club’s first-team bar');
     process.exitCode = 1;
   }
-  if (splitEngland < 2 || splitLoans.length !== LOAN_OFFER_COUNT) {
-    console.error('two of three loans should come from the player’s nation when that league exists');
+  if (splitFrance < 2 || splitEngland < 1 || splitLoans.length !== LOAN_OFFER_COUNT) {
+    console.error('abroad: two loans from the host country and one from nationality');
     process.exitCode = 1;
   }
 
   const uruguayLoans = pickLoanClubsForMiss(0, 'uruguay', LOAN_OFFER_COUNT, ['toulouse'], 'toulouse');
-  const uruguayGeo = uruguayLoans.filter((c) => c.country === 'Spain' || c.country === 'Portugal').length;
-  console.log('loan split Uruguay at Toulouse', uruguayGeo, uruguayLoans.map((c) => c.country));
-  if (uruguayLoans.length !== LOAN_OFFER_COUNT || uruguayGeo < 2) {
-    console.error('when nationality has no league, two of three loans must use trial geography (Uruguay → Spain/Portugal)');
+  const uruguayHost = uruguayLoans.filter((c) => c.country === 'France').length;
+  console.log('loan split Uruguay at Toulouse', uruguayHost, uruguayLoans.map((c) => c.country));
+  if (uruguayLoans.length !== LOAN_OFFER_COUNT || uruguayHost < 2) {
+    console.error('abroad: two of three loans come from the host country even when nationality has no league');
     process.exitCode = 1;
   }
   const irelandLoans = pickLoanClubsForMiss(0, 'republic-of-ireland', LOAN_OFFER_COUNT, ['toulouse'], 'toulouse');
+  const irelandFrance = irelandLoans.filter((c) => c.country === 'France').length;
   const irelandEngland = irelandLoans.filter((c) => c.country === 'England').length;
-  console.log('loan split Ireland at Toulouse', irelandEngland, irelandLoans.map((c) => c.country));
-  if (irelandLoans.length !== LOAN_OFFER_COUNT || irelandEngland < 2) {
-    console.error('Ireland has no playable league — two of three loans must come from England');
+  console.log('loan split Ireland at Toulouse', irelandFrance, irelandEngland, irelandLoans.map((c) => c.country));
+  if (irelandLoans.length !== LOAN_OFFER_COUNT || irelandFrance < 2 || irelandEngland < 1) {
+    console.error('Irish player in France: two French loans and one English leftover');
     process.exitCode = 1;
   }
 
@@ -8568,6 +8579,20 @@ console.log('\n--- Kits, cup nights, FA Cup semis, sun, World Cup copy, African 
     console.error('Latino sides must typically be light-brown with black hair');
     process.exitCode = 1;
   }
+  let englandDark = 0;
+  let englandDarkBlonde = 0;
+  for (let i = 0; i < 200; i++) {
+    const look = pickPlayerLook(i * 31 + 3, 'western-europe', 'england');
+    if (!isFairSkin(look.skin)) {
+      englandDark += 1;
+      if (isBlondeHair(look.hair)) englandDarkBlonde += 1;
+    }
+  }
+  console.log('england dark-skin', englandDark, 'dark+blonde', englandDarkBlonde);
+  if (englandDark > 50 || englandDarkBlonde > 6) {
+    console.error('dark skin and light hair must be rare on English looks');
+    process.exitCode = 1;
+  }
 
   console.log('pitch quality', pitchQualityFromStrength(94), pitchQualityFromStrength(66), pitchQualityFromStrength(52));
   if (pitchQualityFromStrength(94) !== 'elite' || pitchQualityFromStrength(66) !== 'tired' || pitchQualityFromStrength(52) !== 'worn') {
@@ -9590,18 +9615,18 @@ console.log('\n--- Call-up beats, transfer fees, 5-season wage discount ---');
   const gala = getClub('galatasaray')!;
   const galaTop = weeklyWageForClub(gala, 0);
   const galaOffer = weeklyWageForTransferOffer(gala, 0, 0.91, 7, 'starter', 'Super Lig', 0.56);
-  const expectedGala = Math.round((galaTop * 0.91 * 0.56) / 500) * 500;
+  const expectedGala = Math.round((galaTop * 0.56) / 500) * 500;
   console.log('wage last×agg 0.91×0.56', lastTimesAgg, 'Gala', galaOffer, 'Gala top', galaTop);
-  if (Math.abs(wageOfferScale(0.91, 7, 0.56) - 0.91 * 0.56) > 1e-9) {
-    console.error('offers must pay last-season ratio times the last-five aggregate');
+  if (Math.abs(wageOfferScale(0.91, 7, 0.56) - 0.56) > 1e-9) {
+    console.error('veteran offers must pay the aggregate ratio, not last-season times aggregate');
     process.exitCode = 1;
   }
-  if (lastTimesAgg !== Math.round((listed * 0.91 * 0.56) / 500) * 500) {
-    console.error('a 0.91 last season and 0.56 aggregate must not pay 91% of Madrid’s listed top');
+  if (lastTimesAgg !== Math.round((listed * 0.56) / 500) * 500) {
+    console.error('a 0.56 aggregate must pay 56% of Madrid’s listed top, not 91% × 56%');
     process.exitCode = 1;
   }
   if (galaOffer !== expectedGala || galaOffer >= Math.round((galaTop * 0.91) / 500) * 500) {
-    console.error('Istanbul Gold must apply the 0.56 aggregate discount, not last-season only');
+    console.error('Istanbul Gold must apply the aggregate wage, not last-season only');
     process.exitCode = 1;
   }
   const unproven094 = weeklyWageForTransferOffer(madrid, 0, 0.94, 5, 'starter', undefined, 0);
@@ -9612,8 +9637,8 @@ console.log('\n--- Call-up beats, transfer fees, 5-season wage discount ---');
     console.error('0.94 last season with a 0 career sample must not pay ~100% of Madrid’s listed wage');
     process.exitCode = 1;
   }
-  if (hot094 !== Math.round((listed * 0.94 * 0.94) / 500) * 500 || maxWage !== atOne) {
-    console.error('100% of the listed max is only for 1.0 last season and 1.0 last-five aggregate');
+  if (hot094 !== Math.round((listed * 0.94) / 500) * 500 || maxWage !== atOne) {
+    console.error('100% of the listed max is only for a 1.0 aggregate; 0.94 aggregate pays 94%');
     process.exitCode = 1;
   }
   if (Math.abs(wageOfferScale(0.94, 5, 0) - 0.47) > 1e-9) {
@@ -9637,8 +9662,8 @@ console.log('\n--- Call-up beats, transfer fees, 5-season wage discount ---');
     console.error('an 18-year-old City renewal must not land on a five-year listed wage');
     process.exitCode = 1;
   }
-  if (fiveYearCity !== Math.round((cityTop * 0.91 * 0.91) / 500) * 500) {
-    console.error('five counted seasons may still use last-season times the five-year aggregate');
+  if (fiveYearCity !== Math.round((cityTop * 0.91) / 500) * 500) {
+    console.error('five counted seasons pay the aggregate ratio, not last-season times aggregate');
     process.exitCode = 1;
   }
   const aggSeasons = [
@@ -10252,9 +10277,188 @@ console.log('\n--- Concurrent career save slots ---');
   const palaceBand = clubQualityLabel(getClub('crystal-palace')!);
   const leicesterBand = clubQualityLabel(getClub('leicester')!);
   console.log('quality labels', palaceBand, leicesterBand);
-  if (palaceBand === leicesterBand || !/championship/i.test(leicesterBand) || /championship/i.test(palaceBand)) {
-    console.error('Championship clubs must not share the Premier League Medium/Strong transfer label');
+  if (palaceBand === leicesterBand || leicesterBand !== TIER_LABEL[getClub('leicester')!.tier] || /championship/i.test(leicesterBand)) {
+    console.error('every offer must show its tier, not a second-division league name');
     process.exitCode = 1;
+  }
+
+  {
+    const homeBids = pickPermanentClubs(3, 12_000_000, ['newcastle'], 'england', false, 'Premier League', 40_000_000, 22, 80, 'England');
+    const homeEnglish = homeBids.filter((c) => c.country === 'England').length;
+    const saLeak = homeBids.filter((c) => c.country === 'Brazil' || c.country === 'Argentina' || c.country === 'Mexico' || c.country === 'Japan');
+    console.log('english-at-home mid-table bids', homeEnglish, homeBids.map((c) => `${c.id}:${c.country}`));
+    if (homeBids.length === TRANSFER_OFFER_COUNT && homeEnglish < 4) {
+      console.error('an English player in England should get four of six transfers from England when the band allows');
+      process.exitCode = 1;
+    }
+    if (saLeak.length > 0) {
+      console.error('South American, Mexican, and Japanese clubs must not appear for a non-South-American player');
+      process.exitCode = 1;
+    }
+    const abroadBids = pickPermanentClubs(2, 20_000_000, ['bayern'], 'england', false, 'Bundesliga', 80_000_000, 22, 80, 'Germany');
+    const abroadHome = abroadBids.filter((c) => c.country === 'England').length;
+    console.log('english-in-germany bids', abroadHome, abroadBids.map((c) => `${c.id}:${c.country}`));
+    if (abroadBids.length === TRANSFER_OFFER_COUNT && abroadHome < 2) {
+      console.error('an English player in Germany should get two English transfer offers when the band allows');
+      process.exitCode = 1;
+    }
+    const onePoor = wageOfferScale(0.23, 6, 0.68, 1);
+    const twoPoor = wageOfferScale(0.24, 6, 0.45, 2);
+    if (onePoor <= twoPoor || Math.abs(onePoor - 0.68 * wagePoorFactor(1)) > 1e-9) {
+      console.error('one bad season must still pay on aggregate; two bad seasons must pay less');
+      process.exitCode = 1;
+    }
+    const madridMiss = resolveSeasonTransition({
+      season: {
+        ...dummySeason,
+        seasonNumber: 5,
+        clubId: 'real-madrid',
+        role: 'first-team',
+        goals: 9,
+        gamesPlayed: 40,
+        leagueGoals: 8,
+        leagueGames: 38,
+        age: 21,
+      },
+      role: 'first-team',
+      clubId: 'real-madrid',
+      parentClubId: 'real-madrid',
+      seasonsAtCurrentClub: 2,
+      age: 21,
+      careerGoals: 83,
+      careerGames: 118,
+      nationality: 'england',
+      loansUsed: 0,
+      contractYearsRemaining: 3,
+      weeklyWage: 316_000,
+      squadStatus: 'starter',
+      seasonHistory: [
+        { ...dummySeason, seasonNumber: 2, clubId: 'real-madrid', role: 'first-team', goals: 30, gamesPlayed: 40, leagueGames: 38, leagueGoals: 24 },
+        { ...dummySeason, seasonNumber: 3, clubId: 'real-madrid', role: 'first-team', goals: 28, gamesPlayed: 38, leagueGames: 36, leagueGoals: 22 },
+        { ...dummySeason, seasonNumber: 4, clubId: 'real-madrid', role: 'first-team', goals: 16, gamesPlayed: 40, leagueGames: 38, leagueGoals: 13 },
+      ],
+    });
+    const madridOffers = madridMiss.pendingTransfer?.offers ?? [];
+    const madridLoans = madridOffers.filter((o) => o.move === 'loan');
+    const madridLoanClubs = madridLoans.map((o) => getClub(o.clubId)).filter((c): c is NonNullable<typeof c> => c != null);
+    const madridAgg = recentAggregateRatio([
+      { ...dummySeason, seasonNumber: 2, clubId: 'real-madrid', role: 'first-team', goals: 30, gamesPlayed: 40 },
+      { ...dummySeason, seasonNumber: 3, clubId: 'real-madrid', role: 'first-team', goals: 28, gamesPlayed: 38 },
+      { ...dummySeason, seasonNumber: 4, clubId: 'real-madrid', role: 'first-team', goals: 16, gamesPlayed: 40 },
+      { ...dummySeason, seasonNumber: 5, clubId: 'real-madrid', role: 'first-team', goals: 9, gamesPlayed: 40 },
+    ]);
+    console.log('madrid 0.23 offers', madridOffers.map((o) => `${o.move}:${o.clubId}:${getClub(o.clubId)?.tier}:${o.weeklyWage}:${o.squadStatus}`));
+    if (madridLoanClubs.some((c) => SECOND_DIVISIONS.has(c.league) || c.tier > 2)) {
+      console.error('an 83m-class Madrid miss must loan to Strong clubs, not the Championship');
+      process.exitCode = 1;
+    }
+    if (madridLoans.some((o) => o.squadStatus !== 'starter')) {
+      console.error('an elite miss must loan as a starter, not on reserve wages');
+      process.exitCode = 1;
+    }
+    const crushWages = madridLoans.filter((o) => {
+      const dest = getClub(o.clubId);
+      if (!dest) return true;
+      const crush = weeklyWageForTransferOffer(dest, 83_000_000, 0.23, 4, 'starter', dest.league, 0.23, 1);
+      const expected = weeklyWageForTransferOffer(dest, 83_000_000, 0.23, 4, 'starter', dest.league, madridAgg, 1);
+      return o.weeklyWage + 500 < expected || (expected > crush && o.weeklyWage <= crush);
+    });
+    if (crushWages.length > 0) {
+      console.error('strong clubs must bid on the aggregate ratio, not a 30k last-season wage');
+      process.exitCode = 1;
+    }
+    const kept = resolveSeasonTransition({
+      season: {
+        ...dummySeason,
+        seasonNumber: 5,
+        clubId: 'real-madrid',
+        role: 'first-team',
+        goals: 38,
+        gamesPlayed: 40,
+        leagueGoals: 32,
+        leagueGames: 38,
+        age: 21,
+      },
+      role: 'first-team',
+      clubId: 'real-madrid',
+      parentClubId: 'real-madrid',
+      seasonsAtCurrentClub: 2,
+      age: 21,
+      careerGoals: 90,
+      careerGames: 118,
+      nationality: 'england',
+      loansUsed: 0,
+      contractYearsRemaining: 3,
+      squadStatus: 'starter',
+    });
+    if ((kept.pendingTransfer?.offers ?? []).some((o) => o.move === 'loan')) {
+      console.error('meeting the starter ratio must not produce loan offers');
+      process.exitCode = 1;
+    }
+    const slumpSeasons = [
+      { ...dummySeason, seasonNumber: 2, clubId: 'real-madrid', role: 'first-team' as const, goals: 36, gamesPlayed: 40, wonWpy: true },
+      { ...dummySeason, seasonNumber: 3, clubId: 'napoli', role: 'first-team' as const, goals: 8, gamesPlayed: 40 },
+      { ...dummySeason, seasonNumber: 4, clubId: 'napoli', role: 'first-team' as const, goals: 0, gamesPlayed: 38 },
+      { ...dummySeason, seasonNumber: 5, clubId: 'napoli', role: 'first-team' as const, goals: 10, gamesPlayed: 38 },
+      { ...dummySeason, seasonNumber: 6, clubId: 'napoli', role: 'first-team' as const, goals: 7, gamesPlayed: 37 },
+    ];
+    const slumpValue = playerMarketValueFromSeasons({
+      age: 23,
+      careerGoals: 61,
+      careerGames: 193,
+      seasons: slumpSeasons,
+      fallbackClub: getClub('napoli')!,
+    });
+    console.log('slump MV after WPY then 0.20/0.00/0.27/0.19', slumpValue);
+    if (slumpValue >= 100_000_000) {
+      console.error('market value must fall after consecutive seasons below the 0.33 collapse bar');
+      process.exitCode = 1;
+    }
+    const twoPoorMadrid = resolveSeasonTransition({
+      season: {
+        ...dummySeason,
+        seasonNumber: 4,
+        clubId: 'real-madrid',
+        role: 'first-team',
+        goals: 9,
+        gamesPlayed: 38,
+        leagueGoals: 8,
+        leagueGames: 36,
+        age: 21,
+      },
+      role: 'first-team',
+      clubId: 'real-madrid',
+      parentClubId: 'real-madrid',
+      seasonsAtCurrentClub: 2,
+      age: 21,
+      careerGoals: 67,
+      careerGames: 116,
+      nationality: 'england',
+      loansUsed: 0,
+      contractYearsRemaining: 3,
+      weeklyWage: 316_000,
+      squadStatus: 'starter',
+      seasonHistory: [
+        { ...dummySeason, seasonNumber: 2, clubId: 'real-madrid', role: 'first-team', goals: 50, gamesPlayed: 40, leagueGames: 38, leagueGoals: 38, wonWpy: true },
+        { ...dummySeason, seasonNumber: 3, clubId: 'real-madrid', role: 'first-team', goals: 8, gamesPlayed: 38, leagueGames: 36, leagueGoals: 6 },
+      ],
+    });
+    const twoPoorLoans = (twoPoorMadrid.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan');
+    const twoPoorLoanCountries = twoPoorLoans.map((o) => getClub(o.clubId)?.country);
+    const hostLoans = twoPoorLoanCountries.filter((country) => country === 'Spain').length;
+    const homeLoans = twoPoorLoanCountries.filter((country) => country === 'England').length;
+    console.log('two-poor madrid loans', twoPoorLoans.map((o) => `${o.clubId}:${getClub(o.clubId)?.country}:${o.weeklyWage}`));
+    if (twoPoorLoans.length === LOAN_OFFER_COUNT && (hostLoans < 2 || homeLoans !== 1)) {
+      console.error('an English player at Madrid must get two Spanish loans and one English loan when the band allows');
+      process.exitCode = 1;
+    }
+    const twoPoorScale = wageOfferScale(0.24, 6, 0.45, 2);
+    const onePoorScale = wageOfferScale(0.23, 6, 0.68, 1);
+    if (twoPoorScale >= onePoorScale) {
+      console.error('two bad seasons must pay less than one bad season on the same aggregate path');
+      process.exitCode = 1;
+    }
+    void VALUE_POOR_RATIO;
   }
   if (depadded.games !== 36 || depadded.goals !== 11) {
     console.error('padded leagueGames must drop cups and caps so club totals stop counting 0-chance / international');
@@ -10680,12 +10884,14 @@ console.log('\n--- Concurrent career save slots ---');
       season: { goals: 8, gamesPlayed: 24, leagueGames: 22 },
       careerGoals: 53,
       careerGames: 64,
+      hasBeenCapped: true,
     }),
     nationId: 'spain',
     publicSeason: 3,
     squadStatus: 'starter',
     league: 'La Liga',
     leagueGames: 22,
+    hasBeenCapped: true,
   });
   if (slumpDrop) {
     console.error('a later slump below the international bar must drop the player even after a previous call-up');

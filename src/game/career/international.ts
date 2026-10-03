@@ -226,20 +226,22 @@ export function seasonRatioForSelection(season: { goals: number; gamesPlayed: nu
 }
 
 /**
- * Until this season has CALL_UP_MIN_LEAGUE_GAMES, take the better of this
- * season and prior career. After 20 league games, this season decides so a
- * later slump drops the player even if they were already called up.
+ * First call-up only: until this season has CALL_UP_MIN_LEAGUE_GAMES, take
+ * the better of this season and prior career. After the first cap, this
+ * season's ratio decides immediately — the 20-game hold does not repeat.
  */
 export function callUpRatio(params: {
   season?: { goals: number; gamesPlayed: number; leagueGames?: number } | null;
   careerGoals: number;
   careerGames: number;
+  hasBeenCapped?: boolean;
 }): number {
   const gp = params.season?.leagueGames ?? params.season?.gamesPlayed ?? 0;
   const goals = params.season?.goals ?? 0;
   const seasonRatio = (params.season?.gamesPlayed ?? 0) > 0
     ? goals / (params.season?.gamesPlayed ?? 1)
     : 0;
+  if (params.hasBeenCapped) return seasonRatio;
   if (gp >= CALL_UP_MIN_LEAGUE_GAMES) return seasonRatio;
   const played = params.season?.gamesPlayed ?? 0;
   const priorGames = Math.max(0, params.careerGames - played);

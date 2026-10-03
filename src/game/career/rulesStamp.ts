@@ -71,6 +71,10 @@ export function rebuildCurrentSeason(state: CareerState): Partial<CareerState> {
       season: state.currentSeason,
       careerGoals: state.careerGoals,
       careerGames: state.careerGames,
+      hasBeenCapped: playerHasBeenCapped({
+        caps: state.nationalTeam?.caps,
+        seasons: [...(state.seasonHistory ?? []), ...(state.currentSeason ? [state.currentSeason] : [])],
+      }),
     }),
     nationId: state.nationality,
     qualifierCarry: state.intlQualifying,
@@ -108,6 +112,10 @@ export function rebuildCurrentSeason(state: CareerState): Partial<CareerState> {
       season: state.currentSeason,
       careerGoals: state.careerGoals,
       careerGames: state.careerGames,
+      hasBeenCapped: playerHasBeenCapped({
+        caps: state.nationalTeam?.caps,
+        seasons: [...(state.seasonHistory ?? []), ...(state.currentSeason ? [state.currentSeason] : [])],
+      }),
     }),
     nationId: state.nationality,
     publicSeason: publicSeason >= 1 ? publicSeason : null,
