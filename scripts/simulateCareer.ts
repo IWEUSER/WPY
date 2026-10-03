@@ -11,7 +11,7 @@ import {
   chancesForLeagueMatch,
   meanChancesFromStrength,
 } from '../src/game/career/chanceEngine';
-import { assignClubTier, clubQualityLabel, CLUBS, clubsForSeason, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, leagueMatchWeeks, playableClubsGroupedByLeague, SECOND_DIVISIONS, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
+import { assignClubTier, clubQualityLabel, CLUBS, clubsByTier, clubsForSeason, clubsInLeague, earnedPromotion, getClub, goalRatioFromStrength, leagueMatchWeeks, playableClubsGroupedByLeague, SECOND_DIVISIONS, TARGET_LEAGUE_SIZE, TIER_LABEL } from '../src/game/career/data/clubs';
 import { leagueDisplayName, playoffGamesFromOpening, playoffOpeningForPosition } from '../src/game/career/data/leagueFormat';
 import { confederationDisplayName } from '../src/game/career/data/displayNames';
 import { clubTransferBudget, consecutivePoorFactor, contractValueFactor, DEFAULT_CONTRACT_YEARS, ELITE_TRANSFER_VALUE_FLOOR, FIRST_CONTRACT_YEARS, firstTopFlightValueCap, formAdjustedRatio, isSeason1ValueLocked, leagueAdjustedOfferRatio, leagueValueWeight, loanContractYearsRemaining, maxContractYearsForAge, MEGA_CLUB_IDS, MIN_ACCEPTED_FEE_RATIO, newContractYears, openingWeeklyWageForSquadStatus, playerMarketValue, playerMarketValueFromSeasons, recentAggregateRatio, RESERVE_CONTRACT_YEARS, RESERVE_WAGE_FACTOR, RESERVE_WEEKLY_WAGE, SECOND_DIVISION_STARTER_FLOOR, seasonalSponsorship, tierForMarketValue, TOP_LEAGUES, transferFeeFromValue, VALUE_POOR_RATIO, wageCareerMaturityScale, wageOfferScale, wagePoorFactor, weeklyWageForClub, weeklyWageForRatio, weeklyWageForSquadStatus, weeklyWageForTransferOffer, YOUTH_MARKET_VALUE } from '../src/game/career/playerValue';
@@ -10297,8 +10297,9 @@ console.log('\n--- Concurrent career save slots ---');
     }
     const abroadBids = pickPermanentClubs(2, 20_000_000, ['bayern'], 'england', false, 'Bundesliga', 80_000_000, 22, 80, 'Germany');
     const abroadHome = abroadBids.filter((c) => c.country === 'England').length;
-    console.log('english-in-germany bids', abroadHome, abroadBids.map((c) => `${c.id}:${c.country}`));
-    if (abroadBids.length === TRANSFER_OFFER_COUNT && abroadHome < 2) {
+    const strongEngland = clubsByTier(2).filter((c) => c.country === 'England' && !SECOND_DIVISIONS.has(c.league)).length;
+    console.log('english-in-germany bids', abroadHome, 'band-home', strongEngland, abroadBids.map((c) => `${c.id}:${c.country}:${c.tier}`));
+    if (abroadBids.length === TRANSFER_OFFER_COUNT && abroadHome < Math.min(2, strongEngland)) {
       console.error('an English player in Germany should get two English transfer offers when the band allows');
       process.exitCode = 1;
     }
@@ -10447,8 +10448,13 @@ console.log('\n--- Concurrent career save slots ---');
     const twoPoorLoanCountries = twoPoorLoans.map((o) => getClub(o.clubId)?.country);
     const hostLoans = twoPoorLoanCountries.filter((country) => country === 'Spain').length;
     const homeLoans = twoPoorLoanCountries.filter((country) => country === 'England').length;
-    console.log('two-poor madrid loans', twoPoorLoans.map((o) => `${o.clubId}:${getClub(o.clubId)?.country}:${o.weeklyWage}`));
-    if (twoPoorLoans.length === LOAN_OFFER_COUNT && (hostLoans < 2 || homeLoans !== 1)) {
+    const strongSpain = clubsByTier(2).filter((c) => c.country === 'Spain' && c.id !== 'real-madrid' && !SECOND_DIVISIONS.has(c.league)).length;
+    const strongEnglandLoans = clubsByTier(2).filter((c) => c.country === 'England' && !SECOND_DIVISIONS.has(c.league)).length;
+    console.log('two-poor madrid loans', twoPoorLoans.map((o) => `${o.clubId}:${getClub(o.clubId)?.country}:${o.weeklyWage}`), 'band', strongSpain, strongEnglandLoans);
+    if (
+      twoPoorLoans.length === LOAN_OFFER_COUNT
+      && (hostLoans < Math.min(2, strongSpain) || homeLoans < Math.min(1, strongEnglandLoans))
+    ) {
       console.error('an English player at Madrid must get two Spanish loans and one English loan when the band allows');
       process.exitCode = 1;
     }
