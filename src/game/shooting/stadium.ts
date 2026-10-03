@@ -188,7 +188,7 @@ function shirtColor(
   u: number,
   allowAway = true,
 ): string {
-  const awayStart = 1 - Math.min(0.42, Math.max(0.14, awayShare));
+  const awayStart = 1 - Math.min(0.42, Math.max(0.02, awayShare));
   const visiting = allowAway && u > awayStart;
   const primary = visiting ? away : home;
   const secondary = visiting ? awaySecondary : homeSecondary;
@@ -375,7 +375,7 @@ function paintPackedFans(
       const px = x + stagger + jitterX;
       const py = y + jitterY;
       const u = Math.max(0, Math.min(1, (px + colW / 2) / Math.max(1, viewW)));
-      const visiting = allowAway && u > 1 - Math.min(0.42, Math.max(0.14, stadium.awayShare ?? 0.2));
+      const visiting = allowAway && u > 1 - Math.min(0.42, Math.max(0.02, stadium.awayShare ?? 0.2));
       const paleSection = visiting ? paleAway : paleHome;
 
       const jacketChance = (paleSection ? 0.52 : 0.22) + (darkDeck ? 0.34 : 0);

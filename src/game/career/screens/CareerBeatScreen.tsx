@@ -33,23 +33,32 @@ export default function CareerBeatScreen({ beat }: { beat: CareerBeat }) {
   const showClub = beat.portrait === 'club' || beat.portrait === 'both';
   const showNation = beat.portrait === 'nation' || beat.portrait === 'both';
   const honourName = honourNameForBeat(beat);
-  const honourCaption = beat.kind === 'award' ? 'Award' : beat.kind === 'first-title' || beat.kind === 'title' ? 'Trophy' : undefined;
+  const honourCaption = beat.kind === 'award'
+    ? 'Award'
+    : beat.kind === 'first-title' || beat.kind === 'title' || beat.kind === 'record'
+      ? 'Trophy'
+      : undefined;
+  const outrightRecord = beat.kind === 'record' && beat.recordRank === 1;
+  const cardTone = outrightRecord
+    ? 'from-amber-200/45 via-yellow-700/30 to-transparent ring-2 ring-amber-300/55 shadow-lg shadow-amber-400/15'
+    : 'from-white/10 via-white/5 to-transparent';
 
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-6 overflow-y-auto px-6 py-[max(1.5rem,env(safe-area-inset-top))] text-center text-white">
-      <div className="beat-card w-full max-w-sm rounded-3xl bg-gradient-to-b from-white/10 via-white/5 to-transparent px-5 py-8">
+      <div className={`beat-card w-full max-w-sm rounded-3xl bg-gradient-to-b ${cardTone} px-5 py-8`}>
         <p className="text-xs uppercase tracking-[0.28em] text-amber-200/80">{beat.eyebrow}</p>
         <h1 className="mt-3 font-display text-3xl font-black tracking-tight">{beat.headline}</h1>
-        {honourName ? (
-          <HonourArt name={honourName} caption={honourCaption} />
-        ) : (
+        <div className="mt-5 flex items-end justify-center gap-3">
+          {honourName ? (
+            <HonourArt name={honourName} caption={honourCaption} compact />
+          ) : null}
           <PlayerKitPortrait
             name={playerName?.trim() || 'You'}
             club={showClub ? club : undefined}
             nation={showNation ? nation : undefined}
             look={look}
           />
-        )}
+        </div>
         {beat.copy.trim() ? (
           <p className="mt-5 text-sm leading-relaxed text-white/70">{beat.copy}</p>
         ) : null}

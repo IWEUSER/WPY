@@ -969,6 +969,30 @@ export function countLoanSpells(history: SeasonRecord[], current?: SeasonRecord 
   return consecutiveLoanSpells(history, current);
 }
 
+/**
+ * Trailing first-team misses at this club. A loan is only forced after two
+ * consecutive failures; one miss after a season that met the bar stays reserve.
+ */
+export function consecutiveRatioMissesAtClub(
+  history: SeasonRecord[] | undefined,
+  clubId: string,
+  currentMissed: boolean,
+): number {
+  if (!currentMissed) return 0;
+  let n = 1;
+  const seasons = history ?? [];
+  for (let i = seasons.length - 1; i >= 0; i--) {
+    const row = seasons[i];
+    if (row.clubId !== clubId) break;
+    if (row.role === 'loan') continue;
+    if (row.role !== 'first-team') break;
+    if (row.ratioMet === true) break;
+    if (row.ratioMet === false) n += 1;
+    else break;
+  }
+  return n;
+}
+
 /** Trailing loan seasons — two in a row at a club blocks a third until you transfer. */
 export function consecutiveLoanSpells(history: SeasonRecord[], current?: SeasonRecord | null): number {
   const seasons = [...history, ...(current ? [current] : [])];
@@ -1568,6 +1592,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     season,
   });
   const graceActive = seasonsAtCurrentClub === 0 && !firstPublic;
+  const consecutiveMisses = consecutiveRatioMissesAtClub(params.seasonHistory, club.id, !ratioMet);
   const firstSeasonStayStatus: SquadStatus = nextSquadStatusAfterSeason({
     role: 'first-team',
     current: currentStatus,
@@ -1680,7 +1705,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
     );
   }
 
-  if (!ratioMet && !graceActive) {
+  if (!ratioMet && consecutiveMisses >= 2) {
     const transfers = pickPermanentClubs(transferTier, fee, [club.id], nationality, blockElite, currentLeague, value, age, leagueSample, club.country);
     const includeOpeningLoans = openingContractWindow && !contractExpiring;
     const canLoan = includeOpeningLoans || (canOfferLoans && loansUsed < MAX_CONSECUTIVE_LOANS && !contractExpiring);
@@ -1783,7 +1808,7 @@ export function resolveSeasonTransition(params: SeasonTransitionParams): SeasonT
       ratioMet ? 'Place secured' : 'Given more time to settle in',
       ratioMet
         ? `You maintained ${threshold.toFixed(2)} goals/game at ${club.name} - your place is safe.`
-        : `You missed ${club.name}'s ${threshold.toFixed(2)} bar in your first season here. Stay as a ${SQUAD_STATUS_LABEL[nextIfStay]} next season — a loan is not required until you miss again.`,
+        : `You missed ${club.name}'s ${threshold.toFixed(2)} bar. Stay as a ${SQUAD_STATUS_LABEL[nextIfStay]} — a loan is only required after two consecutive seasons below the bar.`,
       stayOn(),
       value,
       fee,

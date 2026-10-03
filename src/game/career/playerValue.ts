@@ -103,8 +103,18 @@ export const RISING_STAR_WAGE_FACTOR = 0.1;
 export const MIN_ACCEPTED_FEE_RATIO = 0.8;
 /** Every loan is one season — never a multi-year loan deal. */
 export const YOUTH_LOAN_YEARS = 1;
-/** Public Season 1 stays at the youth value until week 21, on every career path. */
-export const SEASON_1_VALUE_LOCK_WEEKS = 20;
+/** Public Season 1 stays at the youth value in week 1, then updates from week 2. */
+export const SEASON_1_VALUE_LOCK_WEEKS = 1;
+/** Market-value popups fire the first time the player crosses each mark. */
+export const VALUE_MILESTONES = [
+  1_000_000,
+  10_000_000,
+  50_000_000,
+  100_000_000,
+  200_000_000,
+  300_000_000,
+  400_000_000,
+] as const;
 export const YOUTH_MARKET_VALUE = 100_000;
 export const SPONSORSHIP_VALUE_FLOOR = 10_000_000;
 /** Ignore the live season until it has a real sample, or value swings week to week. */
@@ -431,8 +441,8 @@ export function playerMarketValueFromSeasons(params: {
   const seasons = params.seasons.filter((season) => {
     if (!countsTowardCareerRecord(season.seasonNumber, season.role)) return true;
     if (season.gamesPlayed >= VALUE_FORM_MIN_GAMES) return true;
-    // The season just finished still counts, even at 8–14 games.
-    if (season === lastCounted && season.gamesPlayed >= 6) return true;
+    // Live form counts from the first appearance so value can move in week 2.
+    if (season === lastCounted && season.gamesPlayed >= 1) return true;
     careerGoals -= season.goals;
     careerGames -= season.gamesPlayed;
     return false;
