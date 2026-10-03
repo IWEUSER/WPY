@@ -5046,6 +5046,18 @@ if (capLoans !== 0 || (loanCap.pendingTransfer?.offers ?? []).filter((o) => o.mo
       careerStart: 'favourite-first-team',
       squadStatus: 'reserve',
       clubLeague: 'Premier League',
+      seasonHistory: [{
+        ...dummySeason,
+        seasonNumber: 3,
+        clubId: 'chelsea',
+        goals: 23,
+        gamesPlayed: 38,
+        leagueGoals: 23,
+        leagueGames: 38,
+        league: 'Premier League',
+        ratioMet: false,
+        squadStatus: 'starter',
+      }],
     });
     const chelseaS2Loans = (chelseaS2.pendingTransfer?.offers ?? []).filter((o) => o.move === 'loan');
     console.log('Chelsea second miss', chelseaS2.headline, 'stay', Boolean(chelseaS2.pendingTransfer?.stay), 'loans', chelseaS2Loans.length);
@@ -7172,8 +7184,8 @@ console.log('\n--- Promotion, contracts, MLS weeks, twilight offers, sponsorship
     calendarWeek: 2,
   });
   console.log('early-season value', afterHotStart, 'finished-only', fromFinishedOnly);
-  if (afterHotStart !== fromFinishedOnly) {
-    console.error('market value must ignore a 2-game hot start and stay on completed seasons');
+  if (afterHotStart <= fromFinishedOnly) {
+    console.error('market value must start moving with live form from week 2');
     process.exitCode = 1;
   }
   if (seasonLeagueLabel({ ...dummySeason, clubId: 'leicester', league: 'Premier League' }) !== 'English League') {
@@ -7838,14 +7850,6 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
     console.error('Rome shorts must match the shirt colour');
     process.exitCode = 1;
   }
-  const dortmundHome = resolveMatchStadium({
-    fixture: { week: 4, kind: 'league', isDecisive: false, isHome: true },
-    club: getClub('dortmund'),
-  });
-  if (Math.abs(dortmundHome.awayShare - SINGLE_TIER_AWAY_SHARE) > 1e-9) {
-    console.error('single-tier grounds must cut the away end to 5%');
-    process.exitCode = 1;
-  }
   const sevilla = kitFromScheme(clubKit(getClub('sevilla')));
   const tottenham = kitFromScheme(clubKit(getClub('tottenham')));
   const arsenal = kitFromScheme(clubKit(getClub('arsenal')));
@@ -8278,6 +8282,23 @@ console.log('\n--- Stadium home/away crowd and opposition defender kit ---');
   }
   if (dortmundHome.standTiers !== 1 || (dortmundHome.capacity ?? 0) < 80_000) {
     console.error('Signal Iduna Park is a single tall terrace');
+    process.exitCode = 1;
+  }
+  const romeHome = resolveMatchStadium({
+    fixture: { week: 1, kind: 'league', isDecisive: false, isHome: true, opponentId: 'lazio' },
+    club: getClub('roma'),
+  });
+  const liverpoolHome = resolveMatchStadium({
+    fixture: { week: 1, kind: 'league', isDecisive: false, isHome: true, opponentId: 'everton' },
+    club: getClub('liverpool'),
+  });
+  if (
+    Math.abs(dortmundHome.awayShare - SINGLE_TIER_AWAY_SHARE) > 1e-9
+    || Math.abs(romeHome.awayShare - SINGLE_TIER_AWAY_SHARE) > 1e-9
+    || Math.abs(liverpoolHome.awayShare - SINGLE_TIER_AWAY_SHARE) > 1e-9
+    || Math.abs((madridHome.awayShare ?? 0) - 0.2) > 1e-9
+  ) {
+    console.error('single-tier grounds must cut the away end by 75%; multi-deck grounds keep 20%');
     process.exitCode = 1;
   }
   if (getafeHome.standTiers !== 2 || (getafeHome.capacity ?? 99_000) >= LISTED_MIN_CAPACITY) {
