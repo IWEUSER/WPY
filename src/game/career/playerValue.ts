@@ -228,6 +228,9 @@ export function seasonalSponsorship(marketValue: number, league?: string | null)
   return Math.round(raw / 5_000) * 5_000;
 }
 
+/** A season under this is a collapse year for value and offer wages. */
+export const VALUE_POOR_RATIO = 0.33;
+
 /** Trailing first-team/loan seasons below a goals-per-game bar. */
 export function consecutiveSeasonsBelow(seasons: SeasonRecord[], threshold: number): number {
   let n = 0;
@@ -435,7 +438,7 @@ export function playerMarketValueFromSeasons(params: {
     return false;
   });
   const careerRatio = leagueWeightedCareerRatio(seasons, careerGoals, careerGames);
-  const poorSeasons = consecutiveSeasonsBelow(seasons, 0.25);
+  const poorSeasons = consecutiveSeasonsBelow(seasons, VALUE_POOR_RATIO);
   const ratio = formAdjustedRatio(careerRatio, lastSeasonLeagueAdjustedRatio(seasons), poorSeasons);
   let weighted = 0;
   let weight = 0;
@@ -457,10 +460,12 @@ export function playerMarketValueFromSeasons(params: {
   const base = valueFromScale(age, ratio, careerGoals, scale, careerGames, weightedGoals);
   const poor = consecutivePoorFactor(poorSeasons);
   const lastLeague = lastSeasonLeague(seasons) ?? fallbackClub.league;
-  const floor = Math.max(
-    youngDivisionStarFloor({ age, league: lastLeague, seasons }),
-    youngTopFlightSeasonFloor({ age, seasons }),
-  );
+  const floor = poorSeasons >= 2
+    ? 0
+    : Math.max(
+      youngDivisionStarFloor({ age, league: lastLeague, seasons }),
+      youngTopFlightSeasonFloor({ age, seasons }),
+    );
   const raw = Math.max(floor, base * poor);
   const capped = Math.min(raw, firstTopFlightValueCap(seasons) ?? raw);
   return Math.max(100_000, Math.round(capped / 100_000) * 100_000);
@@ -581,26 +586,34 @@ export function wageCareerMaturityScale(countedSeasonsCompleted: number): number
 }
 
 /**
- * Listed max wage is the 1.0 last-season / 1.0 last-five-aggregate rate.
- * After five counted seasons, offers pay last-season × that five-year
- * aggregate (0.91 last and 0.56 aggregate is 91% × 56% of the listed top).
- * With fewer than five seasons the aggregate is just the same hot year, so
- * last-season ratio is scaled by career maturity instead.
+ * Strong clubs pay on the player's aggregate ratio — a one-season slump is
+ * an opportunity, not a 90% wage cut. A second blank year discounts further.
+ * One counted season still uses last-season × short-career maturity so a
+ * single hot year cannot claim a five-year listed wage.
  */
+export function wagePoorFactor(consecutivePoor = 0): number {
+  if (consecutivePoor <= 0) return 1;
+  if (consecutivePoor === 1) return 0.88;
+  if (consecutivePoor === 2) return 0.52;
+  return 0.35;
+}
+
 export function wageOfferScale(
   lastSeasonRatio: number | null | undefined,
   countedSeasonsCompleted?: number,
   aggregateRatio?: number | null,
+  consecutivePoor = 0,
 ): number {
   const last = wageRatioScale(lastSeasonRatio);
   const seasons = Math.max(0, Math.floor(countedSeasonsCompleted ?? 0));
-  if (seasons >= WAGE_AGGREGATE_SEASONS) {
-    if (aggregateRatio == null) return last * last;
-    const aggregate = wageRatioScale(aggregateRatio);
-    if (aggregate <= 0) return last * 0.5;
-    return last * aggregate;
+  const poor = wagePoorFactor(consecutivePoor);
+  if (seasons < 2) {
+    return last * wageCareerMaturityScale(seasons);
   }
-  return last * wageCareerMaturityScale(seasons);
+  const aggregate = aggregateRatio == null ? null : wageRatioScale(aggregateRatio);
+  if (aggregate == null) return last * last * poor;
+  if (aggregate <= 0) return last * 0.5;
+  return aggregate * poor;
 }
 
 export function countedSeasonsCompleted(seasons: SeasonRecord[]): number {
@@ -622,7 +635,7 @@ export function weeklyWageForRatio(
   return roundWeeklyWage(top * wageRatioScale(ratio), floor);
 }
 
-/** Incoming transfer / loan offer: last-season × last-five aggregate of the listed 1.0 wage. */
+/** Incoming transfer / loan offer: aggregate ratio of the listed 1.0 wage. */
 export function weeklyWageForTransferOffer(
   club: Club,
   marketValue: number,
@@ -631,13 +644,14 @@ export function weeklyWageForTransferOffer(
   status: SquadStatus,
   playingLeague?: string | null,
   aggregateRatio?: number | null,
+  consecutivePoor = 0,
 ): number {
   const top = weeklyWageForSquadStatus(club, marketValue, status, playingLeague);
   if (status !== 'starter') return top;
   const league = playingLeague ?? club.league;
   const floor = SECOND_DIVISIONS.has(league ?? '') ? SECOND_DIVISION_STARTER_FLOOR : RESERVE_WEEKLY_WAGE;
   return roundWeeklyWage(
-    top * wageOfferScale(lastSeasonRatio, countedSeasonsCompleted, aggregateRatio),
+    top * wageOfferScale(lastSeasonRatio, countedSeasonsCompleted, aggregateRatio, consecutivePoor),
     floor,
   );
 }

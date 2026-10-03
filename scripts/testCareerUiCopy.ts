@@ -1,6 +1,6 @@
 import { awardClass, awardCopyFor, recordCopy, scoredWinningGoal, titleCopyFor, tournamentWinFlavour, trophyClass } from '../src/game/career/careerBeatCopy';
 import { positionZone } from '../src/game/career/leagueTableZones';
-import { awardBeat, enqueueMatchMilestones, firstCapBeat, firstTitleBeat, recordBeat, signedClubBeat, titleBeat } from '../src/game/career/careerBeat';
+import { awardBeat, enqueueMatchMilestones, firstCapBeat, firstTitleBeat, impactRoleBeat, recordBeat, signedClubBeat, titleBeat } from '../src/game/career/careerBeat';
 
 function assert(cond: boolean, message: string) {
   if (!cond) {
@@ -39,7 +39,13 @@ assert(trophyClass('Nations Cup') === 'nations-league', 'nations class');
 assert(titleCopyFor('league', true).includes('podium'), 'first league copy');
 assert(titleCopyFor('league', false).includes('Another winter'), 'repeat league copy');
 assert(titleCopyFor('world', true).includes('World Championship'), 'first WC copy');
+assert(!titleCopyFor('continental', true).includes('pinnacle'), 'Europe is a European competition, not the pinnacle');
+assert(titleCopyFor('continental', true).includes('European'), 'Europe trophy names the competition');
 assert(awardClass('World Player of the Year') === 'wpy', 'WPY class');
+assert(awardClass('World Championship top goalscorer') === 'world-boot', 'WC boot is not league copy');
+assert(awardCopyFor('world-boot', true).includes('World Championship'), 'WC boot copy is about the tournament');
+assert(!awardCopyFor('world-boot', true).includes('dictated'), 'WC boot must not reuse league-player copy');
+assert(impactRoleBeat().kind === 'impact-role', 'impact role beat exists');
 assert(awardCopyFor('wpy', true).includes('planet earth'), 'first WPY copy');
 assert(awardCopyFor('wpy', false).includes('again'), 'repeat WPY copy');
 assert(scoredWinningGoal(1, 0, 1, true, false), '1-0 from one goal is the winner');
@@ -85,8 +91,9 @@ const climb = recordBeat({
   goalsToRecord: 3,
   id: 'intl-tournament:career:world-cup',
 }, 'Alex');
-assert(climb.copy.includes('2nd') && climb.copy.includes('3 goal'), `climb copy: ${climb.copy}`);
-assert(recordCopy({
+assert(climb.copy.includes('2nd') && climb.copy.includes('3 goal') && climb.copy.includes('World Championship'), `climb copy: ${climb.copy}`);
+assert(climb.headline.includes('World Championship'), 'top-ten popup names the record');
+const wcHold = recordCopy({
   title: 'World Championship',
   subtitle: 'All-time World Championship goals',
   rankLabel: '1st',
@@ -96,7 +103,22 @@ assert(recordCopy({
   domain: 'nation',
   group: 'nation',
   id: 'intl-tournament:career:world-cup',
-}).includes('highest goalscorer in World Championship'), 'unique WC record line');
+});
+assert(wcHold.includes('World Championship'), 'unique WC record line');
+assert(!/shatter/i.test(wcHold), 'record copy must not say shattered');
+assert(recordCopy({
+  title: 'Spanish League',
+  subtitle: 'Single-season league goals',
+  rankLabel: '3rd',
+  rank: 3,
+  playerGoals: 40,
+  kind: 'season',
+  domain: 'club',
+  group: 'league',
+  recordGoals: 47,
+  goalsToRecord: 7,
+  id: 'league:season:la-liga',
+}).includes('league record'), 'top ten names league vs club vs tournament');
 
 const milestones = enqueueMatchMilestones([], [], {
   clubAppearance: true,
